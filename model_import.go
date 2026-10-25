@@ -1,0 +1,368 @@
+package main
+
+// ============================================================================
+// §9.3 受控模型导入：拉取上游 /models → 有序信号分类每个模型的 free/paid →
+// 生成预览批次（preview）→ 管理员勾选批准（apply）后才写入池与 provider。
+// 核心护栏：未匹配任何免费信号的模型一律归为 paid，绝不猜免费；已有模型
+// 的层级变化只以 diff 呈现，remote/zen/manual 归属的条目永远 protected。
+// ============================================================================
+
+import (
+	"crypto/rand"
+	"encoding/json"
+	"fmt"
+	"log"
+	"net/http"
+	"sort"
+	"strings"
+	"sync"
+	"time"
+
+	"cline-go-proxy/internal/modelcatalog"
+)
+
+// Tier signals (stored in Model.TierSignal; admin UI shows why a model is free
+// and supports manual override to "manual"). Ordered strongest-first.
+const (
+	tierSignalPricingZero  = modelcatalog.TierSignalPricingZero
+	tierSignalFlagFree     = modelcatalog.TierSignalFlagFree
+	tierSignalSuffixFree   = modelcatalog.TierSignalSuffixFree
+	tierSignalNameToken    = modelcatalog.TierSignalNameToken
+	tierSignalDisplayName  = modelcatalog.TierSignalDisplayName
+	tierSignalAllowlist    = modelcatalog.TierSignalAllowlist
+	tierSignalProviderFree = modelcatalog.TierSignalProviderFree
+	tierSignalPricingPaid  = modelcatalog.TierSignalPricingPaid
+	tierSignalPaidDefault  = modelcatalog.TierSignalPaidDefault
+)
+
+// upstreamModelEntry is one parsed /models item (OpenAI list + OpenRouter-style pricing).
+type upstreamModelEntry = modelcatalog.Entry
+
+// freeIDAllowlist 内置免费模型 id 白名单（zen 种子表 + 别名），随包初始化。
+var freeIDAllowlist = func() map[string]bool {
+	m := map[string]bool{}
+	for _, sm := range zenSeedModels {
+		m[strings.ToLower(sm.ID)] = true
+		for _, al := range sm.Aliases {
+			m[strings.ToLower(al)] = true
+		}
+	}
+	return m
+}()
+
+func freeWord(s string) bool { return modelcatalog.FreeWord(s) }
+
+// classifyUpstreamModel checks signals in order and returns on the first hit.
+// Explicit free markers rank above explicit non-zero pricing.
+func classifyUpstreamModel(e upstreamModelEntry, providerFree bool) (tier, signal string) {
+	return modelcatalog.Classify(e, providerFree, freeIDAllowlist)
+}
+
+// discoverModelEntries 拉取 {baseURL}/models（404 时补试 /v1/models，再回退预设
+// ModelsFetcher 目录端点），解析 id + 定价 + 标签。
+func discoverModelEntries(baseURL, apiKey string, headers map[string]string) ([]upstreamModelEntry, error) {
+	return modelcatalog.Discover(
+		oauthHTTPClient(15*time.Second),
+		baseURL, apiKey, headers,
+		fetcherBaseForBase(baseURL),
+	)
+}
+
+// fetcherBaseForBase 按规范化 baseURL 匹配预设的 ModelsFetcher 目录端点。
+func fetcherBaseForBase(baseURL string) string {
+	return modelcatalog.FetcherBaseFor(baseURL)
+}
+
+// ---------- 预览批次 ----------
+
+type importItem = modelcatalog.ImportItem
+
+type importBatch = modelcatalog.ImportBatch
+
+var (
+	importsMu      sync.Mutex
+	pendingImports = map[string]*importBatch{}
+)
+
+func newImportBatchID() string {
+	b := make([]byte, 6)
+	if _, err := rand.Read(b); err != nil {
+		return fmt.Sprintf("%d", time.Now().UnixNano())
+	}
+	return fmt.Sprintf("%x", b)
+}
+
+// buildImportBatch 对条目分类并对比当前池，产出仅内存的待批准批次。
+func buildImportBatch(p CustomProvider, entries []upstreamModelEntry) *importBatch {
+	batch := &importBatch{ID: newImportBatchID(), ProviderID: p.ID, ProviderName: p.Name, CreatedAt: time.Now()}
+	pool := loadPool()
+	poolMu.Lock()
+	existing := make(map[string]modelcatalog.Existing, len(pool.Models))
+	for i := range pool.Models {
+		m := &pool.Models[i]
+		existing[m.ID] = modelcatalog.Existing{Source: m.Source, TierSignal: m.TierSignal, Cost: m.Cost}
+	}
+	poolMu.Unlock()
+	batch.Items = modelcatalog.BuildImportItems(entries, p.Free, existing, freeIDAllowlist)
+	importsMu.Lock()
+	for id, old := range pendingImports {
+		if len(pendingImports) >= 20 && time.Since(old.CreatedAt) > time.Hour {
+			delete(pendingImports, id)
+		}
+	}
+	pendingImports[batch.ID] = batch
+	importsMu.Unlock()
+	return batch
+}
+
+// ---------- admin 端点 ----------
+
+// POST /admin/api/models/import/preview  body: {id} 或草稿 {baseURL,apiKey,headers,free,name}
+// 拉取 + 分类 + 生成预览批次。草稿（未保存 Provider）走后者，批次 providerId 为空、
+// 仅可预览：apply 端点找不到 provider 会拒绝，前端改为「所选并入并保存」。
+// 上游失败按既有约定：HTTP 200 包 {error}。
+func handleModelImportPreview(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeAPI(w, http.StatusMethodNotAllowed, apiResponse{Error: "method_not_allowed"})
+		return
+	}
+	var req struct {
+		ID      string            `json:"id"`
+		BaseURL string            `json:"baseURL"`
+		APIKey  string            `json:"apiKey"`
+		Headers map[string]string `json:"headers"`
+		Free    bool              `json:"free"`
+		Name    string            `json:"name"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeAPI(w, http.StatusBadRequest, apiResponse{Error: "invalid_json"})
+		return
+	}
+	loadProviders()
+	providersMu.Lock()
+	var prov *CustomProvider
+	if req.ID != "" {
+		for _, p := range customProviders {
+			if p.ID == req.ID {
+				cp := *p
+				prov = &cp
+				break
+			}
+		}
+	} else if strings.TrimSpace(req.BaseURL) != "" {
+		prov = &CustomProvider{
+			Name:    req.Name,
+			BaseURL: strings.TrimRight(strings.TrimSpace(req.BaseURL), "/"),
+			APIKey:  req.APIKey,
+			Headers: req.Headers,
+			Free:    req.Free,
+		}
+	}
+	providersMu.Unlock()
+	if prov == nil {
+		writeAPI(w, http.StatusNotFound, apiResponse{Error: "provider not found"})
+		return
+	}
+	entries, err := discoverModelEntries(prov.BaseURL, prov.APIKey, prov.Headers)
+	if err != nil {
+		writeAPI(w, http.StatusOK, apiResponse{Success: true, Data: map[string]any{"error": err.Error()}})
+		return
+	}
+	batch := buildImportBatch(*prov, entries)
+	writeAPI(w, http.StatusOK, apiResponse{Success: true, Data: map[string]any{"batch": batch}})
+}
+
+// POST /admin/api/models/import/apply  body: {batchId, approve:[modelId…]}
+// 仅批准列表内的 add / tier_change 落盘；写入 provider.ModelIDs 使其在
+// syncProviderModels 清理逻辑中存续。
+func handleModelImportApply(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeAPI(w, http.StatusMethodNotAllowed, apiResponse{Error: "method_not_allowed"})
+		return
+	}
+	var req struct {
+		BatchID string   `json:"batchId"`
+		Approve []string `json:"approve"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeAPI(w, http.StatusBadRequest, apiResponse{Error: "invalid_json"})
+		return
+	}
+	importsMu.Lock()
+	batch := pendingImports[req.BatchID]
+	importsMu.Unlock()
+	if batch == nil {
+		writeAPI(w, http.StatusNotFound, apiResponse{Error: "batch not found (already applied or expired)"})
+		return
+	}
+	approved := make(map[string]bool, len(req.Approve))
+	for _, id := range req.Approve {
+		approved[id] = true
+	}
+	byID := make(map[string]importItem, len(batch.Items))
+	for _, it := range batch.Items {
+		byID[it.ModelID] = it
+	}
+	prov := func() *CustomProvider {
+		loadProviders()
+		providersMu.Lock()
+		defer providersMu.Unlock()
+		for _, p := range customProviders {
+			if p.ID == batch.ProviderID {
+				cp := *p
+				return &cp
+			}
+		}
+		return nil
+	}()
+	if prov == nil {
+		writeAPI(w, http.StatusNotFound, apiResponse{Error: "provider no longer exists"})
+		return
+	}
+	added, changed, now := 0, 0, time.Now().Unix()
+	pool := loadPool()
+	poolMu.Lock()
+	existing := make(map[string]*Model, len(pool.Models))
+	for i := range pool.Models {
+		existing[pool.Models[i].ID] = &pool.Models[i]
+	}
+	for id := range approved {
+		it, ok := byID[id]
+		if !ok || (it.Action != "add" && it.Action != "tier_change") {
+			continue
+		}
+		if m, exists := existing[id]; exists {
+			m.Cost, m.TierSignal, m.TierDecidedAt = it.Tier, it.Signal, now
+			changed++
+			continue
+		}
+		pool.Models = append(pool.Models, Model{
+			ID: id, Provider: prov.Name, Cost: it.Tier, Status: "active",
+			Source: "provider", TierSignal: it.Signal, TierDecidedAt: now,
+		})
+		// 进入 provider.ModelIDs：syncProviderModels 的清理循环以它为准
+		found := false
+		for _, mid := range prov.ModelIDs {
+			if mid == id {
+				found = true
+				break
+			}
+		}
+		if !found {
+			prov.ModelIDs = append(prov.ModelIDs, id)
+		}
+		added++
+	}
+	poolMu.Unlock()
+	if added+changed == 0 {
+		writeAPI(w, http.StatusOK, apiResponse{Success: true, Data: map[string]any{"added": 0, "changed": 0}})
+		return
+	}
+	providersMu.Lock()
+	for i, p := range customProviders {
+		if p.ID == prov.ID {
+			customProviders[i].ModelIDs = prov.ModelIDs
+			break
+		}
+	}
+	saveProvidersLocked()
+	providersMu.Unlock()
+	savePool()
+	importsMu.Lock()
+	delete(pendingImports, batch.ID)
+	importsMu.Unlock()
+	syncProviderModels()
+	log.Printf("model import applied: batch %s provider %s added=%d tierChanged=%d", batch.ID, prov.Name, added, changed)
+	writeAPI(w, http.StatusOK, apiResponse{Success: true, Data: map[string]any{"added": added, "changed": changed}})
+}
+
+// GET /admin/api/models/import/pending — 当前待批准批次（摘要）。
+func handleModelImportPending(w http.ResponseWriter, r *http.Request) {
+	importsMu.Lock()
+	out := make([]map[string]any, 0, len(pendingImports))
+	for _, b := range pendingImports {
+		out = append(out, map[string]any{
+			"id": b.ID, "providerId": b.ProviderID, "providerName": b.ProviderName,
+			"createdAt": b.CreatedAt, "items": len(b.Items), "auto": b.Auto,
+		})
+	}
+	importsMu.Unlock()
+	sort.Slice(out, func(i, j int) bool {
+		return out[i]["createdAt"].(time.Time).After(out[j]["createdAt"].(time.Time))
+	})
+	writeAPI(w, http.StatusOK, apiResponse{Success: true, Data: map[string]any{"batches": out}})
+}
+
+// GET /admin/api/models/import/batch?id=x — 读回待批准批次全文（横幅点击打开 Auto 批次用）。
+func handleModelImportBatch(w http.ResponseWriter, r *http.Request) {
+	id := r.URL.Query().Get("id")
+	importsMu.Lock()
+	batch := pendingImports[id]
+	importsMu.Unlock()
+	if batch == nil {
+		writeAPI(w, http.StatusNotFound, apiResponse{Error: "batch not found (already applied or expired)"})
+		return
+	}
+	writeAPI(w, http.StatusOK, apiResponse{Success: true, Data: map[string]any{"batch": batch}})
+}
+
+// POST /admin/api/models/import/discard  body: {batchId}
+func handleModelImportDiscard(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		BatchID string `json:"batchId"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeAPI(w, http.StatusBadRequest, apiResponse{Error: "invalid_json"})
+		return
+	}
+	importsMu.Lock()
+	delete(pendingImports, req.BatchID)
+	importsMu.Unlock()
+	writeAPI(w, http.StatusOK, apiResponse{Success: true})
+}
+
+// POST /admin/api/models/cost  body: {id, cost:"free"|"pass"|""}
+// 手动定级（TierSignal="manual"）；cost 传空字符串=恢复自动（清除 manual 标记，
+// 层级保留现值，等下一次导入/同步再判定）。§9.3：manual 条目在导入批次中 protected。
+func handleAdminModelCost(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeAPI(w, http.StatusMethodNotAllowed, apiResponse{Error: "method_not_allowed"})
+		return
+	}
+	var req struct {
+		ID   string `json:"id"`
+		Cost string `json:"cost"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeAPI(w, http.StatusBadRequest, apiResponse{Error: "invalid_json"})
+		return
+	}
+	if req.ID == "" || (req.Cost != "free" && req.Cost != "pass" && req.Cost != "") {
+		writeAPI(w, http.StatusBadRequest, apiResponse{Error: "id and cost(free|pass|empty) required"})
+		return
+	}
+	p := loadPool()
+	poolMu.Lock()
+	found := false
+	for i, m := range p.Models {
+		if m.ID == req.ID {
+			if req.Cost == "" {
+				p.Models[i].TierSignal = ""
+				p.Models[i].TierDecidedAt = 0
+			} else {
+				p.Models[i].Cost = req.Cost
+				p.Models[i].TierSignal = "manual"
+				p.Models[i].TierDecidedAt = time.Now().Unix()
+			}
+			found = true
+			break
+		}
+	}
+	poolMu.Unlock()
+	if !found {
+		writeAPI(w, http.StatusNotFound, apiResponse{Error: "model not found"})
+		return
+	}
+	savePool()
+	writeAPI(w, http.StatusOK, apiResponse{Success: true})
+}

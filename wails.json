@@ -1,0 +1,13 @@
+{
+  "$schema": "https://wails.io/schema.json",
+  "name": "routenest",
+  "outputfilename": "routenest-desktop",
+  "frontend:install": "",
+  "frontend:build": "",
+  "frontend:dev:watcher": "",
+  "frontend:dev:serverUrl": "",
+  "author": {
+    "name": "dhananjaym182",
+    "email": ""
+  }
+}

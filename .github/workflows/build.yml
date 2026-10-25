@@ -1,0 +1,76 @@
+name: Build
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build (${{ matrix.artifact }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: windows-latest
+            artifact: routenest-desktop.exe
+            ldflags: "-s -w -H windowsgui"
+          - runner: macos-latest
+            artifact: routenest-desktop-darwin-arm64
+            ldflags: "-s -w"
+          - runner: ubuntu-22.04
+            artifact: routenest-desktop-linux-amd64
+            ldflags: "-s -w"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+          cache: true
+
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.0-dev
+
+      - name: Build
+        env:
+          CGO_LDFLAGS: ${{ runner.os == 'macOS' && '-framework UniformTypeIdentifiers' || '' }}
+          # tag 触发时为 v1.3.0 形式；workflow_dispatch 手动触发时为分支名
+          APP_VERSION: ${{ github.ref_type == 'tag' && github.ref_name || 'dev' }}
+        run: go build -tags "desktop production" -trimpath -ldflags="-s -w -X main.appVersion=${APP_VERSION} -X main.appGitCommit=$(git rev-parse --short HEAD) -X main.appBuildDate=$(date -u +%Y-%m-%dT%H:%M:%SZ) ${{ matrix.ldflags }}" -o ${{ matrix.artifact }} .
+
+      - name: Verify selfcheck
+        if: runner.os != 'Linux'
+        run: ./${{ matrix.artifact }} -selfcheck
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.artifact }}
+
+  release:
+    name: Release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            routenest-desktop.exe/routenest-desktop.exe
+            routenest-desktop-darwin-arm64/routenest-desktop-darwin-arm64
+            routenest-desktop-linux-amd64/routenest-desktop-linux-amd64
