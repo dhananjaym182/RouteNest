@@ -1236,7 +1236,7 @@ Model:    cline-free/glm-5.2</pre>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
         </div>
         <div>
-          <div style="font-size:20px;font-weight:700;color:var(--text)">Cline2API</div>
+          <div style="font-size:20px;font-weight:700;color:var(--text)">RouteNest</div>
           <div style="font-size:13px;color:var(--text2);margin-top:2px">RouteNest · 多账号轮询 · 双协议兼容</div>
           <div style="font-size:12px;color:var(--text3);margin-top:4px"><span id="aboutVersion">版本 dev</span> · MIT License · Go 1.25 + Wails v2</div>
           <div style="font-size:12px;color:var(--text3);margin-top:2px" id="aboutBuildRow" hidden><span>构建信息</span>: <span id="aboutGitInfo">—</span></div>
@@ -1288,7 +1288,7 @@ Model:    cline-free/glm-5.2</pre>
     <div class="section-body">
       <div style="font-size:13px;color:var(--text2);line-height:1.8">
         <div>• 本程序仅在本地运行，默认监听 <code style="background:var(--surface2);padding:1px 5px;border-radius:3px;font-size:12px">127.0.0.1:3457</code>，不对外暴露。</div>
-        <div>• 账号凭据（refreshToken）存储在数据目录的 <code style="background:var(--surface2);padding:1px 5px;border-radius:3px;font-size:12px">.cline-accounts.json</code>（Docker 中位于 /app/data，可用 CLINE2API_DATA_DIR 配置）中，明文保存，请注意保护。</div>
+        <div>• 账号凭据（refreshToken）存储在数据目录的 <code style="background:var(--surface2);padding:1px 5px;border-radius:3px;font-size:12px">.routenest-accounts.json</code>（Docker 中位于 /app/data，可用 ROUTENEST_DATA_DIR 配置）中，明文保存，请注意保护。</div>
         <div>• 所有 API 请求通过本机代理转发至 Cline 官方服务器，不经过任何第三方。</div>
         <div>• 关闭窗口即停止服务，无后台驻留进程。</div>
       </div>
@@ -1304,7 +1304,7 @@ Model:    cline-free/glm-5.2</pre>
 
 <div id="loginOverlay">
   <div class="login-card">
-    <h2>Cline2API 管理后台</h2>
+    <h2>RouteNest 管理后台</h2>
     <p>该后台已启用访问密码，请输入密码登录</p>
     <input type="password" id="loginPassword" placeholder="访问密码" autocomplete="current-password" onkeydown="if(event.key==='Enter')submitLogin()">
     <button class="btn btn-primary" style="width:100%;margin-top:14px" onclick="submitLogin()">登 录</button>

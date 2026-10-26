@@ -504,7 +504,7 @@ func postAnthropicStream(t *testing.T, baseURL, model string) (int, string, time
 // error 甩给客户端（客户端再退化成必定失败的非流式重试）—— 用户看到的就是「thinking 很久然后超时」。
 // 新逻辑按「有无内容事件」判定：静默超过 firstContentTimeout 即冷却该模型并换链上下一个。
 func TestAnthropicStreamStallsWithoutContentFailsOver(t *testing.T) {
-	t.Setenv("CLINE2API_FIRST_CONTENT_TIMEOUT_MS", "150")
+	t.Setenv("ROUTENEST_FIRST_CONTENT_TIMEOUT_MS", "150")
 	baseURL := newStreamTestServer(t, "stream-stall", "backup-model")
 
 	var attempted []string
@@ -639,10 +639,10 @@ func TestBuildUpstreamBodyMaxTokensEnvCap(t *testing.T) {
 		t.Fatalf("default max_tokens = %d, want %d", got, defaultMaxTokens)
 	}
 
-	t.Setenv("CLINE2API_MAX_TOKENS", "64000")
+	t.Setenv("ROUTENEST_MAX_TOKENS", "64000")
 	body = buildUpstreamBody(map[string]any{"max_tokens": float64(128000)}, true)
 	if got := body["max_tokens"].(int); got != 64000 {
-		t.Fatalf("CLINE2API_MAX_TOKENS override ignored: max_tokens = %d, want 64000", got)
+		t.Fatalf("ROUTENEST_MAX_TOKENS override ignored: max_tokens = %d, want 64000", got)
 	}
 }
 

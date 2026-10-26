@@ -34,7 +34,7 @@ const (
 	// "maximum context length is 262144 tokens, however you requested about 263503
 	// tokens (88799 text input, 46704 tool input, 128000 in the output)"。
 	// 也就是说 128k 的输出预留本身就能把请求顶出上下文窗口，让本来可用的模型直接失败，
-	// 并让其余模型陷入超长预填充/静默。可用 CLINE2API_MAX_TOKENS 调整。
+	// 并让其余模型陷入超长预填充/静默。可用 ROUTENEST_MAX_TOKENS（旧名 CLINE2API_MAX_TOKENS 仍兜底）调整。
 	defaultMaxTokens       = 32000
 	defaultReasoningEffort = "high"
 	fallbackDefaultModel   = "z-ai/glm-5.3-flash"
@@ -60,20 +60,68 @@ const minUpstreamMaxTokens = 16
 // 20s 而不是 90s：90s 的实测后果是 13:31:40 那次请求在 GLM 上白等 90s、
 // 换到 laguna 立刻 400、再换 solar-pro4 又静默，客户端只看到「Fermenting… (2m51s)」。
 // 好几个候选都被跳过时，旧行为（客户端自己超时后重连）体验明显好于我们长时间静默等待，
-// 所以这里取「一次不行就赶紧换」的短耐心。可用 CLINE2API_FIRST_CONTENT_TIMEOUT_MS 覆盖。
+// 所以这里取「一次不行就赶紧换」的短耐心。可用 ROUTENEST_FIRST_CONTENT_TIMEOUT_MS
+// （旧名 CLINE2API_FIRST_CONTENT_TIMEOUT_MS 仍兜底）覆盖。
 const defaultFirstContentTimeout = 20 * time.Second
 
 // lastAttemptFirstContentTimeout 是最后一次尝试的等待上限，比普通尝试宽容：
 // 候选模型都被跳过时，宁可多等一下也要给出答案，而不是把错误抛给客户端。
 // 但仍然收敛在客户端忍耐范围内，不留几分钟的静默「假活着」。
-// 可用 CLINE2API_LAST_ATTEMPT_TIMEOUT_MS 覆盖。
+// 可用 ROUTENEST_LAST_ATTEMPT_TIMEOUT_MS（旧名 CLINE2API_LAST_ATTEMPT_TIMEOUT_MS 仍兜底）覆盖。
 const lastAttemptFirstContentTimeout = 45 * time.Second
+
+// envWithLegacy resolves a tunable's environment variable from its
+// ROUTENEST_-prefixed name, falling back to the pre-rename CLINE2API_-prefixed
+// name so existing deployments keep working.
+func envWithLegacy(name string) string {
+	if v, ok := os.LookupEnv("ROUTENEST_" + name); ok && strings.TrimSpace(v) != "" {
+		return v
+	}
+	return os.Getenv("CLINE2API_" + name)
+}
+
+// envRoutingInt reads a positive integer override by new/legacy env-name pair.
+func envRoutingInt(name string, def int) int {
+	if v := strings.TrimSpace(envWithLegacy(name)); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			return n
+		}
+	}
+	return def
+}
+
+// envRoutingDurationFromMS reads a positive millisecond-duration override by
+// new/legacy env-name pair.
+func envRoutingDurationFromMS(name string, def time.Duration) time.Duration {
+	if v := strings.TrimSpace(envWithLegacy(name)); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			return time.Duration(n) * time.Millisecond
+		}
+	}
+	return def
+}
+
+// envRoutingString reads a string override by new/legacy env-name pair.
+func envRoutingString(name string) string {
+	return strings.TrimSpace(envWithLegacy(name))
+}
 
 // maxOutputTokens 是客户端请求中 max_tokens 的上限。
 // 客户端显式要更大的输出（例如 128k）也会被夹到这里：预留过大的输出空间会把输入+输出
 // 顶出上游上下文窗口（实测 400），收益却接近没有。
 func maxOutputTokens() int {
-	return envInt("CLINE2API_MAX_TOKENS", defaultMaxTokens)
+	return envRoutingInt("MAX_TOKENS", defaultMaxTokens)
+}
+
+// reasoningEffort 返回下发给上游的推理强度。默认保持 "high"，
+// 可用 ROUTENEST_REASONING_EFFORT（旧名 CLINE2API_REASONING_EFFORT 仍兜底）
+// =low|medium|high|none 覆盖：推理模型在大上下文下的思考阶段可能是长时间静默的
+// 来源之一，这是用户侧最简单的延迟开关。
+func reasoningEffort() string {
+	if v := envRoutingString("REASONING_EFFORT"); v != "" {
+		return v
+	}
+	return defaultReasoningEffort
 }
 
 // clampMaxTokens 把请求的输出上限夹到 [1, maxOutputTokens()]。
@@ -83,16 +131,6 @@ func clampMaxTokens(n int) int {
 		return limit
 	}
 	return n
-}
-
-// reasoningEffort 返回下发给上游的推理强度。默认保持 "high"，
-// 可用 CLINE2API_REASONING_EFFORT=low|medium|high|none 覆盖：推理模型在大上下文下
-// 的思考阶段可能是长时间静默的来源之一，这是用户侧最简单的延迟开关。
-func reasoningEffort() string {
-	if v := strings.TrimSpace(os.Getenv("CLINE2API_REASONING_EFFORT")); v != "" {
-		return v
-	}
-	return defaultReasoningEffort
 }
 
 // freeModelChain 是 model="free" 时的降级顺序。
@@ -2501,9 +2539,9 @@ const maxStreamAttempts = 3
 // 普通尝试用较短的上限快速换模型；最后一次尝试放宽，宁可慢也尽量把答案交出去。
 func firstContentTimeoutForAttempt(attempt, maxAttempts int) time.Duration {
 	if attempt >= maxAttempts {
-		return envDurationFromMs("CLINE2API_LAST_ATTEMPT_TIMEOUT_MS", lastAttemptFirstContentTimeout)
+		return envRoutingDurationFromMS("LAST_ATTEMPT_TIMEOUT_MS", lastAttemptFirstContentTimeout)
 	}
-	return envDurationFromMs("CLINE2API_FIRST_CONTENT_TIMEOUT_MS", defaultFirstContentTimeout)
+	return envRoutingDurationFromMS("FIRST_CONTENT_TIMEOUT_MS", defaultFirstContentTimeout)
 }
 
 // streamFailoverCooldown 是「上游在产出任何内容前失败」时对该模型施加的冷却时长。

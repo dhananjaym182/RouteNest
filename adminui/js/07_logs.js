@@ -403,7 +403,7 @@ function downloadLogs(btn) {
   if (!shown.length) { toast(t('当前无可下载日志'), 'error'); return; }
   if (btn) btn.disabled = true;
   try {
-    downloadLogsTSV(shown, 'cline2api-logs.txt', btn);
+    downloadLogsTSV(shown, 'routenest-logs.txt', btn);
   } finally { if (btn) btn.disabled = false; }
 }
 
@@ -413,7 +413,7 @@ function downloadErrorLogs(btn) {
   if (!failed.length) { toast(t('当前无失败日志'), 'success'); return; }
   if (btn) btn.disabled = true;
   try {
-    downloadLogsTSV(failed, 'cline2api-logs-errors.txt', btn);
+    downloadLogsTSV(failed, 'routenest-logs-errors.txt', btn);
   } finally { if (btn) btn.disabled = false; }
 }
 
