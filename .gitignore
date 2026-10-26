@@ -26,6 +26,11 @@ data/
 routenest
 routenest.exe
 
+# linux/mac build outputs (extensionless compiled binaries)
+cline-proxy
+cline-go-proxy
+routenest-debug
+
 # local secrets & runtime logs
 credentials.txt
 proxy.log
