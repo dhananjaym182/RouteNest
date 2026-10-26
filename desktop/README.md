@@ -1,87 +1,87 @@
 # RouteNest Desktop
 
-单文件跨平台桌面版（Wails v2）：代理服务、管理后台和系统 WebView 窗口都在同一个可执行文件中。
+Single-file cross-platform desktop build (Wails v2): the proxy service, admin dashboard, and system WebView window are all contained in the same executable.
 
-## 支持平台
+## Supported Platforms
 
-| 平台 | WebView | 前置依赖 |
+| Platform | WebView | Prerequisites |
 |------|---------|----------|
-| Windows x64 | WebView2 | Win10/11 自带，无需额外安装 |
-| macOS (Intel/Apple Silicon) | 系统 WebKit | Xcode Command Line Tools (`xcode-select --install`) |
-| Linux x64 | WebKit2GTK | GTK3 + WebKit2GTK 开发包 |
+| Windows x64 | WebView2 | Bundled with Win10/11, no extra installation needed |
+| macOS (Intel/Apple Silicon) | System WebKit | Xcode Command Line Tools (`xcode-select --install`) |
+| Linux x64 | WebKit2GTK | GTK3 + WebKit2GTK development packages |
 
-## 给最终用户
+## For End Users
 
-1. 解压发布包，双击可执行文件。
-2. 首次使用时，在窗口内的管理后台完成账号登录。
-3. 客户端使用本机地址：
-   - Base URL：`http://127.0.0.1:3457/v1`
-   - API Key：在管理后台生成
-   - Model：如 `cline-free/glm-5.2`
-4. 关闭桌面窗口会终止整个程序和本地代理。
+1. Extract the release package and double-click the executable.
+2. On first use, complete account login in the admin dashboard inside the window.
+3. Clients use the local address:
+   - Base URL: `http://127.0.0.1:3457/v1`
+   - API Key: generate it in the admin dashboard
+   - Model: e.g. `cline-free/glm-5.2`
+4. Closing the desktop window terminates the entire program and the local proxy.
 
-程序默认仅监听 `127.0.0.1`，不会将管理后台开放到局域网或公网。
+By default the program listens only on `127.0.0.1` and never exposes the admin dashboard to the LAN or the public internet.
 
-## 构建各平台版本
+## Building for Each Platform
 
-Wails 依赖各平台原生 WebView 的 C 绑定，**不能交叉编译**，需在每个目标系统上分别构建：
+Wails depends on C bindings for each platform's native WebView and **cannot cross-compile**; you must build separately on each target system:
 
-### Windows（当前机器即可）
+### Windows (can be done on the current machine)
 
 ```bash
 ./desktop/build.sh
-# 产物：desktop/build/windows-amd64/routenest-desktop.exe
+# Output: desktop/build/windows-amd64/routenest-desktop.exe
 ```
 
-### Windows 资源信息（图标 / 版本 / manifest）
+### Windows resource info (icon / version / manifest)
 
-Windows exe 的图标、文件版本信息（属性页"详细信息"）和应用 manifest（DPI 感知、Win10/11 兼容声明）
-都来自 PE 资源文件 `resource_windows_amd64.syso`（项目根目录，go build 自动链接）。
+The Windows exe's icon, file version info (the "Details" property page), and application manifest (DPI awareness, Win10/11 compatibility declarations)
+all come from the PE resource file `resource_windows_amd64.syso` (in the project root, automatically linked by go build).
 
-修改图标或版本号后需重新生成：
+After changing the icon or version number, regenerate it:
 
 ```bash
 cd desktop/icon-gen
-go run .            # 生成 desktop/icon-gen/resource_windows_amd64.syso
+go run .            # Generates desktop/icon-gen/resource_windows_amd64.syso
 cp resource_windows_amd64.syso ../../resource_windows_amd64.syso
 ```
 
-版本号在 `desktop/icon-gen/main.go` 顶部的 `appVersion` 等常量中修改。生成的 `.syso` 应提交到仓库，
-CI 构建依赖它（见根目录 `.gitignore` 中的 `!resource_windows_amd64.syso`）。
+The version number is changed in the `appVersion` and other constants at the top of `desktop/icon-gen/main.go`. The generated `.syso` should be committed to the repo;
+CI builds depend on it (see `!resource_windows_amd64.syso` in the root `.gitignore`).
 
-### 发布 zip（网盘分发推荐）
+### Release zip (recommended for cloud-drive distribution)
 
-裸 exe 上传网盘后 Chrome/Edge 容易拦截，打包成 zip 可显著降低拦截率：
+Uploading a bare exe to a cloud drive is easily blocked by Chrome/Edge; packaging it as a zip significantly reduces the block rate:
 
 ```bash
 ./desktop/build.sh && ./desktop/dist.sh
-# 产物：desktop/dist/ccline2api-windows-amd64.zip（exe + 使用说明）
+# Output: desktop/dist/ccline2api-windows-amd64.zip (exe + usage instructions)
 ```
 
-### 自签名（可选，免费防篡改）
+### Self-signing (optional, free tamper protection)
 
-自签名证书**无法**消除 SmartScreen 拦截（浏览器不信任自签根），但能让文件属性显示签名者、
-防止被篡改，且部分安全软件对"有签名的文件"更友好：
+A self-signed certificate **cannot** eliminate SmartScreen blocking (browsers don't trust self-signed roots), but it makes the file properties show the signer,
+prevents tampering, and some security software is friendlier toward "signed files":
 
 ```powershell
-# 管理员 PowerShell
+# Administrator PowerShell
 powershell -ExecutionPolicy Bypass -File desktop/sign-self.ps1
 ```
 
 ### macOS
 
 ```bash
-xcode-select --install   # 首次需要
+xcode-select --install   # needed on first use
 ./desktop/build.sh
-# 产物：desktop/build/darwin-arm64/routenest-desktop（Apple Silicon）
-#       desktop/build/darwin-amd64/routenest-desktop（Intel）
+# Output: desktop/build/darwin-arm64/routenest-desktop (Apple Silicon)
+#         desktop/build/darwin-amd64/routenest-desktop (Intel)
 ```
 
-正式分发还需签名和 notarize：
+Official distribution also requires signing and notarization:
 
 ```bash
-codesign --deep --force --sign "Developer ID Application: <你的名字>" routenest-desktop
-xcrun notarytool submit routenest-desktop --apple-id <你的AppleID> --wait
+codesign --deep --force --sign "Developer ID Application: <your-name>" routenest-desktop
+xcrun notarytool submit routenest-desktop --apple-id <your-apple-id> --wait
 ```
 
 ### Linux
@@ -95,28 +95,28 @@ sudo dnf install gtk3-devel webkit2gtk4.1-devel
 sudo pacman -S gtk3 webkit2gtk
 
 ./desktop/build.sh
-# 产物：desktop/build/linux-amd64/routenest-desktop
+# Output: desktop/build/linux-amd64/routenest-desktop
 ```
 
-## 调试构建
+## Debug Builds
 
-构建带控制台输出的版本（不隐藏命令行窗口）：
+Build a version with console output (does not hide the command-line window):
 
 ```bash
 go build -tags "desktop production" -o routenest-desktop-debug.exe .
 ```
 
-自检模式（启动代理、验证 /health、退出，不弹窗口）：
+Self-check mode (starts the proxy, verifies /health, exits, no window pops up):
 
 ```bash
 ./routenest-desktop.exe -selfcheck
 ```
 
-## 技术说明
+## Technical Notes
 
-- 构建必须包含 `-tags "desktop production"`。直接 `go build` 会进入 Wails 的保护分支报错。
-- 普通 `go build .` 仍构建原来的命令行代理；`desktop` build tag 只影响桌面版入口。
-- 账号、API Key 和请求日志仍由原有代理逻辑保存到 exe 所在目录。不要将 `.cline-accounts.json` 等凭据打进发布包。
-- `CLINE_PROXY_PORT` 环境变量或 `-port` 参数可覆盖默认端口 `3457`。
-- Windows 图标、版本信息、应用 manifest 通过 `.syso` PE 资源嵌入，由 `desktop/icon-gen/` 生成（图标 + 版本信息 + manifest 在同一资源文件内）。
-- `desktop_main.go` 位于项目根目录（`package main`），需调用同包内 `startProxy` 等未导出函数。
+- Builds must include `-tags "desktop production"`. A plain `go build` enters Wails' guard branch and errors out.
+- A plain `go build .` still builds the original command-line proxy; the `desktop` build tag only affects the desktop entry point.
+- Accounts, API keys, and request logs are still saved by the existing proxy logic to the exe's directory. Do not bundle `.cline-accounts.json` and other credentials into the release package.
+- The `CLINE_PROXY_PORT` environment variable or the `-port` flag can override the default port `3457`.
+- The Windows icon, version info, and application manifest are embedded via the `.syso` PE resource, generated by `desktop/icon-gen/` (icon + version info + manifest in the same resource file).
+- `desktop_main.go` lives in the project root (`package main`) and needs to call unexported functions such as `startProxy` in the same package.

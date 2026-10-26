@@ -253,7 +253,7 @@ Confirmed port direction: **ExtremeRouter → cline2api**, plus one net-new feat
 - **Provider presets** — `providerPresets` map (`providers.go:801-851`) served at
   `GET /admin/api/providers/presets` (`admin.go:101`, handler `providers.go:1241`).
   9 presets today (`openrouter groq cerebras gemini mistral together deepseek openai
-  vllm-local`), 6 with `FreeTier: true`; UI hook “从预设添加（免费源）”
+  vllm-local`), 6 with `FreeTier: true`; UI hook "add from preset (free source)"
   (`admin_html.go:1693`, render at `admin_html.go:3035-3062`).
 - **Custom provider registry** — `CustomProvider` (`providers.go:29-43`): baseURL,
   apiKey, headers, `ModelIDs`, `Free` flag, RPM/daily budgets, priority, persisted to
@@ -333,7 +333,7 @@ Confirmed port direction: **ExtremeRouter → cline2api**, plus one net-new feat
   import dedup by refreshToken (`pool.go:297` `findAccountByRefreshToken`,
   `pool.go:322` `isDuplicateImportToken`) — `addAccount` keeps an existing
   rotated refresh token (`pool.go:259`).
-- Admin “导入账号” page supports OAuth login **or** pasted refreshToken, batch
+- Admin "import accounts" page supports OAuth login **or** pasted refreshToken, batch
   import (`admin_html.go:479,643,1205`; endpoints `admin.go:68-80`:
   accounts/add/delete/reset/test).
 - No concept of *provider-scoped* connections (a Kilo/OAuth connection distinct from

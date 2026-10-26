@@ -1,40 +1,40 @@
-## 1. 最终结论
+## 1. Final Conclusion
 
-**Cline 4.1.15 的 Free Models 来自：**
+**Cline 4.1.15's Free Models come from:**
 ```text
 GET https://api.cline.bot/api/v1/ai/cline/recommended-models
 ```
 
-该 API 返回 JSON 包含 `recommended`、`free` 和 `clinePass` 三个数组。**Free 模型由服务器直接返回 `free` 数组**，客户端不进行任何价格判断。
+The JSON returned by this API contains three arrays: `recommended`, `free`, and `clinePass`. **Free models come directly from the server-returned `free` array**; the client performs no price judgment of its own.
 
 ---
 
-## 2. API 信息
+## 2. API Information
 
-| 项 | 值 |
+| Item | Value |
 |---|---|
 | **HTTP Method** | `GET` |
 | **URL** | `https://api.cline.bot/api/v1/ai/cline/recommended-models` |
-| **Authentication** | **无需登录 / 无 Token** |
-| **环境变量覆盖** | `CLINE_API_BASE_URL` (生产环境默认 `https://api.cline.bot`) |
+| **Authentication** | **No login / no token required** |
+| **Env var override** | `CLINE_API_BASE_URL` (production default `https://api.cline.bot`) |
 
 ---
 
-## 3. 完整请求
+## 3. Complete Request
 
 ```bash
 curl 'https://api.cline.bot/api/v1/ai/cline/recommended-models'
 ```
 
-- **Query 参数**: 无
-- **Body**: 无
-- **Headers**: 仅默认浏览器/Node headers，**无自定义 Authorization**
+- **Query params**: none
+- **Body**: none
+- **Headers**: only default browser/Node headers, **no custom Authorization**
 - **Timeout**: 5000ms (`T_p=5e3`)
-- **缓存**: 5分钟 (`fMh`)
+- **Cache**: 5 minutes (`fMh`)
 
 ---
 
-## 4. Response 示例
+## 4. Response Example
 
 ```json
 {
@@ -51,38 +51,38 @@ curl 'https://api.cline.bot/api/v1/ai/cline/recommended-models'
 
 ---
 
-## 5. Free 判断逻辑
+## 5. Free Detection Logic
 
-**Free 判断依据**: 服务器直接返回的 `free` 数组
+**Free determination basis**: the server-returned `free` array
 
-- 客户端**不检查** `pricing.input === 0` 或 `model.free === true` 等字段
-- 后台 `bqd()` 函数**强制设置** `pricing: {input:0, output:0}` 给 free 模型，但这是设置而非过滤
-- Free Tab 渲染 `r.free` 数组: `we.free.map(e => h$(e, "FREE"))`
+- The client does **not check** fields like `pricing.input === 0` or `model.free === true`
+- The backend `bqd()` function **force-sets** `pricing: {input:0, output:0}` on free models, but this is a setting rather than a filter
+- The Free Tab renders the `r.free` array: `we.free.map(e => h$(e, "FREE"))`
 
 ---
 
-## 6. 模型字段
+## 6. Model Fields
 
-| 字段 | 类型 | 含义 |
+| Field | Type | Meaning |
 |---|---|---|
-| `id` | string | **实际 API Model ID** (如 `kwaipilot/kat-coder-pro`) |
-| `name` | string | 显示名称 |
-| `description` | string | 描述 |
-| `tags` | string[] | 标签 (如 `["FREE"]`) |
-| `contextWindow` | number | 上下文窗口 |
-| `maxInputTokens` | number | 最大输入 tokens |
-| `maxTokens` | number | 最大输出 tokens |
-| `capabilities` | string[] | 能力列表 |
-| `pricing` | object | 价格 (客户端设为 0) |
-| `releaseDate` | string | 发布日期 |
-| `family` | string | 模型家族 |
-| `status` | string | 状态 (active/preview/deprecated/legacy) |
-| `modalities` | object | 输入/输出模态 |
-| `operation` | string | 操作类型 |
+| `id` | string | **Actual API Model ID** (e.g. `kwaipilot/kat-coder-pro`) |
+| `name` | string | Display name |
+| `description` | string | Description |
+| `tags` | string[] | Tags (e.g. `["FREE"]`) |
+| `contextWindow` | number | Context window |
+| `maxInputTokens` | number | Max input tokens |
+| `maxTokens` | number | Max output tokens |
+| `capabilities` | string[] | Capability list |
+| `pricing` | object | Pricing (set to 0 on the client) |
+| `releaseDate` | string | Release date |
+| `family` | string | Model family |
+| `status` | string | Status (active/preview/deprecated/legacy) |
+| `modalities` | object | Input/output modalities |
+| `operation` | string | Operation type |
 
 ---
 
-## 7. Cline 内部调用链
+## 7. Cline Internal Call Chain
 
 ```text
 Free Tab UI (Settings → API Configuration → ClinePass → Free)
@@ -90,67 +90,67 @@ Free Tab UI (Settings → API Configuration → ClinePass → Free)
 next/webview-ui/build/assets/index.js
   ↓ Ar.makeUnaryRequest("refreshClineRecommendedModelsRpc", en.create({}), en.toJSON, YF.fromJSON)
   ↓ window.postMessage({type:"grpc_request", method:"refreshClineRecommendedModelsRpc", ...})
-  ↓ ProtoBuf decode → ModelsService handler → ywu(t, e) 函数
-      ↓ $0r() [5分钟内存缓存]
-          ↓ mMh() [缓存未命中]
+  ↓ ProtoBuf decode → ModelsService handler → ywu(t, e) function
+      ↓ $0r() [5-minute in-memory cache]
+          ↓ mMh() [cache miss]
               ↓ r7o({}) → B_p(fetch, `${base}/api/v1/ai/cline/recommended-models`, 5000)
                   ↓ R_p() → use().apiBaseUrl → p8t().apiBaseUrl → "https://api.cline.bot"
-              ↓ k_p(i) [验证结构] → P_p(s, obn, timeout) [enrichment]
-          ↓ 缓存: K0r = {data, timestamp}
+              ↓ k_p(i) [validate structure] → P_p(s, obn, timeout) [enrichment]
+          ↓ Cache: K0r = {data, timestamp}
       ↓ Nst.create({recommended, free, clinePass})
-  ↓ webview: v(R.free ?? []) → Free Tab 渲染
+  ↓ webview: v(R.free ?? []) → Free Tab render
 ```
 
-**关键文件/函数**:
-- `xqd(t=fetch)` — 构建 URL: `${p8t().apiBaseUrl}/api/v1/ai/cline/recommended-models`
-- `p8t()` — 返回配置，`YOt.production.apiBaseUrl = "https://api.cline.bot"`
-- `ywu(t,e)` — RPC handler，调用 `$0r()` → `r.free.map(...)` 返回 `free` 数组
-- `r7o(t)` — 实际 HTTP 请求，通过 `B_p()` 包装 `fetch()`，5秒超时
-- `B_p(t,e,r)` — 带 AbortController 的 fetch 包装，**无 auth headers**
-- `NQt` — 硬编码 fallback (4 recommended + 2 free models)
-- `Pge` — webview 硬编码 fallback (4 recommended + 2 free models)
+**Key files/functions**:
+- `xqd(t=fetch)` — builds the URL: `${p8t().apiBaseUrl}/api/v1/ai/cline/recommended-models`
+- `p8t()` — returns the config; `YOt.production.apiBaseUrl = "https://api.cline.bot"`
+- `ywu(t,e)` — RPC handler, calls `$0r()` → `r.free.map(...)` and returns the `free` array
+- `r7o(t)` — the actual HTTP request; wraps `fetch()` via `B_p()`, 5-second timeout
+- `B_p(t,e,r)` — fetch wrapper with AbortController, **no auth headers**
+- `NQt` — hardcoded fallback (4 recommended + 2 free models)
+- `Pge` — webview hardcoded fallback (4 recommended + 2 free models)
 
 ---
 
-## 8. Token 来源
+## 8. Token Provenance
 
-| 问题 | 答案 |
+| Question | Answer |
 |---|---|
-| Token 从哪里来 | **不需要 Token** |
-| Token 是否必须 | **否** |
-| 未登录是否可以获取 | **是** |
-| Free Models 是否需要 Cline 账号 | **否** |
+| Where does the token come from | **No token needed** |
+| Is a token required | **No** |
+| Can it be fetched while logged out | **Yes** |
+| Do Free Models require a Cline account | **No** |
 
-`xqd()` → `B_p()` → `fetch(url, {signal})` —**纯粹的无认证 GET 请求**，无 Authorization/Cookie/API-Key headers。
-
----
-
-## 9. 是否可以被第三方工具直接调用
-
-**✅ 可以直接调用** — 无需 Token，无需特殊 Headers。
+`xqd()` → `B_p()` → `fetch(url, {signal})` — **a purely unauthenticated GET request** with no Authorization/Cookie/API-Key headers.
 
 ---
 
-## 10. 实现方案
+## 9. Can Third-Party Tools Call It Directly
+
+**✅ Yes, it can be called directly** — no token, no special headers required.
+
+---
+
+## 10. Implementation Approach
 
 ```text
-我的工具
+My tool
     ↓
 GET https://api.cline.bot/api/v1/ai/cline/recommended-models
     ↓
-解析 JSON 响应
+Parse the JSON response
     ↓
-提取 response.free 数组
+Extract the response.free array
     ↓
-展示模型列表 (id, name, description)
+Display the model list (id, name, description)
 ```
 
-**curl 示例**:
+**curl example**:
 ```bash
 curl 'https://api.cline.bot/api/v1/ai/cline/recommended-models'
 ```
 
-**Node.js 示例**:
+**Node.js example**:
 ```js
 const res = await fetch('https://api.cline.bot/api/v1/ai/cline/recommended-models');
 const data = await res.json();
@@ -159,33 +159,28 @@ const freeModels = data.free ?? [];
 
 ---
 
-## 11. Combo 组合模型路由（本项目扩展）
+## 11. Combo Named-Model Routing (this project's extension)
 
-本项目在客户端侧支持 **Combo（具名模型组合）**：管理员在 `/admin/` 后台把若干模型
-按顺序配置成一个组合 ID（如 `claude-free-combo`），客户端把该 ID 当作普通模型名使用。
+This project supports **Combo (named model groups)** on the client side: an admin configures several models, in order, into a combo ID (e.g. `claude-free-combo`) in the `/admin/` dashboard, and clients use that ID as if it were a regular model name.
 
-**适用端点** — 组合通过模型名定位，三个端点均支持：
+**Applicable endpoints** — combos are located by model name; all three endpoints support them:
 
-| 端点 | 用法 |
+| Endpoint | Usage |
 |---|---|
 | `POST /v1/chat/completions` | `"model": "<combo-id>"` |
 | `POST /v1/messages` (Anthropic) | `"model": "<combo-id>"` |
 | `POST /v1/responses` | `"model": "<combo-id>"` |
 
-**回退（fallback）语义** — 按管理员配置的条目顺序依次尝试：
+**Fallback semantics** — entries are tried in the order the admin configured:
 
-1. 配置顺序即优先级：**列表中靠前的启用条目先被尝试**，首个成功者服务本次请求。
-2. 条目失败且被判定为**可重试**（限流 429 / 余额 402 / 瞬态 5xx / 超时 / 账号不可用，
-   以及上游 400「上下文超限」截断重试后仍失败）时，自动**继续尝试下一个条目**。
-3. **永久性错误**（401/403 及一般 400）直接失败，不再换下一个条目。
-4. **固定源条目**（pinned source）：条目可显式固定 `cline` / `provider` / `zen`，
-   此时只用该上游，失败**不回退**到其他源；固定源对该模型不可用时该条目被跳过，
-   继续走下一个条目（不会中止整条组合）。
-5. 停用条目 / 重复条目 / 后台停用的模型会被跳过（计入轨迹，不发起请求）。
-6. 默认不触发全局 ModelChain 或 free 链兜底（应急回退需管理员显式开启）。
+1. Configuration order is priority: **enabled entries earlier in the list are tried first**, and the first success serves the request.
+2. If an entry fails and is judged **retryable** (rate limit 429 / insufficient balance 402 / transient 5xx / timeout / account unavailable, plus an upstream 400 "context length exceeded" that still fails after truncation retry), it automatically **moves on to the next entry**.
+3. **Permanent errors** (401/403 and general 400) fail immediately without trying the next entry.
+4. **Pinned source entries**: an entry can explicitly pin `cline` / `provider` / `zen`; only that upstream is used and failure does **not** fall back to other sources. If the pinned source is unavailable for that model, the entry is skipped and the next entry continues (the whole combo is not aborted).
+5. Disabled entries / duplicate entries / models disabled in the dashboard are skipped (they count in the trace, but no request is made).
+6. By default the global ModelChain or free-chain fallback is not triggered (emergency fallback must be explicitly enabled by an admin).
 
-**查找可用组合 ID** — `GET /v1/models`（及 `/models`）会把启用中的组合合并进模型列表，
-组合条目以 `owned_by: "combo"` 标识：
+**Finding available combo IDs** — `GET /v1/models` (and `/models`) merges enabled combos into the model list, with combo entries identified by `owned_by: "combo"`:
 
 ```bash
 curl -H "x-api-key: YOUR_KEY" http://127.0.0.1:8999/v1/models
@@ -201,19 +196,19 @@ curl -H "x-api-key: YOUR_KEY" http://127.0.0.1:8999/v1/models
 }
 ```
 
-> 组合的创建 / 编辑 / 删除 / 启停在 `/admin/` 后台完成；响应中的 `created` 为当前时间戳。
+> Combos are created / edited / deleted / enabled-or-disabled in the `/admin/` dashboard; `created` in the response is the current timestamp.
 
 ---
 
-## 附录：关于 `ox-alpha` 等 UI 所示模型的说明
+## Appendix: About models shown in the UI such as `ox-alpha`
 
-UI 中显示的 `ox-alpha`、`deepseek-v4-flash`、`laguna-s-2.1` 是**本地硬编码**的 fallback 模型，不是远程 API 返回的 Free 模型：
+The `ox-alpha`, `deepseek-v4-flash`, and `laguna-s-2.1` shown in the UI are **locally hardcoded** fallback models, not Free models returned by the remote API:
 
-| UI 显示 | 本地硬编码 Model ID | 远程 API Free 模型 |
+| UI shows | Local hardcoded Model ID | Remote API Free model |
 |---|---|---|
-| Ox Alpha | `stealth/ox-alpha` | (不同的模型) |
-| DeepSeek V4 Flash | `deepseek-ai/deepseek-v4-flash` | (不同的模型) |
-| Laguna S 2.1 | `poolside/laguna-s-2.1:free` | (不同的模型) |
+| Ox Alpha | `stealth/ox-alpha` | (different model) |
+| DeepSeek V4 Flash | `deepseek-ai/deepseek-v4-flash` | (different model) |
+| Laguna S 2.1 | `poolside/laguna-s-2.1:free` | (different model) |
 
-远程 API 返回的 Free 模型（4.1.15 build）：`kwaipilot/kat-coder-pro`、`arcee-ai/trinity-large-preview:free`
-(具体取决于服务器端，可能会更新)
+Free models returned by the remote API (4.1.15 build): `kwaipilot/kat-coder-pro`, `arcee-ai/trinity-large-preview:free`
+(depends on the server side and may be updated)
