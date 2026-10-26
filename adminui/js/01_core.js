@@ -1,7 +1,7 @@
 
 // ===== i18n =====
 const I18N = {
-  'Cline 代理': 'Cline Proxy',
+  'RouteNest': 'RouteNest',
   '多账号轮询 · 双协议': 'Multi-account rotation · Dual protocol',
   '管理': 'Admin',
   '仪表盘': 'Dashboard',
@@ -147,7 +147,7 @@ const I18N = {
   '删除全部密钥': 'Delete All Keys',
   '应用信息、使用指南与开源协议': 'App info, usage guide & license',
   '应用信息': 'About App',
-  'Cline API 反向代理 · 多账号轮询 · 双协议兼容': 'Cline API reverse proxy · multi-account rotation · dual protocol',
+  'RouteNest · 多账号轮询 · 双协议兼容': 'RouteNest · multi-account rotation · dual protocol',
   '快速上手': 'Quick Start',
   '添加 Cline 账号': 'Add a Cline account',
   '在「账号与连接」页展开「登录与导入」分区，通过 OAuth 登录或手动输入 refreshToken 添加账号。支持批量导入。': 'On the Accounts page, expand the Cline Login and Import section and add via OAuth or a pasted refreshToken. Batch import supported.',
@@ -964,9 +964,9 @@ function t(s){ if (LANG==='en' && s && I18N[s]) return I18N[s]; return s; }
 const I18N_REV = Object.keys(I18N).reduce((acc, k) => { acc[I18N[k]] = k; return acc; }, {});
 function applyLang(){
   if (LANG === 'en') {
-    document.title = 'Cline Proxy Admin';
+    document.title = 'RouteNest Admin';
   } else {
-    document.title = 'Cline 代理管理面板';
+    document.title = 'RouteNest 管理面板';
   }
   const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
   const nodes = [];

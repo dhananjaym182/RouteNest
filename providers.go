@@ -787,7 +787,7 @@ var providerPresets = map[string]providerPreset{
 		BaseURL: "https://openrouter.ai/api/v1",
 		Headers: map[string]string{
 			"HTTP-Referer": "https://cline.bot",
-			"X-Title":      "Cline Proxy",
+			"X-Title":      "RouteNest",
 		},
 		Notes:    "300+ models; many :free variants. Key: openrouter.ai/keys",
 		FreeTier: true,
