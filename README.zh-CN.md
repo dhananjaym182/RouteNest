@@ -240,23 +240,23 @@ Cline 文档说明：Cline API 不支持免费模型，免费模型仅限 Cline 
 
 ## 数据与升级
 
-数据按以下顺序查找：可执行文件目录、工作目录、`~/.cline2api/`。设置 `CLINE2API_DATA_DIR` 可把所有数据文件固定到一个目录。
+数据按以下顺序查找：可执行文件目录、工作目录、`~/.routenest/`。设置 `ROUTENEST_DATA_DIR` 可把所有数据文件固定到一个目录（`ROUTENEST_DATA_DIR` 未设置时仍兼容旧的 `CLINE2API_DATA_DIR`）。
 
 | 文件 | 用途 |
 | --- | --- |
-| `.cline-accounts.json` | 账号池、API 密钥、模型设置、管理密码哈希 |
-| `.cline-config.json` | 代理配置、别名、策略与模型组合 |
-| `.cline-connections.json` | 非 Cline 连接元数据（Zen、Qoder 等） |
-| `.cline-credentials.json` | 已保存的连接凭据 |
-| `.cline-providers.json` | 自定义服务商 |
-| `.cline-providers-cooldowns.json` | 服务商冷却状态 |
-| `.cline-providers-sync.json` | 服务商目录同步状态 |
-| `.cline-proxy.json` | Cline 出口代理池 |
-| `.cline-zen.json` | OpenCode Zen 配置与出口代理池 |
-| `.cline-request-logs.json` | 请求日志 |
+| `.routenest-accounts.json` | 账号池、API 密钥、模型设置、管理密码哈希 |
+| `.routenest-config.json` | 代理配置、别名、策略与模型组合 |
+| `.routenest-connections.json` | 非 Cline 连接元数据（Zen、Qoder 等） |
+| `.routenest-credentials.json` | 已保存的连接凭据 |
+| `.routenest-providers.json` | 自定义服务商 |
+| `.routenest-providers-cooldowns.json` | 服务商冷却状态 |
+| `.routenest-providers-sync.json` | 服务商目录同步状态 |
+| `.routenest-proxy.json` | Cline 出口代理池 |
+| `.routenest-zen.json` | OpenCode Zen 配置与出口代理池 |
+| `.routenest-request-logs.json` | 请求日志 |
 | `override.md` | 可选的 System Prompt 覆盖，从工作目录读取 |
 
-设置 `CLINE2API_DATA_DIR` 后，首次使用时会把可执行文件目录或工作目录中的旧数据文件复制到该目录，前提是目标文件尚不存在。`.cline-` 文件名被有意保留，以便旧部署原地升级。
+数据目录首次使用时，会把可执行文件目录、工作目录或 `~/.cline2api/` 中的旧 `.cline-*` 数据文件以新的 `.routenest-*` 名称复制进去（前提是目标文件尚不存在），旧部署可原地升级；`ROUTENEST_DATA_DIR` 未设置时仍兼容旧的 `CLINE2API_DATA_DIR` 环境变量。
 
 > 数据文件包含明文 refreshToken、服务商密钥与生成的 API 密钥。请安全备份，不要公开，也不要提交到 Git。
 

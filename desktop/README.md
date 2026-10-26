@@ -55,7 +55,7 @@ Uploading a bare exe to a cloud drive is easily blocked by Chrome/Edge; packagin
 
 ```bash
 ./desktop/build.sh && ./desktop/dist.sh
-# Output: desktop/dist/ccline2api-windows-amd64.zip (exe + usage instructions)
+# Output: desktop/dist/routenest-windows-amd64.zip (exe + usage instructions)
 ```
 
 ### Self-signing (optional, free tamper protection)

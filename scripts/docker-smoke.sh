@@ -10,9 +10,9 @@
 # ============================================================================
 set -euo pipefail
 
-IMAGE=${SMOKE_IMAGE:-cline2api-smoke}
+IMAGE=${SMOKE_IMAGE:-routenest-smoke}
 PORT=${SMOKE_PORT:-39999}
-NAME=cline2api-smoke
+NAME=routenest-smoke
 WORK=${SMOKE_WORKDIR:-"$(mktemp -d)"}
 
 say()  { printf '\n\033[1;36m==> %s\033[0m\n' "$*"; }

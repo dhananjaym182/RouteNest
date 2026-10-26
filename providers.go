@@ -25,7 +25,7 @@ import (
 // 用户可接入任意 OpenAI 兼容上游（OpenRouter / Groq / Cerebras / Gemini 兼容层 /
 // Mistral / 自建 vLLM 等）。每个 provider 声明 baseURL、apiKey、自定义请求头、
 // 模型列表；请求按模型归属路由，失败后按 回退链 → 自动兜底 降级。
-// providerRegistry 内存态 + 落盘（.cline-providers.json）。
+// providerRegistry 内存态 + 落盘（.routenest-providers.json）。
 var (
 	providersMu            sync.Mutex
 	customProviders        []*CustomProvider
@@ -37,8 +37,8 @@ var (
 )
 
 func init() {
-	providersFilePath = resolveDataPath(".cline-providers.json")
-	providersCooldownsPath = resolveDataPath(".cline-providers-cooldowns.json")
+	providersFilePath = resolveDataPath(".routenest-providers.json")
+	providersCooldownsPath = resolveDataPath(".routenest-providers-cooldowns.json")
 }
 
 func loadProviders() {

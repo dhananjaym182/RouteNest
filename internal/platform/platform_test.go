@@ -49,8 +49,10 @@ func TestResolveDataPathIsolatedUnderTest(t *testing.T) {
 func TestMigrateLegacyDataFilesIsIdempotent(t *testing.T) {
 	src := t.TempDir()
 	dst := t.TempDir()
-	name := ".cline-config.json"
-	if err := os.WriteFile(filepath.Join(src, name), []byte("first"), 0600); err != nil {
+	// 旧版名（源）→ 新版名（迁移目标）
+	legacyName := ".cline-config.json"
+	name := CurrentDataFileName(legacyName)
+	if err := os.WriteFile(filepath.Join(src, legacyName), []byte("first"), 0600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -64,7 +66,7 @@ func TestMigrateLegacyDataFilesIsIdempotent(t *testing.T) {
 		t.Fatalf("migrated content = %q, want first", got)
 	}
 
-	if err := os.WriteFile(filepath.Join(src, name), []byte("second"), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(src, legacyName), []byte("second"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	MigrateLegacyDataFiles(dst, legacy)

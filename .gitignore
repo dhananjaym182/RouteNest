@@ -4,18 +4,27 @@
 .cline-request-logs.json
 .cline-zen.json
 .cline-config.json
-.cline-providers.json
 .cline-providers-cooldowns.json
 .cline-providers-sync.json
 .cline-proxy.json
+.routenest-accounts.json
+.routenest-credentials.json
+.routenest-providers.json
+.routenest-request-logs.json
+.routenest-zen.json
+.routenest-config.json
+.routenest-providers-cooldowns.json
+.routenest-providers-sync.json
+.routenest-proxy.json
 
 # 运行时数据目录（docker compose 挂载）与原子写/损坏备份产物
 data/
 .cline-*.json.tmp
 .cline-*.json.corrupt-*
-cline-proxy
-cline-go-proxy
-cline-proxy.exe
+.routenest-*.json.tmp
+.routenest-*.json.corrupt-*
+routenest
+routenest.exe
 
 # local secrets & runtime logs
 credentials.txt

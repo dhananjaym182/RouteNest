@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -45,33 +44,9 @@ func init() {
 }
 
 func findCredentialsFile() string {
-	// CLINE2API_DATA_DIR 设置时固定使用该目录（与 resolveDataPath 保持一致）
-	if dir := envDataDir(); dir != "" {
-		migrateLegacyDataOnce(dir)
-		return filepath.Join(dir, ".cline-credentials.json")
-	}
-	// First, try next to the executable
-	exe, err := os.Executable()
-	if err == nil {
-		p := filepath.Join(filepath.Dir(exe), ".cline-credentials.json")
-		if fileExists(p) {
-			return p
-		}
-	}
-	// Second, try current working directory
-	pwd, err := os.Getwd()
-	if err == nil {
-		p := filepath.Join(pwd, ".cline-credentials.json")
-		if fileExists(p) {
-			return p
-		}
-	}
-	// Default to executable directory
-	if err == nil {
-		return filepath.Join(filepath.Dir(exe), ".cline-credentials.json")
-	}
-	pwd, _ = os.Getwd()
-	return filepath.Join(pwd, ".cline-credentials.json")
+	// 数据目录环境变量（ROUTENEST_DATA_DIR，旧 CLINE2API_DATA_DIR 仍兜底）
+	// 与 resolveDataPath 的 exe/工作目录/主目录启发式保持一致（含旧文件迁移）。
+	return resolveDataPath(".routenest-credentials.json")
 }
 
 func loadCredentials() *credentials {

@@ -9,7 +9,7 @@ import (
 )
 
 // ClineEgressPath is the data file holding the Cline egress proxy pool.
-const ClineEgressPath = ".cline-proxy.json"
+const ClineEgressPath = ".routenest-proxy.json"
 
 // ClineEgress is the persisted Cline egress proxy pool configuration.
 type ClineEgress struct {

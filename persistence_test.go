@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"cline-go-proxy/internal/platform"
 )
 
 // chdir 临时切换工作目录（使用它的测试不可并行）。
@@ -74,8 +76,9 @@ func TestResolveDataPathIsolationUnderGoTest(t *testing.T) {
 	}
 }
 
-// TestMigrateLegacyDataFiles 切换数据目录时应把旧位置已有的数据文件拷贝过来：
-// 仅当目标不存在时拷贝（不覆盖已有新数据），且重复调用幂等。
+// TestMigrateLegacyDataFiles 切换数据目录时应把旧位置已有的旧版 .cline-* 数据文件
+// 拷贝为目录下的新版 .routenest-* 文件名：仅当目标不存在时拷贝
+// （不覆盖已有新数据），且重复调用幂等。
 func TestMigrateLegacyDataFiles(t *testing.T) {
 	t.Setenv(dataDirEnv, "")
 	work := t.TempDir()
@@ -88,6 +91,7 @@ func TestMigrateLegacyDataFiles(t *testing.T) {
 	legacyDataDirsOverride = func() []string { return []string{work} }
 	t.Cleanup(func() { legacyDataDirsOverride = origOverride })
 
+	// 旧版名字 → 迁移后的新数据目录内容
 	legacy := map[string]string{
 		".cline-accounts.json": `{"keys":["sk-old"],"accounts":[]}`,
 		".cline-config.json":   `{"strategy":"fill"}`,
@@ -100,7 +104,8 @@ func TestMigrateLegacyDataFiles(t *testing.T) {
 
 	migrateLegacyDataFiles(dir)
 
-	for name, content := range legacy {
+	for oldName, content := range legacy {
+		name := platform.CurrentDataFileName(oldName)
 		data, err := os.ReadFile(filepath.Join(dir, name))
 		if err != nil {
 			t.Fatalf("migrated file %s missing: %v", name, err)
@@ -111,7 +116,7 @@ func TestMigrateLegacyDataFiles(t *testing.T) {
 	}
 
 	// 已存在的目标不被覆盖
-	existing := filepath.Join(dir, ".cline-accounts.json")
+	existing := filepath.Join(dir, ".routenest-accounts.json")
 	if err := os.WriteFile(existing, []byte(`{"keys":["sk-new"],"accounts":[]}`), 0600); err != nil {
 		t.Fatalf("seed destination: %v", err)
 	}
@@ -211,11 +216,12 @@ func TestPoolPersistenceRoundTrip(t *testing.T) {
 	}
 }
 
-// TestFindCredentialsFileEnv 凭据文件路径与数据目录环境变量保持一致。
+// TestFindCredentialsFileEnv 凭据文件路径与数据目录环境变量保持一致
+// （ROUTENEST_DATA_DIR 优先，旧的 CLINE2API_DATA_DIR 仍兜底）。
 func TestFindCredentialsFileEnv(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv(dataDirEnv, dir)
-	if got := findCredentialsFile(); got != filepath.Join(dir, ".cline-credentials.json") {
-		t.Fatalf("findCredentialsFile = %q, want %q", got, filepath.Join(dir, ".cline-credentials.json"))
+	if got := findCredentialsFile(); got != filepath.Join(dir, ".routenest-credentials.json") {
+		t.Fatalf("findCredentialsFile = %q, want %q", got, filepath.Join(dir, ".routenest-credentials.json"))
 	}
 }

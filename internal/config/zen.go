@@ -9,7 +9,7 @@ import (
 )
 
 // ZenPath is the data file holding the OpenCode Zen configuration.
-const ZenPath = ".cline-zen.json"
+const ZenPath = ".routenest-zen.json"
 
 // LegacyZenBaseURL is the retired default endpoint. Persisted configurations
 // pointing at it are migrated to the current inference API on load.

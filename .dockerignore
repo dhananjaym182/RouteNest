@@ -10,7 +10,7 @@ data/
 
 # 本地构建产物与无关目录
 *.exe
-cline-proxy
+routenest
 frontend/
 desktop/
 *.md

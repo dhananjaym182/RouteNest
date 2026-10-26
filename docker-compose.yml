@@ -1,7 +1,7 @@
 services:
-  cline-proxy:
+  routenest:
     build: .
-    container_name: cline-proxy
+    container_name: routenest
     restart: unless-stopped
     ports:
       - "3457:3457"

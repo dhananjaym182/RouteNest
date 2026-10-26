@@ -9,7 +9,7 @@ import (
 )
 
 // ProxyPath is the data file holding global proxy settings and combos.
-const ProxyPath = ".cline-config.json"
+const ProxyPath = ".routenest-config.json"
 
 // Proxy is the persisted global proxy configuration.
 type Proxy struct {

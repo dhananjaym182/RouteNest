@@ -34,7 +34,7 @@ var (
 )
 
 func init() {
-	connectionsFilePath = resolveDataPath(".cline-connections.json")
+	connectionsFilePath = resolveDataPath(".routenest-connections.json")
 }
 
 func loadConnections() {

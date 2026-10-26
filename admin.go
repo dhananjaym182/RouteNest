@@ -322,7 +322,7 @@ func handleAdminAccountTest(w http.ResponseWriter, r *http.Request) {
 	adminAccountOps.Test(w, r)
 }
 
-// Global proxy config (mutable via API, persisted to .cline-config.json)
+// Global proxy config (mutable via API, persisted to .routenest-config.json)
 var (
 	proxyConfig   = loadProxyConfigFromDisk()
 	proxyConfigMu sync.Mutex

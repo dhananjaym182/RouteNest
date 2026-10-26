@@ -243,23 +243,23 @@ Priority is application proxy pool → environment proxy (`HTTPS_PROXY`) → dir
 
 ## Data and upgrades
 
-State is looked up in the executable directory, then the working directory, then `~/.cline2api/`. Set `CLINE2API_DATA_DIR` to fix all data files to one directory.
+State is looked up in the executable directory, then the working directory, then `~/.routenest/`. Set `ROUTENEST_DATA_DIR` to fix all data files to one directory (the legacy `CLINE2API_DATA_DIR` variable is still honored when `ROUTENEST_DATA_DIR` is unset).
 
 | File | Purpose |
 | --- | --- |
-| `.cline-accounts.json` | Account pool, API keys, model settings, admin password hash |
-| `.cline-config.json` | Proxy configuration, aliases, policies and model combos |
-| `.cline-connections.json` | Non-Cline connection metadata (Zen, Qoder and others) |
-| `.cline-credentials.json` | Stored connection credentials |
-| `.cline-providers.json` | Custom providers |
-| `.cline-providers-cooldowns.json` | Provider cooldown state |
-| `.cline-providers-sync.json` | Provider catalog sync state |
-| `.cline-proxy.json` | Cline egress proxy pool |
-| `.cline-zen.json` | OpenCode Zen configuration and egress pool |
-| `.cline-request-logs.json` | Request logs |
+| `.routenest-accounts.json` | Account pool, API keys, model settings, admin password hash |
+| `.routenest-config.json` | Proxy configuration, aliases, policies and model combos |
+| `.routenest-connections.json` | Non-Cline connection metadata (Zen, Qoder and others) |
+| `.routenest-credentials.json` | Stored connection credentials |
+| `.routenest-providers.json` | Custom providers |
+| `.routenest-providers-cooldowns.json` | Provider cooldown state |
+| `.routenest-providers-sync.json` | Provider catalog sync state |
+| `.routenest-proxy.json` | Cline egress proxy pool |
+| `.routenest-zen.json` | OpenCode Zen configuration and egress pool |
+| `.routenest-request-logs.json` | Request logs |
 | `override.md` | Optional system-prompt override, read from the working directory |
 
-When `CLINE2API_DATA_DIR` is set, legacy data files found next to the executable or in the working directory are copied into that directory on first use if the destination file does not already exist. The legacy `.cline-` file names are intentionally retained so existing deployments upgrade in place.
+When the data directory is resolved to a new location, legacy `.cline-*` data files found next to the executable or in the working directory or in `~/.cline2api/` are copied into it under the new `.routenest-*` names on first use if the destination files do not already exist. This keeps existing deployments upgrading in place; the legacy `CLINE2API_DATA_DIR` environment variable is also still honored when `ROUTENEST_DATA_DIR` is unset.
 
 > The data files contain plaintext refresh tokens, provider keys and generated API keys. Back them up securely and never publish them or commit them to Git.
 

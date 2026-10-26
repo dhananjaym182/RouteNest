@@ -18,7 +18,7 @@ var (
 )
 
 func init() {
-	poolPath = resolveDataPath(".cline-accounts.json")
+	poolPath = resolveDataPath(".routenest-accounts.json")
 }
 
 func loadPool() *AccountPool {

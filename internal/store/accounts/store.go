@@ -11,7 +11,7 @@ import (
 )
 
 // FileName is the data file holding the account pool.
-const FileName = ".cline-accounts.json"
+const FileName = ".routenest-accounts.json"
 
 // Empty returns a pool with initialized slices so callers never see nils.
 func Empty() *domain.AccountPool {

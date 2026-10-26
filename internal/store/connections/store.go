@@ -11,7 +11,7 @@ import (
 )
 
 // FileName is the data file holding provider connections.
-const FileName = ".cline-connections.json"
+const FileName = ".routenest-connections.json"
 
 // Load reads path. A missing or unreadable file yields nil and no error; a
 // decode error yields nil and the error so the caller can back up the file.

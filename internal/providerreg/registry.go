@@ -1,7 +1,7 @@
 // Package providerreg defines provider presets and their immutable built-in
 // registry. Presets are compile-time data: editing a JSON file requires
 // rebuilding the binary. Runtime custom providers are stored separately in
-// .cline-providers.json and apply without a rebuild.
+// .routenest-providers.json and apply without a rebuild.
 package providerreg
 
 import (

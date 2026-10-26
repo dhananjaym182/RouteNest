@@ -26,7 +26,7 @@ var (
 )
 
 func init() {
-	requestLogsPath = resolveDataPath(".cline-request-logs.json")
+	requestLogsPath = resolveDataPath(".routenest-request-logs.json")
 }
 
 func loadRequestLogs() {

@@ -14,8 +14,8 @@ set -eu
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 cd "$ROOT"
 
-BIN=./cline-proxy
-LOG=cline-proxy.log
+BIN=./routenest
+LOG=routenest.log
 HEALTH_URL=${HEALTH_URL:-http://127.0.0.1:3457/admin/}
 PULL=1
 TESTS=1
@@ -71,13 +71,13 @@ go build -trimpath -ldflags "-s -w -X main.appVersion=$VERSION -X main.appGitCom
 printf 'Built: %s (version %s)\n' "$BIN" "$VERSION"
 
 say "Restarting service"
-if pkill -x cline-proxy 2>/dev/null; then
+if pkill -x routenest 2>/dev/null; then
   i=0
-  while pgrep -x cline-proxy >/dev/null 2>&1 && [ "$i" -lt 20 ]; do
+  while pgrep -x routenest >/dev/null 2>&1 && [ "$i" -lt 20 ]; do
     sleep 0.5
     i=$((i + 1))
   done
-  pgrep -x cline-proxy >/dev/null 2>&1 && die "old instance did not stop"
+  pgrep -x routenest >/dev/null 2>&1 && die "old instance did not stop"
   echo "old instance stopped"
 else
   echo "no instance was running"
@@ -86,14 +86,14 @@ fi
 # setsid: 独立会话启动，避免脚本所在 shell 退出时被一并回收
 setsid nohup "$BIN" > "$LOG" 2>&1 < /dev/null &
 sleep 1
-NEW_PID=$(pgrep -x cline-proxy | head -1 || true)
+NEW_PID=$(pgrep -x routenest | head -1 || true)
 [ -n "$NEW_PID" ] || { tail -20 "$LOG" >&2; die "failed to start $BIN"; }
 echo "started pid=$NEW_PID (log: $LOG)"
 
 say "Health check ($HEALTH_URL)"
 i=0
 while [ "$i" -lt 30 ]; do
-  if ! pgrep -x cline-proxy >/dev/null 2>&1; then
+  if ! pgrep -x routenest >/dev/null 2>&1; then
     echo "--- last log lines:" >&2
     tail -20 "$LOG" >&2
     die "process exited during startup"

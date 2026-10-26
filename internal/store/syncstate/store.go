@@ -10,7 +10,7 @@ import (
 )
 
 // FileName is the data file holding provider recheck status.
-const FileName = ".cline-providers-sync.json"
+const FileName = ".routenest-providers-sync.json"
 
 // State is the persisted display status for one provider.
 type State struct {

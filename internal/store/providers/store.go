@@ -13,9 +13,9 @@ import (
 
 const (
 	// FileName is the data file holding custom provider definitions.
-	FileName = ".cline-providers.json"
+	FileName = ".routenest-providers.json"
 	// CooldownsFileName is the data file holding provider:model cooldowns.
-	CooldownsFileName = ".cline-providers-cooldowns.json"
+	CooldownsFileName = ".routenest-providers-cooldowns.json"
 )
 
 // Load reads path. A missing or unreadable file yields nil and no error; a
