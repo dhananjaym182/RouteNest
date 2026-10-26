@@ -2,16 +2,16 @@
 # 一键更新：拉取代码 → 跑测试 → 重新构建 → 重启服务（带健康检查）。
 #
 # 用法:
-#   ./update.sh               拉取 origin/main 并更新
-#   ./update.sh --upstream     额外快进合并 upstream/main（需先配置 upstream 远端）
-#   ./update.sh --no-pull      跳过拉取，只测试 + 构建 + 重启 (aliases: --local, --no-fetch)
-#   ./update.sh --no-test      跳过测试（不推荐）
+#   sh scripts/update.sh               拉取 origin/main 并更新
+#   sh scripts/update.sh --upstream     额外快进合并 upstream/main（需先配置 upstream 远端）
+#   sh scripts/update.sh --no-pull      跳过拉取，只测试 + 构建 + 重启 (aliases: --local, --no-fetch)
+#   sh scripts/update.sh --no-test      跳过测试（不推荐）
 #
 # 说明: 拉取/测试/构建阶段旧进程继续运行；只有全部成功后才重启，
 #       任一步失败都会保留正在运行的旧版本。
 set -eu
 
-ROOT=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 cd "$ROOT"
 
 BIN=./cline-proxy

@@ -4,7 +4,7 @@
 #
 # 场景对应真实事故：容器重建后账号/配置等数据异常丢失。
 # 本脚本在部署机上即可运行：
-#   ./docker-smoke.sh            # 使用 docker build 构建镜像后测试
+#   sh scripts/docker-smoke.sh            # 使用 docker build 构建镜像后测试
 #
 # 流程：构建镜像 → 带卷启动 → 写入数据 → 强制删除容器 → 同卷重建 → 校验数据仍在。
 # ============================================================================
@@ -23,6 +23,9 @@ cleanup() {
   docker rm -f "$NAME" >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
+
+ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+cd "$ROOT"
 
 say "1/6 构建镜像 $IMAGE"
 docker build -t "$IMAGE" .

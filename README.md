@@ -298,15 +298,19 @@ Development packages are only needed to compile. Release users need the correspo
 ## Project layout
 
 ```
-main.go, desktop_main.go   CLI and desktop entry points
+main.go, desktop_main.go   CLI and desktop entry points (package main, root)
 proxy.go, responses.go     HTTP routes, protocol bridging, SSE
 combos.go, providers.go    model combos, presets and provider dispatch
 admin*.go                  admin REST API
 adminui/                   embedded admin console
 internal/                  config, protocol adapters, upstream clients, storage
 desktop/                   Wails shell and build scripts
+docs/                      design documents and provider-registry audits
+scripts/                   update.sh, docker-smoke.sh
 Dockerfile, docker-compose.yml
 ```
+
+The repository's Go source at the root compiles as a single `package main`; all reusable logic lives in `internal/`.
 
 ## Attribution and license
 

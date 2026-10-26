@@ -12,7 +12,7 @@ import (
 )
 
 // clineRecommendedModelsURL 是 Cline 官方的「推荐/免费模型」接口（无需认证）。
-// 参考 model-api.md：Cline 4.1.15 的 Free Models 由该接口直接返回。
+// 参考 docs/model-api.md：Cline 4.1.15 的 Free Models 由该接口直接返回。
 // var 便于测试注入 httptest 假服务。
 var clineRecommendedModelsURL = "https://api.cline.bot/api/v1/ai/cline/recommended-models"
 
