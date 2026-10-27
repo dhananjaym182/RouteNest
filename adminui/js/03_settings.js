@@ -9,9 +9,9 @@ async function loadKeys() {
       return;
     }
     el.innerHTML = keys.map(k =>
-      '<div class="flex" style="margin-bottom:8px">' +
-        '<span class="key-display" style="flex:1" onclick="copyText(\'' + k + '\')" title="' + t('点击复制') + '">' + esc(k) + '</span>' +
-        '<button class="btn btn-sm btn-danger" onclick="deleteKey(\'' + k + '\', this)" title="' + t('删除') + '" aria-label="' + t('删除') + '">✕</button>' +
+     '<div class="flex mb-8">' +
+        '<span class="key-display f1" onclick="copyText(\'' + k + '\')" title="' + t('点击复制') + '">' + esc(k) + '</span>' +
+        '<button class="btn btn-sm btn-danger" onclick="deleteKey(\'' + k + '\', this)" title="' + t('删除') + '" aria-label="' + t('删除') + '">'+uiIcon('close')+'</button>' +
       '</div>'
     ).join('');
   } catch (e) { _('keysList').innerHTML = '<div class="empty">' + t('加载失败') + '</div>'; }
@@ -24,8 +24,8 @@ async function generateKey(btn) {
     const d = await api('POST', '/keys/generate');
     const key = d.data.key;
     _('keyGenResult').innerHTML =
-      '<div style="background:var(--green-soft);border:1px solid var(--green);border-radius:var(--radius-sm);padding:14px">' +
-        '<div style="color:var(--green);font-weight:600;margin-bottom:8px">✓ ' + t('新密钥已生成（点击复制）') + '</div>' +
+      '<div class="save-banner">' +
+        '<div class="save-result ok mb-8">✓ ' + t('新密钥已生成（点击复制）') + '</div>' +
         '<div class="key-display" onclick="copyText(\'' + key + '\')">' + esc(key) + '</div>' +
       '</div>';
     loadKeys();
@@ -137,7 +137,7 @@ function addAliasRow(alias, target, provider) {
   const rem = document.createElement('button');
   rem.type = 'button';
   rem.className = 'btn btn-sm btn-danger se-remove';
-  rem.textContent = '✕';
+  rem.innerHTML = uiIcon('close');
   rem.title = t('移除');
   rem.addEventListener('click', () => { row.remove(); checkAliasDupes(); refreshSaveBar(); });
   a.addEventListener('input', checkAliasDupes);
@@ -213,7 +213,7 @@ function addErrorRuleRow(codes, match, action, regex) {
   down.title = t('下移');
   down.addEventListener('click', () => { const next = row.nextElementSibling; if (next) { row.parentNode.insertBefore(next, row); refreshSaveBar(); } });
   const rem = document.createElement('button');
-  rem.type = 'button'; rem.className = 'btn btn-sm btn-danger se-remove'; rem.textContent = '✕';
+  rem.type = 'button'; rem.className = 'btn btn-sm btn-danger se-remove'; rem.innerHTML = uiIcon('close');
   rem.title = t('移除');
   rem.addEventListener('click', () => { row.remove(); refreshSaveBar(); });
   row.appendChild(codesInp);
@@ -413,8 +413,9 @@ async function saveTuning(btn) {
   try {
     await api('POST', '/config/update', payload);
     toast(t('调优参数已保存'), 'success');
+    showSaveResult('tunSaveResult', true, t('调优参数已保存'));
     await loadConfig();
-  } catch (e) { toast(t('保存失败: ') + e.message, 'error'); }
+  } catch (e) { toast(t('保存失败: ') + e.message, 'error'); showSaveResult('tunSaveResult', false, (e && e.message) || t('保存失败')); }
   finally { if (btn) { btn.disabled = false; btn.innerHTML = orig; } }
 }
 
@@ -513,9 +514,9 @@ function addHeaderRow() {
   const tbody = _('headersTableBody');
   const tr = document.createElement('tr');
   tr.innerHTML =
-    '<td><input type="text" class="header-key" placeholder="Header-Name" style="font-size:12px;font-family:ui-monospace,monospace"></td>' +
-    '<td><input type="text" class="header-val" placeholder="value" style="font-size:12px;font-family:ui-monospace,monospace"></td>' +
-    '<td><button class="btn btn-sm btn-danger" onclick="this.closest(\'tr\').remove()" title="' + t('移除') + '" aria-label="' + t('移除') + '">✕</button></td>';
+    '<td><input type="text" class="header-key" placeholder="Header-Name"></td>' +
+    '<td><input type="text" class="header-val" placeholder="value"></td>' +
+    '<td><button class="btn btn-sm btn-danger" onclick="this.closest(\'tr\').remove()" title="' + t('移除') + '" aria-label="' + t('移除') + '">'+uiIcon('close')+'</button></td>';
   tbody.appendChild(tr);
 }
 
@@ -530,9 +531,9 @@ async function bulkEditHeaders() {
   });
   const box = document.createElement('div');
   box.innerHTML =
-    '<div class="field" style="margin-top:10px"><label>' + t('批量编辑（每行 Key: Value）') + '</label>' +
-    '<textarea id="headersBulk" rows="10" style="width:100%;font-family:ui-monospace,monospace;font-size:12px;border:1px solid var(--border2);border-radius:8px;padding:8px;background:var(--surface);color:var(--text)">' + esc(lines.join('\n')) + '</textarea></div>' +
-    '<div class="form-actions" style="margin-top:8px"><button class="btn btn-sm btn-primary" onclick="applyBulkHeaders()">' + t('应用并保存') + '</button>' +
+    '<div class="field mt-10"><label>' + t('批量编辑（每行 Key: Value）') + '</label>' +
+    '<textarea id="headersBulk" rows="10" class="w-full mono-plain ta-bulk">' + esc(lines.join('\n')) + '</textarea></div>' +
+    '<div class="form-actions mt-8"><button class="btn btn-sm btn-primary" onclick="applyBulkHeaders()">' + t('应用并保存') + '</button>' +
     '<button class="btn btn-sm" onclick="loadConfig()">' + t('取消') + '</button></div>';
   tbody.parentElement.parentElement.querySelector('.form-actions').style.display = 'none';
   tbody.parentElement.parentElement.appendChild(box);
@@ -583,8 +584,7 @@ async function saveZenHeaders(btn) {
   try {
     await api('POST', '/opencode/config/update', { zenHeaders: parseHeaderText(_('zenHeadersBulk').value) });
     toast(t('opencode 请求头已保存'), 'success');
-    _('zenHeaderSaveResult').innerHTML = '<div style="color:var(--green);font-size:13px">✓ ' + t('已保存') + '</div>';
-    setTimeout(() => _('zenHeaderSaveResult').innerHTML = '', 4000);
+    showSaveResult('zenHeaderSaveResult', true);
   } catch (e) { toast(t('保存失败: ') + e.message, 'error'); }
   finally { if (btn) { btn.disabled = false; btn.innerHTML = orig; } }
 }

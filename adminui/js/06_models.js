@@ -199,10 +199,10 @@ function renderModelRow(m) {
   // 手动设置的 Output 会作为 modelMaxOutputLimit 的封顶值生效
   const prevTest = _modelTestResults[m.id] || null;
   let actions =
-    '<button class="btn btn-sm" style="padding:2px 6px" onclick="testModelRow(\'' + escAttr(m.id) + '\', this)" title="' + t('测试') + '" aria-label="' + t('测试') + '">' + t('测试') + '</button>' +
-    '<button class="btn btn-sm" style="padding:2px 6px" onclick="editModelMeta(\'' + esc(m.id) + '\',' + m.context + ',' + m.output + ',\'' + esc(m.cost || '') + '\',\'' + esc(m.tierSignal || '') + '\')" title="' + t('上下文窗口 / 最大输出 (token)，点击⚙修改') + '" aria-label="' + t('上下文窗口 / 最大输出 (token)，点击⚙修改') + '">⚙</button>';
+    '<button class="btn btn-sm btn-xs" onclick="testModelRow(\'' + escAttr(m.id) + '\', this)" title="' + t('测试') + '" aria-label="' + t('测试') + '">' + t('测试') + '</button>' +
+    '<button class="btn btn-sm btn-xs" onclick="editModelMeta(\'' + esc(m.id) + '\',' + m.context + ',' + m.output + ',\'' + esc(m.cost || '') + '\',\'' + esc(m.tierSignal || '') + '\')" title="' + t('上下文窗口 / 最大输出 (token)，点击⚙修改') + '" aria-label="' + t('上下文窗口 / 最大输出 (token)，点击⚙修改') + '">⚙</button>';
   if (m._customAny || m._delistedAny) {
-    actions += '<button class="btn btn-sm btn-danger" style="padding:2px 6px" onclick="deleteModel(\'' + esc(m.id) + '\')" title="' + (m._delistedAny ? t('移除（已下架模型支持手动移除）') : t('删除')) + '" aria-label="' + (m._delistedAny ? t('移除（已下架模型支持手动移除）') : t('删除')) + '">✕</button>';
+    actions += '<button class="btn btn-sm btn-danger btn-xs" onclick="deleteModel(\'' + esc(m.id) + '\')" title="' + (m._delistedAny ? t('移除（已下架模型支持手动移除）') : t('删除')) + '" aria-label="' + (m._delistedAny ? t('移除（已下架模型支持手动移除）') : t('删除')) + '">'+uiIcon('close')+'</button>';
   }
   return '<div class="model-row' + (m._disabled ? ' disabled-row' : '') + '">' +
     '<label class="switch model-col-switch" title="' + (m._disabled ? t('点击启用该模型') : t('点击停用该模型')) + '"><input type="checkbox"' + (m._disabled ? '' : ' checked') + ' onchange="toggleModel(\'' + esc(m.id) + '\', !this.checked)"><span class="slider"></span></label>' +
@@ -235,7 +235,7 @@ async function testModelRow(id, btn) {
   const out = row ? row.querySelector('.model-row-test') : null;
   const orig = btn ? btn.innerHTML : '';
   if (btn) { btn.disabled = true; btn.innerHTML = '<span class="loading"></span>'; }
-  if (out) out.innerHTML = '<span style="color:var(--text3)"><span class="loading"></span></span>';
+  if (out) out.innerHTML = '<span class="mut"><span class="loading"></span></span>';
   try {
     const d = await api('POST', '/models/test', { model: id });
     const r = d.data || {};
@@ -336,7 +336,7 @@ function renderModelList() {
   const groupHead = (key, label, rows, open, src) => {
     const st = groupStats(rows);
     return '<div class="model-group-head' + (src ? ' model-group-src-head' : '') + (open ? ' expanded' : '') + '" data-key="' + escAttr(key) + '" onclick="toggleModelGroupEl(this)" title="' + t('点击展开/折叠') + '">' +
-      '<span class="model-group-caret">▸</span>' +
+      ''+uiIcon('caretRight')+'</span>' +
       '<span class="model-group-label">' + esc(label) + '</span>' +
       '<span class="model-group-count">' + st.en + '/' + rows.length + '</span>' +
       (st.fail ? '<span class="model-group-fail">' + st.fail + ' ' + t('测试失败') + '</span>' : '') +
@@ -670,10 +670,10 @@ async function loadOcConfig() {
     // 运行状态与出口冷却
     const rt = c.runtime || {};
     let status;
-    if (!c.enabled) status = '<span style="color:var(--text3)">⏸ ' + t('已停用') + '</span>';
-    else if (rt.failoverActive) status = '<span style="color:var(--red)">🔴 ' + t('故障转移中（opencode 暂不可用，请求走 Cline 池）') + '</span>';
-    else status = '<span style="color:var(--green)">🟢 ' + t('正常') + '</span>' +
-      '<span style="margin-left:8px">' + t('已同步模型') + ': ' + (c.syncedModels || 0) + '</span>';
+    if (!c.enabled) status = '<span class="mut">⏸ ' + t('已停用') + '</span>';
+    else if (rt.failoverActive) status = '<span class="red-txt">🔴 ' + t('故障转移中（opencode 暂不可用，请求走 Cline 池）') + '</span>';
+    else status = '<span class="green-txt">🟢 ' + t('正常') + '</span>' +
+      '<span class="ml-8">' + t('已同步模型') + ': ' + (c.syncedModels || 0) + '</span>';
     _('ocRuntimeStatus').innerHTML = status;
     const cds = c.proxyCooldowns || {};
     const entries = Object.entries(cds);
@@ -711,8 +711,7 @@ async function saveOcConfig(btn) {
   if (btn) { btn.disabled = true; btn.innerHTML = '<span class="loading"></span> ' + t('保存中...'); }
   try {
     await api('POST', '/opencode/config/update', payload);
-    _('ocSaveResult').innerHTML = '<span style="color:var(--green)">✓ ' + t('opencode 配置已保存') + '</span>';
-    setTimeout(() => _('ocSaveResult').innerHTML = '', 5000);
+    showSaveResult('ocSaveResult', true, t('opencode 配置已保存'));
     await loadOcConfig();
   } catch (e) {
     toast(t('保存失败: ') + (e.message || ''), 'error');
@@ -738,8 +737,7 @@ async function saveClineProxyConfig(btn) {
   if (btn) { btn.disabled = true; btn.innerHTML = '<span class="loading"></span> ' + t('保存中...'); }
   try {
     await api('POST', '/cline-proxy/config/update', payload);
-    _('clineProxySaveResult').innerHTML = '<span style="color:var(--green)">✓ ' + t('Cline 代理配置已保存') + '</span>';
-    setTimeout(() => _('clineProxySaveResult').innerHTML = '', 5000);
+    showSaveResult('clineProxySaveResult', true, t('Cline 代理配置已保存'));
     await loadClineProxyConfig();
   } catch (e) {
     toast(t('保存失败: ') + (e.message || ''), 'error');
@@ -751,16 +749,16 @@ function showModelSyncModal(res) {
   const ov = _('modelSyncOverlay');
   if (!ov) return;
   const box = _('modelSyncModal');
-  const add = (res.added || []).map(m => '<div style="padding:3px 0">+ <span class="mono">' + esc(m) + '</span></div>').join('');
-  const rem = (res.removed || []).map(m => '<div style="padding:3px 0;color:var(--text3)">- <span class="mono">' + esc(m) + '</span></div>').join('');
+  const add = (res.added || []).map(m => '<div class="p3-thin">+ <span class="mono">' + esc(m) + '</span></div>').join('');
+  const rem = (res.removed || []).map(m => '<div class="p3-thin mut">- <span class="mono">' + esc(m) + '</span></div>').join('');
   let body = '';
-  if (add) body += '<div style="color:var(--green);font-weight:600;margin-bottom:6px">' + t('新增模型') + '</div>' + add;
-  if (rem) body += '<div style="color:var(--text2);font-weight:600;margin:10px 0 6px">' + t('已下架（保留在列表，标记显示）') + '</div>' + rem;
-  if (!body) body = '<div style="color:var(--text2)">' + t('模型无变化') + '</div>';
+  if (add) body += '<div class="save-result ok mb-6">' + t('新增模型') + '</div>' + add;
+  if (rem) body += '<div class="txt-strong mt-10 mb-6">' + t('已下架（保留在列表，标记显示）') + '</div>' + rem;
+  if (!body) body = '<div class="hint-mut">' + t('模型无变化') + '</div>';
   box.innerHTML =
-    '<h2 style="margin:0 0 10px;font-size:18px">' + t('模型同步') + '</h2>' +
-    '<div style="font-size:13px;max-height:320px;overflow-y:auto;color:var(--text);line-height:1.6">' + body + '</div>' +
-    '<div style="text-align:right;margin-top:16px"><button class="btn btn-primary" onclick="closeModelSyncModal()">OK</button></div>';
+    '<h2 class="sync-title">' + t('模型同步') + '</h2>' +
+    '<div class="sync-body">' + body + '</div>' +
+    '<div class="modal-foot"><button class="btn btn-primary" onclick="closeModelSyncModal()">OK</button></div>';
   ov.style.display = 'flex';
 }
 
@@ -866,9 +864,9 @@ async function loadConfig() {
       const tbody = _('headersTableBody');
       tbody.innerHTML = Object.entries(c.headers).map(([k, v]) =>
         '<tr>' +
-          '<td><input type="text" class="header-key" value="' + esc(k) + '" style="font-size:12px;font-family:ui-monospace,monospace;width:100%"></td>' +
-          '<td><input type="text" class="header-val" value="' + esc(v) + '" style="font-size:12px;font-family:ui-monospace,monospace;width:100%"></td>' +
-          '<td><button class="btn btn-sm btn-danger" onclick="this.closest(\'tr\').remove()" title="' + t('移除') + '" aria-label="' + t('移除') + '">✕</button></td>' +
+          '<td><input type="text" class="header-key w-full mono-plain" value="' + esc(k) + '"></td>' +
+          '<td><input type="text" class="header-val w-full mono-plain" value="' + esc(v) + '"></td>' +
+          '<td><button class="btn btn-sm btn-danger" onclick="this.closest(\'tr\').remove()" title="' + t('移除') + '" aria-label="' + t('移除') + '">'+uiIcon('close')+'</button></td>' +
         '</tr>'
       ).join('');
     }

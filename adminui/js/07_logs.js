@@ -64,7 +64,7 @@ function renderAttempts(attempts) {
 
 // 日志模型单元格：服务模型 + 组合徽章 + 回退计数（requestedModel 与服务模型不同时一并显示）
 function logModelCell(l) {
-  let html = '<span class="mono" style="font-size:11px">' + esc(l.model || '-') + '</span>';
+  let html = '<span class="mono hint-xs">' + esc(l.model || '-') + '</span>';
   if (l.requestedModel && l.requestedModel !== l.model) {
     html += '<span class="log-req-model">' + t('请求: ') + esc(l.requestedModel) + '</span>';
   }
@@ -86,13 +86,14 @@ function toggleLogDetail(id) {
 }
 
 // ---------- 筛选 ----------
+// 快捷筛选 chip：与全局 .chip-btn 体系统一，dot 提供成败/流式等色调提示
 const LOG_FILTERS = [
-  { key: 'all', label: '全部', fn: () => true },
-  { key: 'ok', label: '成功', fn: l => l.completed && !l.error },
-  { key: 'fail', label: '失败', fn: l => !l.completed || !!l.error },
-  { key: 'stream', label: '流式', fn: l => !!l.stream },
-  { key: 'combo', label: '组合', fn: l => !!l.comboId },
-  { key: 'fallback', label: '回退', fn: l => !!l.fallbackUsed }
+  { key: 'all', label: '全部', tone: '', fn: () => true },
+  { key: 'ok', label: '成功', tone: 'green', fn: l => l.completed && !l.error },
+  { key: 'fail', label: '失败', tone: 'red', fn: l => !l.completed || !!l.error },
+  { key: 'stream', label: '流式', tone: 'cyan', fn: l => !!l.stream },
+  { key: 'combo', label: '组合', tone: 'purple', fn: l => !!l.comboId },
+  { key: 'fallback', label: '回退', tone: 'yellow', fn: l => !!l.fallbackUsed }
 ];
 
 function logMatches(l) {
@@ -114,8 +115,9 @@ function updateLogChips() {
   if (!box) return;
   box.innerHTML = LOG_FILTERS.map(f => {
     const n = _logItems.filter(f.fn).length;
-    return '<button type="button" class="chip log-chip' + (_logFilter === f.key ? ' active' : '') + '" data-filter="' + f.key + '" onclick="setLogFilter(\'' + f.key + '\')">' +
-      t(f.label) + ' <b>' + n + '</b></button>';
+  // 筛选 chip：确定要性/计数由 .chip-btn 统一样式提供；dot 提示色调
+    return '<button type="button" class="chip chip-btn log-chip' + (_logFilter === f.key ? ' active' : '') + '" data-filter="' + f.key + '" onclick="setLogFilter(\'' + f.key + '\')">' +
+      (f.tone ? '<i class="dot ' + f.tone + '"></i>' : '') + t(f.label) + ' <b>' + n + '</b></button>';
   }).join('');
   // 协议下拉：用已加载数据补充选项，保留当前选择
   const sel = _('logFilterProtocol');
@@ -168,11 +170,12 @@ function renderLogList() {
     const hasAttempts = attempts.length > 0;
     const detailId = 'logDetail' + (_logRowSeq++);
     _logDetailMap[l.id] = detailId;
-    const rowCls = 'log-row' + (hasAttempts ? ' has-attempts' : '');
+    const rowCls = 'log-row' + (hasAttempts ? ' has-attempts' : '') + (idx % 2 ? ' alt' : '');
+    const acct = esc(logUpstreamValue(l));
     const rowTitle = hasAttempts ? ' title="' + escAttr(t('点击查看尝试链路')) + ' · ' + t('双击复制 JSON') + '"' : ' title="' + escAttr(t('双击复制 JSON')) + '"';
     return '<tr class="' + rowCls + '" data-idx="' + idx + '"' + rowTitle + '>' +
       '<td>' + logTimestampHtml(l.startedAt) + '</td>' +
-      '<td>' + esc(logUpstreamValue(l)) + '</td>' +
+      '<td title="' + escAttr(logUpstreamValue(l)) + '">' + acct + '</td>' +
       '<td>' + esc(l.protocol || '-') + '</td>' +
       '<td>' + logModelCell(l) + '</td>' +
       '<td>' + tk + '</td>' +
@@ -196,9 +199,9 @@ function renderLogList() {
       const n = Number(l.fallbackCount) || 0;
       extra += '<span class="log-fallback-badge">' + t('回退') + (n > 0 ? ' ' + n : '') + '</span>';
     }
-    const extraBlock = extra ? '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:6px">' + extra + '</div>' : '';
+    const extraBlock = extra ? '<div class="log-extra-row">' + extra + '</div>' : '';
     const reqLine = (l.requestedModel && l.requestedModel !== l.model)
-      ? '<div class="log-req-model" style="margin-bottom:6px">' + t('请求: ') + esc(l.requestedModel) + '</div>' : '';
+      ? '<div class="log-req-model mb-6">' + t('请求: ') + esc(l.requestedModel) + '</div>' : '';
     const attemptsBlock = attempts.length
       ? '<details class="log-card-attempts"><summary>' + t('尝试链路') + ' (' + attempts.length + ')</summary>' + renderAttempts(attempts) + '</details>'
       : '';
@@ -211,10 +214,10 @@ function renderLogList() {
         '<div class="account-metric"><span class="account-metric-label">tok/s</span><span class="account-metric-value">' + formatTPS(l.outputTokensPerSecond) + '</span></div>' +
       '</div>' +
       extraBlock + reqLine +
-      '<div style="font-size:12px;color:var(--text2);margin-bottom:8px">' + tk + '</div>' +
-      '<div class="account-card-footer">' + logTimestampHtml(l.startedAt) + '<span class="mono" style="font-size:11px">' + esc(l.model || '-') + '</span></div>' +
+      '<div class="hint-mut mb-8">' + tk + '</div>' +
+      '<div class="account-card-footer">' + logTimestampHtml(l.startedAt) + '<span class="mono hint-xs">' + esc(l.model || '-') + '</span></div>' +
       attemptsBlock +
-      '<div style="margin-top:8px"><button type="button" class="btn btn-sm log-detail-btn" data-idx="' + idx + '">' + t('详情') + '</button></div>' +
+      '<div class="mt-8"><button type="button" class="btn btn-sm log-detail-btn" data-idx="' + idx + '">' + t('详情') + '</button></div>' +
     '</article>';
   };
 
@@ -252,10 +255,9 @@ async function loadRequestLogs(reset) {
 }
 
 // ---------- 跟随新日志 ----------
-// 「实时端」必须相对最新一行判定，而不是窗口滚动顶部：列表上方还有页头与
-// 工具栏（约 200–300px），正常观看位置 scrollTop 早已超过固定阈值，会把正常
-// 观看误判成翻阅历史——resume 条常驻、点击后又跳回页顶（列表反而离开视野），
-// 看起来就是「点了没反应 / 一直显示」。
+// 页面滚动发生在 .main（overflow-y:auto），不是 documentElement；实时端判定
+// 必须相对视口内最新一行的位置：最新一行被滚出视口 280px 以上才算「翻阅历史」，
+// 否则（含刚点过「恢复跟随」回到实时端时）都在实时端，resume 条不出现。
 function newestLogEl() {
   const row = document.querySelector('#logTableBody tr.log-row');
   if (row && row.getClientRects().length) return row;
@@ -263,14 +265,13 @@ function newestLogEl() {
   if (card && card.getClientRects().length) return card;
   return row || card || null;
 }
+// 280px 缓冲最高容纳 sticky 表头 + 工具栏高度，轻微滚动不会被误判为离端
 function logAtLiveEdge() {
-  const se = document.scrollingElement || document.documentElement;
   const first = newestLogEl();
-  if (!first) return se.scrollTop <= 140;
-  // 最新行的文档内绝对位置（含页头/工具栏/resume 条自身高度的实时影响）；
-  // 只要还没向下翻过它 240px 以上，就仍在实时端。
-  const rowTopDoc = first.getBoundingClientRect().top + se.scrollTop;
-  return se.scrollTop <= rowTopDoc + 240;
+  if (!first) return true;
+  const rect = first.getBoundingClientRect();
+  if (!rect.height) return true;
+  return rect.top >= -280;
 }
 
 function hideLogResumeBar() {
@@ -330,7 +331,12 @@ async function logPollTick() {
 
 function resumeLogFollow() {
   if (_logPending.length) {
-    _logPending.forEach(l => { if (!_logIds.has(l.id)) { _logItems.unshift(l); _logIds.add(l.id); } });
+    // _logPending 为新→旧排序；unshift 会把先处理的推到更前，所以必须从最旧
+    // 的一端开始合并，否则缓冲的新日志在列表里是新旧行交错反序。
+    for (let i = _logPending.length - 1; i >= 0; i--) {
+      const l = _logPending[i];
+      if (!_logIds.has(l.id)) { _logItems.unshift(l); _logIds.add(l.id); }
+    }
     _logPending = [];
   }
   hideLogResumeBar();
@@ -485,6 +491,18 @@ function toggleLogFullscreen(btn) {
       const art = e.target.closest('.log-card');
       if (art) copyLogJson(Number(art.dataset.idx));
     });
+    // 详情按钮在卡片视图中没有行委托兜底：点它必须直接开详情弹窗
+    cards.addEventListener('click', e => {
+      const btn = e.target.closest('.log-detail-btn');
+      if (btn) openLogDetail(Number(btn.dataset.idx));
+    });
+  }
+  // 表格视图：行点击只做「展开尝试链路」，详情按钮单独开弹窗
+  if (tbody) {
+    tbody.addEventListener('click', e => {
+      const btn = e.target.closest('.log-detail-btn');
+      if (btn) openLogDetail(Number(btn.dataset.idx));
+    }, true);
   }
   document.addEventListener('keydown', e => {
     if (e.key === 'Escape') closeLogDetail();

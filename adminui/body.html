@@ -179,24 +179,20 @@
         <div class="tile-icon cyan"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a10 10 0 1 0 10 10"/><path d="M12 6v6l4 2"/></svg></div>
         <div class="tile-body"><div class="tile-num" id="statCachedTokens">-</div><div class="tile-label">缓存 Token</div><div class="tile-sub" id="statCacheRate">缓存率 -</div></div>
       </div>
-    </div>
-  </div>
-  <div class="metric-section">
-    <div class="metric-heading">opencode 免费模型 · 今日用量</div>
-    <div class="tiles">
-      <div class="stat-tile">
+      <div class="tiles-subhead"><span class="dot"></span>今日 · opencode 免费模型</div>
+      <div class="stat-tile secondary">
         <div class="tile-icon amber"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg></div>
         <div class="tile-body"><div class="tile-num" id="statOcRequests">-</div><div class="tile-label">今日请求数</div></div>
       </div>
-      <div class="stat-tile">
+      <div class="stat-tile secondary">
         <div class="tile-icon blue"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></div>
         <div class="tile-body"><div class="tile-num" id="statOcInputTokens">-</div><div class="tile-label">今日输入 Token</div></div>
       </div>
-      <div class="stat-tile">
+      <div class="stat-tile secondary">
         <div class="tile-icon green"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></div>
         <div class="tile-body"><div class="tile-num" id="statOcOutputTokens">-</div><div class="tile-label">今日输出 Token</div></div>
       </div>
-      <div class="stat-tile">
+      <div class="stat-tile secondary">
         <div class="tile-icon purple"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></div>
         <div class="tile-body"><div class="tile-num" id="statOcTotalTokens">-</div><div class="tile-label">今日总 Token</div></div>
       </div>
@@ -222,9 +218,9 @@
   <div class="page-header">
     <div>
       <div class="large-title">账号与连接</div>
-      <div class="large-subtitle">分开管理 Cline 账号池与 OAuth 登录连接，免费模型用量按来源汇总查看</div>
+      <div class="large-subtitle">分开管理内置账号池（Cline 源）与 OAuth 登录连接，免费模型用量按来源汇总查看</div>
     </div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap">
+    <div class="action-row">
       <button class="btn btn-sm" onclick="testAllAccounts(this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>测试全部</button>
       <button class="btn btn-sm" onclick="exportAccounts(this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>导出全部</button>
       <button class="btn btn-sm" onclick="loadAccounts()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>刷新</button>
@@ -238,13 +234,13 @@
 
   <div class="page-subpage" data-subpage="pool">
   <div class="section">
-    <div class="section-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg><span>Cline 账号池</span></div>
+    <div class="section-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg><span>内置账号池（Cline 源）</span></div>
     <div class="section-body flush">
-      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:10px 16px;border-bottom:1px solid var(--border2)">
-        <input type="text" id="accSearch" placeholder="搜索邮箱..." aria-label="搜索邮箱" oninput="onAccSearch(this.value)" style="flex:1;max-width:320px;min-width:0;padding:7px 12px;border-radius:8px;border:1px solid var(--border2);background:var(--surface2);color:var(--text);font-size:13px">
-        <span id="accSearchCount" style="font-size:12px;color:var(--text3)"></span>
+      <div class="row-toolbar">
+        <input type="text" id="accSearch" placeholder="搜索邮箱..." aria-label="搜索邮箱" oninput="onAccSearch(this.value)" class="search-input">
+        <span id="accSearchCount" class="hint-sm"></span>
         <!-- 勾选后可用的批量操作：集中在勾选区旁，表头只保留全局操作 -->
-        <span style="display:flex;gap:6px;flex-wrap:wrap;margin-left:auto">
+        <span class="row-bulk">
           <button class="btn btn-sm" onclick="exportSelectedAccounts()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>导出选中<span id="selCount"></span></button>
           <button class="btn btn-sm" onclick="resetSelectedAccounts(this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>重置选中<span id="resetCount"></span></button>
           <button class="btn btn-sm btn-danger" onclick="deleteSelectedAccounts(this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>删除选中<span id="delCount"></span></button>
@@ -258,14 +254,14 @@
           <tr><td colspan="12"><div class="sk-stack"><span class="skeleton"></span><span class="skeleton w70"></span><span class="skeleton w45"></span></div></td></tr>
         </tbody>
       </table>
-      <div id="accountPager" style="display:none;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px;padding:10px 16px;border-top:1px solid var(--border2)"></div>
+      <div id="accountPager" class="pager-bar"></div>
       <div id="accountCards" class="account-cards"></div>
     </div>
   </div>
   <div class="section" id="loginImportSection">
-    <div class="section-title"><button class="btn btn-sm btn-icon" id="loginImportToggle" onclick="toggleLoginImport()" title="展开" aria-label="展开" aria-expanded="false" aria-controls="loginImportBody">▸</button><span>登录与导入（Cline 账号）</span></div>
+    <div class="section-title"><button class="btn btn-sm btn-icon" id="loginImportToggle" onclick="toggleLoginImport()" title="展开" aria-label="展开" aria-expanded="false" aria-controls="loginImportBody"><svg class="ui-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"/></svg></button><span>登录与导入（Cline 账号）</span></div>
     <div id="loginImportBody" style="display:none">
-      <div class="section-desc">为上方「Cline 账号池」添加账号：OAuth 浏览器登录、粘贴 refreshToken 或批量文件。第三方服务（Kilo、GitHub Copilot 等）的登录请使用「OAuth 连接池」。</div>
+      <div class="section-desc">为上方「内置账号池（Cline 源）」添加账号：OAuth 浏览器登录、粘贴 refreshToken 或批量文件。第三方服务（Kilo、GitHub Copilot 等）的登录请使用「OAuth 连接池」。</div>
       <div class="tabs" id="importTabs">
         <div class="tab active" data-tab="oauth">OAuth 浏览器登录</div>
         <div class="tab" data-tab="token">手动输入 Token</div>
@@ -273,15 +269,15 @@
       </div>
 
       <div id="import-oauth" class="tab-content active">
-        <p style="color:var(--text2);margin-bottom:16px">通过浏览器完成 OAuth 认证，支持 Google/GitHub/邮箱登录，自动获取 refreshToken。</p>
+        <p class="desc-lead">通过浏览器完成 OAuth 认证，支持 Google/GitHub/邮箱登录，自动获取 refreshToken。</p>
         <button class="btn btn-primary" onclick="startOAuth()" id="oauthBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>开始 OAuth 登录</button>
         <div id="oauthProgress" style="display:none;margin-top:16px" aria-live="polite">
-          <div style="display:flex;align-items:center;gap:12px">
+          <div class="oauth-line">
             <div class="loading"></div>
             <div>
-              <div style="font-weight:600" id="oauthStatus">等待浏览器授权...</div>
-              <div style="color:var(--text2);font-size:13px;margin-top:4px">
-                点击链接（系统浏览器打开）: <a href="#" id="oauthUrl" style="color:var(--accent);cursor:pointer"></a><br>
+              <div class="txt-strong" id="oauthStatus">等待浏览器授权...</div>
+              <div class="small-t2 mt-4">
+                点击链接（系统浏览器打开）: <a href="#" id="oauthUrl" class="oauth-url"></a><br>
                 并输入代码: <strong id="oauthUserCode"></strong>
               </div>
             </div>
@@ -291,7 +287,7 @@
       </div>
 
       <div id="import-token" class="tab-content">
-        <p style="color:var(--text2);margin-bottom:16px">输入已有的 Cline refreshToken，系统会自动验证并加入池。</p>
+        <p class="desc-lead">输入已有的 Cline refreshToken，系统会自动验证并加入池。</p>
         <div class="form-row">
           <div class="field">
             <label>Refresh Token *</label>
@@ -307,11 +303,11 @@
         <div class="form-actions">
           <button class="btn btn-primary" onclick="addByToken(this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>添加账号</button>
         </div>
-        <div id="tokenResult" style="margin-top:8px" aria-live="polite"></div>
+        <div id="tokenResult" class="mt-8" aria-live="polite"></div>
       </div>
 
       <div id="import-batch" class="tab-content">
-        <p style="color:var(--text2);margin-bottom:16px">批量导入多个账号。支持 JSON 数组或每行一个 token。</p>
+        <p class="desc-lead">批量导入多个账号。支持 JSON 数组或每行一个 token。</p>
         <div class="form-row">
           <div class="field">
             <label>JSON 数组格式：[{"refreshToken":"...","email":"..."}]</label>
@@ -322,14 +318,14 @@
           <button class="btn btn-primary" onclick="batchImport(this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>导入全部</button>
           <button class="btn" onclick="document.getElementById('fileInput').click()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>选择文件</button>
         </div>
-        <div id="batchResult" style="margin-top:8px" aria-live="polite"></div>
+        <div id="batchResult" class="mt-8" aria-live="polite"></div>
       </div>
     </div>
   </div>
   <div class="section" id="modelUsageSection">
-    <div class="section-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><rect x="7" y="10" width="3" height="8" rx="1"/><rect x="13" y="6" width="3" height="12" rx="1"/></svg><button class="btn btn-sm btn-icon" id="modelUsageToggle" onclick="toggleModelUsage()" title="展开" aria-label="展开" aria-expanded="false" aria-controls="modelUsageBody">▸</button><span>模型用量</span></div>
+    <div class="section-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><rect x="7" y="10" width="3" height="8" rx="1"/><rect x="13" y="6" width="3" height="12" rx="1"/></svg><button class="btn btn-sm btn-icon" id="modelUsageToggle" onclick="toggleModelUsage()" title="展开" aria-label="展开" aria-expanded="false" aria-controls="modelUsageBody"><svg class="ui-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"/></svg></button><span>模型用量</span></div>
     <div id="modelUsageBody" style="display:none">
-      <div class="section-desc">汇总全部 Cline 账号服务过的免费模型，按来源分组展示请求与 Token 用量。</div>
+      <div class="section-desc">汇总内置账号池服务过的免费模型，按来源分组展示请求与 Token 用量。</div>
       <div class="section-body flush">
         <div id="modelUsageList"><div class="sk-stack"><span class="skeleton"></span><span class="skeleton w70"></span><span class="skeleton w45"></span></div></div>
       </div>
@@ -359,13 +355,15 @@
       <div class="large-title">请求日志</div>
       <div class="large-subtitle">查看每次请求的 Token 消耗、缓存、耗时与流式速度</div>
     </div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap">
+    <div class="action-row">
       <button class="btn btn-sm btn-primary" id="logFollowBtn" onclick="toggleLogFollow(this)" title="自动跟随新日志">跟随新日志</button>
+      <button class="btn btn-sm" onclick="loadRequestLogs(true)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>刷新</button>
+      <span class="toolbar-sep" aria-hidden="true"></span>
       <button class="btn btn-sm" onclick="downloadLogs(this)" title="下载当前筛选结果">下载</button>
       <button class="btn btn-sm" onclick="downloadErrorLogs(this)" title="仅下载失败请求">下载错误日志</button>
+      <span class="toolbar-sep" aria-hidden="true"></span>
       <button class="btn btn-sm" onclick="toggleLogFullscreen(this)" title="全屏">全屏</button>
       <button class="btn btn-sm btn-danger" onclick="clearRequestLogs(this)" title="清空全部日志">清空</button>
-      <button class="btn btn-sm" onclick="loadRequestLogs(true)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>刷新</button>
     </div>
   </div>
   <div class="log-toolbar">
@@ -376,11 +374,12 @@
     </div>
   </div>
   <div class="log-resume-bar" id="logResumeBar" hidden>
-    <button class="btn btn-sm btn-primary" onclick="resumeLogFollow()">恢复跟随</button>
+    <span class="log-resume-dot" aria-hidden="true"></span>
     <span id="logResumeText"></span>
+    <button class="btn btn-sm btn-primary" onclick="resumeLogFollow()">恢复跟随</button>
   </div>
   <div class="section">
-    <div class="section-body flush">
+    <div class="section-body flush log-sheet">
       <table class="log-table">
         <thead>
           <tr><th>时间</th><th>账号</th><th>协议</th><th>模型</th><th>输入</th><th>输出</th><th>缓存</th><th>总</th><th>耗时</th><th>TTFT</th><th>tok/s</th><th>状态</th><th>操作</th></tr>
@@ -392,7 +391,7 @@
       <div id="logCards" class="log-cards"></div>
     </div>
   </div>
-  <div id="logLoadMore" style="display:none;text-align:center;padding:16px">
+  <div id="logLoadMore" class="load-more" style="display:none">
     <button class="btn btn-primary" onclick="loadRequestLogs(false)">加载更多</button>
   </div>
   <div id="logDetailModal" class="overlay-modal" onclick="if(event.target===this)closeLogDetail()">
@@ -432,7 +431,7 @@
     <div class="section-desc">生成的密钥可用于客户端访问代理 API（作为 x-api-key 或 Authorization 头）。</div>
     <div class="section-body">
       <div id="keysList"></div>
-      <div id="keyGenResult" style="margin-top:8px" aria-live="polite"></div>
+      <div id="keyGenResult" class="mt-8" aria-live="polite"></div>
     </div>
   </div>
   </div>
@@ -453,27 +452,27 @@
       </div>
       <div id="listenWarn" class="warn-box" style="display:none">⚠️ 当前监听非本机回环地址（0.0.0.0 或局域网 IP），管理后台无鉴权，局域网内任何设备都可访问。请确认网络环境安全，或配合防火墙限制端口。</div>
       <div id="localIPsRow" class="form-row" style="display:none">
-        <div class="field" style="flex:1">
+        <div class="field f1">
           <label>本机 IP（局域网访问地址）</label>
           <div id="localIPsList"></div>
         </div>
       </div>
-      <div class="form-row" style="margin-top:12px">
-        <div class="field" style="flex:1">
+      <div class="form-row mt-12">
+        <div class="field f1">
           <label>管理后台密码（<span id="passwordStatus">未启用</span>）</label>
-          <div style="display:flex;gap:8px">
-            <input type="password" id="settingPassword" placeholder="留空保存 = 清除密码" autocomplete="new-password" style="flex:1">
+          <div class="gap-row">
+            <input type="password" id="settingPassword" placeholder="留空保存 = 清除密码" autocomplete="new-password" class="f1">
             <button class="btn btn-primary" onclick="savePassword(this)">保存</button>
           </div>
-          <div style="font-size:12px;color:var(--text3);margin-top:4px">设置后访问管理后台需输入密码，默认无密码</div>
+          <div class="hint-sm mt-4">设置后访问管理后台需输入密码，默认无密码</div>
         </div>
       </div>
-      <div class="form-row" style="margin-top:12px">
-        <div class="field" style="flex:1">
+      <div class="form-row mt-12">
+        <div class="field f1">
           <label>后台登录会话</label>
-          <div style="display:flex;gap:8px;align-items:center">
+          <div class="gap-row-mid">
             <button class="btn" onclick="clearAdminSessions(this)">清除全部登录会话</button>
-            <span style="font-size:12px;color:var(--text3)">强制所有浏览器（包括当前页面）重新登录，凭据数据不受影响</span>
+            <span class="hint-sm">强制所有浏览器（包括当前页面）重新登录，凭据数据不受影响</span>
           </div>
         </div>
       </div>
@@ -529,8 +528,8 @@
         <div class="field">
           <label>回退模型链</label>
           <input type="text" id="settingModelChain" placeholder="z-ai/glm-5.3-flash, deepseek/deepseek-v4-flash, cline-free/longcat-2.0, free" oninput="this.dataset.dirty='1'" onchange="updateConfig()">
-          <div style="font-size:12px;color:var(--text3);margin-top:4px">逗号分隔模型 ID，可用 free 表示内置免费回退链；留空则自动回退到内置免费链。允许填写不在上方列表里的模型 ID（列表外的模型实测仍可用时可直接填入，同步列表只是参考）；失效条目由冷却与故障转移自动跳过</div>
-          <div class="field-hint" style="margin-top:2px"><a href="#" onclick="switchTab('combos');return false" style="color:var(--accent);cursor:pointer;text-decoration:none">组合的回退顺序与紧急回退在「模型组合」页管理 →</a></div>
+          <div class="hint-sm mt-4">逗号分隔模型 ID，可用 free 表示内置免费回退链；留空则自动回退到内置免费链。允许填写不在上方列表里的模型 ID（列表外的模型实测仍可用时可直接填入，同步列表只是参考）；失效条目由冷却与故障转移自动跳过</div>
+          <div class="field-hint mt-2"><a href="#" onclick="switchTab('combos');return false" class="lnk-a">组合的回退顺序与紧急回退在「模型组合」页管理 →</a></div>
         </div>
       </div>
       <div class="form-row">
@@ -540,7 +539,7 @@
             <option value="false">关闭（返回全部模型）</option>
             <option value="true">开启（/models 仅返回免费模型）</option>
           </select>
-          <div style="font-size:12px;color:var(--text3);margin-top:4px">影响 /models、/v1/models 对客户端返回的模型列表，不影响管理页模型管理</div>
+          <div class="hint-sm mt-4">影响 /models、/v1/models 对客户端返回的模型列表，不影响管理页模型管理</div>
         </div>
       </div>
       <div class="form-row">
@@ -553,8 +552,8 @@
     <div class="section-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="3"/><circle cx="18" cy="18" r="3"/><path d="M6 9v3a3 3 0 0 0 3 3h6"/></svg><span>策略与回退一览</span></div>
     <div class="section-desc">本页「轮询策略」= 从 Cline 账号池取号的方式（quality 同时参与自定义 Provider 评分排序）；全局「回退模型链」是组合失败的最终兜底。其余两处策略选择器在别的页面：</div>
     <div class="section-body">
-      <div class="field-hint"><a href="#" onclick="switchTab('upstreams');return false" style="color:var(--accent);cursor:pointer;text-decoration:none">上游服务页：opencode / Cline 出口代理策略 = 多个出口代理地址之间的选择 →</a></div>
-      <div class="field-hint"><a href="#" onclick="switchTab('combos');return false" style="color:var(--accent);cursor:pointer;text-decoration:none">模型组合页：组合条目顺序与紧急回退 →</a></div>
+      <div class="field-hint"><a href="#" onclick="switchTab('upstreams');return false" class="lnk-a">上游服务页：opencode / Cline 出口代理策略 = 多个出口代理地址之间的选择 →</a></div>
+      <div class="field-hint"><a href="#" onclick="switchTab('combos');return false" class="lnk-a">模型组合页：组合条目顺序与紧急回退 →</a></div>
     </div>
   </div>
   <div class="section">
@@ -605,7 +604,7 @@
       </div>
       <div class="field">
         <label>排除模型（逗号分隔，支持 * 通配；对全部来源生效）</label>
-        <input type="text" id="tunExcluded" placeholder="gpt-4-*, *-preview" style="font-family:ui-monospace,monospace" oninput="updateExcludedMatchCounts()">
+        <input type="text" id="tunExcluded" placeholder="gpt-4-*, *-preview" class="mono-plain" oninput="updateExcludedMatchCounts()">
         <div class="se-foot">
           <button type="button" class="btn btn-sm" onclick="toggleExcludedPicker()" id="excludedPickerBtn">选择模型</button>
           <span id="excludedMatchCounts" class="excluded-matches"></span>
@@ -618,7 +617,8 @@
       <datalist id="modelIdList"></datalist>
       <div class="form-actions">
         <button class="btn btn-primary" onclick="saveTuning(this)">保存调优参数</button>
-        <span style="font-size:12px;color:var(--text3)">非法别名/规则会整次拒绝并提示，不会部分生效</span>
+        <span class="hint-sm">非法别名/规则会整次拒绝并提示，不会部分生效</span>
+        <span id="tunSaveResult" class="ml-8" aria-live="polite"></span>
       </div>
     </div>
   </div>
@@ -662,8 +662,8 @@
             <button class="btn btn-sm" id="bulkDisableFilteredBtn" onclick="bulkToggleFiltered(true)">停用当前筛选</button>
           </div>
         </div>
-        <button class="sync-btn" id="syncModelsBtn" onclick="syncModels()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg><span>从 Cline 同步模型</span></button>
-        <button class="sync-btn" id="syncOcModelsBtn" onclick="syncOcModels()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg><span>从 opencode 同步模型</span></button>
+        <button class="sync-btn" id="syncModelsBtn" onclick="syncModels()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="ic-sm"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg><span>从 Cline 同步模型</span></button>
+        <button class="sync-btn" id="syncOcModelsBtn" onclick="syncOcModels()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="ic-sm"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg><span>从 opencode 同步模型</span></button>
       </div>
       <div id="modelAddRow" class="model-composer" style="display:none">
         <input type="text" id="newModelId" class="composer-input" placeholder="模型 ID，如 deepseek/deepseek-v4-flash" onkeydown="if(event.key==='Enter')addModel()">
@@ -687,7 +687,7 @@
       <div class="large-title">模型组合</div>
       <div class="large-subtitle">把多个模型按优先级编排成回退链：命中组合按序尝试，失败（限流/不可用）自动切到下一个，停用条目直接跳过</div>
     </div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap">
+    <div class="action-row">
       <button class="btn btn-sm" onclick="loadCombos()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>刷新</button>
       <button class="btn btn-sm btn-primary" onclick="showComboEditor()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>新建组合</button>
     </div>
@@ -713,11 +713,11 @@
     <div class="drawer-group">
       <div class="form-group-label">基本信息</div>
       <div class="form-row">
-        <div class="field"><label>组合 ID *</label><input type="text" id="comboId" placeholder="premium-coding" style="font-family:ui-monospace,monospace"></div>
+        <div class="field"><label>组合 ID *</label><input type="text" id="comboId" placeholder="premium-coding" class="mono-plain"></div>
         <div class="field"><label>名称 *</label><input type="text" id="comboName" placeholder="Premium Coding"></div>
       </div>
       <div class="form-row">
-        <div class="field" style="flex:2"><label>描述</label><input type="text" id="comboDesc" placeholder="可选"></div>
+        <div class="field f2"><label>描述</label><input type="text" id="comboDesc" placeholder="可选"></div>
         <div class="field"><label>分类</label><input type="text" id="comboCategory" placeholder="coding（可选）"></div>
       </div>
       <div class="form-row">
@@ -725,13 +725,13 @@
           <label>启用</label>
           <select id="comboEnabled"><option value="true">启用</option><option value="false">停用</option></select>
         </div>
-        <div class="field" style="justify-content:flex-end">
+        <div class="field row-end">
           <label>紧急回退</label>
-          <label class="combo-check"><input type="checkbox" id="comboEmergency" style="width:16px;height:16px;accent-color:var(--accent);cursor:pointer"> <span>允许跳出组合回退</span></label>
+          <label class="combo-check"><input type="checkbox" id="comboEmergency" > <span>允许跳出组合回退</span></label>
         </div>
       </div>
       <div class="field-hint">开启「紧急回退」后，仅当组合内所有条目都失败时，才允许继续回退到配置的全局回退链 / 内置免费链；关闭则组合内失败即结束。</div>
-      <div class="field-hint"><a href="#" onclick="hideComboEditor();switchTab('routing');return false" style="color:var(--accent);cursor:pointer;text-decoration:none">全局回退链与账号轮询策略在「路由与模型」页管理 →</a></div>
+      <div class="field-hint"><a href="#" onclick="hideComboEditor();switchTab('routing');return false" class="lnk-a">全局回退链与账号轮询策略在「路由与模型」页管理 →</a></div>
     </div>
     <div class="drawer-group">
       <div class="form-group-label">模型条目（按优先级从上到下）</div>
@@ -740,21 +740,21 @@
       <div class="form-actions">
         <button class="btn btn-sm btn-primary" onclick="openComboModelPicker()">⊕ 多选添加模型</button>
         <button class="btn btn-sm" onclick="addComboEntry()">＋ 添加条目</button>
-        <span style="font-size:12px;color:var(--text3)">从模型目录勾选多个模型，确认后按勾选顺序追加。</span>
+        <span class="hint-sm">从模型目录勾选多个模型，确认后按勾选顺序追加。</span>
       </div>
     </div>
     <div class="drawer-group">
       <div class="form-group-label">优先级预览</div>
       <div class="combo-preview-box">
         <div id="comboPreview" class="combo-preview">（暂无启用的条目）</div>
-        <div style="font-size:11px;color:var(--text3);margin-top:6px">仅显示已启用的条目，停用的条目会被跳过。</div>
+        <div class="hint-xs mt-6">仅显示已启用的条目，停用的条目会被跳过。</div>
       </div>
     </div>
   </div>
   <div class="drawer-footer">
     <button class="btn btn-sm btn-success" onclick="saveCombo()">保存组合</button>
     <button class="btn btn-sm" onclick="hideComboEditor()">取消</button>
-    <span id="comboSaveResult" style="font-size:12px;margin-left:8px"></span>
+    <span id="comboSaveResult" class="note-sm ml-8"></span>
   </div>
 </aside>
 
@@ -782,15 +782,15 @@
     <div class="section-body">
       <div class="form-group-label">基础连接</div>
       <div class="form-row">
-        <div class="field" style="max-width:220px">
+        <div class="field w-220">
           <label>启用 opencode</label>
           <select id="ocEnabled" onchange="saveOcConfig()">
             <option value="true">启用</option>
             <option value="false">停用</option>
           </select>
         </div>
-        <div class="field" style="flex:1"><label>API Key</label><input type="text" id="ocKey" placeholder="public" onchange="saveOcConfig()"></div>
-        <div class="field" style="flex:1.4"><label>Base URL</label><input type="text" id="ocBaseURL" placeholder="https://opencode.ai/zen/v1" style="font-family:ui-monospace,monospace" onchange="saveOcConfig()"></div>
+        <div class="field f1"><label>API Key</label><input type="text" id="ocKey" placeholder="public" onchange="saveOcConfig()"></div>
+        <div class="field f-14"><label>Base URL</label><input type="text" id="ocBaseURL" placeholder="https://opencode.ai/zen/v1" class="mono-plain" onchange="saveOcConfig()"></div>
       </div>
       <div class="form-group-label">请求调优</div>
       <div class="form-row">
@@ -820,11 +820,11 @@
         <div class="field"><label>尾部保留 Token</label><input type="number" id="ocCompactKeepTokens" min="0" onchange="saveOcConfig()"></div>
         <div class="field"><label>摘要最大 Token</label><input type="number" id="ocCompactMaxSummary" min="0" onchange="saveOcConfig()"></div>
       </div>
-      <div class="form-actions" style="margin-top:14px">
+      <div class="form-actions mt-14">
         <button class="btn btn-primary" onclick="saveOcConfig(this)">保存 opencode 配置</button>
       </div>
-      <div id="ocSaveResult" style="margin-top:8px" aria-live="polite"></div>
-      <div style="font-size:12px;color:var(--text3);margin-top:8px">上述字段改动后会自动保存，也可点按钮手动触发。</div>
+      <div id="ocSaveResult" class="mt-8" aria-live="polite"></div>
+      <div class="hint-sm mt-8">上述字段改动后会自动保存，也可点按钮手动触发。</div>
     </div>
   </div>
 
@@ -833,18 +833,18 @@
     <div class="section-desc">发往 opencode 的请求可经代理池轮询出口；命中限流时冷却当前出口并自动跳过。支持 http / https / socks5 / socks5h，每行一个，如 <span class="mono">socks5://127.0.0.1:1080</span>。</div>
     <div class="section-body">
       <div class="form-row">
-        <div class="field" style="max-width:260px">
+        <div class="field w-260">
           <label>代理策略</label>
           <select id="ocProxyStrategy" onchange="saveOcConfig()">
             <option value="round_robin">轮询 (round_robin)</option>
             <option value="random">随机 (random)</option>
             <option value="fill">填满 (fill)</option>
           </select>
-          <div class="field-hint">仅决定多个出口代理地址之间的选择；Cline 账号轮询与 Provider 评分在 <a href="#" onclick="switchTab('routing');return false" style="color:var(--accent);cursor:pointer;text-decoration:none">「路由与模型」</a></div>
+          <div class="field-hint">仅决定多个出口代理地址之间的选择；Cline 账号轮询与 Provider 评分在 <a href="#" onclick="switchTab('routing');return false" class="lnk-a">「路由与模型」</a></div>
         </div>
-        <div class="field" style="flex:1"><label>出口冷却状态</label><div id="ocProxyCooldowns" style="font-size:12px;color:var(--text3)">-</div></div>
+        <div class="field f1"><label>出口冷却状态</label><div id="ocProxyCooldowns" class="hint-sm">-</div></div>
       </div>
-      <div class="field" style="margin-top:10px">
+      <div class="field mt-10">
         <label>代理列表</label>
         <textarea id="ocProxies" rows="4" placeholder="socks5://127.0.0.1:1080&#10;http://user:pass@proxy.example.com:8080" onchange="saveOcConfig()"></textarea>
       </div>
@@ -859,24 +859,24 @@
     <div class="section-desc">国内直连 Cline 上游会被跨区限制；配置后所有发往 Cline 的请求（对话、登录/令牌刷新、模型同步）经代理池轮询出去。支持 http / https / socks5 / socks5h，每行一个，如 socks5://127.0.0.1:1080。回环 / 内网地址（本机 Ollama 等自定义 Provider）始终直连；未配置时依次尝试环境变量代理、直连。</div>
     <div class="section-body">
       <div class="form-row">
-        <div class="field" style="max-width:260px">
+        <div class="field w-260">
           <label>代理策略</label>
           <select id="clineProxyStrategy">
             <option value="round_robin">轮询 (round_robin)</option>
             <option value="random">随机 (random)</option>
             <option value="fill">填满 (fill)</option>
           </select>
-          <div class="field-hint">仅决定多个出口代理地址之间的选择；Cline 账号轮询与 Provider 评分在 <a href="#" onclick="switchTab('routing');return false" style="color:var(--accent);cursor:pointer;text-decoration:none">「路由与模型」</a></div>
+          <div class="field-hint">仅决定多个出口代理地址之间的选择；Cline 账号轮询与 Provider 评分在 <a href="#" onclick="switchTab('routing');return false" class="lnk-a">「路由与模型」</a></div>
         </div>
       </div>
-      <div class="field" style="margin-top:10px">
+      <div class="field mt-10">
         <label>代理列表</label>
         <textarea id="clineProxies" rows="4" placeholder="socks5://127.0.0.1:1080&#10;http://user:pass@proxy.example.com:8080"></textarea>
       </div>
-      <div class="form-actions" style="margin-top:14px">
+      <div class="form-actions mt-14">
         <button class="btn btn-primary" onclick="saveClineProxyConfig(this)">保存 Cline 代理</button>
       </div>
-      <div id="clineProxySaveResult" style="margin-top:8px" aria-live="polite"></div>
+      <div id="clineProxySaveResult" class="mt-8" aria-live="polite"></div>
     </div>
   </div>
   </div>
@@ -892,12 +892,12 @@
           <tr><td colspan="3"><div class="sk-stack"><span class="skeleton"></span><span class="skeleton w70"></span></div></td></tr>
         </tbody>
       </table>
-      <div class="form-actions" style="margin-top:14px">
+      <div class="form-actions mt-14">
         <button class="btn btn-sm" onclick="addHeaderRow()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>添加请求头</button>
         <button class="btn btn-sm btn-primary" onclick="saveHeaders(this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>保存请求头</button>
         <button class="btn btn-sm" onclick="bulkEditHeaders()">批量编辑</button>
       </div>
-      <div id="headerSaveResult" style="margin-top:8px" aria-live="polite"></div>
+      <div id="headerSaveResult" class="mt-8" aria-live="polite"></div>
     </div>
   </div>
 
@@ -909,10 +909,10 @@
         <label>请求头（每行一个，格式 Key: Value）</label>
         <textarea id="zenHeadersBulk" rows="6" placeholder="User-Agent: opencode/1.18.31&#10;x-opencode-project: global&#10;x-custom-header: my-value"></textarea>
       </div>
-      <div class="form-actions" style="margin-top:10px">
+      <div class="form-actions mt-10">
         <button class="btn btn-sm btn-primary" onclick="saveZenHeaders(this)">保存 opencode 请求头</button>
       </div>
-      <div id="zenHeaderSaveResult" style="margin-top:8px" aria-live="polite"></div>
+      <div id="zenHeaderSaveResult" class="mt-8" aria-live="polite"></div>
     </div>
   </div>
 
@@ -934,7 +934,7 @@
         <button class="btn btn-sm btn-primary" onclick="showProviderEditor()">＋ 添加 Provider</button>
       </span>
     </div>
-    <div id="providerSyncBanner" style="display:none;align-items:center;gap:10px;padding:8px 12px;margin:0 0 10px;border:1px solid var(--border2);border-radius:var(--radius);background:var(--surface2)" aria-live="polite"></div>
+    <div id="providerSyncBanner" class="sync-banner" style="display:none" aria-live="polite"></div>
     <div class="section-body xscroll">
       <div id="providersList"></div>
     </div>
@@ -970,27 +970,27 @@
       <div class="form-group-label">基本信息</div>
       <div class="form-row">
         <div class="field"><label>名称 *</label><input type="text" id="provName" placeholder="OpenRouter"></div>
-        <div class="field" style="flex:1.6"><label>Base URL *</label><input type="text" id="provBaseURL" placeholder="https://openrouter.ai/api/v1" style="font-family:ui-monospace,monospace"></div>
+        <div class="field f-16"><label>Base URL *</label><input type="text" id="provBaseURL" placeholder="https://openrouter.ai/api/v1" class="mono-plain"></div>
       </div>
       <div class="form-row">
-        <div class="field" style="flex:1.4"><label>API Key</label><input type="password" id="provKey" placeholder="sk-...（本地服务器可留空）"></div>
+        <div class="field f-14"><label>API Key</label><input type="password" id="provKey" placeholder="sk-...（本地服务器可留空）"></div>
       </div>
     </div>
     <div class="drawer-group" id="provModelsGroup">
-      <div class="form-group-label">模型与请求头 <span id="provModelsCount" style="font-weight:400;font-size:11px;color:var(--text3)"></span></div>
-      <div class="form-row" style="align-items:center">
+      <div class="form-group-label">模型与请求头 <span id="provModelsCount" class="grp-count"></span></div>
+      <div class="form-row row-mid">
         <button type="button" id="provFetchModelsBtn" class="btn btn-sm btn-primary" onclick="fetchProviderModels(this)">选择模型</button>
-        <span style="font-size:11px;color:var(--text3);margin-left:10px">从上游目录勾选（免费 / 付费分组），确认前不写入</span>
+        <span class="hint-xs ml-8">从上游目录勾选（免费 / 付费分组），确认前不写入</span>
       </div>
-      <div id="provModelsChips" class="chip-row" style="display:none;margin-top:10px"></div>
-      <div style="margin:2px 0 10px">
-        <a href="javascript:void(0)" onclick="toggleProvModelsAdv()" style="font-size:11px;color:var(--text3);text-decoration:underline">手动输入模型 ID（高级）</a>
-        <div id="provModelsAdv" style="display:none;margin-top:6px">
-          <input type="text" id="provModels" style="width:100%;font-family:ui-monospace,monospace" placeholder="z-ai/glm-5.3-flash, deepseek/deepseek-v4-flash" oninput="renderProvModelChips()">
+      <div id="provModelsChips" class="chip-row mt-10" style="display:none"></div>
+      <div class="adv-wrap">
+        <a href="javascript:void(0)" onclick="toggleProvModelsAdv()" class="adv-lnk">手动输入模型 ID（高级）</a>
+        <div id="provModelsAdv" class="adv-body" style="display:none">
+          <input type="text" id="provModels" class="w-full mono-plain" placeholder="z-ai/glm-5.3-flash, deepseek/deepseek-v4-flash" oninput="renderProvModelChips()">
         </div>
       </div>
       <div class="form-row">
-        <div class="field" style="flex:1"><label>自定义请求头（每行 Key: Value，如 HTTP-Referer: https://mysite.com）</label><textarea id="provHeaders" rows="3"></textarea></div>
+        <div class="field f1"><label>自定义请求头（每行 Key: Value，如 HTTP-Referer: https://mysite.com）</label><textarea id="provHeaders" rows="3"></textarea></div>
       </div>
     </div>
     <div class="drawer-group">
@@ -1002,7 +1002,7 @@
         <div class="field"><label>每日请求上限（0=不限）</label><input type="number" id="provDailyLimit" value="0" min="0" max="1000000"></div>
       </div>
       <div class="form-row">
-        <div class="field" style="flex:2"><label>出口代理（空=继承全局；- 表示直连）</label><input type="text" id="provProxyUrl" placeholder="http://127.0.0.1:7890 或 -" style="font-family:ui-monospace,monospace"></div>
+        <div class="field f2"><label>出口代理（空=继承全局；- 表示直连）</label><input type="text" id="provProxyUrl" placeholder="http://127.0.0.1:7890 或 -" class="mono-plain"></div>
         <div class="field"><label>权重（加权轮询；0=按1，-1=排除）</label><input type="number" id="provWeight" value="0" min="-1" max="1000000"></div>
       </div>
       <div class="field-hint">配额提示：填入免费层限额后，路由会在派发前自动避开打满额度的上游，改用组内其他 provider，不再拿 429 试错</div>
@@ -1020,7 +1020,7 @@
         </div>
       </div>
       <div class="field">
-        <label>账号连接池 <span id="provConnCount" style="font-weight:400;color:var(--text3)"></span></label>
+        <label>账号连接池 <span id="provConnCount" class="grp-count"></span></label>
         <div id="provConnPick" class="conn-pick-box"><span class="conn-pick-empty">加载中...</span></div>
         <div class="field-hint">勾选多个登录连接后轮转派发，被限流/待重登的连接自动跳过由兄弟连接顶上；不勾选 = 仅用 API Key。连接的增删在「账号与连接」页管理。</div>
       </div>
@@ -1032,7 +1032,7 @@
     <span class="drawer-footer-sep"></span>
     <button class="btn btn-sm" onclick="testProvider(this)">测试连通性</button>
     <button class="btn btn-sm" onclick="previewModelImport(this)">导入分级预览</button>
-    <span id="provTestResult" style="font-size:12px;margin-left:8px"></span>
+    <span id="provTestResult" class="note-sm ml-8"></span>
   </div>
 </aside>
       <!-- 预设选择弹窗：按接入成本分组（免密钥 → 免费额度 → 含免费模型 → 本地 → 其他），顶部搜索即时过滤 -->
@@ -1042,10 +1042,10 @@
           <div class="modal-sub">来自 ExtremeRouter 目录，按接入成本分组。点击预设填充表单；免密钥源会自动拉取模型。</div>
           <div class="modal-search-row">
             <input type="text" id="presetSearch" placeholder="搜索预设..." aria-label="搜索预设" oninput="renderPresetPickerList()" onkeydown="if(event.key==='Escape')closePresetPicker()">
-            <span id="presetCount" style="font-size:12px;color:var(--text2);white-space:nowrap"></span>
+            <span id="presetCount" class="grp-meta"></span>
           </div>
-          <div id="presetFilterChips" class="chip-row" style="margin:10px 0 0"></div>
-          <div id="presetPickerList" class="combo-picker-list" style="margin-top:10px;max-height:min(52vh,480px)"><div class="sk-stack"><span class="skeleton"></span><span class="skeleton w70"></span><span class="skeleton w45"></span></div></div>
+          <div id="presetFilterChips" class="chip-row mt-10"></div>
+          <div id="presetPickerList" class="combo-picker-list picker-scroll"><div class="sk-stack"><span class="skeleton"></span><span class="skeleton w70"></span><span class="skeleton w45"></span></div></div>
           <div class="modal-actions">
             <button class="btn btn-sm" onclick="closePresetPicker()">取消</button>
           </div>
@@ -1054,14 +1054,14 @@
       <!-- §9.3 受控导入：预览批次（新模型 / 层级变化 / protected），勾选批准后写入池 -->
       <div id="importPreviewModal" class="overlay-modal overlay-top" onclick="if(event.target===this)closeImportPreview()">
         <div class="modal-card modal-card-col w640" role="dialog" aria-modal="true" aria-label="导入分级预览">
-          <div class="modal-title">导入分级预览 <span id="importPreviewProv" class="mono" style="font-size:12px;color:var(--text3);font-weight:400"></span></div>
+          <div class="modal-title">导入分级预览 <span id="importPreviewProv" class="mono grp-meta"></span></div>
           <div id="importPreviewSummary" class="modal-sub"></div>
-          <div class="modal-sub" style="margin-bottom:6px">按「新增 / 层级变化 / 无变化 / 受保护」分组，每行标注判定依据（悬停看规则）；只有新增与层级变化可勾选。</div>
+          <div class="modal-sub mb-6">按「新增 / 层级变化 / 无变化 / 受保护」分组，每行标注判定依据（悬停看规则）；只有新增与层级变化可勾选。</div>
           <div class="modal-search-row">
             <input type="text" id="importPreviewSearch" placeholder="搜索模型..." aria-label="搜索模型" oninput="filterImportPreview()" onkeydown="if(event.key==='Escape')closeImportPreview()">
             <button class="btn btn-sm" onclick="importPreviewSelectAll(true)">全选</button>
             <button class="btn btn-sm" onclick="importPreviewSelectAll(false)">清空</button>
-            <span id="importPreviewMatch" style="font-size:12px;color:var(--text3);white-space:nowrap"></span>
+            <span id="importPreviewMatch" class="grp-meta"></span>
           </div>
           <div class="import-filter-row" role="group" aria-label="按操作过滤">
             <button class="btn btn-sm import-act-filter active" data-act="" onclick="setImportActionFilter(this)">全部</button>
@@ -1072,7 +1072,7 @@
           </div>
           <div id="importPreviewList" class="combo-picker-list"><div class="sk-stack"><span class="skeleton"></span><span class="skeleton w70"></span><span class="skeleton w45"></span></div></div>
           <div class="modal-actions">
-            <span id="importPreviewCount" class="mr-auto" style="font-size:12px;color:var(--text2)"></span>
+            <span id="importPreviewCount" class="mr-auto hint-mut"></span>
             <button class="btn btn-sm" onclick="closeImportPreview()">取消</button>
             <button class="btn btn-sm btn-primary" onclick="importPreviewApply(this)">批准导入所选</button>
           </div>
@@ -1085,14 +1085,14 @@
   <div id="connLoginModal" class="overlay-modal" onclick="if(event.target===this)closeDeviceLogin()">
     <div class="modal-card modal-card-col w480" role="dialog" aria-modal="true" aria-label="设备码登录">
       <div class="modal-title" id="connLoginTitle">设备码登录</div>
-      <div id="connLoginStep2" style="margin-top:12px">
-        <div style="font-size:12px;color:var(--text3)" id="connLoginHint">在浏览器中打开下面的地址并输入此代码，然后保持本窗口打开。</div>
-        <div style="display:flex;align-items:center;gap:10px;margin:10px 0">
-          <div id="connLoginCode" class="mono" style="font-size:26px;font-weight:700;letter-spacing:2px;color:var(--text);background:var(--bg);border:1px solid var(--border2);border-radius:8px;padding:10px 16px"></div>
+      <div id="connLoginStep2" class="mt-12">
+        <div class="hint-sm" id="connLoginHint">在浏览器中打开下面的地址并输入此代码，然后保持本窗口打开。</div>
+        <div class="login-row">
+          <div id="connLoginCode" class="mono conn-code"></div>
           <button class="btn btn-sm" onclick="copyDeviceCode()">复制</button>
         </div>
-        <div style="margin-bottom:10px"><a id="connLoginUrl" href="#" target="_blank" rel="noopener" style="font-size:12px;color:var(--accent);word-break:break-all"></a></div>
-        <div id="connLoginStatus" aria-live="polite" style="font-size:12px;color:var(--text2)"><span class="loading"></span> 等待授权...</div>
+        <div class="mb-8"><a id="connLoginUrl" href="#" target="_blank" rel="noopener" class="conn-url"></a></div>
+        <div id="connLoginStatus" aria-live="polite" class="hint-mut"><span class="loading"></span> 等待授权...</div>
         <div class="modal-actions">
           <button class="btn btn-sm" onclick="closeDeviceLogin()">关闭</button>
         </div>
@@ -1105,13 +1105,13 @@
     <div class="modal-card modal-card-col w480" role="dialog" aria-modal="true" aria-label="导入 Token">
       <div class="modal-title">导入 Token</div>
       <div class="modal-sub">粘贴已有访问令牌作为连接（Bearer 注入），适合 Kilo 这类不签发刷新令牌的上游，或任何无设备码流程、但你已持有 token 的服务；过期后需重新导入或登录。</div>
-      <div class="field" style="margin-bottom:8px"><label>服务 *</label><input type="text" id="connImpProvider" placeholder="kilocode / 任意 provider key" list="connProviderList" style="font-family:ui-monospace,monospace"><datalist id="connProviderList"></datalist></div>
-      <div class="field" style="margin-bottom:8px"><label>Access Token *</label><input type="password" id="connImpToken" placeholder="粘贴令牌（只存服务端，不外泄）"></div>
+      <div class="field mb-8"><label>服务 *</label><input type="text" id="connImpProvider" placeholder="kilocode / 任意 provider key" list="connProviderList" class="mono-plain"><datalist id="connProviderList"></datalist></div>
+      <div class="field mb-8"><label>Access Token *</label><input type="password" id="connImpToken" placeholder="粘贴令牌（只存服务端，不外泄）"></div>
       <div class="form-row">
         <div class="field"><label>邮箱（可选，用于去重）</label><input type="text" id="connImpEmail" placeholder="dev@example.com"></div>
-        <div class="field"><label>Org ID（可选）</label><input type="text" id="connImpOrg" placeholder="org-..." style="font-family:ui-monospace,monospace"></div>
+        <div class="field"><label>Org ID（可选）</label><input type="text" id="connImpOrg" placeholder="org-..." class="mono-plain"></div>
       </div>
-      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px">
+      <div class="modal-foot">
         <button class="btn btn-sm" onclick="hideConnectionImport()">取消</button>
         <button class="btn btn-sm btn-primary" onclick="submitConnectionImport(this)">保存连接</button>
       </div>
@@ -1129,28 +1129,28 @@
   <div class="section">
     <div class="section-title">接入步骤</div>
     <div class="section-body">
-      <div style="display:flex;flex-direction:column;gap:16px">
-        <div style="display:flex;gap:12px;align-items:flex-start">
+      <div class="stack-col">
+        <div class="step-item">
           <div class="step-dot">1</div>
           <div>
-            <div style="font-weight:600;color:var(--text)">添加 Cline 账号</div>
-            <div style="font-size:13px;color:var(--text2);margin-top:2px">在「账号与连接」页展开「登录与导入」分区，通过 OAuth 登录或手动输入 refreshToken 添加账号。支持批量导入。</div>
-            <button class="btn btn-sm" style="margin-top:6px" onclick="switchTab('accounts')">前往账号与连接</button>
+            <div class="txt-strong">添加 Cline 账号</div>
+            <div class="page-sub-title">在「账号与连接」页展开「登录与导入」分区，通过 OAuth 登录或手动输入 refreshToken 添加账号。支持批量导入。</div>
+            <button class="btn btn-sm mt-6" onclick="switchTab('accounts')">前往账号与连接</button>
           </div>
         </div>
-        <div style="display:flex;gap:12px;align-items:flex-start">
+        <div class="step-item">
           <div class="step-dot">2</div>
           <div>
-            <div style="font-weight:600;color:var(--text)">生成 API Key</div>
-            <div style="font-size:13px;color:var(--text2);margin-top:2px">前往「密钥与安全」页面生成密钥。如不配置任何密钥，代理允许匿名访问。</div>
-            <button class="btn btn-sm" style="margin-top:6px" onclick="switchTab('security')">前往密钥与安全</button>
+            <div class="txt-strong">生成 API Key</div>
+            <div class="page-sub-title">前往「密钥与安全」页面生成密钥。如不配置任何密钥，代理允许匿名访问。</div>
+            <button class="btn btn-sm mt-6" onclick="switchTab('security')">前往密钥与安全</button>
           </div>
         </div>
-        <div style="display:flex;gap:12px;align-items:flex-start">
+        <div class="step-item">
           <div class="step-dot">3</div>
           <div>
-            <div style="font-weight:600;color:var(--text)">配置客户端</div>
-            <div style="font-size:13px;color:var(--text2);margin-top:2px">按下方客户端示例填入 Base URL 与密钥即可。</div>
+            <div class="txt-strong">配置客户端</div>
+            <div class="page-sub-title">按下方客户端示例填入 Base URL 与密钥即可。</div>
           </div>
         </div>
       </div>
@@ -1194,7 +1194,7 @@ Model:    cline-free/glm-5.2</pre>
   <div class="section">
     <div class="section-title">下一步</div>
     <div class="section-body">
-      <div style="display:flex;gap:10px;flex-wrap:wrap;font-size:13px">
+      <div class="quickstart-links">
         <button class="btn btn-sm" onclick="switchTab('upstreams')">接入更多免费上游（OpenCode / Zen）</button>
         <button class="btn btn-sm" onclick="switchTab('providers')">添加自定义 Provider</button>
         <button class="btn btn-sm" onclick="switchTab('combos')">配置模型组合自动换源</button>
@@ -1210,7 +1210,7 @@ Model:    cline-free/glm-5.2</pre>
       <div class="large-title">配额与预算</div>
       <div class="large-subtitle">Provider 每分钟 / 每日预算用量、冷却恢复与账号 Token 总量</div>
     </div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap">
+    <div class="action-row">
       <button class="btn btn-sm" onclick="loadQuota(true)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>刷新</button>
     </div>
   </div>
@@ -1220,7 +1220,7 @@ Model:    cline-free/glm-5.2</pre>
     </div>
   </div>
   <div id="quotaList">
-    <div class="sk-stack" style="padding:16px"><span class="skeleton"></span><span class="skeleton w70"></span></div>
+    <div class="sk-stack p-16"><span class="skeleton"></span><span class="skeleton w70"></span></div>
   </div>
 </div>
 
@@ -1231,17 +1231,17 @@ Model:    cline-free/glm-5.2</pre>
   <div class="section">
     <div class="section-title">应用信息</div>
     <div class="section-body">
-      <div style="display:flex;align-items:center;gap:16px;margin-bottom:16px">
+      <div class="about-head">
         <div class="app-logo-lg">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
         </div>
         <div>
-          <div style="font-size:20px;font-weight:700;color:var(--text)">RouteNest</div>
-          <div style="font-size:13px;color:var(--text2);margin-top:2px">RouteNest · 多账号轮询 · 双协议兼容</div>
-          <div style="font-size:12px;color:var(--text3);margin-top:4px"><span id="aboutVersion">版本 dev</span> · MIT License · Go 1.25 + Wails v2</div>
-          <div style="font-size:12px;color:var(--text3);margin-top:2px" id="aboutBuildRow" hidden><span>构建信息</span>: <span id="aboutGitInfo">—</span></div>
-          <div style="font-size:12px;color:var(--text3);margin-top:2px"><span>API 地址</span>: <span id="aboutApiAddr">127.0.0.1:3457</span></div>
-          <div style="font-size:12px;color:var(--text3);margin-top:2px" id="aboutUptimeRow" hidden><span>运行时长</span>: <span id="aboutUptime">—</span><span id="aboutStartedAtWrap"> · 启动于 <span id="aboutStartedAt">—</span></span></div>
+          <div class="about-brand">RouteNest</div>
+          <div class="page-sub-title">RouteNest · 多账号轮询 · 双协议兼容</div>
+          <div class="hint-sm mt-4"><span id="aboutVersion">版本 dev</span> · MIT License · Go 1.25 + Wails v2</div>
+          <div class="hint-sm mt-2" id="aboutBuildRow" hidden><span>构建信息</span>: <span id="aboutGitInfo">—</span></div>
+          <div class="hint-sm mt-2"><span>API 地址</span>: <span id="aboutApiAddr">127.0.0.1:3457</span></div>
+          <div class="hint-sm mt-2" id="aboutUptimeRow" hidden><span>运行时长</span>: <span id="aboutUptime">—</span><span id="aboutStartedAtWrap"> · 启动于 <span id="aboutStartedAt">—</span></span></div>
         </div>
       </div>
     </div>
@@ -1250,14 +1250,14 @@ Model:    cline-free/glm-5.2</pre>
   <div class="section">
     <div class="section-title">快速上手</div>
     <div class="section-body">
-      <div style="font-size:13px;color:var(--text2);line-height:1.8">添加账号 → 生成 API Key → 客户端配置 <code style="background:var(--surface2);padding:1px 5px;border-radius:3px;font-size:12px">Base URL: http://127.0.0.1:3457/v1</code>。完整步骤与各客户端示例见「快速开始」页。<button class="btn btn-sm" style="margin-left:8px" onclick="switchTab('quickstart')">打开快速开始</button></div>
+      <div class="about-para">添加账号 → 生成 API Key → 客户端配置 <code class="inline-code">Base URL: http://127.0.0.1:3457/v1</code>。完整步骤与各客户端示例见「快速开始」页。<button class="btn btn-sm ml-8" onclick="switchTab('quickstart')">打开快速开始</button></div>
     </div>
   </div>
 
   <div class="section">
     <div class="section-title">功能特性</div>
     <div class="section-body">
-      <div class="about-feature-grid" style="font-size:13px;color:var(--text2)">
+      <div class="about-feature-grid small-t2">
         <div>✅ 多账号轮询（轮询/填满/随机）</div>
         <div>✅ OpenAI & Anthropic 双协议</div>
         <div>✅ 429 冷却自动恢复</div>
@@ -1273,12 +1273,12 @@ Model:    cline-free/glm-5.2</pre>
   <div class="section">
     <div class="section-title">项目链接</div>
     <div class="section-body">
-      <div style="display:flex;flex-direction:column;gap:10px;font-size:14px">
-        <div><span style="color:var(--text3);display:inline-block;width:80px">仓库地址</span><a href="#" onclick="openExternal('https://github.com/dhananjaym182/RouteNest');return false" style="color:var(--accent);cursor:pointer">github.com/dhananjaym182/RouteNest</a></div>
-        <div><span style="color:var(--text3);display:inline-block;width:80px">问题反馈</span><a href="#" onclick="openExternal('https://github.com/dhananjaym182/RouteNest/issues');return false" style="color:var(--accent);cursor:pointer">github.com/dhananjaym182/RouteNest/issues</a></div>
-        <div><span style="color:var(--text3);display:inline-block;width:80px">下载更新</span><a href="#" onclick="openExternal('https://github.com/dhananjaym182/RouteNest/releases');return false" style="color:var(--accent);cursor:pointer">github.com/dhananjaym182/RouteNest/releases</a></div>
-        <div><span style="color:var(--text3);display:inline-block;width:80px">更新检查</span><span id="aboutVerCheck" style="font-size:13px;color:var(--text3)">未检查</span> <button type="button" class="btn btn-sm" onclick="checkForUpdate(true,this)">检查更新</button></div>
-        <div><span style="color:var(--text3);display:inline-block;width:80px">开源协议</span>MIT License © 2026 dhananjaym182 (RouteNest)；上游 Cline2API © 2026 luawei1 见 THIRD_PARTY_NOTICES</div>
+      <div class="about-links">
+        <div><span class="about-kv">仓库地址</span><a href="#" onclick="openExternal('https://github.com/dhananjaym182/RouteNest');return false" class="oauth-url">github.com/dhananjaym182/RouteNest</a></div>
+        <div><span class="about-kv">问题反馈</span><a href="#" onclick="openExternal('https://github.com/dhananjaym182/RouteNest/issues');return false" class="oauth-url">github.com/dhananjaym182/RouteNest/issues</a></div>
+        <div><span class="about-kv">下载更新</span><a href="#" onclick="openExternal('https://github.com/dhananjaym182/RouteNest/releases');return false" class="oauth-url">github.com/dhananjaym182/RouteNest/releases</a></div>
+        <div><span class="about-kv">更新检查</span><span id="aboutVerCheck" class="hint-md">未检查</span> <button type="button" class="btn btn-sm" onclick="checkForUpdate(true,this)">检查更新</button></div>
+        <div><span class="about-kv">开源协议</span>MIT License © 2026 dhananjaym182 (RouteNest)；上游 Cline2API © 2026 luawei1 见 THIRD_PARTY_NOTICES</div>
       </div>
     </div>
   </div>
@@ -1286,9 +1286,9 @@ Model:    cline-free/glm-5.2</pre>
   <div class="section">
     <div class="section-title">数据与隐私</div>
     <div class="section-body">
-      <div style="font-size:13px;color:var(--text2);line-height:1.8">
-        <div>• 本程序仅在本地运行，默认监听 <code style="background:var(--surface2);padding:1px 5px;border-radius:3px;font-size:12px">127.0.0.1:3457</code>，不对外暴露。</div>
-        <div>• 账号凭据（refreshToken）存储在数据目录的 <code style="background:var(--surface2);padding:1px 5px;border-radius:3px;font-size:12px">.routenest-accounts.json</code>（Docker 中位于 /app/data，可用 ROUTENEST_DATA_DIR 配置）中，明文保存，请注意保护。</div>
+      <div class="about-para">
+        <div>• 本程序仅在本地运行，默认监听 <code class="inline-code">127.0.0.1:3457</code>，不对外暴露。</div>
+        <div>• 账号凭据（refreshToken）存储在数据目录的 <code class="inline-code">.routenest-accounts.json</code>（Docker 中位于 /app/data，可用 ROUTENEST_DATA_DIR 配置）中，明文保存，请注意保护。</div>
         <div>• 所有 API 请求通过本机代理转发至 Cline 官方服务器，不经过任何第三方。</div>
         <div>• 关闭窗口即停止服务，无后台驻留进程。</div>
       </div>
@@ -1300,15 +1300,15 @@ Model:    cline-free/glm-5.2</pre>
 </div>
 </div>
 
-<div id="toast" class="toast" role="status" aria-live="polite"></div>
+<div id="toastStack" class="toast-stack" role="status" aria-live="polite"></div>
 
 <div id="loginOverlay">
   <div class="login-card">
     <h2>RouteNest 管理后台</h2>
     <p>该后台已启用访问密码，请输入密码登录</p>
     <input type="password" id="loginPassword" placeholder="访问密码" autocomplete="current-password" onkeydown="if(event.key==='Enter')submitLogin()">
-    <button class="btn btn-primary" style="width:100%;margin-top:14px" onclick="submitLogin()">登 录</button>
-    <div id="loginError" style="color:var(--red);font-size:13px;margin-top:12px"></div>
+    <button class="btn btn-primary btn-block" onclick="submitLogin()">登录</button>
+    <div id="loginError" class="login-err"></div>
   </div>
 </div>
 
@@ -1319,15 +1319,15 @@ Model:    cline-free/glm-5.2</pre>
       <div id="modelMetaEditor" class="overlay-modal">
         <div class="modal-card w500">
         <div class="form-row">
-          <div class="field"><label>模型 ID</label><input type="text" id="mmId" disabled style="font-family:ui-monospace,monospace"></div>
+          <div class="field"><label>模型 ID</label><input type="text" id="mmId" disabled class="mono-plain"></div>
           <div class="field"><label>上下文窗口 (token)</label><input type="number" id="mmCtx" value="200000" min="1000" max="2000000"></div>
           <div class="field"><label>最大输出 (token)</label><input type="number" id="mmOut" value="32768" min="256" max="200000"></div>
         </div>
         <div class="form-row">
           <div class="field"><label>层级（免费/付费）</label><select id="mmTier"><option value="auto">自动</option><option value="free">免费</option><option value="pass">付费</option></select></div>
-          <div class="field" style="flex:1.6"><label>&nbsp;</label><div id="mmTierNote" style="font-size:12px;color:var(--text3)"></div></div>
+          <div class="field f-16"><label>&nbsp;</label><div id="mmTierNote" class="hint-sm"></div></div>
         </div>
-        <div class="form-actions" style="margin-top:10px">
+        <div class="form-actions mt-10">
           <button class="btn btn-sm btn-primary" onclick="saveModelMeta(this)">保存</button>
           <button class="btn btn-sm" onclick="hideModelMetaEditor()">取消</button>
         </div>
@@ -1335,7 +1335,7 @@ Model:    cline-free/glm-5.2</pre>
       </div>
       <div id="confirmModal" class="overlay-modal">
         <div class="modal-card w420" role="alertdialog" aria-modal="true" aria-labelledby="confirmMsg">
-          <div id="confirmMsg" style="font-size:14px;margin-bottom:16px;white-space:pre-wrap"></div>
+          <div id="confirmMsg" class="confirm-msg"></div>
           <div class="modal-actions">
             <button class="btn btn-sm" onclick="resolveConfirm(false)">取消</button>
             <button class="btn btn-sm btn-danger" onclick="resolveConfirm(true)">确认</button>
@@ -1354,7 +1354,7 @@ Model:    cline-free/glm-5.2</pre>
           </div>
           <div id="comboPickerList" class="combo-picker-list"><div class="sk-stack"><span class="skeleton"></span><span class="skeleton w70"></span><span class="skeleton w45"></span></div></div>
           <div class="modal-actions">
-            <span id="comboPickerCount" class="mr-auto" style="font-size:12px;color:var(--text2)"></span>
+            <span id="comboPickerCount" class="mr-auto hint-mut"></span>
             <button class="btn btn-sm" onclick="closeComboModelPicker()">取消</button>
             <button id="comboPickerReplaceBtn" class="btn btn-sm" style="display:none" onclick="comboPickerConfirm(true)">替换整表</button>
             <button class="btn btn-sm btn-primary" onclick="comboPickerConfirm(false)">确认追加</button>
@@ -1373,7 +1373,7 @@ Model:    cline-free/glm-5.2</pre>
           </div>
           <div id="provPickerList" class="combo-picker-list"><div class="sk-stack"><span class="skeleton"></span><span class="skeleton w70"></span><span class="skeleton w45"></span></div></div>
           <div class="modal-actions">
-            <span id="provPickerCount" class="mr-auto" style="font-size:12px;color:var(--text2)"></span>
+            <span id="provPickerCount" class="mr-auto hint-mut"></span>
             <button class="btn btn-sm" onclick="closeProvModelPicker()">取消</button>
             <button class="btn btn-sm btn-primary" onclick="provPickerConfirm()">确认添加</button>
           </div>
@@ -1385,12 +1385,12 @@ Model:    cline-free/glm-5.2</pre>
           <div class="modal-headrow">
             <span class="modal-title">组合测试</span>
             <span id="comboTestSummary" class="model-source-badge zen" style="display:none"></span>
-            <span id="comboTestId" class="mono" style="font-size:12px;color:var(--text3)"></span>
+            <span id="comboTestId" class="mono hint-sm"></span>
           </div>
           <div class="modal-sub">按优先级逐条探测；可在结果中直接启停/移除条目，保存更改后才实际落盘，取消即放弃修改。</div>
           <div id="comboTestList" class="combo-picker-list"><div class="sk-stack"><span class="skeleton"></span><span class="skeleton w70"></span><span class="skeleton w45"></span></div></div>
           <div class="modal-actions">
-            <span id="comboTestResult" class="mr-auto" style="font-size:12px;color:var(--text2)"></span>
+            <span id="comboTestResult" class="mr-auto hint-mut"></span>
             <button class="btn btn-sm" onclick="closeComboTest()">取消</button>
             <button id="comboTestSaveBtn" class="btn btn-sm btn-primary" style="display:none" onclick="comboTestSave(this)">保存更改</button>
           </div>

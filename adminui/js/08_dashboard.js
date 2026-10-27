@@ -247,12 +247,21 @@ function renderDashboardOverview(o) {
   renderDashRuntime(o.runtime || {});
 }
 
+// 仪表盘空态：图标 + 一行提示 + 刷新入口（复用现有 empty-state / btn 样式）
+function dashEmptyState(msg) {
+  return '<div class="empty-state">' +
+    '<div class="icon">' + uiIcon('chart') + '</div>' +
+    '<div class="empty-hint">' + esc(msg) + '</div>' +
+    '<div class="empty-cta"><button class="btn btn-sm" onclick="loadDashboardOverview();loadStats()">' + t('刷新') + '</button></div>' +
+    '</div>';
+}
+
 function renderDashChart(buckets, bucketSecs) {
   const box = _('dashThroughput');
   if (!box) return;
   const total = buckets.reduce((s, b) => s + (b.ok || 0) + (b.err || 0), 0);
   if (!buckets.length || total === 0) {
-    box.innerHTML = '<div class="attention-empty">' + t('窗口内暂无请求流量') + '</div>';
+    box.innerHTML = dashEmptyState(t('窗口内暂无请求流量'));
     return;
   }
   const W = 900, H = 110, pad = 4;
@@ -292,7 +301,7 @@ function renderDashFleet(fleet) {
   const box = _('dashFleet');
   if (!box) return;
   if (!fleet.length) {
-    box.innerHTML = '<div class="attention-empty">' + t('窗口内暂无请求流量') + '</div>';
+    box.innerHTML = dashEmptyState(t('窗口内暂无请求流量'));
     return;
   }
   const maxReqs = Math.max(1, ...fleet.map(f => f.requests || 0));
@@ -314,7 +323,7 @@ function renderDashModels(models) {
   const box = _('dashModels');
   if (!box) return;
   if (!models.length) {
-    box.innerHTML = '<div class="attention-empty">' + t('窗口内暂无请求流量') + '</div>';
+    box.innerHTML = dashEmptyState(t('窗口内暂无请求流量'));
     return;
   }
   const max = Math.max(1, ...models.map(m => m.requests || 0));

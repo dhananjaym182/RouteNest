@@ -99,7 +99,7 @@ async function loadAccounts() {
       updateSelCount();
       const emptyMsg = _accSearch
         ? (t('没有匹配的账号') + '："' + esc(_accSearch) + '"')
-        : (t('还没有账号') + ' — <a href="#" onclick="showAccountLogin();return false" style="color:var(--accent);cursor:pointer;text-decoration:none">' + t('添加账号') + '</a> · ' + t('支持 OAuth 登录 / 手动 Token / 批量导入'));
+        : (t('还没有账号') + ' — <a href="#" onclick="showAccountLogin();return false" class="lnk-a">' + t('添加账号') + '</a> · ' + t('支持 OAuth 登录 / 手动 Token / 批量导入'));
       tbody.innerHTML = '<tr><td colspan="12" class="empty">' + emptyMsg + '</td></tr>';
       cards.innerHTML = listEmptyState(ICON_ACCOUNTS, emptyMsg);
       renderModelUsage();
@@ -120,9 +120,9 @@ async function loadAccounts() {
       const statusBadge = acctStatusBadge(a, sn);
       const selBox = '<input type="checkbox" ' + (_checkedAccounts.has(a.accountId) ? 'checked' : '') + ' onchange="onSelAccount(\'' + a.accountId + '\', this.checked)">';
       return '<tr>' +
-        '<td style="text-align:center">' + selBox + '</td>' +
-        '<td class="mono" style="font-size:12px;color:var(--text3)">' + seq + '</td>' +
-        '<td class="mono" style="font-size:12px" title="' + esc(a.email) + '">' + esc(a.email) + '</td>' +
+        '<td class="td-center">' + selBox + '</td>' +
+        '<td class="mono hint-sm">' + seq + '</td>' +
+        '<td class="mono note-sm" title="' + esc(a.email) + '">' + esc(a.email) + '</td>' +
         '<td>' + statusBadge + acctHeatHtml(a.accountId) + '</td>' +
         '<td>' + formatNumber(a.usageCount) + '</td>' +
         '<td>' + formatTokenCount(a.promptTokens) + '</td>' +
@@ -131,10 +131,10 @@ async function loadAccounts() {
         '<td>' + formatTokenCount(a.cachedTokens) + '</td>' +
         '<td>' + formatDateTime(a.lastUsed, true) + '</td>' +
         '<td>' + formatDateTime(a.createdAt, true) + '</td>' +
-        '<td style="white-space:nowrap">' +
-          '<button class="btn btn-sm" onclick="testAccount(\'' + a.accountId + '\',this)" title="' + t('测试') + '" aria-label="' + t('测试') + '">⚡</button> ' +
-          '<button class="btn btn-sm" onclick="resetAccount(\'' + a.accountId + '\')" title="' + t('重置') + '" aria-label="' + t('重置') + '">↻</button> ' +
-          '<button class="btn btn-sm btn-danger" onclick="deleteAccount(\'' + a.accountId + '\', this)" title="' + t('删除') + '" aria-label="' + t('删除') + '">✕</button>' +
+        '<td class="td-nowrap">' +
+          '<button class="btn btn-sm" onclick="testAccount(\'' + a.accountId + '\',this)" title="' + t('测试') + '" aria-label="' + t('测试') + '">'+uiIcon('bolt')+'</button> ' +
+          '<button class="btn btn-sm" onclick="resetAccount(\'' + a.accountId + '\')" title="' + t('重置') + '" aria-label="' + t('重置') + '">'+uiIcon('reset')+'</button> ' +
+          '<button class="btn btn-sm btn-danger" onclick="deleteAccount(\'' + a.accountId + '\', this)" title="' + t('删除') + '" aria-label="' + t('删除') + '">'+uiIcon('close')+'</button>' +
         '</td></tr>';
     }).join('');
     cards.innerHTML = pageList.map(a => {
@@ -143,7 +143,7 @@ async function loadAccounts() {
       // Per-model stats live in the pool-wide 模型用量 section now; the card only points there.
       const coolingCount = Object.keys(a.modelCooldowns || {}).filter(m => a.modelCooldowns[m]).length;
       const modelHtml = '<div class="account-card-usage-hint" onclick="toggleModelUsage(true)" title="' + escAttr(t('展开模型用量')) + '">' + t('免费模型用量见「模型用量」汇总') +
-        (coolingCount ? ' · <span style="color:var(--yellow)">⏳ ' + coolingCount + '</span>' : '') + '</div>';
+        (coolingCount ? ' · <span class="warn-txt">⏳ ' + coolingCount + '</span>' : '') + '</div>';
       return '<article class="account-card">' +
         '<div class="account-card-header"><span class="account-email">' + esc(a.email) + '</span>' +
         cardStatus + '</div>' + acctHeatHtml(a.accountId) +
@@ -155,9 +155,9 @@ async function loadAccounts() {
           '<div class="account-metric"><span class="account-metric-label">' + t('输出') + '</span><span class="account-metric-value">' + formatTokenCount(a.completionTokens) + '</span></div>' +
         '</div>' + modelHtml +
         '<div class="account-card-footer"><span>' + t('最后使用：') + lu + '</span><span class="account-card-actions">' +
-          '<button class="btn btn-sm" onclick="testAccount(\'' + a.accountId + '\',this)" title="' + t('测试') + '" aria-label="' + t('测试') + '">⚡</button>' +
-          '<button class="btn btn-sm" onclick="resetAccount(\'' + a.accountId + '\')" title="' + t('重置') + '" aria-label="' + t('重置') + '">↻</button>' +
-          '<button class="btn btn-sm btn-danger" onclick="deleteAccount(\'' + a.accountId + '\', this)" title="' + t('删除') + '" aria-label="' + t('删除') + '">✕</button>' +
+          '<button class="btn btn-sm" onclick="testAccount(\'' + a.accountId + '\',this)" title="' + t('测试') + '" aria-label="' + t('测试') + '">'+uiIcon('bolt')+'</button>' +
+          '<button class="btn btn-sm" onclick="resetAccount(\'' + a.accountId + '\')" title="' + t('重置') + '" aria-label="' + t('重置') + '">'+uiIcon('reset')+'</button>' +
+          '<button class="btn btn-sm btn-danger" onclick="deleteAccount(\'' + a.accountId + '\', this)" title="' + t('删除') + '" aria-label="' + t('删除') + '">'+uiIcon('close')+'</button>' +
         '</span></div></article>';
     }).join('');
   } catch (e) { toast(t('加载账号失败: ') + e.message, 'error'); }
@@ -171,10 +171,10 @@ function renderAccountPager(total) {
   if (totalPages <= 1 && total <= _accPageSize) { pager.style.display = 'none'; return; }
   pager.style.display = 'flex';
   pager.innerHTML =
-    '<span style="font-size:12px;color:var(--text2)">' + t('共') + ' ' + total + ' ' + t('个账号 · 每页') + ' ' + _accPageSize + '</span>' +
-    '<div style="display:flex;gap:6px;align-items:center">' +
+    '<span class="hint-mut">' + t('共') + ' ' + total + ' ' + t('个账号 · 每页') + ' ' + _accPageSize + '</span>' +
+    '<div class="pager-nav">' +
       '<button class="btn btn-sm" ' + (_accPage <= 1 ? 'disabled' : '') + ' onclick="accGotoPage(' + (_accPage - 1) + ')" title="' + t('上一页') + '" aria-label="' + t('上一页') + '">‹</button>' +
-      '<span style="font-size:12px" class="mono">' + _accPage + ' / ' + totalPages + '</span>' +
+      '<span class="mono note-sm">' + _accPage + ' / ' + totalPages + '</span>' +
       '<button class="btn btn-sm" ' + (_accPage >= totalPages ? 'disabled' : '') + ' onclick="accGotoPage(' + (_accPage + 1) + ')" title="' + t('下一页') + '" aria-label="' + t('下一页') + '">›</button>' +
     '</div>';
 }
@@ -299,7 +299,7 @@ async function deleteSelectedAccounts(btn) {
 }
 
 // 统一空值占位（缺失/未知）
-function emptyCell() { return '<span style="color:var(--text3)">-</span>'; }
+function emptyCell() { return '<span class="mut">-</span>'; }
 
 // 统一空状态：图标 + 文案（与密钥页 empty-state 同款视觉）
 function listEmptyState(icon, msg) {
@@ -325,8 +325,8 @@ function formatDateTime(v, twoLine) {
   if (!v) return emptyCell();
   const d = new Date(v);
   if (twoLine) {
-    return '<div style="white-space:nowrap">' + d.toLocaleDateString(LC()) + '</div>' +
-      '<div style="white-space:nowrap;font-size:10px;color:var(--text3)">' + d.toLocaleTimeString(LC()) + '</div>';
+    return '<div class="td-nowrap">' + d.toLocaleDateString(LC()) + '</div>' +
+      '<div class="hint-xs td-nowrap">' + d.toLocaleTimeString(LC()) + '</div>';
   }
   return d.toLocaleString(LC());
 }
@@ -515,7 +515,7 @@ async function startOAuth() {
           btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>' + t('开始 OAuth 登录');
           if (r.data.success) {
             _('oauthProgress').style.display = 'none';
-            _('oauthResult').innerHTML = '<div style="color:var(--green);font-weight:600">✓ ' + t('账号添加成功: ')+ esc(r.data.email) + '</div>';
+            _('oauthResult').innerHTML = '<div class="save-result ok">' + t('账号添加成功: ')+ esc(r.data.email) + '</div>';
             _('oauthResult').style.display = 'block';
             loadAccounts(); loadStats();
             toast(t('账号添加成功！'), 'success');
@@ -548,11 +548,11 @@ async function startOAuth() {
 // 表单内联结果（成功/失败都渲染进 #tokenResult，不再只靠 toast）
 function tokenFormResult(ok, html) {
   const el = _('tokenResult');
-  if (el) el.innerHTML = '<div style="color:var(' + (ok ? '--green' : '--red') + ');font-size:13px;margin-top:8px">' + (ok ? '✓ ' : '✗ ') + html + '</div>';
+  if (el) el.innerHTML = '<div class="save-result ' + (ok ? 'ok' : 'err') + ' mt-8">' + uiIcon(ok ? 'check' : 'close') + html + '</div>';
 }
 // 提交后引导：跳到账号列表核对结果
 function viewAccountsLink() {
-  return '<a href="#" onclick="switchTab(\'accounts\')" style="color:var(--accent);text-decoration:none;margin-left:6px">' + t('查看账号列表') + ' →</a>';
+  return '<a href="#" onclick="switchTab(\'accounts\')" class="lnk-a ml-8">' + t('查看账号列表') + ' →</a>';
 }
 
 async function addByToken(btn) {
@@ -632,7 +632,7 @@ function parseImportData(text) {
 // 批量导入表单内联结果
 function batchFormResult(ok, html) {
   const el = _('batchResult');
-  if (el) el.innerHTML = '<div style="color:var(' + (ok ? '--green' : '--red') + ');font-size:13px;margin-top:8px">' + (ok ? '✓ ' : '✗ ') + html + '</div>';
+  if (el) el.innerHTML = '<div class="save-result ' + (ok ? 'ok' : 'err') + ' mt-8">' + uiIcon(ok ? 'check' : 'close') + html + '</div>';
 }
 
 async function batchImport(btn) {

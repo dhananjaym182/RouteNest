@@ -68,7 +68,7 @@ function renderCombosList() {
         ? ' <span class="model-source-badge provider" title="' + t('允许跳出组合回退') + '">' + t('紧急回退') + '</span>'
         : '';
       return '<tr>' +
-        '<td class="mono" style="font-size:12px">' + esc(c.id) + '</td>' +
+        '<td class="mono note-sm">' + esc(c.id) + '</td>' +
         '<td>' + esc(c.name || '') + fb + '</td>' +
         '<td>' + (c.category ? esc(c.category) : '<span style="color:var(--text3)">-</span>') + '</td>' +
         '<td class="row-count num-col">' + enabledEntries + ' / ' + entries.length + '</td>' +
@@ -77,7 +77,7 @@ function renderCombosList() {
             '<button class="btn btn-sm" onclick="editCombo(\'' + escAttr(c.id) + '\')">' + t('编辑') + '</button> ' +
             '<button class="btn btn-sm" onclick="cloneCombo(\'' + escAttr(c.id) + '\', this)">' + t('克隆') + '</button> ' +
             '<button class="btn btn-sm" onclick="toggleCombo(\'' + escAttr(c.id) + '\', ' + !c.enabled + ', this)">' + t(c.enabled ? '停用' : '启用') + '</button> ' +
-            '<button class="btn btn-sm btn-danger" onclick="deleteCombo(\'' + escAttr(c.id) + '\', this)" title="' + t('删除') + '" aria-label="' + t('删除') + '">✕</button></td>' +
+            '<button class="btn btn-sm btn-danger" onclick="deleteCombo(\'' + escAttr(c.id) + '\', this)" title="' + t('删除') + '" aria-label="' + t('删除') + '">'+uiIcon('close')+'</button></td>' +
       '</tr>';
     }).join('') +
     '</tbody></table></div>';
@@ -163,9 +163,9 @@ function buildComboModelOptions(current, chosenMap) {
 
 // 选中模型的小徽章：来源 / 提供商 / 计费 / 停用 / 下架
 function comboEntryBadges(id) {
-  if (!id) return '<span style="font-size:11px;color:var(--text3)">' + t('未选择模型') + '</span>';
+  if (!id) return '<span class="hint-xs">' + t('未选择模型') + '</span>';
   const m = comboCatalogEntry(id);
-  if (!m) return '<span class="delisted-badge" style="border-color:var(--yellow);color:var(--yellow)">' + t('目录中未找到') + '</span>';
+  if (!m) return '<span class="delisted-badge warn-soft">' + t('目录中未找到') + '</span>';
   let b = '';
   let srcKey = 'custom';
   if (m.source === 'provider') srcKey = 'provider';
@@ -174,9 +174,9 @@ function comboEntryBadges(id) {
   b += '<span class="model-source-badge ' + srcKey + '">' + esc(comboSourceName(m)) + '</span>';
   if (m.provider && m.source !== 'provider') b += '<span class="model-source-badge">' + esc(m.provider) + '</span>';
   b += m.cost === 'free'
-    ? '<span class="model-tag free" style="padding:1px 7px;font-size:10px;margin:0">' + t('免费') + '</span>'
-    : '<span class="model-tag pass" style="padding:1px 7px;font-size:10px;margin:0">' + t('付费') + '</span>';
-  if (m.disabled) b += '<span class="delisted-badge" style="border-color:var(--yellow);color:var(--yellow)">' + t('模型已停用') + '</span>';
+    ? '<span class="model-tag free tag-xs">' + t('免费') + '</span>'
+    : '<span class="model-tag pass tag-xs">' + t('付费') + '</span>';
+  if (m.disabled) b += '<span class="delisted-badge warn-soft">' + t('模型已停用') + '</span>';
   if (m.delisted) b += '<span class="delisted-badge">' + t('已下架') + '</span>';
   return b;
 }
@@ -258,7 +258,7 @@ function renderComboEntries() {
         '<label class="switch" title="' + t('启用/停用该条目') + '"><input type="checkbox"' + (e.disabled ? '' : ' checked') + ' onchange="onComboEntryDisabled(' + i + ', !this.checked)"><span class="slider"></span></label>' +
         '<button class="btn btn-sm" onclick="moveComboEntry(' + i + ', -1)"' + (i === 0 ? ' disabled' : '') + ' title="' + t('上移') + '" aria-label="' + t('上移') + '">↑</button>' +
         '<button class="btn btn-sm" onclick="moveComboEntry(' + i + ', 1)"' + (i === _comboEntries.length - 1 ? ' disabled' : '') + ' title="' + t('下移') + '" aria-label="' + t('下移') + '">↓</button>' +
-        '<button class="btn btn-sm btn-danger" onclick="removeComboEntry(' + i + ')" title="' + t('移除') + '" aria-label="' + t('移除') + '">✕</button>' +
+        '<button class="btn btn-sm btn-danger" onclick="removeComboEntry(' + i + ')" title="' + t('移除') + '" aria-label="' + t('移除') + '">'+uiIcon('close')+'</button>' +
       '</span>' +
     '</div>';
   }).join('');
@@ -272,7 +272,7 @@ function renderComboPreview(order) {
   const idxs = order || _comboEntries.map((_, k) => k);
   const enabled = idxs.filter(k => { const e = _comboEntries[k]; return e && !e.disabled && e.model; });
   if (!enabled.length) {
-    box.innerHTML = '<span style="color:var(--text3)">' + t('（暂无启用的条目）') + '</span>';
+    box.innerHTML = '<span class="mut">' + t('（暂无启用的条目）') + '</span>';
     return;
   }
   box.innerHTML = enabled.map((k, i) =>
@@ -506,8 +506,8 @@ function renderComboPickerList() {
         '<span class="combo-pick-id">' + esc(m.id) + '</span>' +
         '<span class="model-source-badge ' + (m.source === 'provider' ? 'provider' : (m.source === 'zen' || m.source === 'seed' ? 'zen' : (m.source === 'remote' ? 'remote' : 'custom'))) + '">' + esc(comboSourceName(m)) + '</span>' +
         (m.cost === 'free'
-          ? '<span class="model-tag free" style="padding:1px 7px;font-size:10px;margin:0">' + t('免费') + '</span>'
-          : '<span class="model-tag pass" style="padding:1px 7px;font-size:10px;margin:0">' + t('付费') + '</span>') +
+          ? '<span class="model-tag free tag-xs">' + t('免费') + '</span>'
+          : '<span class="model-tag pass tag-xs">' + t('付费') + '</span>') +
         (used ? '<span class="model-source-badge" title="' + t('已在组合条目中，无需重复添加') + '">' + t('已添加') + '</span>' : '') +
         (rank !== -1 ? '<span class="combo-pick-rank" title="' + t('勾选顺序即尝试优先级') + '">#' + (rank + 1) + '</span>' : '') +
       '</label>';
@@ -577,7 +577,7 @@ async function saveCombo() {
     hideComboEditor();
     await loadCombos();
   } catch (e) {
-    res.innerHTML = '<span style="color:var(--red)">✗ ' + esc(e.message) + '</span>';
+    res.innerHTML = '<span class="save-result err">' + esc(e.message) + '</span>';
     toast(t('保存失败: ') + e.message, 'error');
   }
 }
@@ -648,7 +648,7 @@ async function testCombo(id, btn) {
   } catch (e) {
     // 400（组合无启用条目）等业务错误原样透出；404/接口缺失 → 重启提示
     const box = _('comboTestList');
-    if (box) box.innerHTML = '<div class="empty" style="color:var(--red)">✗ ' + esc(friendlyTestError(e)) + '</div>';
+    if (box) box.innerHTML = '<div class="empty save-result err">' + esc(friendlyTestError(e)) + '</div>';
     const summary = _('comboTestSummary');
     if (summary) summary.style.display = 'none';
     const saveBtn = _('comboTestSaveBtn');
@@ -731,16 +731,16 @@ function renderComboTestModal() {
   box.innerHTML = details.map((d, i) => {
     const e = d.entry, res = d.res;
     const verdict = !res
-      ? '<span class="combo-test-verdict" style="color:var(--text3)">—</span>'
+      ? '<span class="combo-test-verdict mut">—</span>'
       : (res.ok
-        ? '<span class="combo-test-verdict" style="color:var(--green)">✓ <span>' + esc((res.durationMs || 0) + 'ms') + '</span></span>'
-        : '<span class="combo-test-verdict" style="color:var(--red)">✗</span>');
+        ? '<span class="combo-test-verdict save-result ok">' + esc((res.durationMs || 0) + 'ms') + '</span>'
+        : '<span class="combo-test-verdict save-result err">✗</span>');
     const errHtml = res && !res.ok
       ? '<span class="combo-test-error" title="' + escAttr(res.error || '') + '">' + esc(res.error || '') + '</span>'
       : '';
     // 移除只对已测失败的条目开放（保存确认前仅改工作副本，取消即放弃）
     const removeBtn = res && !res.ok
-      ? '<button class="btn btn-sm btn-danger" onclick="comboTestRemoveEntry(' + i + ')" title="' + t('移除') + '" aria-label="' + t('移除') + '">✕</button>'
+      ? '<button class="btn btn-sm btn-danger" onclick="comboTestRemoveEntry(' + i + ')" title="' + t('移除') + '" aria-label="' + t('移除') + '">'+uiIcon('close')+'</button>'
       : '';
     return '<div class="combo-test-row' + (e.disabled ? ' combo-test-disabled' : '') + '">' +
       '<span class="combo-entry-idx">' + (i + 1) + '</span>' +
@@ -807,7 +807,7 @@ async function comboTestSave(btn) {
     await loadCombos();
   } catch (e) {
     const resLbl = _('comboTestResult');
-    if (resLbl) resLbl.innerHTML = '<span style="color:var(--red)">✗ ' + esc(e.message) + '</span>';
+    if (resLbl) resLbl.innerHTML = '<span class="save-result err">' + esc(e.message) + '</span>';
     toast(t('保存失败: ') + e.message, 'error');
   } finally {
     if (btn) { btn.disabled = false; btn.innerHTML = orig; }

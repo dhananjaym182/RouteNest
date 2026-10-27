@@ -8,7 +8,7 @@ async function loadQuota(showSkeleton) {
   const listEl = _('quotaList');
   if (!listEl) return;
   if (showSkeleton !== false) {
-    listEl.innerHTML = '<div class="sk-stack" style="padding:16px"><span class="skeleton"></span><span class="skeleton w70"></span></div>';
+    listEl.innerHTML = '<div class="sk-stack p-16"><span class="skeleton"></span><span class="skeleton w70"></span></div>';
   }
   try {
     const pv = await api('GET', '/providers');

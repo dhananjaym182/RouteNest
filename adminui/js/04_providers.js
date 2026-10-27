@@ -19,27 +19,27 @@ async function loadProviders() {
       '<table class="action-table"><thead><tr><th>' + t('名称') + '</th><th>Base URL</th><th>' + t('模型') + '</th><th class="num-col">' + t('优先级') + '</th><th>' + t('健康') + '</th><th>' + t('状态') + '</th><th>' + t('最近检测') + '</th><th>' + t('操作') + '</th></tr></thead><tbody>' +
       list.map(p =>
         '<tr>' +
-          '<td>' + esc(p.name) + (p.free ? ' <span style="color:var(--green);font-size:11px">free</span>' : '') + (function () { const n = (p.connectionIds || []).length || (p.connectionId ? 1 : 0); return n ? ' <span style="color:var(--accent);font-size:11px" title="' + t('连接池轮转派发') + '">token×' + n + '</span>' : ''; })() + '</td>' +
-          '<td class="mono" style="font-size:11px;max-width:220px;overflow:hidden;text-overflow:ellipsis">' + esc(p.baseURL) + '</td>' +
-          '<td style="font-size:11px;max-width:200px;overflow:hidden;text-overflow:ellipsis">' + esc((p.modelIds || []).join(', ')) + '</td>' +
+          '<td>' + esc(p.name) + (p.free ? ' <span class="green-xs">free</span>' : '') + (function () { const n = (p.connectionIds || []).length || (p.connectionId ? 1 : 0); return n ? ' <span class="acc-xs" title="' + t('连接池轮转派发') + '">token×' + n + '</span>' : ''; })() + '</td>' +
+          '<td class="mono hint-xs clip-220">' + esc(p.baseURL) + '</td>' +
+          '<td class="hint-xs clip-200">' + esc((p.modelIds || []).join(', ')) + '</td>' +
           '<td class="num-col">' + p.priority + '</td>' +
           '<td class="prov-health-cell">' + provHealthCell(p) + '</td>' +
           '<td>' + (p.enabled
             ? '<span class="status active"><span class="status-dot active"></span>' + t('已启用') + '</span>'
             : '<span class="status disabled"><span class="status-dot disabled"></span>' + t('已停用') + '</span>') + '</td>' +
-          '<td style="white-space:nowrap">' + (p.enabled ? provSyncCellHTML(p.id) : '<span style="font-size:11px;color:var(--text3)">—</span>') + '</td>' +
+          '<td class="td-nowrap">' + (p.enabled ? provSyncCellHTML(p.id) : '<span class="hint-xs">—</span>') + '</td>' +
           '<td><button class="btn btn-sm" onclick="editProvider(\'' + p.id + '\')">' + t('编辑') + '</button> ' +
               '<button class="btn btn-sm" onclick=\'testProviderById("' + p.id + '", this)\'>' + t('测试') + '</button> ' +
               '<span class="prov-row-test-out"></span> ' +
               '<button class="btn btn-sm" onclick=\'recheckProvider("' + p.id + '", this)\'>' + t('重新检测') + '</button> ' +
               '<span class="prov-row-recheck-out"></span> ' +
               '<button class="btn btn-sm" onclick=\'toggleProvider("' + p.id + '", ' + !p.enabled + ', this)\'>' + (p.enabled ? t('停用') : t('启用')) + '</button> ' +
-              '<button class="btn btn-sm btn-danger" onclick=\'deleteProvider("' + p.id + '")\' title="' + t('删除') + '" aria-label="' + t('删除') + '">✕</button></td>' +
+              '<button class="btn btn-sm btn-danger" onclick=\'deleteProvider("' + p.id + '")\' title="' + t('删除') + '" aria-label="' + t('删除') + '">'+uiIcon('close')+'</button></td>' +
         '</tr>'
       ).join('') + '</tbody></table>';
   } catch (e) {
     const box = _('providersList');
-    if (box) box.innerHTML = '<div class="empty" style="padding:10px;color:var(--text3)">' + t('加载失败') + ': ' + esc(e.message) + '</div>';
+    if (box) box.innerHTML = '<div class="empty hint-sm">' + t('加载失败') + ': ' + esc(e.message) + '</div>';
   }
 }
 
@@ -152,13 +152,13 @@ function fmtAgo(ms) {
 function provSyncCellHTML(id) {
   const st = _provSync[id] || {};
   const when = st.lastCheckedMs
-    ? '<span style="font-size:11px;color:var(--text3)" title="' + esc(new Date(st.lastCheckedMs).toLocaleString(LC())) + '">' + fmtAgo(st.lastCheckedMs) + '</span>'
-    : '<span style="font-size:11px;color:var(--text3)">' + t('未检测') + '</span>';
+    ? '<span class="hint-xs" title="' + esc(new Date(st.lastCheckedMs).toLocaleString(LC())) + '">' + fmtAgo(st.lastCheckedMs) + '</span>'
+    : '<span class="hint-xs">' + t('未检测') + '</span>';
   const err = st.lastError
-    ? ' <span style="font-size:11px;color:var(--red)" title="' + esc(st.lastError) + '">✗</span>' : '';
+    ? ' <span class="hint-red" title="' + esc(st.lastError) + '">✗</span>' : '';
   let flow = '';
-  if (st.newQueued && st.batchId) flow += ' <span class="a-link" style="font-size:11px" onclick="openAutoBatch(\'' + esc(st.batchId) + '\')">+' + st.newQueued + ' ' + t('待审') + '</span>';
-  if (st.delistedMarked) flow += ' <span style="font-size:11px;color:var(--text3)" title="' + t('已下架') + '">' + st.delistedMarked + ' ↓</span>';
+  if (st.newQueued && st.batchId) flow += ' <span class="a-link hint-xs" onclick="openAutoBatch(\'' + esc(st.batchId) + '\')">+' + st.newQueued + ' ' + t('待审') + '</span>';
+  if (st.delistedMarked) flow += ' <span class="hint-xs" title="' + t('已下架') + '">' + st.delistedMarked + ' ↓</span>';
   return when + err + flow;
 }
 
@@ -195,13 +195,13 @@ function renderProviderSyncBanner(list) {
   });
   if (!queued && !delisted) { box.style.display = 'none'; box.innerHTML = ''; return; }
   box.style.display = 'flex';
-  box.innerHTML = '<span style="font-size:12px;color:var(--text2)">' +
-    (queued ? '<span style="color:var(--accent);font-weight:600">' + queued + t('个新模型待审') + '</span>' : '') +
+  box.innerHTML = '<span class="hint-mut">' +
+    (queued ? '<span class="acc-strong">' + queued + t('个新模型待审') + '</span>' : '') +
     (queued && delisted ? ' · ' : '') +
-    (delisted ? '<span style="color:var(--text3)">' + delisted + ' ' + t('已下架') + '</span>' : '') +
+    (delisted ? '<span class="mut">' + delisted + ' ' + t('已下架') + '</span>' : '') +
     '</span>' +
-    '<span style="font-size:11px;color:var(--text3);margin-left:8px">' + t('后台每 6 小时自动检测已启用 Provider 的上游模型清单') + '</span>' +
-    '<span style="margin-left:auto;display:flex;gap:8px">' +
+    '<span class="hint-xs ml-8">' + t('后台每 6 小时自动检测已启用 Provider 的上游模型清单') + '</span>' +
+    '<span class="row-bulk">' +
     (queued ? '<button class="btn btn-sm btn-primary" onclick="openNewestAutoBatch()">' + t('查看审阅') + '</button>' +
              '<button class="btn btn-sm" onclick="discardAutoBatches(this)">' + t('全部忽略') + '</button>' : '') +
     '</span>';
@@ -355,7 +355,7 @@ function renderProvModelChips() {
   if (!ids.length) { box.style.display = 'none'; box.innerHTML = ''; return; }
   box.style.display = '';
   box.innerHTML = ids.map(id => '<span class="model-tag mono">' + esc(id) +
-    ' <a href="javascript:void(0)" onclick="removeProvModel(\'' + escAttr(id) + '\')" title="' + t('移除') + '" aria-label="' + t('移除') + '" style="color:var(--text3);text-decoration:none">×</a></span>').join('');
+    ' <a href="javascript:void(0)" onclick="removeProvModel(\'' + escAttr(id) + '\')" title="' + t('移除') + '" aria-label="' + t('移除') + '" class="mut">×</a></span>').join('');
 }
 
 function removeProvModel(id) {
@@ -443,9 +443,9 @@ async function deleteProvider(id) {
 
 // 内联测试结果统一渲染：绿 ✓ + 摘要 / 红 ✗ + 原因（一律就地展示，不弹 toast-only）
 function renderTestResultHTML(ok, text) {
-  return ok
-    ? '<span style="color:var(--green)">✓ ' + esc(text) + '</span>'
-    : '<span style="color:var(--red)">✗ ' + esc(text) + '</span>';
+  // 与全站保存反馈同款：showSaveResult / .save-result（✓/✗ + SVG 图标 + 状态色）
+  return '<span class="save-result ' + (ok ? 'ok' : 'err') + '">' +
+    uiIcon(ok ? 'check' : 'close') + esc(text) + '</span>';
 }
 
 // 老接口/网关异常的降级文案：404「page not found」/ 非 JSON 响应（旧版本进程）→ 提示重启代理；
@@ -482,7 +482,7 @@ async function testProvider(btn) {
   const out = _('provTestResult');
   const orig = btn ? btn.innerHTML : '';
   if (btn) { btn.disabled = true; btn.innerHTML = '<span class="loading"></span> ' + t('测试中...'); }
-  if (out) out.innerHTML = '<span style="color:var(--text3)"><span class="loading"></span> ' + t('测试中...') + '</span>';
+  if (out) out.innerHTML = '<span class="mut"><span class="loading"></span> ' + t('测试中...') + '</span>';
   // 表单里的「模型 ID」是逗号分隔列表，探测取第一个（显式给出的模型按原样使用）
   const model = _('provModels').value.split(',').map(s => s.trim()).filter(Boolean)[0] || '';
   const body = _editingProviderId
@@ -608,7 +608,7 @@ function renderProvPickerList() {
   };
   const groupTitle = (label, n, tier) =>
     '<div class="preset-group-title">' + label + ' · ' + n +
-    '<button type="button" class="btn btn-sm" style="float:right;padding:1px 8px;font-size:11px" onclick="event.preventDefault();provPickerSelectAllTier(\'' + tier + '\')">' + t('全选') + '</button></div>';
+    '<button type="button" class="btn btn-sm" class="float-note" onclick="event.preventDefault();provPickerSelectAllTier(\'' + tier + '\')">' + t('全选') + '</button></div>';
   const freeIds = visible.filter(id => _provPickerTiers[id] === 'free');
   const paidIds = visible.filter(id => _provPickerTiers[id] !== 'free');
   box.innerHTML =
@@ -704,7 +704,7 @@ function presetRowHTML(p) {
   return '<div class="preset-row" onclick="applyPreset(\'' + esc(p.key) + '\')" title="' + esc(p.baseURL || '') + '">' +
     '<span class="preset-name">' + esc(p.name) + '</span>' +
     '<span class="preset-key">' + esc(p.baseURL || p.key) + '</span>' +
-    '<span style="display:inline-flex;gap:6px;align-items:center;flex-shrink:0">' +
+    '<span class="row-inline">' +
     (p.loginFlow ? '<span class="model-source-badge zen" title="' + t('设备码连接：在「账号与连接」添加，编辑器「账号连接池」勾选即可；无需 API Key') + '">' + t('需登录') + '</span>' : (g.badge ? '<span class="' + g.cls + '">' + t(g.badge) + '</span>' : '')) +
     (p.modelIDs && p.modelIDs.length ? '<span class="model-source-badge">' + p.modelIDs.length + ' ' + t('个模型') + '</span>' : '') +
     '</span></div>';
@@ -871,8 +871,8 @@ function renderImportPreviewList() {
       if (it.action === 'add') action = '<span class="model-source-badge zen">' + t('新增') + '</span>';
       else if (it.action === 'tier_change') action = '<span class="model-source-badge provider">' + t('层级变化') + ': ' + esc(it.oldTier === 'free' ? t('免费') : t('付费')) + ' → ' + esc(it.tier === 'free' ? t('免费') : t('付费')) + '</span>';
       else if (it.action === 'protected') action = '<span class="model-source-badge" title="' + escAttr(it.reason || '') + '">' + t('受保护') + '</span>';
-      else action = '<span class="model-source-badge" style="opacity:.6">' + t('无变化') + '</span>';
-      return '<label class="combo-pick-row" data-action="' + escAttr(it.action) + '" style="display:flex;align-items:center;gap:8px;padding:7px 10px;border-bottom:1px solid var(--border2);font-size:12px">' +
+      else action = '<span class="model-source-badge" class="dim-op">' + t('无变化') + '</span>';
+      return '<label class="combo-pick-row" data-action="' + escAttr(it.action) + '" class="prov-flow-row">' +
         '<input type="checkbox" class="import-approve" onchange="updateImportCount()" value="' + esc(it.modelId) + '" ' + (it.action === 'add' ? 'checked' : '') + (selectable ? '' : ' disabled') + '>' +
         '<span class="combo-pick-id">' + esc(it.modelId) + '</span>' + tierBadge(it.tier) + sig + action + '</label>';
     }).join('');
@@ -1030,7 +1030,7 @@ function renderConnectionProviders() {
       state = '<span class="conn-tile-state"><span class="status-dot disabled"></span>' + t('未连接') + '</span>';
     } else {
       state = '<span class="conn-tile-state"><span class="status-dot active"></span>' + active + ' ' + t('个账号');
-      if (reauth) state += ' · <span style="color:var(--yellow)">' + reauth + ' ' + t('需重新登录') + '</span>';
+      if (reauth) state += ' · <span class="warn-txt">' + reauth + ' ' + t('需重新登录') + '</span>';
       state += '</span>';
     }
     const action = '<button class="btn btn-sm' + (has ? '' : ' btn-primary') + '" onclick="startProviderLogin(\'' + escAttr(p) + '\', this)">' +
@@ -1086,39 +1086,39 @@ function renderConnectionsList() {
     if (c.provider !== lastProv) {
       lastProv = c.provider;
       groupRow = '<tr class="conn-group-row"><td colspan="6">' + esc(flowLabel(c.provider)) +
-        ' <span class="mono" style="font-size:11px;color:var(--text3);font-weight:400">' + esc(c.provider) + '</span></td></tr>';
+        ' <span class="mono grp-count">' + esc(c.provider) + '</span></td></tr>';
     }
     const stats = Object.values(c.modelStats || {}).sort((x, y) => y.totalTokens - x.totalTokens);
     const statRows = stats.length
-      ? '<tr style="background:var(--surface2)"><td colspan="6" style="padding:8px 32px;color:var(--text2);font-size:12px;font-weight:600">' + t('按模型统计') + ' · ' + stats.length + ' ' + t('个模型') + '</td></tr>' +
+      ? '<tr class="row-alt"><td colspan="6" class="pl-32 note-sm txt-strong">' + t('按模型统计') + ' · ' + stats.length + ' ' + t('个模型') + '</td></tr>' +
         stats.map(st =>
-          '<tr style="background:var(--surface2)">' +
-            '<td style="padding-left:32px" class="mono">' + esc(st.modelId) +
-              ' <span class="model-tag' + (st.cost === 'free' ? ' free' : '') + '" style="font-size:10px;padding:1px 6px">' + esc(st.cost || 'paid') + '</span></td>' +
+          '<tr class="row-alt">' +
+            '<td class="mono pl-32">' + esc(st.modelId) +
+              ' <span class="model-tag tag-xs' + (st.cost === 'free' ? ' free' : '') + '">' + esc(st.cost || 'paid') + '</span></td>' +
             '<td></td>' +
             '<td>' + formatNumber(st.usageCount) + '</td>' +
             '<td>' + formatTokenCount(st.promptTokens) + '</td>' +
             '<td>' + formatTokenCount(st.totalTokens) + '</td>' +
             '<td>' + formatTokenCount(st.cachedTokens) + '</td>' +
           '</tr>').join('')
-      : '<tr style="background:var(--surface2)"><td colspan="6" style="padding:6px 32px;color:var(--text3);font-size:12px">' + t('暂无数据') + '</td></tr>';
+      : '<tr class="row-alt"><td colspan="6" class="pl-32 hint-sm">' + t('暂无数据') + '</td></tr>';
     return groupRow + '<tr>' +
-      '<td><button class="btn btn-sm btn-icon" onclick="toggleConnStats(\'' + escAttr(c.id) + '\', this)" title="' + t('展开') + '" aria-label="' + t('展开') + '">▸</button></td>' +
-      '<td style="font-size:11px;color:var(--text3)">' + esc(c.authType === 'device_code' ? t('设备码登录') : c.authType === 'import_token' ? t('导入 Token') : (c.authType || '')) + '</td>' +
-      '<td style="font-size:12px">' + esc(c.email || (c.providerSpecificData && c.providerSpecificData.orgId ? 'org ' + c.providerSpecificData.orgId : '—')) + '</td>' +
+      '<td><button class="btn btn-sm btn-icon" onclick="toggleConnStats(\'' + escAttr(c.id) + '\', this)" title="' + t('展开') + '" aria-label="' + t('展开') + '">'+uiIcon('caretRight')+'</button></td>' +
+      '<td class="hint-xs">' + esc(c.authType === 'device_code' ? t('设备码登录') : c.authType === 'import_token' ? t('导入 Token') : (c.authType || '')) + '</td>' +
+      '<td class="note-sm">' + esc(c.email || (c.providerSpecificData && c.providerSpecificData.orgId ? 'org ' + c.providerSpecificData.orgId : '—')) + '</td>' +
       '<td>' + (c.status === 'active'
         ? '<span class="status active"><span class="status-dot active"></span>' + t('已登录') + '</span>'
         : '<span class="status disabled"><span class="status-dot disabled"></span>' + t('需重新登录') + '</span>') + connExpiryHtml(c) + '</td>' +
-      '<td style="font-size:12px">' + (c.usageCount
+      '<td class="note-sm">' + (c.usageCount
         ? formatNumber(c.usageCount) + ' ' + t('请求') + ' · ' + formatTokenCount(c.totalTokens || 0) + ' token'
-        : '<span style="color:var(--text3)">—</span>') + '</td>' +
+        : '<span class="mut">—</span>') + '</td>' +
       '<td><button class="btn btn-sm" onclick=\'testConnection("' + c.id + '", this)\'>' + t('测试') + '</button> ' +
           '<span class="conn-row-test-out"></span> ' +
-          '<button class="btn btn-sm btn-danger" onclick=\'deleteConnection("' + c.id + '")\' title="' + t('删除') + '" aria-label="' + t('删除') + '">✕</button></td>' +
+          '<button class="btn btn-sm btn-danger" onclick=\'deleteConnection("' + c.id + '")\' title="' + t('删除') + '" aria-label="' + t('删除') + '">'+uiIcon('close')+'</button></td>' +
       '</tr>' +
       '<tr id="connStatsRow-' + escAttr(c.id) + '" style="display:none"><td colspan="6" style="padding:0">' +
         '<table class="model-subtable" style="width:100%">' +
-          '<tr><th style="padding-left:32px;text-align:left">' + t('模型') + '</th><th></th><th style="text-align:left">' + t('请求') + '</th><th style="text-align:left">' + t('输入') + '</th><th style="text-align:left">' + t('总量') + '</th><th style="text-align:left">' + t('缓存') + '</th></tr>' +
+          '<tr><th class="pl-32 th-left">' + t('模型') + '</th><th></th><th class="th-left">' + t('请求') + '</th><th class="th-left">' + t('输入') + '</th><th class="th-left">' + t('总量') + '</th><th class="th-left">' + t('缓存') + '</th></tr>' +
           statRows +
         '</table></td></tr>';
   }).join('');
@@ -1130,7 +1130,7 @@ function toggleConnStats(id, btn) {
   if (!row) return;
   const hidden = row.style.display === 'none';
   row.style.display = hidden ? '' : 'none';
-  btn.innerHTML = hidden ? '▾' : '▸';
+  btn.innerHTML = hidden ? uiIcon('caretDown') : uiIcon('caretRight');
   btn.title = hidden ? t('收起') : t('展开');
 }
 
@@ -1296,7 +1296,7 @@ function renderConnPick() {
   const cnt = _('provConnCount');
   if (cnt) cnt.textContent = ' · ' + (_provConnSel.length ? _provConnSel.length + t('已选') : t('未选择'));
   if (!_connList.length) {
-    box.innerHTML = '<span class="conn-pick-empty">' + t('暂无登录连接') + ' · <a href="javascript:void(0)" onclick="showConnectionImport()" style="color:var(--accent)">' + t('导入 Token') + '</a></span>';
+    box.innerHTML = '<span class="conn-pick-empty">' + t('暂无登录连接') + ' · <a href="javascript:void(0)" onclick="showConnectionImport()" class="lnk-a">' + t('导入 Token') + '</a></span>';
     return;
   }
   const byProv = {};
@@ -1308,7 +1308,7 @@ function renderConnPick() {
       const who = c.email || (c.providerSpecificData && c.providerSpecificData.orgId ? 'org ' + c.providerSpecificData.orgId : c.id);
       return '<label class="conn-pick-item' + (on ? ' on' : '') + '">' +
         '<input type="checkbox"' + (on ? ' checked' : '') + ' onchange="toggleConnPick(\'' + escAttr(c.id) + '\', this.checked)"> ' +
-        '<span class="mono" style="font-size:12px">' + esc(who) + '</span>' +
+        '<span class="mono note-sm">' + esc(who) + '</span>' +
         (c.status !== 'active' ? ' <span class="conn-pick-warn">' + t('需重新登录') + '</span>' : '') +
         (c.usageCount ? ' <span class="conn-pick-usage">' + formatNumber(c.usageCount) + ' ' + t('请求') + '</span>' : '') +
         '</label>';
@@ -1336,9 +1336,7 @@ async function saveHeaders(btn) {
   try {
     const d = await api('POST', '/config/update', { headers });
     toast(t('请求头已保存'), 'success');
-    _('headerSaveResult').innerHTML =
-      '<div style="color:var(--green);font-size:13px">✓ ' + t('已保存 ')+ Object.keys(d.data.headers).length + t(' 个请求头') + '</div>';
-    setTimeout(() => _('headerSaveResult').innerHTML = '', 5000);
+    showSaveResult('headerSaveResult', true, t('已保存 ') + Object.keys(d.data.headers).length + t(' 个请求头'));
     loadConfig();
   } catch (e) { toast(t('保存失败: ') + e.message, 'error'); }
   finally { if (btn) { btn.disabled = false; btn.innerHTML = orig; } }

@@ -178,7 +178,7 @@ const I18N = {
   '• 关闭窗口即停止服务，无后台驻留进程。': '• Closing the window stops the service; no background process.',
   'RouteNest 管理后台': 'RouteNest Admin',
   '该后台已启用访问密码，请输入密码登录': 'Password protection is enabled. Enter the password to continue.',
-  '登 录': 'Sign In',
+  '登录': 'Sign In',
   '即将恢复': 'recovering soon',
   '需要登录': 'Login required',
   '登录失败': 'Login failed',
@@ -335,7 +335,7 @@ const I18N = {
   // opencode 免费模型
   '从 opencode 同步模型': 'Sync Models from opencode',
   'opencode 模型列表已更新': 'opencode model list updated',
-  'opencode 免费模型 · 今日用量': 'opencode Free Models · Today',
+  '今日 · opencode 免费模型': 'Today · opencode Free Models',
   '今日请求数': 'Requests today',
   '今日输入 Token': 'Input tokens today',
   '今日输出 Token': 'Output tokens today',
@@ -655,20 +655,20 @@ const I18N = {
   '可用': 'OK',
   '确定删除该连接？绑定它的 Provider 将不再注入 token。': 'Delete this connection? Bound providers will stop injecting the token.',
   '账号与连接': 'Accounts and Connections',
-  '分开管理 Cline 账号池与 OAuth 登录连接，免费模型用量按来源汇总查看': 'Accounts and OAuth logins on separate subtabs, with pool-wide free-model usage grouped by source',
+  '分开管理内置账号池（Cline 源）与 OAuth 登录连接，免费模型用量按来源汇总查看': 'Built-in account pool (Cline source) and OAuth logins on separate subtabs, with pool-wide free-model usage grouped by source',
   '账号池': 'Accounts',
   '连接池': 'Connections',
   '模型用量': 'Model Usage',
-  '汇总全部 Cline 账号服务过的免费模型，按来源分组展示请求与 Token 用量。': 'Free models served by all Cline accounts, grouped by source with request and token totals.',
+  '汇总内置账号池服务过的免费模型，按来源分组展示请求与 Token 用量。': 'Free models served by the built-in account pool, grouped by source with request and token totals.',
   '暂无用量数据': 'No usage data yet',
   ' 个账号冷却中': ' accounts cooling',
   '免费模型用量见「模型用量」汇总': 'See the Model Usage summary for per-model totals',
   '展开模型用量': 'Open Model Usage',
-  'Cline 账号池': 'Cline Account Pool',
+  '内置账号池（Cline 源）': 'Built-in Account Pool (Cline)',
   'OAuth 连接池': 'OAuth Connection Pool',
   '所有需要登录签票的上游账号（OAuth 设备码 / 粘贴 Token）统一在此管理：每个连接独立统计自己服务过的模型与用量，并按 Provider 分组。点击下方 Provider 卡片直接登录；已连接的 Provider 可继续「添加账号」，多个账号会一起参与轮转派发。登录后在 Provider 编辑器的「账号连接池」里勾选即可参与派发；Token 只存服务端，不写进 Provider。': 'All upstream accounts that need a login (OAuth device code / pasted token) are managed here: each connection tracks the models and usage it served, grouped by provider. Click a provider card below to sign in; connected providers also offer "Add Account", and multiple accounts join dispatch rotation together. After login, tick the connection in the provider editor account pool to include it; tokens stay server-side and are never copied into providers.',
   '登录与导入（Cline 账号）': 'Cline Login and Import',
-  '为上方「Cline 账号池」添加账号：OAuth 浏览器登录、粘贴 refreshToken 或批量文件。第三方服务（Kilo、GitHub Copilot 等）的登录请使用「OAuth 连接池」。': 'Add accounts to the Cline pool above: OAuth browser login, a pasted refreshToken, or a batch file. For third-party services (Kilo, GitHub Copilot, etc.) use the OAuth connection pool above.',
+  '为上方「内置账号池（Cline 源）」添加账号：OAuth 浏览器登录、粘贴 refreshToken 或批量文件。第三方服务（Kilo、GitHub Copilot 等）的登录请使用「OAuth 连接池」。': 'Add accounts to the built-in pool above (Cline source): OAuth browser login, a pasted refreshToken, or a batch file. For third-party services (Kilo, GitHub Copilot, etc.) use the OAuth connection pool above.',
   '账号连接池': 'Account connection pool',
   '勾选多个登录连接后轮转派发，被限流/待重登的连接自动跳过由兄弟连接顶上；不勾选 = 仅用 API Key。连接的增删在「账号与连接」页管理。': 'Tick multiple logins for round-robin dispatch; rate-limited or reauth-pending ones are skipped while siblings take over. Tick none to use the API key only. Connections are added and removed on the Accounts and Connections page.',
   '复制': 'Copy',
@@ -1053,11 +1053,49 @@ const formatTokenCount = n => {
   return String(value);
 };
 
-function toast(msg, t) {
-  const el = _('toast');
-  el.textContent = msg;
-  el.className = 'toast ' + t + ' show';
-  setTimeout(() => el.classList.remove('show'), 3500);
+// 行内 SVG 图标助手：与 body.html 表头图标同风格（stroke=currentColor / 2px / 圆角端点）
+const UI_ICONS = {
+  bolt: '<path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>',
+  reset: '<polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>',
+  close: '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>',
+  check: '<polyline points="20 6 9 17 4 12"/>',
+  chart: '<rect x="3" y="12" width="4" height="8" rx="1"/><rect x="10" y="8" width="4" height="12" rx="1"/><rect x="17" y="4" width="4" height="16" rx="1"/>',
+  caretRight: '<polyline points="9 6 15 12 9 18"/>',
+  caretDown: '<polyline points="6 9 12 15 18 9"/>'
+};
+function uiIcon(name, cls) {
+  const d = UI_ICONS[name] || '';
+  return '<svg class="ui-ic' + (cls ? ' ' + cls : '') + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + d + '</svg>';
+}
+
+// Toast：堆叠队列（最多 3 条，错峰自动消失；软底色+状态色描边）
+// 兼容旧签名 toast(msg, type)，type 缺省按 info 处理
+let _toastSeq = 0;
+function toast(msg, tone) {
+  const stack = _('toastStack');
+  if (!stack) return;
+  if (!tone) tone = 'info';
+  const item = document.createElement('div');
+  item.className = 'toast ' + tone;
+  item.innerHTML = uiIcon(tone === 'success' ? 'check' : (tone === 'error' ? 'close' : 'bolt')) + '<span class="toast-msg"></span>';
+  item.querySelector('.toast-msg').textContent = msg;
+  stack.appendChild(item);
+  while (stack.children.length > 3) stack.removeChild(stack.firstChild);
+  requestAnimationFrame(() => item.classList.add('show'));
+  setTimeout(() => {
+    item.classList.remove('show');
+    setTimeout(() => { if (item.parentNode) item.parentNode.removeChild(item); }, 300);
+  }, 3500 + (_toastSeq++ % 3) * 400);
+}
+
+// 行内保存反馈统一：「✓ 已保存 / ✗ 失败」，4s 后自动清除
+function showSaveResult(id, ok, msg) {
+  const el = _(id);
+  if (!el) return;
+  el.innerHTML = '<span class="save-result ' + (ok ? 'ok' : 'err') + '">' +
+    uiIcon(ok ? 'check' : 'close') + esc(msg || (ok ? t('已保存') : t('保存失败'))) + '</span>';
+  clearTimeout(el._saveTimer);
+  el._saveTimer = setTimeout(() => { el.innerHTML = ''; }, 4000);
 }
 
 // 格式化冷却倒计时：返回紧凑的 "3.2h" 格式
@@ -1082,7 +1120,7 @@ function toggleLoginImport(forceOpen) {
   if (!body || !btn) return;
   const open = (forceOpen === undefined) ? body.style.display === 'none' : !!forceOpen;
   body.style.display = open ? '' : 'none';
-  btn.textContent = open ? '▾' : '▸';
+  btn.innerHTML = open ? uiIcon('caretDown') : uiIcon('caretRight');
   const label = open ? '收起' : '展开';
   btn.title = label;
   btn.setAttribute('aria-label', label);
@@ -1095,7 +1133,7 @@ function toggleModelUsage(forceOpen) {
   if (!body || !btn) return;
   const open = (forceOpen === undefined) ? body.style.display === 'none' : !!forceOpen;
   body.style.display = open ? '' : 'none';
-  btn.textContent = open ? '▾' : '▸';
+  btn.innerHTML = open ? uiIcon('caretDown') : uiIcon('caretRight');
   const label = open ? '收起' : '展开';
   btn.title = label;
   btn.setAttribute('aria-label', label);
