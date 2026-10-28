@@ -343,7 +343,7 @@
     <div class="section-desc">所有需要登录签票的上游账号（OAuth 设备码 / 粘贴 Token）统一在此管理：每个连接独立统计自己服务过的模型与用量，并按 Provider 分组。点击下方 Provider 卡片直接登录；已连接的 Provider 可继续「添加账号」，多个账号会一起参与轮转派发。登录后在 Provider 编辑器的「账号连接池」里勾选即可参与派发；Token 只存服务端，不写进 Provider。</div>
     <div id="connProviderGroups"></div>
     <div class="section-body flush">
-      <div id="connectionsList"></div>
+      <div id="connectionsList" class="table-sheet"></div>
     </div>
   </div>
   </div>
@@ -396,7 +396,7 @@
   </div>
   <div id="logDetailModal" class="overlay-modal" onclick="if(event.target===this)closeLogDetail()">
     <div class="modal-card modal-card-col w760" role="dialog" aria-modal="true" aria-label="请求详情">
-      <div class="modal-title">请求详情 <span class="mono" id="logDetailId"></span></div>
+      <div class="modal-title">请求详情 <span class="mono" id="logDetailId"></span><button type="button" class="modal-x" onclick="closeLogDetail()" aria-label="关闭弹窗" title="关闭">&times;</button></div>
       <div class="modal-sub" id="logDetailSub"></div>
       <div class="log-detail-body" id="logDetailBody"></div>
       <div class="modal-actions">
@@ -758,6 +758,18 @@
   </div>
 </aside>
 
+<!-- 供应商详情抽屉（只读 master-detail；body 级浮层，不随标签页隐藏；无保存条） -->
+<div id="provDetailOverlay" class="drawer-overlay" onclick="closeProvDetail()"></div>
+<aside id="provDetail" class="drawer drawer-wide" role="dialog" aria-modal="true" aria-labelledby="provDetailTitle">
+  <div class="drawer-header">
+    <div class="drawer-title" id="provDetailTitle">供应商详情</div>
+    <button type="button" class="drawer-close" onclick="closeProvDetail()" aria-label="关闭"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+  </div>
+  <div class="drawer-body" id="provDetailBody">
+    <div class="sk-stack"><span class="skeleton"></span><span class="skeleton w70"></span><span class="skeleton w45"></span></div>
+  </div>
+</aside>
+
 <div id="tab-upstreams" class="tab-panel" style="display:none">
   <div class="page-header">
     <div>
@@ -934,8 +946,8 @@
         <button class="btn btn-sm btn-primary" onclick="showProviderEditor()">＋ 添加 Provider</button>
       </span>
     </div>
-    <div id="providerSyncBanner" class="sync-banner" style="display:none" aria-live="polite"></div>
-    <div class="section-body xscroll">
+    <div id="providerSyncBanner" class="sync-banner" aria-live="polite"></div>
+    <div class="section-body">
       <div id="providersList"></div>
     </div>
   </div>
@@ -1061,6 +1073,7 @@
             <input type="text" id="importPreviewSearch" placeholder="搜索模型..." aria-label="搜索模型" oninput="filterImportPreview()" onkeydown="if(event.key==='Escape')closeImportPreview()">
             <button class="btn btn-sm" onclick="importPreviewSelectAll(true)">全选</button>
             <button class="btn btn-sm" onclick="importPreviewSelectAll(false)">清空</button>
+            <button class="btn btn-sm" onclick="importPreviewSelectTier()" title="勾选当前可见的全部免费模型，取消可见的付费模型（隐藏行不动）">只选免费</button>
             <span id="importPreviewMatch" class="grp-meta"></span>
           </div>
           <div class="import-filter-row" role="group" aria-label="按操作过滤">
@@ -1069,6 +1082,9 @@
             <button class="btn btn-sm import-act-filter" data-act="tier_change" onclick="setImportActionFilter(this)">层级变化</button>
             <button class="btn btn-sm import-act-filter" data-act="nochange" onclick="setImportActionFilter(this)">无变化</button>
             <button class="btn btn-sm import-act-filter" data-act="protected" onclick="setImportActionFilter(this)">受保护</button>
+            <span class="imp-fsep" aria-hidden="true"></span>
+            <button class="btn btn-sm import-tier-filter" data-tier="free" onclick="setImportTierFilter(this)" aria-label="只看免费计费的行">免费 <span id="tierCntFree"></span></button>
+            <button class="btn btn-sm import-tier-filter" data-tier="paid" onclick="setImportTierFilter(this)" aria-label="只看付费计费的行">付费 <span id="tierCntPaid"></span></button>
           </div>
           <div id="importPreviewList" class="combo-picker-list"><div class="sk-stack"><span class="skeleton"></span><span class="skeleton w70"></span><span class="skeleton w45"></span></div></div>
           <div class="modal-actions">
@@ -1333,7 +1349,7 @@ Model:    cline-free/glm-5.2</pre>
         </div>
         </div>
       </div>
-      <div id="confirmModal" class="overlay-modal">
+      <div id="confirmModal" class="overlay-modal overlay-top" onclick="if(event.target===this)resolveConfirm(false)">
         <div class="modal-card w420" role="alertdialog" aria-modal="true" aria-labelledby="confirmMsg">
           <div id="confirmMsg" class="confirm-msg"></div>
           <div class="modal-actions">

@@ -48,8 +48,17 @@ func FreeWord(s string) bool {
 }
 
 // Classify checks signals in order and returns on the first hit. Explicit free
-// markers outrank explicit non-zero pricing because gateway catalogs commonly
-// list free variants with the reference list price.
+// markers (free flag, free mode, ":free"/"-free" id suffix) outrank explicit
+// non-zero pricing because gateway catalogs commonly list free variants with
+// the reference list price. A parsed non-zero price outranks the weak fallbacks.
+//
+// Weak word/metadata signals (a standalone "free" word inside the id or display
+// name, an allowlist tag, and the provider-level free flag) no longer grant a
+// free tier: an aggregator namespace like "free/claude-opus" and a
+// provider-scoped claim are metadata, not per-model entitlements, and they must
+// not turn settled paid endpoints into "free" classifications. They fall
+// through to the paid default unless stronger evidence exists. Access-class
+// policy lives in domain.AccessClass and is applied separately.
 //
 // The returned tier keeps the legacy "free"/"pass" vocabulary used by the
 // import flow. Access-class policy lives in domain.AccessClass and is applied
@@ -66,11 +75,11 @@ func Classify(e Entry, providerFree bool, allowlist map[string]bool) (tier, sign
 	if strings.HasSuffix(lower, ":free") || strings.HasSuffix(lower, "-free") {
 		return "free", TierSignalSuffixFree
 	}
-	if FreeWord(lower) {
-		return "free", TierSignalNameToken
-	}
-	if FreeWord(e.Name) {
-		return "free", TierSignalDisplayName
+	// Strong pricing evidence: any parsed non-zero component wins over every
+	// weak signal below. Request-only fees stay paid under this rule too.
+	if (e.PricingPrompt != nil && *e.PricingPrompt != 0) || (e.PricingComplet != nil && *e.PricingComplet != 0) ||
+		(e.PricingRequest != nil && *e.PricingRequest != 0) {
+		return "pass", TierSignalPricingPaid
 	}
 	for _, tag := range e.Tags {
 		if strings.EqualFold(strings.TrimSpace(tag), "free") {
@@ -80,12 +89,18 @@ func Classify(e Entry, providerFree bool, allowlist map[string]bool) (tier, sign
 	if allowlist[lower] {
 		return "free", TierSignalAllowlist
 	}
-	if (e.PricingPrompt != nil && *e.PricingPrompt != 0) || (e.PricingComplet != nil && *e.PricingComplet != 0) ||
-		(e.PricingRequest != nil && *e.PricingRequest != 0) {
-		return "pass", TierSignalPricingPaid
+	if FreeWord(lower) {
+		// 弱信号：id 里的独立 free 词段（如 "free/claude-opus" 目录命名）不是
+		// 每模型权益，交给下方 provider-free 元数据处理，不再单独授予免费。
+		return "pass", TierSignalNameToken
+	}
+	if FreeWord(e.Name) {
+		return "pass", TierSignalDisplayName
 	}
 	if providerFree {
-		return "free", TierSignalProviderFree
+		// Provider 级 free 标志是元数据而非逐模型权益：不再授予免费，
+		// 仅保留溯源信号（UI 显示「整源免费但无逐模型证据」）。
+		return "pass", TierSignalProviderFree
 	}
 	return "pass", TierSignalPaidDefault
 }

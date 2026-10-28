@@ -248,6 +248,23 @@ const I18N = {
   '搜索模型': 'Search models',
   '搜索预设': 'Search presets',
   '已下架': 'Delisted',
+  '检测出错': 'Check failed',
+  '每日': 'Daily',
+  '冷却中': 'Cooling down',
+  '打开详情': 'Details',
+  '重试': 'Retry',
+  '返回列表': 'Back to list',
+  '只选免费': 'Select free only',
+  '批次统计': 'Batch summary',
+  '批次判定只来自服务端信号：定价为零 / free 标志 / :free、:paid 后缀；悬停任一行可见具体依据': 'Tiering comes only from server signals: zero pricing / free flag / :free, :paid suffix; hover a row for its exact signal',
+  '移除全部已下架': 'Remove all delisted',
+  '已从上游官方列表移除，可在此手动清理': 'Removed from the upstream official list; clean up here',
+  '确定移除 ': 'Remove ',
+  ' 个已下架模型？': ' delisted model(s)?',
+  '已移除 ': 'Removed ',
+  ' 个已下架模型': ' delisted model(s)',
+  '没有已下架模型': 'No delisted models',
+  '获取中': 'Loading',
   '匹配': 'Match ',
   '没有匹配的账号': 'No matching accounts',
   '请先勾选要重置的账号': 'Select accounts to reset first',
@@ -854,6 +871,19 @@ const I18N = {
   '检测中...': 'Checking...',
   '检测失败': 'Check failed',
   '待审': 'pending',
+  '待同步模型': ' models pending sync',
+  '多少模型变更待同步': 'How many model changes are pending sync',
+  '接近上限': 'Near limit',
+  '联动连接': 'Linked connections',
+  '供应商详情': 'Provider details',
+  '限额与健康': 'Limits & health',
+  '未设置': 'Not set',
+  '已设置': 'Set',
+  '近期成败': 'Recent results',
+  '打开审阅': 'Open review',
+  '立即检测': 'Recheck now',
+  '未链接任何连接': 'No linked connections',
+  '同步': 'Sync',
   '个新模型待审': ' new model(s) pending review',
   '查看审阅': 'Review',
   '全部忽略': 'Ignore all',
@@ -1023,7 +1053,7 @@ const escAttr = s => esc(s).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 // and the per-row badges on the Models page.
 const _tierSignals = {
   'pricing-zero': '定价为 0', 'flag-free': '上游 free 标志', 'suffix-free': 'id 后缀 free', 'name-token-free': 'id 含 free 段', 'allowlist': '免费标签/白名单',
-  'provider-free': '整源免费', 'display-name-free': '模型名含 free', 'pricing-paid': '上游定价非零', 'paid-default': '无免费信号 → 付费',
+  'provider-free': '整源标记免费，无逐模型证据', 'display-name-free': '模型名含 free（弱）', 'pricing-paid': '上游定价非零', 'paid-default': '无免费信号 → 付费',
 };
 
 // Merge ids into a picker's checked-order array, skipping ids already present
@@ -1061,7 +1091,12 @@ const UI_ICONS = {
   check: '<polyline points="20 6 9 17 4 12"/>',
   chart: '<rect x="3" y="12" width="4" height="8" rx="1"/><rect x="10" y="8" width="4" height="12" rx="1"/><rect x="17" y="4" width="4" height="16" rx="1"/>',
   caretRight: '<polyline points="9 6 15 12 9 18"/>',
-  caretDown: '<polyline points="6 9 12 15 18 9"/>'
+  caretDown: '<polyline points="6 9 12 15 18 9"/>',
+  hourglass: '<path d="M5 22h14"/><path d="M5 2h14"/><path d="M17 22v-4.172a2 2 0 0 0-.586-1.414L12 12l-4.414-4.414A2 2 0 0 1 7 6.172V2"/><path d="M7 2v4.172a2 2 0 0 0 .586 1.414L12 12l4.414 4.414A2 2 0 0 1 17 17.828V22"/>',
+  arrowDown: '<line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/>',
+  edit: '<path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/>',
+  pause: '<rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/>',
+  play: '<polygon points="5 3 19 12 5 21 5 3"/>'
 };
 function uiIcon(name, cls) {
   const d = UI_ICONS[name] || '';

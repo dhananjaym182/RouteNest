@@ -15,6 +15,7 @@ let _logPollTimer = 0;
 let _logDetailIdx = -1;
 let _logSearchT = 0;
 let _logDetailMap = {};   // log id -> 展开行 DOM id（避免把 UI 状态写进日志对象）
+let _logOpenIds = new Set(); // 已展开详情的日志 id（跨轮询重渲染保持展开状态）
 
 const formatDuration = ms => {
   if (!ms || ms <= 0) return '-';
@@ -79,10 +80,28 @@ function logModelCell(l) {
 }
 
 // 表格行展开/收起尝试链路详情行
-function toggleLogDetail(id) {
-  const el = _(id);
+// 用 class 驱动显隐（.log-detail.open），而不是翻转内联 style.display：
+// 旧实现 `style.display === 'none' || !style.display` 在展开态（display=''，空串为
+// falsy）会被误判回「未设置」分支再次置 ''，导致行一旦展开就无法收起。
+// 状态以 _logOpenIds 为准，重渲染（跟随轮询/筛选）也能恢复展开态与 chevron。
+function setLogDetailOpen(l, open) {
+  if (!l) return;
+  const el = _( _logDetailMap[l.id] );
   if (!el) return;
-  el.style.display = (el.style.display === 'none' || !el.style.display) ? '' : 'none';
+  el.classList.toggle('open', open);
+  if (l.id) { open ? _logOpenIds.add(l.id) : _logOpenIds.delete(l.id); }
+  const row = el.previousElementSibling;
+  if (row && row.classList.contains('log-row')) {
+    row.classList.toggle('expanded', open);
+    if (open) row.setAttribute('aria-expanded', 'true');
+    else row.setAttribute('aria-expanded', 'false');
+  }
+}
+
+function toggleLogDetailByItem(l) {
+  if (!l || !(Array.isArray(l.attempts) && l.attempts.length)) return;
+  const el = _( _logDetailMap[l.id] );
+  setLogDetailOpen(l, !(el && el.classList.contains('open')));
 }
 
 // ---------- 筛选 ----------
@@ -170,10 +189,11 @@ function renderLogList() {
     const hasAttempts = attempts.length > 0;
     const detailId = 'logDetail' + (_logRowSeq++);
     _logDetailMap[l.id] = detailId;
-    const rowCls = 'log-row' + (hasAttempts ? ' has-attempts' : '') + (idx % 2 ? ' alt' : '');
+    const open = hasAttempts && _logOpenIds.has(l.id);
+    const rowCls = 'log-row' + (hasAttempts ? ' has-attempts' : '') + (open ? ' expanded' : '') + (idx % 2 ? ' alt' : '');
     const acct = esc(logUpstreamValue(l));
     const rowTitle = hasAttempts ? ' title="' + escAttr(t('点击查看尝试链路')) + ' · ' + t('双击复制 JSON') + '"' : ' title="' + escAttr(t('双击复制 JSON')) + '"';
-    return '<tr class="' + rowCls + '" data-idx="' + idx + '"' + rowTitle + '>' +
+    return '<tr class="' + rowCls + '" data-idx="' + idx + '"' + rowTitle + (hasAttempts ? ' aria-expanded="' + (open ? 'true' : 'false') + '"' : '') + '>' +
       '<td>' + logTimestampHtml(l.startedAt) + '</td>' +
       '<td title="' + escAttr(logUpstreamValue(l)) + '">' + acct + '</td>' +
       '<td>' + esc(l.protocol || '-') + '</td>' +
@@ -183,8 +203,8 @@ function renderLogList() {
       '<td>' + (l.ttftMs ? formatDuration(l.ttftMs) : '-') + '</td>' +
       '<td>' + formatTPS(l.outputTokensPerSecond) + '</td>' +
       '<td>' + st + '</td>' +
-      '<td><button type="button" class="btn btn-sm log-detail-btn" data-idx="' + idx + '">' + t('详情') + '</button></td></tr>' +
-      (hasAttempts ? '<tr id="' + detailId + '" class="log-detail" style="display:none"><td colspan="13" class="log-detail-cell">' + renderAttempts(attempts) + '</td></tr>' : '');
+      '<td>' + (hasAttempts ? '<i class="log-chevron" aria-hidden="true"></i>' : '') + '<button type="button" class="btn btn-sm log-detail-btn" data-idx="' + idx + '">' + t('详情') + '</button></td></tr>' +
+      (hasAttempts ? '<tr id="' + detailId + '" class="log-detail' + (open ? ' open' : '') + '"><td colspan="13" class="log-detail-cell">' + renderAttempts(attempts) + '</td></tr>' : '');
   };
 
   const renderCard = (l, idx) => {
@@ -474,11 +494,11 @@ function toggleLogFullscreen(btn) {
   const tbody = _('logTableBody');
   if (tbody) {
     tbody.addEventListener('click', e => {
+      if (e.target.closest('.log-detail-btn')) return; // 详情按钮走 capture 监听开弹窗
       const tr = e.target.closest('tr.log-row');
-      if (!tr || e.target.closest('.log-detail-btn')) return;
-      if (!tr.classList.contains('has-attempts')) return;
+      if (!tr || !tr.classList.contains('has-attempts')) return;
       const l = _logItems[Number(tr.dataset.idx)];
-      if (l && _logDetailMap[l.id]) toggleLogDetail(_logDetailMap[l.id]);
+      if (l) toggleLogDetailByItem(l);
     });
     tbody.addEventListener('dblclick', e => {
       const tr = e.target.closest('tr.log-row');

@@ -77,6 +77,9 @@ for (const f of files) {
 
 const SKIP_IDS = {
   qwen2api: "personal netlify deployment of ExtremeRouter, not a public provider",
+  opencode: "zen source handled by dedicated zen transport, not generic preset",
+  uncloseai: "key registration closed upstream (401 public_beta_closed), preset dead",
+  mimocode: "broken upstream endpoint (404), preset dead",
 };
 const EXCLUDE_KEYS = [/tts/i, /voice/i, /-web$/, /web-cookie/];
 const EXISTING_BASE = new Set([

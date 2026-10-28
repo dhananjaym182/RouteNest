@@ -3,7 +3,23 @@ let _editingProviderId = '';
 // 从免费类预设新建并保存后，自动触发一次分级导入预览（用户勾选后才写入）
 let _previewAfterSave = false;
 
+// 首次加载占位：列表尚未渲染过且请求在途时显示骨架，避免空白闪动
+let _provFirstLoad = true;
+// 行内测试/检测结果跨 re-render 保留（loadProviders 重绘后回填到结果位）
+const _provRowResults = {};
+function provRowResultHTML(kind, id) {
+  const r = _provRowResults[kind + ':' + id];
+  return r ? renderTestResultHTML(r.ok, r.text) : '';
+}
+
 async function loadProviders() {
+  const box0 = _('providersList');
+  if (!box0) return;
+  if (_provFirstLoad) {
+    // 骨架与卡片同构：占多个卡位而非一条，避免加载完成后从「一条」跳到「网格」的布局闪动
+    const skCard = '<div class="prov-card sk-card"><div class="sk-stack"><span class="skeleton"></span><span class="skeleton w70"></span><span class="skeleton w45"></span><span class="skeleton w70"></span><span class="skeleton w45"></span></div></div>';
+    box0.innerHTML = '<div class="prov-cards">' + skCard.repeat(6) + '</div>';
+  }
   try {
     const [d, sd] = await Promise.all([
       api('GET', '/providers'),
@@ -12,35 +28,94 @@ async function loadProviders() {
     _provSync = (sd && sd.data && sd.data.providers) || {};
     _provHealth = (d.data && d.data.health) || {};
     const list = d.data.providers || [];
+    _provFirstLoad = false;
+    list.forEach(p => { _provCache[p.id] = p; });
     const box = _('providersList');
     renderProviderSyncBanner(list);
     if (!list.length) { box.innerHTML = listEmptyState(ICON_PROVIDERS, t('暂无自定义 Provider')); return; }
     box.innerHTML = renderProvCooldownBar(list) +
-      '<table class="action-table"><thead><tr><th>' + t('名称') + '</th><th>Base URL</th><th>' + t('模型') + '</th><th class="num-col">' + t('优先级') + '</th><th>' + t('健康') + '</th><th>' + t('状态') + '</th><th>' + t('最近检测') + '</th><th>' + t('操作') + '</th></tr></thead><tbody>' +
-      list.map(p =>
-        '<tr>' +
-          '<td>' + esc(p.name) + (p.free ? ' <span class="green-xs">free</span>' : '') + (function () { const n = (p.connectionIds || []).length || (p.connectionId ? 1 : 0); return n ? ' <span class="acc-xs" title="' + t('连接池轮转派发') + '">token×' + n + '</span>' : ''; })() + '</td>' +
-          '<td class="mono hint-xs clip-220">' + esc(p.baseURL) + '</td>' +
-          '<td class="hint-xs clip-200">' + esc((p.modelIds || []).join(', ')) + '</td>' +
-          '<td class="num-col">' + p.priority + '</td>' +
-          '<td class="prov-health-cell">' + provHealthCell(p) + '</td>' +
-          '<td>' + (p.enabled
-            ? '<span class="status active"><span class="status-dot active"></span>' + t('已启用') + '</span>'
-            : '<span class="status disabled"><span class="status-dot disabled"></span>' + t('已停用') + '</span>') + '</td>' +
-          '<td class="td-nowrap">' + (p.enabled ? provSyncCellHTML(p.id) : '<span class="hint-xs">—</span>') + '</td>' +
-          '<td><button class="btn btn-sm" onclick="editProvider(\'' + p.id + '\')">' + t('编辑') + '</button> ' +
-              '<button class="btn btn-sm" onclick=\'testProviderById("' + p.id + '", this)\'>' + t('测试') + '</button> ' +
-              '<span class="prov-row-test-out"></span> ' +
-              '<button class="btn btn-sm" onclick=\'recheckProvider("' + p.id + '", this)\'>' + t('重新检测') + '</button> ' +
-              '<span class="prov-row-recheck-out"></span> ' +
-              '<button class="btn btn-sm" onclick=\'toggleProvider("' + p.id + '", ' + !p.enabled + ', this)\'>' + (p.enabled ? t('停用') : t('启用')) + '</button> ' +
-              '<button class="btn btn-sm btn-danger" onclick=\'deleteProvider("' + p.id + '")\' title="' + t('删除') + '" aria-label="' + t('删除') + '">'+uiIcon('close')+'</button></td>' +
-        '</tr>'
-      ).join('') + '</tbody></table>';
+      '<div class="prov-cards">' + list.map(provCardHTML).join('') + '</div>';
+    refreshProvDetailIfOpen();
   } catch (e) {
+    _provFirstLoad = false;
     const box = _('providersList');
-    if (box) box.innerHTML = '<div class="empty hint-sm">' + t('加载失败') + ': ' + esc(e.message) + '</div>';
+    if (box) box.innerHTML = '<div class="empty">' + t('加载失败') + ': ' + esc(e.message) +
+      '<div class="mt-10"><button class="btn btn-sm" onclick="loadProviders()">' + uiIcon('reset') + t('重试') + '</button></div></div>';
   }
+}
+
+// ========== §模型列：紧凑芯片 + 可展开（与日志详情行的渐进披露一致） ==========
+const PROV_CHIP_PREVIEW = 3;
+function provModelsCellHTML(id, modelIds) {
+  const total = (modelIds || []).length;
+  if (!total) return '<span class="hint-sm">—</span>';
+  const chip = m => '<span class="model-tag chip-clip" title="' + escAttr(m) + '">' + esc(m) + '</span>';
+  const shown = modelIds.slice(0, PROV_CHIP_PREVIEW);
+  const rest = total - shown.length;
+  let html = '<div class="model-chips">' + shown.map(chip).join('');
+  if (rest > 0) {
+    html += '<button type="button" class="model-tag chip-more" data-count="' + rest + '" data-prov-id="' + escAttr(id) + '" onclick="event.stopPropagation();toggleProvModelChips(this)" aria-expanded="false" title="' + escAttr(t('展开全部') + ' ' + total + t(' 个模型')) + '">+' + rest + '</button>';
+  }
+  html += '</div>';
+  if (rest > 0) {
+    html += '<div class="model-chips model-chips-extra">' + modelIds.slice(PROV_CHIP_PREVIEW).map(chip).join('') + '</div>';
+  }
+  return html;
+}
+
+// ========== §卡片视图（master–detail 主侧）：每个卡片区域是独立的流式块，禁止绝对定位/固定高，
+// 「0/2,000,000」这类最宽数据在各自块内 ellipsis，天然无重叠（旧表 table-layout:fixed 忽略
+// min-width 导致 nowrap 数字横向绘制进邻列，即此前两次返工的重叠根因）。 ==========
+function provCardHTML(p) {
+  const id = escAttrJS(p.id);
+  const n = (p.connectionIds || []).length || (p.connectionId ? 1 : 0);
+  const h = _provHealth[p.id] || {};
+  // 卡片健康行只放「无样本」徽章；热度块全尺寸进详情
+  const heatNone = (h.recent || []).length ? '' : '<span class="heat-none">' + t('暂无样本') + '</span>';
+  return '<article class="prov-card" data-prov="' + id + '">' +
+    '<div class="prov-card-hit" onclick="openProvDetail(\'' + id + '\')" title="' + t('打开详情') + '">' +
+      '<div class="prov-card-head">' +
+        '<div class="prov-card-title">' +
+          '<button type="button" class="prov-card-name" onclick="event.stopPropagation();openProvDetail(\'' + id + '\')" title="' + t('打开详情') + '" aria-haspopup="dialog">' + esc(p.name) + '</button>' +
+          (p.free ? '<span class="green-xs">free</span>' : '') +
+          (n ? '<span class="acc-xs" title="' + t('连接池轮转派发') + '">token×' + n + '</span>' : '') +
+        '</div>' +
+        '<span class="prov-card-status">' + (p.enabled
+          ? '<span class="status active"><span class="status-dot active"></span>' + t('已启用') + '</span>'
+          : '<span class="status disabled"><span class="status-dot disabled"></span>' + t('已停用') + '</span>') + '</span>' +
+      '</div>' +
+      '<div class="prov-models-cell">' + provModelsCellHTML(p.id, p.modelIds || []) + '</div>' +
+      '<div class="prov-card-health">' + provMiniHealthHTML(p) + heatNone + '</div>' +
+      '<div class="prov-card-url mono" title="' + escAttr(p.baseURL) + '">' + esc(p.baseURL) + '</div>' +
+      '<div class="prov-card-meta">' +
+        '<span class="pm-k">' + t('优先级') + '</span><span class="pm-v mono">' + esc(String(p.priority)) + '</span>' +
+        (p.enabled ? '<span class="pm-sync">' + provSyncCellHTML(p.id) + '</span>' : '<span class="hint-xs">—</span>') +
+      '</div>' +
+    '</div>' +
+    '<div class="prov-card-foot">' +
+      '<button type="button" class="btn btn-sm btn-primary" onclick="openProvDetail(\'' + id + '\')">' + t('打开详情') + '</button>' +
+      '<button type="button" class="btn btn-sm btn-icon" onclick="editProvider(\'' + p.id + '\')" title="' + t('编辑') + '" aria-label="' + t('编辑') + '">' + uiIcon('edit') + '</button>' +
+      '<button type="button" class="btn btn-sm btn-icon" onclick=\'testProviderById("' + p.id + '", this)\' title="' + t('测试') + '" aria-label="' + t('测试') + '">' + uiIcon('bolt') + '</button>' +
+      '<button type="button" class="btn btn-sm btn-icon" onclick=\'recheckProvider("' + p.id + '", this)\' title="' + t('重新检测') + '" aria-label="' + t('重新检测') + '">' + uiIcon('reset') + '</button>' +
+      '<button type="button" class="btn btn-sm btn-icon" onclick=\'toggleProvider("' + p.id + '", ' + !p.enabled + ', this)\' title="' + t(p.enabled ? '停用' : '启用') + '" aria-label="' + t(p.enabled ? '停用' : '启用') + '">' + uiIcon(p.enabled ? 'pause' : 'play') + '</button>' +
+      '<button type="button" class="btn btn-sm btn-icon btn-danger" onclick=\'deleteProvider("' + p.id + '")\' title="' + t('删除') + '" aria-label="' + t('删除') + '">' + uiIcon('close') + '</button>' +
+    '</div>' +
+    '<div class="prov-card-result">' +
+      '<span class="prov-row-test-out">' + provRowResultHTML('test', p.id) + '</span>' +
+      '<span class="prov-row-recheck-out">' + provRowResultHTML('recheck', p.id) + '</span>' +
+    '</div>' +
+  '</article>';
+}
+
+// 展开态行高易抖：追加芯片而不是整体换面板，行本身仍受 chips 最大两行约束
+function toggleProvModelChips(btn) {
+  const cell = btn && btn.closest ? btn.closest('.prov-models-cell') : null;
+  const extra = cell ? cell.querySelector('.model-chips-extra') : null;
+  if (!extra) return;
+  const open = extra.classList.toggle('open');
+  btn.classList.toggle('open', open);
+  btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+  btn.textContent = open ? t('收起') : '+' + btn.dataset.count;
 }
 
 // ========== §健康：配额表 / 冷却恢复 / 近期成败热度 ==========
@@ -57,6 +132,7 @@ function provQuotaHtml(p) {
     const left = 1 - ratio;
     const tone = left >= 0.7 ? 'ok' : (left >= 0.3 ? 'warn' : 'bad');
     out += '<div class="quota-row" title="' + escAttr(t('每日已用 ') + used + '/' + daily) + '">' +
+      '<span class="quota-label">' + t('每日') + '</span>' +
       '<span class="quota-meter"><span class="' + tone + '" style="width:' + (ratio * 100).toFixed(1) + '%"></span></span>' +
       '<span class="quota-num">' + formatNumber(used) + '/' + formatNumber(daily) + '</span></div>';
   }
@@ -65,7 +141,7 @@ function provQuotaHtml(p) {
     const left = 1 - Math.min(1, used / rpm);
     const tone = left >= 0.7 ? 'ok' : (left >= 0.3 ? 'warn' : 'bad');
     out += '<div class="quota-row rpm" title="' + escAttr(t('每分钟已用 ') + used + '/' + rpm) + '">' +
-      '<span class="quota-label">rpm</span>' +
+      '<span class="quota-label">RPM</span>' +
       '<span class="quota-meter narrow"><span class="' + tone + '" style="width:' + (Math.min(1, used / rpm) * 100).toFixed(1) + '%"></span></span>' +
       '<span class="quota-num">' + used + '/' + rpm + '</span></div>';
   }
@@ -93,14 +169,284 @@ function fmtLeft(untilRFC) {
   return t('剩 ') + Math.floor(s / 3600) + 'h' + Math.floor((s % 3600) / 60) + 'm';
 }
 
-function provHealthCell(p) {
+// 列表健康行：单个紧凑微型状态（色点 + 一行短语 + RPM 计数），计量表/热度进详情
+function provMiniHealthHTML(p) {
   const h = _provHealth[p.id] || {};
+  const lim = h.limits || {};
+  const st = _provSync[p.id] || {};
+  const daily = Number(lim.daily) || 0, rpm = Number(lim.rpm) || 0;
   const cool = (h.cooldowns || []).length;
-  let out = provQuotaHtml(p) + provHeatCellHtml(p);
-  if (cool) {
-    out += ' <button type="button" class="chip warn cooldown-chip" onclick="resetProviderCooldown(\'' + escAttr(p.id) + '\', \'\', this)" title="' + escAttr(t('点击清除该 Provider 全部冷却')) + '">⏳ ' + cool + ' · ' + fmtLeft(h.recoveryAt) + '</button>';
+  const dailyUsed = Number(h.daily) || 0, rpmUsed = Number(h.rpm) || 0;
+  let tone = 'ok', label = '正常';
+  if (cool) { tone = 'bad'; label = '冷却中'; }
+  else if (!st.lastCheckedMs && st.lastError) { tone = 'bad'; label = '检测出错'; }
+  else if (daily > 0 && dailyUsed / daily >= 0.7 || rpm > 0 && rpmUsed / rpm >= 0.7 || h.rate !== undefined && h.rate < 0.5) { tone = 'warn'; label = '接近上限'; }
+  let html = '<span class="pmini tone-' + tone + '"><span class="pmini-dot" aria-hidden="true"></span>' + t(label) + '</span>';
+  if (rpm > 0) html += ' <span class="pmini-rpm mono" title="' + escAttr(t('每分钟已用 ') + rpmUsed + '/' + rpm) + '">RPM ' + rpmUsed + '/' + rpm + '</span>';
+  if (cool) html += ' <button type="button" class="chip warn cooldown-chip" onclick="event.stopPropagation();resetProviderCooldown(\'' + escAttr(p.id) + '\', \'\', this)" title="' + escAttr(t('点击清除该 Provider 全部冷却')) + '">' + uiIcon('hourglass') + ' ' + cool + ' · ' + fmtLeft(h.recoveryAt) + '</button>';
+  return html;
+}
+
+// ========== §供应商详情（master–detail）：列表紧凑，全量数据进只读抽屉 ==========
+function openProvDetail(id) {
+  const p = _provCache[id];
+  if (!p) { toast(t('加载失败'), 'error'); return; }
+  _provDetailOpenId = id;
+  renderProvDetail(p);
+  ensureProvDelisted(); // 异步取该 provider 的已下架模型清单，到达后自动重绘详情
+  if (!_connList.length) loadConnections();
+  openDrawer('provDetail');
+}
+
+function closeProvDetail() { _provDetailOpenId = ''; closeDrawer('provDetail'); }
+
+//组成员 loadConnections / loadProviders 后若详情开着 → 就地刷新内容
+function refreshProvDetailIfOpen() {
+  if (!_provDetailOpenId) return;
+  const p = _provCache[_provDetailOpenId];
+  if (p) renderProvDetail(p); else closeProvDetail();
+}
+
+function provDetailSectionsHTML(p) {
+  const h = _provHealth[p.id] || {};
+  const lim = h.limits || {};
+  const st = _provSync[p.id] || {};
+  const ids = p.connectionIds && p.connectionIds.length
+    ? p.connectionIds
+    : (p.connectionId ? [p.connectionId] : []);
+  const conns = _connList.filter(c => ids.includes(c.id));
+
+  // §1 概览：键值网格（不入表格，避免 fixed 布局挤压）
+  const kv = (k, v) => '<div class="detail-k">' + esc(k) + '</div><div class="detail-v">' + v + '</div>';
+  const overview =
+    kv(t('状态'), p.enabled
+      ? '<span class="status active"><span class="status-dot active"></span>' + t('已启用') + '</span>'
+      : '<span class="status disabled"><span class="status-dot disabled"></span>' + t('已停用') + '</span>') +
+    kv('Base URL', '<span class="mono detail-clip">' + esc(p.baseURL) + '</span>') +
+    kv('API Key', p.apiKey ? t('已设置') : '<span class="mut">' + t('未设置') + '</span>') +
+    kv(t('免费来源'), p.free
+      ? '<span class="model-source-badge custom">' + t('免费') + '</span>'
+      : '<span class="model-source-badge provider">' + t('付费') + '</span>') +
+    kv(t('优先级'), esc(String(p.priority))) +
+    kv(t('权重'), esc(String(p.weight))) +
+    kv(t('代理'), p.proxyUrl ? '<span class="mono detail-clip">' + esc(p.proxyUrl) + '</span>' : '<span class="mut">' + t('未设置') + '</span>') +
+    kv(t('创建时间'), p.createdAt ? esc(new Date(p.createdAt).toLocaleString(LC())) : '<span class="mut">—</span>');
+
+  // §2 模型：全量芯片 + 待审计数
+  const totalModes = (p.modelIds || []).length;
+  const models = '<div class="model-chips model-chips-all">' +
+      (p.modelIds || []).map(m => '<span class="model-tag chip-clip" title="' + escAttr(m) + '">' + esc(m) + '</span>').join('') +
+    '</div>' +
+    '<div class="detail-meta">' +
+      '<span class="hint-xs">' + totalModes + t(' 个模型') + '</span>' +
+      (st.newQueued && st.batchId
+        ? ' <a href="javascript:void(0)" class="pending-pill pending-open" onclick="openAutoBatch(\'' + esc(st.batchId) + '\')"><span class="pp-num mono">' + st.newQueued + '</span>' + t('待同步模型') + '</a>'
+        : '') +
+      (st.delistedMarked
+        ? ' <span class="pending-pill"><span class="pp-num mono">' + st.delistedMarked + '</span>' + t('已下架') + ' ' + uiIcon('arrowDown') + '</span>'
+        : '') +
+    '</div>';
+
+  // §3 限额与健康：完整计量表 + 热度 + 最近检测/错误全文 + last result
+  const errBlock = st.lastError
+    ? '<div class="detail-err" title="' + esc(st.lastError) + '">' + esc(st.lastError) + '</div>' : '';
+  const health =
+    (provQuotaHtml(p) || '<div class="hint-sm">—</div>') +
+    '<div class="detail-meta mt-6"><span class="hint-xs">' + t('近期成败') + '</span> ' + provHeatCellHtml(p) + '</div>' +
+    '<div class="detail-meta mt-6"><span class="hint-xs">' + t('最近检测') + '</span> ' +
+      (st.lastCheckedMs
+        ? '<span class="hint-sm">' + esc(new Date(st.lastCheckedMs).toLocaleString(LC())) + ' · ' + fmtAgo(st.lastCheckedMs) + '</span>'
+        : '<span class="hint-sm">' + t('未检测') + '</span>') +
+    '</div>' + errBlock +
+    '<div class="detail-meta mt-6"><span class="hint-xs">' + t('重试') + '</span> ' + provRowResultHTML('test', p.id) + ' ' + provRowResultHTML('recheck', p.id) + '</div>';
+
+  // §4 连接：勾选的登录连接（名称/状态）
+  const connList = conns.length
+    ? conns.map(c =>
+        '<div class="detail-conn-row">' +
+          '<span class="status ' + (c.status === 'active' ? 'active' : 'disabled') + '"><span class="status-dot ' + (c.status === 'active' ? 'active' : 'disabled') + '"></span>' + t(c.status === 'active' ? '已登录' : '需重新登录') + '</span>' +
+          '<span class="mono detail-clip">' + esc(c.email || c.id) + '</span>' + connExpiryHtml(c) +
+        '</div>').join('')
+    : '<div class="hint-sm">' + t('未链接任何连接') + '</div>';
+
+  // §5 同步：批次入口 + 立即检测
+  const sync =
+    '<div class="detail-meta">' +
+      '<span class="hint-xs">' + t('最近检测') + '</span> ' + (st.lastCheckedMs ? '<span class="hint-sm">' + fmtAgo(st.lastCheckedMs) + '</span>' : '<span class="hint-sm">' + t('未检测') + '</span>') +
+      (st.newQueued ? ' <span class="pending-pill"><span class="pp-num mono">' + st.newQueued + '</span>' + t('待同步模型') + '</span>' : '') +
+      (st.delistedMarked ? ' <span class="pending-pill"><span class="pp-num mono">' + st.delistedMarked + '</span>' + t('已下架') + '</span>' : '') +
+    '</div>' +
+    '<div class="form-actions mt-10">' +
+      (st.newQueued && st.batchId
+        ? '<button class="btn btn-sm btn-primary" onclick="openAutoBatch(\'' + esc(st.batchId) + '\')">' + t('打开审阅') + '</button>'
+        : (st.newQueued ? '<button class="btn btn-sm" onclick="openNewestAutoBatch()">' + t('打开审阅') + '</button>' : '')) +
+      '<button class="btn btn-sm" onclick="provDetailRecheck(this)">' + t('立即检测') + '</button>' +
+    '</div>';
+
+  return { overview, models, health, connList, sync, hasConns: conns.length };
+}
+
+function renderProvDetail(p) {
+  const title = _('provDetailTitle');
+  if (title) title.textContent = p.name || p.id;
+  const sec = provDetailSectionsHTML(p);
+  const body = _('provDetailBody');
+  if (!body) return;
+  body.innerHTML =
+    '<div class="detail-back"><a href="javascript:void(0)" class="lnk-a" onclick="closeProvDetail()">‹ ' + t('返回列表') + '</a></div>' +
+    '<div class="drawer-group">' +
+      '<div class="form-group-label">' + t('概览') + '</div>' +
+      '<div class="detail-actions">' +
+        '<button class="btn btn-sm btn-primary" onclick="showProviderEditor(_provCache[\'' + escAttrJS(p.id) + '\'])">' + t('编辑') + '</button>' +
+        '<button class="btn btn-sm" onclick="provDetailTest(this)">' + t('测试') + '</button>' +
+        '<button class="btn btn-sm" onclick="toggleProvider(\'' + p.id + '\', ' + !p.enabled + ', this)">' + t(p.enabled ? '停用' : '启用') + '</button>' +
+        '<button class="btn btn-sm btn-danger" onclick=\'deleteProvider("' + p.id + '")\'>' + t('删除') + '</button>' +
+        '<span id="provDetailTestOut"></span>' +
+      '</div>' +
+      '<div class="detail-kv">' + sec.overview + '</div>' +
+    '</div>' +
+    '<div class="drawer-group">' +
+      '<div class="form-group-label">' + t('模型') + ' <span class="grp-count">' + ((p.modelIds || []).length || '') + '</span></div>' + sec.models + provDelistedHTML(p) +
+    '</div>' +
+    '<div class="drawer-group">' +
+      '<div class="form-group-label">' + t('限额与健康') + '</div>' + sec.health +
+    '</div>' +
+    '<div class="drawer-group">' +
+      '<div class="form-group-label">' + t('联动连接') + ' <span class="grp-count">' + (sec.hasConns ? sec.hasConns : '') + '</span></div>' + sec.connList +
+    '</div>' +
+    '<div class="drawer-group">' +
+      '<div class="form-group-label">' + t('同步') + '</div>' + sec.sync +
+      '<div id="provDetailRecheckOut" class="mt-6"></div>' +
+    '</div>';
+}
+
+// escAttrJS: id 用于 JS 字符串字面量拼进 onclick —— 复用 escAttr 的转义即可（id 无引号风险）
+function escAttrJS(s) { return escAttr(s); }
+
+// ========== §已下架模型清理（详情抽屉）：数据取模型池（GET /models），按 provider 名过滤 =====
+// 后端只允许删除 custom 或 delisted 条目（06_models deleteModel 语义），这里仅复用同一端点：
+// POST /models/delete {id}，不改 06_models.js。
+let _provDelisted = null; // providerName -> [{id, cost}]（每次打开详情时刷新一次）
+
+async function ensureProvDelisted() {
+  try {
+    const d = await api('GET', '/models');
+    const list = (d.data.models || []).filter(m => m.source === 'provider' && m.delisted);
+    _provDelisted = {};
+    list.forEach(m => {
+      const k = m.provider || '';
+      (_provDelisted[k] = _provDelisted[k] || []).push({ id: m.id, cost: m.cost || '' });
+    });
+  } catch (e) {
+    _provDelisted = null;
   }
-  return out;
+  // 到数据后重绘详情（下架子节只在确实有数据时出现，首帧不闪占位）
+  refreshProvDetailIfOpen();
+}
+
+// 子行 + 移除全部入口（仅当该 provider 有已下架条目时渲染）
+function provDelistedHTML(p) {
+  if (!_provDelisted) return '';
+  const rows = _provDelisted[p.name || ''] || [];
+  if (!rows.length) return '';
+  const list =
+    '<div class="delist-rows">' +
+    rows.map(m =>
+      '<div class="detail-conn-row delist-row">' +
+        '<span class="mono detail-clip">' + esc(m.id) + '</span>' +
+        '<span class="delisted-badge" title="' + escAttr(t('已从上游官方列表移除，实测可能仍可用；同步只标记不删除，上游报模型不存在时自动清理')) + '">' + t('已下架') + '</span>' +
+        (m.cost === 'free' ? '<span class="model-tag free">' + t('免费') + '</span>' : '') +
+        '<button type="button" class="btn btn-sm btn-xs btn-danger delist-remove" onclick="removeProvDelistedModel(\'' + escAttrJS(m.id) + '\')" title="' + t('移除') + '" aria-label="' + t('移除') + ' ' + escAttr(m.id) + '">' + t('移除') + '</button>' +
+      '</div>').join('') +
+    '</div>' +
+    '<div class="form-actions mt-6"><button type="button" class="btn btn-sm" onclick="removeAllProvDelisted(this)">' + t('移除全部已下架') + '</button></div>';
+  return '<div class="delist-sub"><div class="form-group-label">' + t('已下架') + ' <span class="grp-count">' + rows.length + '</span>' +
+    '<span class="hint-xs ml-8">' + t('已从上游官方列表移除，可在此手动清理') + '</span></div>' + list + '</div>';
+}
+
+// 单个移除：与模型页 deleteModel 同端点同文案（仅复用，不改 06_models.js）
+async function removeProvDelistedModel(id) {
+  if (!(await showConfirm(t('确认删除模型 ') + id + ' ?'))) return;
+  try {
+    await api('POST', '/models/delete', { id });
+    toast(t('模型已删除: ') + id, 'success');
+  } catch (e) {
+    toast(t('删除失败: ') + e.message, 'error');
+  }
+  _provDelisted = null;
+  loadProviders();              // 列表卡片（pending/delisted pill）
+  ensureProvDelisted();         // 拉新的已下架清单 → 完成后经 refreshProvDetailIfOpen 重绘详情
+}
+
+// 一键移除该 provider 全部已下架模型（逐个走同一删除端点，服务端逐条校验 custom/delisted）
+async function removeAllProvDelisted(btn) {
+  const id = _provDetailOpenId;
+  const p = id ? _provCache[id] : null;
+  const rows = (p && _provDelisted && _provDelisted[p.name || '']) || [];
+  if (!rows.length) { toast(t('没有已下架模型'), 'info'); return; }
+  if (!(await showConfirm(t('确定移除 ') + rows.length + t(' 个已下架模型？')))) return;
+  const orig = btn ? btn.innerHTML : '';
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="loading"></span>'; }
+  let okN = 0, errMsg = '';
+  for (const m of rows) {
+    try { await api('POST', '/models/delete', { id: m.id }); okN++; }
+    catch (e) { errMsg = e.message; }
+  }
+  if (okN) toast(t('已移除 ') + okN + t(' 个已下架模型'), 'success');
+  else if (errMsg) toast(t('删除失败: ') + errMsg, 'error');
+  if (btn) { btn.disabled = false; btn.innerHTML = orig; }
+  _provDelisted = null;
+  loadProviders();
+  ensureProvDelisted();
+}
+
+// 详情内「测试连通性」：定位 #provDetailTestOut，结果同样入 _provRowResults 跨刷新保留
+async function provDetailTest(btn) {
+  const id = _provDetailOpenId;
+  if (!id) return;
+  const out = _('provDetailTestOut');
+  const orig = btn ? btn.innerHTML : '';
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="loading"></span> ' + t('测试中...'); }
+  if (out) out.innerHTML = '';
+  try {
+    const d = await api('POST', '/providers/test', { id });
+    const r = d.data || {};
+    const text = r.ok ? (r.durationMs + 'ms') : (r.error || t('失败'));
+    _provRowResults['test:' + id] = { ok: !!r.ok, text: text };
+    if (out) out.innerHTML = renderTestResultHTML(r.ok, text);
+  } catch (e) {
+    _provRowResults['test:' + id] = { ok: false, text: friendlyTestError(e) };
+    if (out) out.innerHTML = renderTestResultHTML(false, _provRowResults['test:' + id].text);
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerHTML = orig; }
+  }
+}
+
+// 详情内「立即检测」：与列表 recheck 同接口，结果写入 #provDetailRecheckOut
+async function provDetailRecheck(btn) {
+  const id = _provDetailOpenId;
+  if (!id) return;
+  const out = _('provDetailRecheckOut');
+  const orig = btn ? btn.innerHTML : '';
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="loading"></span> ' + t('检测中...'); }
+  if (out) out.innerHTML = '';
+  try {
+    const d = await api('POST', '/providers/recheck', { id: id });
+    const st = d.data || {};
+    const bits = [];
+    if (st.newQueued) bits.push('+' + st.newQueued + ' ' + t('待审'));
+    if (st.delistedMarked) bits.push(st.delistedMarked + ' ' + t('已下架'));
+    const ok = !(st.lastError && !st.lastCheckedMs);
+    const text = ok ? (bits.length ? bits.join(' · ') : t('无变化')) : friendlyTestError(new Error(st.lastError));
+    _provRowResults['recheck:' + id] = { ok: ok, text: text };
+    if (out) out.innerHTML = renderTestResultHTML(ok, text);
+    loadProviders(); // 刷新列表状态列（同时经 refreshProvDetailIfOpen 重绘详情）
+  } catch (e) {
+    _provRowResults['recheck:' + id] = { ok: false, text: friendlyTestError(e) };
+    if (out) out.innerHTML = renderTestResultHTML(false, _provRowResults['recheck:' + id].text);
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerHTML = orig; }
+  }
 }
 
 // 冷却快照条：所有活跃冷却按最早恢复排序，支持逐项/整组手动重置
@@ -115,7 +461,7 @@ function renderProvCooldownBar(list) {
   });
   if (!rows.length) return '';
   rows.sort((a, b) => new Date(a.until) - new Date(b.until));
-  return '<div class="prov-cooldown-bar"><div class="pcb-title">' + t('冷却中的 Provider · 按最早恢复排序') + '</div>' +
+  return '<div class="sync-banner on sync-banner-warn cooldown-banner"><div class="pcb-title">' + t('冷却中的 Provider · 按最早恢复排序') + '</div>' +
     rows.map(r =>
       '<div class="pcb-row">' +
         '<span class="pcb-name">' + esc(r.name) + '</span>' +
@@ -139,6 +485,9 @@ async function resetProviderCooldown(id, model, btn) {
 
 // ========== §W3-C 上游自动检测：列表状态列 + 待审横幅 ==========
 let _provSync = {};
+// 已加载 Provider 缓存（供应商详情抽屉直接复用，避免额外请求）
+const _provCache = {};
+let _provDetailOpenId = '';
 
 function fmtAgo(ms) {
   if (!ms) return '';
@@ -150,16 +499,14 @@ function fmtAgo(ms) {
 }
 
 function provSyncCellHTML(id) {
+  // 列表内单行：时间 ∕ 错误(仅图标,原因在详情) ∕ 待同步计数 pill —— 不再纵向堆叠
   const st = _provSync[id] || {};
-  const when = st.lastCheckedMs
+  let html = st.lastCheckedMs
     ? '<span class="hint-xs" title="' + esc(new Date(st.lastCheckedMs).toLocaleString(LC())) + '">' + fmtAgo(st.lastCheckedMs) + '</span>'
     : '<span class="hint-xs">' + t('未检测') + '</span>';
-  const err = st.lastError
-    ? ' <span class="hint-red" title="' + esc(st.lastError) + '">✗</span>' : '';
-  let flow = '';
-  if (st.newQueued && st.batchId) flow += ' <span class="a-link hint-xs" onclick="openAutoBatch(\'' + esc(st.batchId) + '\')">+' + st.newQueued + ' ' + t('待审') + '</span>';
-  if (st.delistedMarked) flow += ' <span class="hint-xs" title="' + t('已下架') + '">' + st.delistedMarked + ' ↓</span>';
-  return when + err + flow;
+  if (st.lastError) html += ' <span class="hint-red hint-red-ic" title="' + esc(st.lastError) + '">' + uiIcon('close') + '</span>';
+  if (st.newQueued && st.batchId) html += ' <a href="javascript:void(0)" class="pending-pill pending-open" onclick="event.stopPropagation();openAutoBatch(\'' + esc(st.batchId) + '\')" title="' + escAttr(t('多少模型变更待同步')) + '"><span class="pp-num mono">' + st.newQueued + '</span>' + t('待同步模型') + '</a>';
+  return html;
 }
 
 async function recheckProvider(id, btn) {
@@ -168,14 +515,17 @@ async function recheckProvider(id, btn) {
   try {
     const d = await api('POST', '/providers/recheck', { id: id });
     const st = d.data || {};
-    const out = btn ? btn.parentNode.querySelector('.prov-row-recheck-out') : null;
+    const host = btn ? btn.closest('.prov-card, tr, .drawer-group') : null;
+    const out = host ? host.querySelector('.prov-row-recheck-out') : null;
     if (st.lastError && !st.lastCheckedMs) {
-      if (out) out.innerHTML = renderTestResultHTML(false, friendlyTestError(new Error(st.lastError)));
+      _provRowResults['recheck:' + id] = { ok: false, text: friendlyTestError(new Error(st.lastError)) };
+      if (out) out.innerHTML = renderTestResultHTML(false, _provRowResults['recheck:' + id].text);
     } else {
       const bits = [];
       if (st.newQueued) bits.push('+' + st.newQueued + ' ' + t('待审'));
       if (st.delistedMarked) bits.push(st.delistedMarked + ' ' + t('已下架'));
-      if (out) out.innerHTML = renderTestResultHTML(true, bits.length ? bits.join(' · ') : t('无变化'));
+      _provRowResults['recheck:' + id] = { ok: true, text: bits.length ? bits.join(' · ') : t('无变化') };
+      if (out) out.innerHTML = renderTestResultHTML(true, _provRowResults['recheck:' + id].text);
     }
     loadProviders();
   } catch (e) {
@@ -193,8 +543,8 @@ function renderProviderSyncBanner(list) {
     delisted += st.delistedMarked || 0;
     if (st.newQueued && st.batchId) queued += st.newQueued;
   });
-  if (!queued && !delisted) { box.style.display = 'none'; box.innerHTML = ''; return; }
-  box.style.display = 'flex';
+  if (!queued && !delisted) { box.classList.remove('on'); box.innerHTML = ''; return; }
+  box.classList.add('on');
   box.innerHTML = '<span class="hint-mut">' +
     (queued ? '<span class="acc-strong">' + queued + t('个新模型待审') + '</span>' : '') +
     (queued && delisted ? ' · ' : '') +
@@ -355,7 +705,7 @@ function renderProvModelChips() {
   if (!ids.length) { box.style.display = 'none'; box.innerHTML = ''; return; }
   box.style.display = '';
   box.innerHTML = ids.map(id => '<span class="model-tag mono">' + esc(id) +
-    ' <a href="javascript:void(0)" onclick="removeProvModel(\'' + escAttr(id) + '\')" title="' + t('移除') + '" aria-label="' + t('移除') + '" class="mut">×</a></span>').join('');
+    ' <a href="javascript:void(0)" onclick="removeProvModel(\'' + escAttr(id) + '\')" title="' + t('移除') + '" aria-label="' + t('移除') + '" class="mut">' + uiIcon('close') + '</a></span>').join('');
 }
 
 function removeProvModel(id) {
@@ -436,6 +786,8 @@ async function deleteProvider(id) {
   if (!(await showConfirm(t('确定删除该 Provider？')))) return;
   try {
     await api('POST', '/providers/delete', { id });
+    delete _provRowResults['test:' + id];
+    delete _provRowResults['recheck:' + id];
     toast(t('已删除'), 'success');
     loadProviders();
   } catch (e) { toast(t('删除失败: ') + e.message, 'error'); }
@@ -458,18 +810,23 @@ function friendlyTestError(e) {
   return t('测试失败: ') + msg;
 }
 
-// 列表行「测试」：结果写入所在行 td 的 .prov-row-test-out（此前写到编辑器内的结果位，编辑器关闭时不可见）
+// 列/卡片「测试」：结果写入所在容器（卡片或表格 td）的 .prov-row-test-out（此前写到编辑器内的结果位，编辑器关闭时不可见）
 async function testProviderById(id, cell) {
-  const out = cell && cell.closest ? cell.closest('td').querySelector('.prov-row-test-out') : null;
+  const host = cell && cell.closest ? cell.closest('.prov-card, td, .drawer-group') : null;
+  const out = host ? host.querySelector('.prov-row-test-out') : null;
   const orig = cell ? cell.innerHTML : '';
   if (cell) { cell.disabled = true; cell.innerHTML = '<span class="loading"></span> ' + t('测试中...'); }
   if (out) out.innerHTML = '';
   try {
     const d = await api('POST', '/providers/test', { id });
     const r = d.data || {};
-    if (out) out.innerHTML = renderTestResultHTML(r.ok, r.ok ? (r.durationMs + 'ms') : (r.error || t('失败')));
+    const text = r.ok ? (r.durationMs + 'ms') : (r.error || t('失败'));
+    _provRowResults['test:' + id] = { ok: !!r.ok, text: r.ok ? (r.durationMs + 'ms') : (r.error || t('失败')) };
+    if (out) out.innerHTML = renderTestResultHTML(r.ok, text);
   } catch (e) {
-    if (out) out.innerHTML = renderTestResultHTML(false, friendlyTestError(e));
+    const text = friendlyTestError(e);
+    _provRowResults['test:' + id] = { ok: false, text: text };
+    if (out) out.innerHTML = renderTestResultHTML(false, text);
   } finally {
     if (cell) { cell.disabled = false; cell.innerHTML = orig; }
   }
@@ -541,6 +898,9 @@ async function fetchProviderModels(btn) {
     _provPickerExisting = {};
     _('provModels').value.split(',').map(s => s.trim()).filter(Boolean).forEach(id => { _provPickerExisting[id] = true; });
     _('provPickerSearch').value = '';
+    // 静默拉取（保存后自动预览）期间抽屉可能已被用户关闭：此时不弹选择器，避免孤儿弹层
+    const drawer = _('providerEditor');
+    if (!drawer || !drawer.classList.contains('open')) return;
     renderProvPickerList();
     _('provPickerModal').style.display = 'flex';
     try { _('provPickerSearch').focus(); } catch (e) {}
@@ -608,7 +968,7 @@ function renderProvPickerList() {
   };
   const groupTitle = (label, n, tier) =>
     '<div class="preset-group-title">' + label + ' · ' + n +
-    '<button type="button" class="btn btn-sm" class="float-note" onclick="event.preventDefault();provPickerSelectAllTier(\'' + tier + '\')">' + t('全选') + '</button></div>';
+    '<button type="button" class="btn btn-sm float-note" onclick="event.preventDefault();provPickerSelectAllTier(\'' + tier + '\')">' + t('全选') + '</button></div>';
   const freeIds = visible.filter(id => _provPickerTiers[id] === 'free');
   const paidIds = visible.filter(id => _provPickerTiers[id] !== 'free');
   box.innerHTML =
@@ -768,6 +1128,8 @@ function applyPreset(key) {
 // ========== §9.3 受控导入：preview → 勾选 → apply ==========
 let _importBatch = null;
 let _importActionFilter = '';
+// 计费筛选：''|'free'|'paid' — 与操作筛选(AND)与搜索(AND)三者取交集
+let _importTierFilter = '';
 
 // Per-signal explanation shown as the row tooltip, so the tier basis is explicit
 // instead of just a badge ("free"/"paid") with no justification.
@@ -775,10 +1137,10 @@ const _tierSignalWhy = {
   'pricing-zero': '上游返回 prompt/completion 价格为 0',
   'flag-free': '上游返回 free 标志或 mode=free',
   'suffix-free': '模型 id 以 :free 或 -free 结尾',
-  'name-token-free': '模型 id 含独立的 free 词段',
-  'display-name-free': '模型显示名含 free 词段',
+  'name-token-free': '模型 id 含独立的 free 词段（弱信号，不授予免费）',
+  'display-name-free': '模型显示名含 free 词段（弱信号，不授予免费）',
   'allowlist': '免费标签或内置白名单命中',
-  'provider-free': '整个 Provider 标记为免费（无更精确的逐模型信号）',
+  'provider-free': '整个 Provider 标记为免费，但无逐模型证据（元数据，不授予免费）',
   'pricing-paid': '上游定价非零 → 付费',
   'paid-default': '没有任何免费信号，保守归为付费',
 };
@@ -795,6 +1157,27 @@ function tierBadge(tier) {
 function tierSplit(items) {
   const free = items.filter(x => x.tier === 'free').length;
   return t('免费') + ' ' + free + ' · ' + t('付费') + ' ' + (items.length - free);
+}
+
+// 批次摘要条：新增突出 + 免费/付费双色统计 + 其余操作数；判定依据只在一处一句话说明
+// （基线 tier 由服务端分类给回，前端不做重算，只显示）。
+function importSummaryHTML(items) {
+  const cnt = a => items.filter(x => x.action === a).length;
+  const freeN = items.filter(x => x.tier === 'free').length;
+  const stat = (label, n, cls) =>
+    '<span class="imp-stat' + (cls ? ' ' + cls : '') + '"><b>' + n + '</b>' + label + '</span>';
+  return '<div class="imp-stats" role="list" aria-label="' + t('批次统计') + '">' +
+    stat(t('新增'), cnt('add'), 'imp-add') +
+    '<span class="imp-sep" aria-hidden="true"></span>' +
+    '<span class="imp-stat imp-free" role="listitem"><span class="imp-dot" aria-hidden="true"></span><b>' + freeN + '</b>' + t('免费') + '</span>' +
+    '<span class="imp-stat imp-pass" role="listitem"><span class="imp-dot" aria-hidden="true"></span><b>' + (items.length - freeN) + '</b>' + t('付费') + '</span>' +
+    '<span class="imp-sep" aria-hidden="true"></span>' +
+    stat(t('层级变化'), cnt('tier_change'), '') +
+    stat(t('无变化'), cnt('nochange'), '') +
+    stat(t('受保护'), cnt('protected'), '') +
+  '</div>' +
+  '<div class="imp-basis">' +
+    '<span>' + t('批次判定只来自服务端信号：定价为零 / free 标志 / :free、:paid 后缀；悬停任一行可见具体依据') + '</span></div>';
 }
 
 async function previewModelImport(btn) {
@@ -823,21 +1206,27 @@ async function previewModelImport(btn) {
 function closeImportPreview() {
   _('importPreviewModal').style.display = 'none';
   _importActionFilter = '';
+  _importTierFilter = '';
   const s = _('importPreviewSearch');
   if (s) s.value = '';
   document.querySelectorAll('.import-act-filter').forEach(b => b.classList.toggle('active', !b.dataset.act));
+  document.querySelectorAll('.import-tier-filter').forEach(b => b.classList.toggle('active', !b.dataset.tier));
 }
 
 function renderImportPreviewList() {
   const items = (_importBatch && _importBatch.items) || [];
-  const cnt = a => items.filter(x => x.action === a).length;
+  const freeN = items.filter(x => x.tier === 'free').length;
   _('importPreviewProv').textContent = _importBatch ? _importBatch.providerName : '';
-  _('importPreviewSummary').innerHTML =
-    t('新增') + ' ' + cnt('add') + ' · ' + t('层级变化') + ' ' + cnt('tier_change') +
-    ' · ' + t('无变化') + ' ' + cnt('nochange') + ' · ' + t('受保护') + ' ' + cnt('protected') +
-    '<br>' + t('本批判定依据：') + tierSplit(items);
+  _('importPreviewSummary').innerHTML = items.length
+    ? importSummaryHTML(items)
+    : '<div class="empty">' + t('没有可导入的模型') + '</div>';
   _importActionFilter = '';
+  _importTierFilter = '';
   document.querySelectorAll('.import-act-filter').forEach(b => b.classList.toggle('active', !b.dataset.act));
+  document.querySelectorAll('.import-tier-filter').forEach(b => b.classList.toggle('active', !b.dataset.tier));
+  const tcF = _('tierCntFree'), tcP = _('tierCntPaid');
+  if (tcF) tcF.textContent = freeN;
+  if (tcP) tcP.textContent = items.length - freeN;
   if (!items.length) {
     _('importPreviewList').innerHTML = '<div class="empty">' + t('没有可导入的模型') + '</div>';
     _('importPreviewCount').textContent = '';
@@ -871,8 +1260,8 @@ function renderImportPreviewList() {
       if (it.action === 'add') action = '<span class="model-source-badge zen">' + t('新增') + '</span>';
       else if (it.action === 'tier_change') action = '<span class="model-source-badge provider">' + t('层级变化') + ': ' + esc(it.oldTier === 'free' ? t('免费') : t('付费')) + ' → ' + esc(it.tier === 'free' ? t('免费') : t('付费')) + '</span>';
       else if (it.action === 'protected') action = '<span class="model-source-badge" title="' + escAttr(it.reason || '') + '">' + t('受保护') + '</span>';
-      else action = '<span class="model-source-badge" class="dim-op">' + t('无变化') + '</span>';
-      return '<label class="combo-pick-row" data-action="' + escAttr(it.action) + '" class="prov-flow-row">' +
+      else action = '<span class="model-source-badge dim-op">' + t('无变化') + '</span>';
+      return '<label class="combo-pick-row prov-flow-row" data-action="' + escAttr(it.action) + '" data-tier="' + (it.tier === 'free' ? 'free' : 'paid') + '">' +
         '<input type="checkbox" class="import-approve" onchange="updateImportCount()" value="' + esc(it.modelId) + '" ' + (it.action === 'add' ? 'checked' : '') + (selectable ? '' : ' disabled') + '>' +
         '<span class="combo-pick-id">' + esc(it.modelId) + '</span>' + tierBadge(it.tier) + sig + action + '</label>';
     }).join('');
@@ -886,17 +1275,19 @@ function updateImportCount() {
   _('importPreviewCount').textContent = n + ' ' + t('个已选');
 }
 
-// Hide/show preview rows by id substring and/or action group without re-rendering
-// (checkbox state stays in the DOM).
+// Hide/show preview rows by id substring and/or action group and/or tier —
+// 三重交集（action-chip AND tier-chip AND search），checkbox 状态始终留在 DOM。
 function filterImportPreview() {
   const q = ((_('importPreviewSearch') || {}).value || '').trim().toLowerCase();
   const act = _importActionFilter || '';
+  const tier = _importTierFilter || '';
   let shown = 0;
   document.querySelectorAll('#importPreviewList .import-group').forEach(group => {
     let groupShown = 0;
     group.querySelectorAll('.combo-pick-row').forEach(row => {
       const idEl = row.querySelector('.combo-pick-id');
       const hit = (!act || group.dataset.action === act) &&
+        (!tier || row.dataset.tier === tier) &&
         (!q || (idEl && idEl.textContent.toLowerCase().indexOf(q) !== -1));
       row.style.display = hit ? 'flex' : 'none';
       if (hit) groupShown++;
@@ -906,7 +1297,7 @@ function filterImportPreview() {
   });
   const total = (_importBatch && _importBatch.items.length) || 0;
   const matchEl = _('importPreviewMatch');
-  if (matchEl) matchEl.textContent = (q || act) ? shown + ' / ' + total : '';
+  if (matchEl) matchEl.textContent = (q || act || tier) ? shown + ' / ' + total : '';
 }
 
 // Action-group filter (all / add / tier_change / nochange / protected).
@@ -914,6 +1305,24 @@ function setImportActionFilter(btn) {
   _importActionFilter = (btn && btn.dataset.act) || '';
   document.querySelectorAll('.import-act-filter').forEach(b => b.classList.toggle('active', b === btn));
   filterImportPreview();
+}
+
+// 计费筛选 chip（免费 / 付费）：与操作 chip、搜索取交集；再点当前 chip 不取消（用「全部」清空）。
+function setImportTierFilter(btn) {
+  _importTierFilter = (btn && btn.dataset.tier) || '';
+  document.querySelectorAll('.import-tier-filter').forEach(b => b.classList.toggle('active', b === btn));
+  filterImportPreview();
+}
+
+// 只选免费：把当前可见且可勾选的行按计费置位（免费勾上、付费取消），隐藏行的选择状态不动。
+function importPreviewSelectTier() {
+  document.querySelectorAll('#importPreviewList .import-approve').forEach(cb => {
+    if (cb.disabled) return;
+    const row = cb.closest('.combo-pick-row');
+    if (row && row.style.display === 'none') return;
+    cb.checked = row && row.dataset.tier === 'free';
+  });
+  updateImportCount();
 }
 
 // Toggle every enabled + currently visible approval checkbox (select all / clear all).
@@ -993,6 +1402,7 @@ async function loadConnections() {
   if (dl) dl.innerHTML = _connFlows.map(p => '<option value="' + esc(p) + '" label="' + esc(flowLabel(p)) + '">').join('');
   const ed = _('providerEditor');
   if (ed && ed.classList.contains('open')) renderConnPick();
+  refreshProvDetailIfOpen();
 }
 
 // Wave-5: OAuth providers render as tiles grouped by connection state, so
@@ -1081,6 +1491,7 @@ function renderConnectionsList() {
   const sorted = _connList.slice().sort((a, b) =>
     String(a.provider).localeCompare(String(b.provider)) || String(a.email || '').localeCompare(String(b.email || '')));
   let lastProv = null;
+  let altIdx = 0;
   const rows = sorted.map(c => {
     let groupRow = '';
     if (c.provider !== lastProv) {
@@ -1102,7 +1513,7 @@ function renderConnectionsList() {
             '<td>' + formatTokenCount(st.cachedTokens) + '</td>' +
           '</tr>').join('')
       : '<tr class="row-alt"><td colspan="6" class="pl-32 hint-sm">' + t('暂无数据') + '</td></tr>';
-    return groupRow + '<tr>' +
+    return groupRow + '<tr' + (altIdx++ % 2 ? ' class="alt"' : '') + '>' +
       '<td><button class="btn btn-sm btn-icon" onclick="toggleConnStats(\'' + escAttr(c.id) + '\', this)" title="' + t('展开') + '" aria-label="' + t('展开') + '">'+uiIcon('caretRight')+'</button></td>' +
       '<td class="hint-xs">' + esc(c.authType === 'device_code' ? t('设备码登录') : c.authType === 'import_token' ? t('导入 Token') : (c.authType || '')) + '</td>' +
       '<td class="note-sm">' + esc(c.email || (c.providerSpecificData && c.providerSpecificData.orgId ? 'org ' + c.providerSpecificData.orgId : '—')) + '</td>' +
@@ -1116,13 +1527,13 @@ function renderConnectionsList() {
           '<span class="conn-row-test-out"></span> ' +
           '<button class="btn btn-sm btn-danger" onclick=\'deleteConnection("' + c.id + '")\' title="' + t('删除') + '" aria-label="' + t('删除') + '">'+uiIcon('close')+'</button></td>' +
       '</tr>' +
-      '<tr id="connStatsRow-' + escAttr(c.id) + '" style="display:none"><td colspan="6" style="padding:0">' +
-        '<table class="model-subtable" style="width:100%">' +
+      '<tr id="connStatsRow-' + escAttr(c.id) + '" style="display:none"><td colspan="6" class="stats-embed">' +
+        '<table class="model-subtable">' +
           '<tr><th class="pl-32 th-left">' + t('模型') + '</th><th></th><th class="th-left">' + t('请求') + '</th><th class="th-left">' + t('输入') + '</th><th class="th-left">' + t('总量') + '</th><th class="th-left">' + t('缓存') + '</th></tr>' +
           statRows +
         '</table></td></tr>';
   }).join('');
-  box.innerHTML = '<table class="action-table"><thead><tr><th style="width:34px"></th><th>' + t('方式') + '</th><th>' + t('账号') + '</th><th>' + t('状态') + '</th><th>' + t('用量') + '</th><th>' + t('操作') + '</th></tr></thead><tbody>' + rows + '</tbody></table>';
+  box.innerHTML = '<table class="action-table"><thead><tr><th></th><th>' + t('方式') + '</th><th>' + t('账号') + '</th><th>' + t('状态') + '</th><th>' + t('用量') + '</th><th>' + t('操作') + '</th></tr></thead><tbody>' + rows + '</tbody></table>';
 }
 
 function toggleConnStats(id, btn) {

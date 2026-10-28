@@ -926,28 +926,24 @@ func syncProviderModels() {
 		if !p.Enabled {
 			continue
 		}
-		cost := "pass"
-		if p.Free {
-			cost = "free"
-		}
 		for _, id := range p.ModelIDs {
 			if id == "" {
 				continue
 			}
 			if _, ok := claimed[id]; !ok {
 				// Classify ids at seed time (same semantics as Cline/Zen sync):
-				// :free / -free suffixes, free name tokens and the zen-seed
-				// allowlist land in the pool as free immediately, without the
-				// import wizard. Id-only signals stamp provenance; pricing and
-				// entry-flag signals still require the catalog fetch path.
-				c := claim{name: p.Name, cost: cost}
-				if tier, sig := classifyUpstreamModel(upstreamModelEntry{ID: id}, p.Free); sig == tierSignalProviderFree {
-					// The provider-level free flag is metadata, not a per-model
-					// entitlement: record its provenance so Free-only routing
-					// treats the route as unknown until verified.
-					c.signal = tierSignalProviderFree
-				} else if tier == "free" {
+				// :free / -free suffixes and the zen-seed allowlist land in the
+				// pool as free without the import wizard. Id-only word segments
+				// and the provider-level free flag are metadata: provenance is
+				// stamped but cost stays paid-default until per-model evidence
+				// arrives via the catalog import path.
+				c := claim{name: p.Name, cost: "pass"}
+				if tier, sig := classifyUpstreamModel(upstreamModelEntry{ID: id}, p.Free); tier == "free" {
 					c.cost, c.signal = "free", sig
+				} else if sig == tierSignalProviderFree || sig == tierSignalNameToken || sig == tierSignalDisplayName {
+					// Weak/metadata signals: record provenance so Free-only
+					// routing treats the route as unverified, cost stays pass.
+					c.signal = sig
 				}
 				claimed[id] = c
 				ids = append(ids, id)

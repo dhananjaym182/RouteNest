@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"sort"
+	"strconv"
 	"strings"
 
 	"cline-go-proxy/internal/platform"
@@ -45,6 +46,28 @@ func ParseModels(body []byte) ([]Entry, error) {
 				e.PricingPrompt = rawNum(pr["prompt"])
 				e.PricingComplet = rawNum(pr["completion"])
 				e.PricingRequest = rawNum(pr["request"])
+				// Additive alternate notations: *_text variants and
+				// LiteLLM-style per-token keys (values may be strings).
+				if e.PricingPrompt == nil {
+					e.PricingPrompt = firstNum(pr["prompt_text"], pr["input_cost_per_token"])
+				}
+				if e.PricingComplet == nil {
+					e.PricingComplet = firstNum(pr["completion_text"], pr["output_cost_per_token"])
+				}
+				if e.PricingRequest == nil {
+					e.PricingRequest = firstNum(pr["request_cost"])
+				}
+			}
+			// Top-level per-token fallbacks (LiteLLM layout) when the pricing
+			// object is absent or left the component unresolved.
+			if e.PricingPrompt == nil {
+				e.PricingPrompt = firstNum(it["input_cost_per_token"])
+			}
+			if e.PricingComplet == nil {
+				e.PricingComplet = firstNum(it["output_cost_per_token"])
+			}
+			if e.PricingRequest == nil {
+				e.PricingRequest = firstNum(it["request_cost"])
 			}
 			if tags, ok := it["tags"].([]any); ok {
 				for _, t := range tags {
@@ -75,10 +98,43 @@ func rawNum(v any) *float64 {
 	switch n := v.(type) {
 	case float64:
 		return &n
+	case int:
+		f := float64(n)
+		return &f
+	case int64:
+		f := float64(n)
+		return &f
+	case json.Number:
+		f, err := n.Float64()
+		if err != nil {
+			return nil
+		}
+		return &f
 	case string:
-		var f float64
-		if _, err := fmt.Sscanf(strings.TrimSpace(n), "%g", &f); err == nil {
-			return &f
+		s := strings.TrimSpace(n)
+		s = strings.TrimSpace(strings.TrimPrefix(s, "$"))
+		lower := strings.ToLower(s)
+		lower = strings.TrimSpace(strings.TrimSuffix(lower, "usd"))
+		lower = strings.TrimSpace(strings.TrimSuffix(lower, "/1m"))
+		if lower == "" {
+			return nil
+		}
+		f, err := strconv.ParseFloat(lower, 64)
+		if err != nil {
+			// Unparseable component stays unknown; callers must not treat
+			// unknown pricing as free.
+			return nil
+		}
+		return &f
+	}
+	return nil
+}
+
+// firstNum returns the first successfully parsed number among vals.
+func firstNum(vals ...any) *float64 {
+	for _, v := range vals {
+		if n := rawNum(v); n != nil {
+			return n
 		}
 	}
 	return nil
@@ -151,7 +207,8 @@ func Discover(client *http.Client, baseURL, apiKey string, headers map[string]st
 
 // FetcherBaseFor returns a preset's catalog base URL for this provider baseURL.
 // Only fetcher URLs ending in /models are trusted; other formats are ignored
-// rather than guessed.
+// rather than guessed. The zen source is hardcoded: its catalog path is owned
+// by the dedicated zen transport, so no preset row is required.
 func FetcherBaseFor(baseURL string) string {
 	norm := func(u string) string {
 		u = strings.ToLower(strings.TrimRight(strings.TrimSpace(u), "/"))
@@ -161,6 +218,9 @@ func FetcherBaseFor(baseURL string) string {
 	target := norm(baseURL)
 	if target == "" {
 		return ""
+	}
+	if target == "https://opencode.ai" {
+		return "https://opencode.ai/zen/v1"
 	}
 	for _, p := range providerreg.Builtin().All() {
 		if p.ModelsFetcher == nil || !strings.HasSuffix(strings.ToLower(p.ModelsFetcher.URL), "/models") {
