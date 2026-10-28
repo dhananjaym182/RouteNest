@@ -190,5 +190,12 @@ func finalizeRequestLog(entry *RequestLog, usage tokenUsage, firstOutputAt time.
 		}
 	}
 
+	// provider token 配额归集：ID 归因且上游回报了计量 token，按该 provider 的
+	// 配额窗口（monthly/daily）累加（失败但带着 usage 的请求同样计入：token
+	// 已经消耗）。
+	if entry.ProviderID != "" && entry.TotalTokens > 0 {
+		recordProviderTokenUsage(entry.ProviderID, entry.TotalTokens, providerTokenWindow(entry.ProviderID))
+	}
+
 	appendRequestLog(*entry)
 }

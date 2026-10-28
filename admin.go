@@ -161,6 +161,7 @@ func registerAdminRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/admin/api/connections/login/start", auth(handleConnectionLoginStart))
 	mux.HandleFunc("/admin/api/connections/login/status", auth(handleConnectionLoginStatus))
 	mux.HandleFunc("/admin/api/connections/import", auth(handleConnectionImport))
+	mux.HandleFunc("/admin/api/connections/import-batch", auth(handleConnectionImportBatch))
 	mux.HandleFunc("/admin/api/connections/delete", auth(handleConnectionDelete))
 	mux.HandleFunc("/admin/api/connections/test", auth(handleConnectionTest))
 	mux.HandleFunc("/admin/api/combos", auth(handleCombosList))

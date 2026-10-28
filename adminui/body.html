@@ -631,7 +631,7 @@
         <span><span>上次同步</span>: <span id="modelSyncTime">-</span></span>
       </span>
     </div>
-    <div class="section-desc">管理从 Cline / opencode 同步的模型与自定义模型。停用的模型不会出现在客户端模型列表（/v1/models）中，直接请求也会被拒绝。</div>
+    <div class="section-desc">模型按 Provider 添加并自动归属：在 Provider 编辑器中使用「选择模型」「手动输入模型 ID」或「导入预览」即可添加。本页用于启用 / 停用、调整计费与上下文窗口、筛选和批量操作。停用的模型不会出现在客户端模型列表（/v1/models）中，直接请求也会被拒绝。</div>
     <div class="section-body">
       <div id="modelStatsBar" class="model-stats-bar"></div>
       <div class="model-toolbar">
@@ -649,7 +649,7 @@
           <option value="failed">测试失败</option>
           <option value="delisted">已下架</option>
         </select>
-        <button class="btn btn-sm" onclick="toggleAddModelRow()">＋ 添加模型</button>
+        <button class="btn btn-sm" onclick="switchTab('providers')" title="在 Provider 编辑器中添加模型，自动归属该 Provider">添加模型 → Provider 页</button>
         <!-- 低频批量操作收入「更多」，避免工具栏两行铺满；保留筛选 / 同步一键直达 -->
         <div class="toolbar-more" id="modelBulkMore">
           <button class="btn btn-sm" onclick="toggleToolbarMore(event)" aria-haspopup="true" aria-expanded="false" id="toolbarMoreBtn">更多操作 ▾</button>
@@ -664,16 +664,6 @@
         </div>
         <button class="sync-btn" id="syncModelsBtn" onclick="syncModels()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="ic-sm"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg><span>从 Cline 同步模型</span></button>
         <button class="sync-btn" id="syncOcModelsBtn" onclick="syncOcModels()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="ic-sm"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg><span>从 opencode 同步模型</span></button>
-      </div>
-      <div id="modelAddRow" class="model-composer" style="display:none">
-        <input type="text" id="newModelId" class="composer-input" placeholder="模型 ID，如 deepseek/deepseek-v4-flash" onkeydown="if(event.key==='Enter')addModel()">
-        <div class="seg cost-seg" id="modelCostSeg" role="group" aria-label="计费">
-          <button type="button" data-cost="pass" class="active" onclick="setModelCost('pass')">付费</button>
-          <button type="button" data-cost="free" onclick="setModelCost('free')">免费</button>
-        </div>
-        <button class="btn btn-sm btn-success" onclick="addModel(this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>添加</button>
-        <span class="composer-hint">添加后用行内 ⚙ 可设置上下文窗口与层级</span>
-        <select id="newModelCost" style="display:none"><option value="pass">付费 (pass)</option><option value="free">免费 (free)</option></select>
       </div>
       <div id="modelsList" class="model-list"><div class="sk-stack"><span class="skeleton"></span><span class="skeleton w70"></span><span class="skeleton w45"></span><span class="skeleton w70"></span></div></div>
     </div>
@@ -972,7 +962,7 @@
   </div>
 </div>
 <div id="providerEditorOverlay" class="drawer-overlay" onclick="hideProviderEditor()"></div>
-<aside id="providerEditor" class="drawer" role="dialog" aria-modal="true" aria-labelledby="providerEditorTitle">
+<aside id="providerEditor" class="drawer drawer-edit" role="dialog" aria-modal="true" aria-labelledby="providerEditorTitle">
   <div class="drawer-header">
     <div class="drawer-title" id="providerEditorTitle">添加 Provider</div>
     <button type="button" class="drawer-close" onclick="hideProviderEditor()" aria-label="关闭"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
@@ -1010,14 +1000,20 @@
       <div class="form-row">
         <div class="field"><label>优先级（小=优先）</label><input type="number" id="provPriority" value="10" min="0" max="1000"></div>
         <div class="field"><label>超时(秒)</label><input type="number" id="provTimeout" value="300" min="5" max="600"></div>
+      </div>
+      <div class="form-row">
         <div class="field"><label>分钟请求上限（0=不限）</label><input type="number" id="provRpmLimit" value="0" min="0" max="100000"></div>
         <div class="field"><label>每日请求上限（0=不限）</label><input type="number" id="provDailyLimit" value="0" min="0" max="1000000"></div>
       </div>
-      <div class="form-row">
-        <div class="field f2"><label>出口代理（空=继承全局；- 表示直连）</label><input type="text" id="provProxyUrl" placeholder="http://127.0.0.1:7890 或 -" class="mono-plain"></div>
+      <div class="form-row quota-win-row">
+        <div class="field"><label id="provTokenLimitLabel" for="provTokenLimit" title="月度 Token 上限（如 10000000 = 10M），0=不限">Token 配额/月</label><input type="number" id="provTokenLimit" value="0" min="0" max="1000000000000" placeholder="0"></div>
+        <div class="field field-win"><label for="provTokenWindow">重置周期</label><select id="provTokenWindow" onchange="syncProvTokenWindowUI()"><option value="monthly" selected>月度</option><option value="daily">每日</option></select></div>
+      </div>
+      <div class="form-row proxy-row">
+        <div class="field field-proxy"><label>出口代理（空=继承全局；- 表示直连）</label><input type="text" id="provProxyUrl" placeholder="http://127.0.0.1:7890 或 -" class="mono-plain"></div>
         <div class="field"><label>权重（加权轮询；0=按1，-1=排除）</label><input type="number" id="provWeight" value="0" min="-1" max="1000000"></div>
       </div>
-      <div class="field-hint">配额提示：填入免费层限额后，路由会在派发前自动避开打满额度的上游，改用组内其他 provider，不再拿 429 试错</div>
+      <div class="field-hint">配额提示：<span id="provQuotaWinHint">Token 配额按月度重置（每月 1 日 UTC），0=不限。</span>填入免费层限额后，路由会在派发前自动避开打满额度的上游，改用组内其他 provider，不再拿 429 试错</div>
     </div>
     <div class="drawer-group">
       <div class="form-group-label">行为与连接</div>
@@ -1065,15 +1061,14 @@
       </div>
       <!-- §9.3 受控导入：预览批次（新模型 / 层级变化 / protected），勾选批准后写入池 -->
       <div id="importPreviewModal" class="overlay-modal overlay-top" onclick="if(event.target===this)closeImportPreview()">
-        <div class="modal-card modal-card-col w640" role="dialog" aria-modal="true" aria-label="导入分级预览">
+        <div class="modal-card modal-card-col w760" role="dialog" aria-modal="true" aria-label="导入分级预览">
           <div class="modal-title">导入分级预览 <span id="importPreviewProv" class="mono grp-meta"></span></div>
           <div id="importPreviewSummary" class="modal-sub"></div>
-          <div class="modal-sub mb-6">按「新增 / 层级变化 / 无变化 / 受保护」分组，每行标注判定依据（悬停看规则）；只有新增与层级变化可勾选。</div>
           <div class="modal-search-row">
             <input type="text" id="importPreviewSearch" placeholder="搜索模型..." aria-label="搜索模型" oninput="filterImportPreview()" onkeydown="if(event.key==='Escape')closeImportPreview()">
             <button class="btn btn-sm" onclick="importPreviewSelectAll(true)">全选</button>
             <button class="btn btn-sm" onclick="importPreviewSelectAll(false)">清空</button>
-            <button class="btn btn-sm" onclick="importPreviewSelectTier()" title="勾选当前可见的全部免费模型，取消可见的付费模型（隐藏行不动）">只选免费</button>
+            <button class="btn btn-sm" id="importSelectFreeBtn" onclick="importPreviewSelectTier()" title="勾选当前可见的全部免费模型，取消可见的付费模型（隐藏行不动）">只选免费</button>
             <span id="importPreviewMatch" class="grp-meta"></span>
           </div>
           <div class="import-filter-row" role="group" aria-label="按操作过滤">
@@ -1083,8 +1078,8 @@
             <button class="btn btn-sm import-act-filter" data-act="nochange" onclick="setImportActionFilter(this)">无变化</button>
             <button class="btn btn-sm import-act-filter" data-act="protected" onclick="setImportActionFilter(this)">受保护</button>
             <span class="imp-fsep" aria-hidden="true"></span>
-            <button class="btn btn-sm import-tier-filter" data-tier="free" onclick="setImportTierFilter(this)" aria-label="只看免费计费的行">免费 <span id="tierCntFree"></span></button>
-            <button class="btn btn-sm import-tier-filter" data-tier="paid" onclick="setImportTierFilter(this)" aria-label="只看付费计费的行">付费 <span id="tierCntPaid"></span></button>
+            <button class="btn btn-sm import-tier-filter" data-tier="free" onclick="setImportTierFilter(this)" aria-label="只看全部条目中免费计费的行" title="全部条目中免费的行">免费（全部） <span id="tierCntFree"></span></button>
+            <button class="btn btn-sm import-tier-filter" data-tier="paid" onclick="setImportTierFilter(this)" aria-label="只看全部条目中付费计费的行" title="全部条目中付费的行">付费（全部） <span id="tierCntPaid"></span></button>
           </div>
           <div id="importPreviewList" class="combo-picker-list"><div class="sk-stack"><span class="skeleton"></span><span class="skeleton w70"></span><span class="skeleton w45"></span></div></div>
           <div class="modal-actions">
@@ -1098,7 +1093,7 @@
 
   <!-- 设备码登录弹窗：从 Provider 卡片直接发起 → 展示 user code + 验证链接 → 轮询状态 -->
   <!-- 连接弹窗位于 tab 面板之外：账号与连接页打开，跨标签页可用 -->
-  <div id="connLoginModal" class="overlay-modal" onclick="if(event.target===this)closeDeviceLogin()">
+  <div id="connLoginModal" class="overlay-modal overlay-top" onclick="if(event.target===this)closeDeviceLogin()">
     <div class="modal-card modal-card-col w480" role="dialog" aria-modal="true" aria-label="设备码登录">
       <div class="modal-title" id="connLoginTitle">设备码登录</div>
       <div id="connLoginStep2" class="mt-12">
@@ -1117,19 +1112,61 @@
   </div>
 
   <!-- 粘贴 token 导入弹窗（无刷新上游的备用登录路径） -->
-  <div id="connImportModal" class="overlay-modal" onclick="if(event.target===this)hideConnectionImport()">
-    <div class="modal-card modal-card-col w480" role="dialog" aria-modal="true" aria-label="导入 Token">
-      <div class="modal-title">导入 Token</div>
-      <div class="modal-sub">粘贴已有访问令牌作为连接（Bearer 注入），适合 Kilo 这类不签发刷新令牌的上游，或任何无设备码流程、但你已持有 token 的服务；过期后需重新导入或登录。</div>
-      <div class="field mb-8"><label>服务 *</label><input type="text" id="connImpProvider" placeholder="kilocode / 任意 provider key" list="connProviderList" class="mono-plain"><datalist id="connProviderList"></datalist></div>
-      <div class="field mb-8"><label>Access Token *</label><input type="password" id="connImpToken" placeholder="粘贴令牌（只存服务端，不外泄）"></div>
-      <div class="form-row">
-        <div class="field"><label>邮箱（可选，用于去重）</label><input type="text" id="connImpEmail" placeholder="dev@example.com"></div>
-        <div class="field"><label>Org ID（可选）</label><input type="text" id="connImpOrg" placeholder="org-..." class="mono-plain"></div>
+  <div id="connImportModal" class="overlay-modal overlay-top" onclick="if(event.target===this)hideConnectionImport()">
+    <div class="modal-card modal-card-col w620" role="dialog" aria-modal="true" aria-label="导入 Token">
+      <div class="conn-imp-head">
+        <div class="modal-title">导入 Token</div>
+        <div class="modal-sub">粘贴已有访问令牌作为连接（Bearer 注入），适合 Kilo 这类不签发刷新令牌的上游，或任何无设备码流程、但你已持有 token 的服务；过期后需重新导入或登录。</div>
       </div>
-      <div class="modal-foot">
+      <div class="tabs conn-imp-tabs" role="tablist" aria-label="导入方式">
+        <div class="tab active" id="connImpTabManual" role="tab" aria-selected="true" aria-controls="connImpPanelManual" tabindex="0" data-conn-tab="manual" onclick="connImportTab('manual')" onkeydown="connImportTabKey(event)">手动 Token</div>
+        <div class="tab" id="connImpTabBatch" role="tab" aria-selected="false" aria-controls="connImpPanelBatch" tabindex="-1" data-conn-tab="batch" onclick="connImportTab('batch')" onkeydown="connImportTabKey(event)">批量导入</div>
+      </div>
+      <div class="conn-imp-body">
+        <div id="connImpPanelManual" class="tab-content active" role="tabpanel" aria-labelledby="connImpTabManual" data-conn-panel="manual">
+          <div class="field mb-8">
+            <label for="connImpProvider">服务 *</label>
+            <select id="connImpProvider" onchange="connImportProviderChange()"></select>
+            <input type="text" id="connImpProviderCustom" class="mono-plain conn-imp-custom" placeholder="provider key，例如 kilocode" autocomplete="off" hidden>
+            <div class="field-hint">从已登录流程、已有连接或 Provider 列表中选择；都不匹配时选「自定义…」。</div>
+          </div>
+          <div class="field mb-8">
+            <label for="connImpToken">Access Token *</label>
+            <div class="conn-imp-secret">
+              <input type="password" id="connImpToken" placeholder="粘贴令牌（只存服务端，不外泄）" autocomplete="new-password" spellcheck="false">
+              <button type="button" class="btn btn-sm conn-imp-reveal" id="connImpReveal" onclick="connImportToggleToken(this)" aria-pressed="false">显示</button>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="field"><label for="connImpEmail">邮箱（可选，用于去重）</label><input type="text" id="connImpEmail" placeholder="dev@example.com" autocomplete="off"></div>
+            <div class="field"><label for="connImpOrg">Org ID（可选）</label><input type="text" id="connImpOrg" placeholder="org-..." class="mono-plain" autocomplete="off"></div>
+          </div>
+          <div id="connImpResult" class="conn-imp-result" aria-live="polite"></div>
+        </div>
+        <div id="connImpPanelBatch" class="tab-content" role="tabpanel" aria-labelledby="connImpTabBatch" data-conn-panel="batch">
+          <div class="field mb-8">
+            <label for="connBatchProvider">服务（用于无 provider 字段的行）</label>
+            <select id="connBatchProvider" onchange="connBatchProviderChange()"></select>
+            <input type="text" id="connBatchProviderCustom" class="mono-plain conn-imp-custom" placeholder="provider key，例如 kilocode" autocomplete="off" oninput="connBatchPreview()" hidden>
+            <div class="field-hint">JSON 条目里的 provider 优先；纯文本行只有 token 时用这里的服务。</div>
+          </div>
+          <div class="field mb-8">
+            <label for="connBatchInput">批量数据</label>
+            <textarea id="connBatchInput" rows="7" placeholder="JSON 数组，或每行一条 provider,token[,email]" spellcheck="false" oninput="connBatchPreview()"></textarea>
+            <div class="conn-imp-fileline">
+              <button type="button" class="btn btn-sm" onclick="connBatchPickFile()">选择文件</button>
+              <input type="file" id="connBatchFile" accept=".json,.txt,.csv" onchange="connBatchFileChosen(event)" hidden>
+              <span id="connBatchFileName" class="hint-xs"></span>
+            </div>
+            <div id="connBatchPreview" class="conn-imp-preview" aria-live="polite">粘贴或选择文件后自动解析</div>
+          </div>
+          <div id="connBatchResult" class="conn-imp-result" aria-live="polite"></div>
+        </div>
+      </div>
+      <div class="modal-foot conn-imp-foot">
         <button class="btn btn-sm" onclick="hideConnectionImport()">取消</button>
-        <button class="btn btn-sm btn-primary" onclick="submitConnectionImport(this)">保存连接</button>
+        <button class="btn btn-sm btn-primary" id="connImpManualFoot" onclick="submitConnectionImport(this)">保存连接</button>
+        <button class="btn btn-sm btn-primary" id="connImpBatchFoot" onclick="submitConnBatch(this)" hidden>导入全部</button>
       </div>
     </div>
   </div>
@@ -1381,7 +1418,7 @@ Model:    cline-free/glm-5.2</pre>
       <div id="provPickerModal" class="overlay-modal overlay-top" onclick="if(event.target===this)closeProvModelPicker()">
         <div class="modal-card modal-card-col w760" role="dialog" aria-modal="true" aria-label="选择模型">
           <div class="modal-title">选择模型</div>
-          <div class="modal-sub">来自上游 /models 接口，按免费 / 付费分组；确认后写入模型列表，仍需手动保存。Provider 中已有的模型预勾选且不可再选。失败时先检查 Base URL 与 API Key。</div>
+          <div class="modal-sub">来自上游 /models 接口（与导入预览共用同一批次），按免费 / 付费分组；数字为全部可拉取模型口径。确认后写入模型列表，仍需手动保存。Provider 中已有的模型预勾选且不可再选。失败时先检查 Base URL 与 API Key。</div>
           <div class="modal-search-row">
             <input type="text" id="provPickerSearch" placeholder="搜索模型..." aria-label="搜索模型" oninput="renderProvPickerList()" onkeydown="if(event.key==='Escape')closeProvModelPicker()">
             <button class="btn btn-sm" onclick="provPickerSelectAllShown()">全选</button>

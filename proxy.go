@@ -1082,29 +1082,38 @@ const servedByParam = "__served_by"
 // 命中之家的显示名，供 stampUpstream 归因到请求日志的 providerName 字段。
 const providerNameParam = "__served_by_name"
 
+// providerIDParam 与 providerNameParam 配套：同一家 provider 的 ID，供请求日志
+// providerId 字段归集月度 token 用量。仅内存参数（残余键不外发——
+// buildUpstreamBody / callProvider / callZenAPI 只拷贝白名单键，不会外发）。
+const providerIDParam = "__served_by_id"
+
 // stampUpstream 按实际服务结果写入请求日志的上游归因：
 // provider 标记 > 生效模型是 zen 模型（反向故障转移）> Cline 账号池。
 func stampUpstream(reqLog *RequestLog, params map[string]any) {
 	if v, _ := params[servedByParam].(string); v == upstreamProvider {
 		reqLog.Upstream = upstreamProvider
 		reqLog.ProviderName, _ = params[providerNameParam].(string)
+		reqLog.ProviderID, _ = params[providerIDParam].(string)
 		return
 	}
 	if m, _ := params["model"].(string); m != "" {
 		if _, isZen := resolveZenInfo(m); isZen {
 			reqLog.Upstream = upstreamOpenCode
 			reqLog.ProviderName = ""
+			reqLog.ProviderID = ""
 			return
 		}
 	}
 	reqLog.Upstream = upstreamCline
 	reqLog.ProviderName = ""
+	reqLog.ProviderID = ""
 }
 
 func callClineAPI(params map[string]any, stream bool) (*http.Response, *Account, error) {
 	model, _ := params["model"].(string)
 	delete(params, servedByParam)     // 归因标记按次重算，避免流重试沿用上一次结果
 	delete(params, providerNameParam) // 同步清掉上次归因的 provider 名
+	delete(params, providerIDParam)   // 同步清掉上次归因的 provider ID
 	// Request-level pin "model@ProviderName": only the named provider may
 	// serve. An explicit pin must fail loudly rather than silently fall back
 	// to a redundancy sibling, the Cline pool, or the fallback chain.
@@ -1296,6 +1305,7 @@ func callClineAPI(params map[string]any, stream bool) (*http.Response, *Account,
 				params[providerNameParam] = v // 同步实际服务的 provider 名
 			} else {
 				delete(params, providerNameParam)
+				delete(params, providerIDParam)
 			}
 			return resp, acc, nil
 		}
@@ -1502,6 +1512,7 @@ func callFreeClineAPI(params map[string]any, stream bool) (*http.Response, *Acco
 	}
 	delete(params, servedByParam)     // 本次调用重新归因
 	delete(params, providerNameParam) // 同步清掉上次归因的 provider 名
+	delete(params, providerIDParam)   // 同步清掉上次归因的 provider ID
 	var affinitySk string
 	if getProxyConfig().SessionAffinity.Enabled {
 		affinitySk = sessionKeyFromParams(params)
@@ -2689,6 +2700,7 @@ func streamAnthropicCombo(ctx context.Context, w http.ResponseWriter, params map
 		} else {
 			delete(params, servedByParam)
 			delete(params, providerNameParam)
+			delete(params, providerIDParam)
 		}
 		// 每次成功建流后按实际服务方重算归因（流式组合此前只在循环外 stamp 过一次，
 		// 会把 provider/zen 条目错记为 cline）。

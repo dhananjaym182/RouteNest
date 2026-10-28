@@ -432,6 +432,29 @@ func handleConnectionLoginStatus(w http.ResponseWriter, r *http.Request) {
 	writeAPI(w, http.StatusOK, apiResponse{Success: true, Data: out})
 }
 
+// importConnectionToken 单条粘贴 token 的共享语义（单条导入与批量导入共用）：
+// trim 后校验，走 provider+email（无 email 时 token 指纹）去重，落 orgId。
+func importConnectionToken(provider, accessToken, email, orgID string) (*Connection, error) {
+	provider = strings.TrimSpace(provider)
+	accessToken = strings.TrimSpace(accessToken)
+	email = strings.TrimSpace(email)
+	orgID = strings.TrimSpace(orgID)
+	if provider == "" || accessToken == "" {
+		return nil, fmt.Errorf("provider and accessToken required")
+	}
+	conn := upsertConnection(&Connection{
+		Provider: provider, AuthType: "import_token", Email: email,
+		AccessToken: accessToken, Status: "active",
+	})
+	if orgID != "" {
+		connectionsMu.Lock()
+		conn.ProviderSpecificData["orgId"] = orgID
+		saveConnectionsLocked()
+		connectionsMu.Unlock()
+	}
+	return conn, nil
+}
+
 // POST /admin/api/connections/import  body: {provider, accessToken, email?, orgId?}
 // 粘贴 token 路径（Kilo 这类无 refresh 的上游同样适用），复用去重与状态语义。
 func handleConnectionImport(w http.ResponseWriter, r *http.Request) {
@@ -441,23 +464,69 @@ func handleConnectionImport(w http.ResponseWriter, r *http.Request) {
 		Email       string `json:"email"`
 		OrgID       string `json:"orgId"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Provider == "" || req.AccessToken == "" {
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeAPI(w, http.StatusBadRequest, apiResponse{Error: "provider and accessToken required"})
 		return
 	}
-	conn := upsertConnection(&Connection{
-		Provider: req.Provider, AuthType: "import_token", Email: req.Email,
-		AccessToken: req.AccessToken, Status: "active",
-	})
-	if req.OrgID != "" {
-		connectionsMu.Lock()
-		conn.ProviderSpecificData["orgId"] = req.OrgID
-		saveConnectionsLocked()
-		connectionsMu.Unlock()
+	conn, err := importConnectionToken(req.Provider, req.AccessToken, req.Email, req.OrgID)
+	if err != nil {
+		writeAPI(w, http.StatusBadRequest, apiResponse{Error: err.Error()})
+		return
 	}
 	cp := *conn
 	cp.AccessToken = ""
 	writeAPI(w, http.StatusOK, apiResponse{Success: true, Data: map[string]any{"connection": cp}})
+}
+
+// connectionImportBatchItem 批量导入的单项输入（token 只在请求内出现，绝不出现在响应）。
+type connectionImportBatchItem struct {
+	Provider    string `json:"provider"`
+	AccessToken string `json:"accessToken"`
+	Email       string `json:"email"`
+	OrgID       string `json:"orgId"`
+}
+
+// connectionImportBatchResult 单项结果：保留输入顺序与原 index，失败不中断整批。
+type connectionImportBatchResult struct {
+	Index    int    `json:"index"`
+	OK       bool   `json:"ok"`
+	ID       string `json:"id,omitempty"`
+	Provider string `json:"provider"`
+	Email    string `json:"email,omitempty"`
+	Error    string `json:"error,omitempty"`
+}
+
+// POST /admin/api/connections/import-batch  body: {items:[{provider, accessToken, email?, orgId?}]}
+// 管理端「导入 Token」弹窗的批量 tab：逐项复用 importConnectionToken，返回逐项结果。
+func handleConnectionImportBatch(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Items []connectionImportBatchItem `json:"items"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || len(req.Items) == 0 {
+		writeAPI(w, http.StatusBadRequest, apiResponse{Error: "items required"})
+		return
+	}
+	if len(req.Items) > 500 {
+		writeAPI(w, http.StatusBadRequest, apiResponse{Error: "too many items (max 500)"})
+		return
+	}
+	results := make([]connectionImportBatchResult, 0, len(req.Items))
+	imported, failed := 0, 0
+	for i, item := range req.Items {
+		res := connectionImportBatchResult{Index: i, Provider: strings.TrimSpace(item.Provider)}
+		conn, err := importConnectionToken(item.Provider, item.AccessToken, item.Email, item.OrgID)
+		if err != nil {
+			res.Error = err.Error()
+			failed++
+		} else {
+			res.OK, res.ID, res.Provider, res.Email = true, conn.ID, conn.Provider, conn.Email
+			imported++
+		}
+		results = append(results, res)
+	}
+	writeAPI(w, http.StatusOK, apiResponse{Success: true, Data: map[string]any{
+		"total": len(req.Items), "imported": imported, "failed": failed, "results": results,
+	}})
 }
 
 // POST /admin/api/connections/delete  body: {id}

@@ -12,6 +12,28 @@ type ImportItem struct {
 	Reason  string `json:"reason,omitempty"`
 }
 
+// BatchStats is the server-authoritative tally of an import batch. Admin views
+// read these numbers instead of recomputing them over ad-hoc item subsets.
+//
+// Invariants: Total == Free+Paid, Add+NoChange+Protected+TierChange == Total,
+// Selectable == Add+TierChange and likewise for the free/paid breakdowns.
+type BatchStats struct {
+	Total          int `json:"total"`
+	Free           int `json:"free"`
+	Paid           int `json:"paid"`
+	Add            int `json:"add"`
+	AddFree        int `json:"addFree"`
+	AddPaid        int `json:"addPaid"`
+	TierChange     int `json:"tierChange"`
+	TierChangeFree int `json:"tierChangeFree"`
+	TierChangePaid int `json:"tierChangePaid"`
+	NoChange       int `json:"noChange"`
+	Protected      int `json:"protected"`
+	Selectable     int `json:"selectable"` // add + tier_change
+	SelectableFree int `json:"selectableFree"`
+	SelectablePaid int `json:"selectablePaid"`
+}
+
 // ImportBatch is an in-memory preview awaiting administrator approval.
 type ImportBatch struct {
 	ID           string       `json:"id"`
@@ -20,6 +42,7 @@ type ImportBatch struct {
 	CreatedAt    time.Time    `json:"createdAt"`
 	Auto         bool         `json:"auto,omitempty"`
 	Items        []ImportItem `json:"items"`
+	Stats        BatchStats   `json:"stats"`
 }
 
 // Existing describes the pool entry an imported model would collide with.
@@ -30,8 +53,9 @@ type Existing struct {
 }
 
 // BuildImportItems classifies entries and diffs them against existing pool
-// entries. The caller owns batch persistence and pool locking.
-func BuildImportItems(entries []Entry, providerFree bool, existing map[string]Existing, allowlist map[string]bool) []ImportItem {
+// entries. The caller owns batch persistence and pool locking. The returned
+// stats are tallied from the finished items slice in one pass.
+func BuildImportItems(entries []Entry, providerFree bool, existing map[string]Existing, allowlist map[string]bool) ([]ImportItem, BatchStats) {
 	items := make([]ImportItem, 0, len(entries))
 	for _, e := range entries {
 		tier, signal := Classify(e, providerFree, allowlist)
@@ -53,5 +77,44 @@ func BuildImportItems(entries []Entry, providerFree bool, existing map[string]Ex
 		}
 		items = append(items, item)
 	}
-	return items
+	return items, computeBatchStats(items)
+}
+
+// computeBatchStats tallies a finished item slice in a single pass so every
+// view of a batch reports the same numbers.
+func computeBatchStats(items []ImportItem) BatchStats {
+	var s BatchStats
+	for _, it := range items {
+		free := it.Tier == "free"
+		s.Total++
+		if free {
+			s.Free++
+		} else {
+			s.Paid++
+		}
+		switch it.Action {
+		case "add":
+			s.Add++
+			if free {
+				s.AddFree++
+			} else {
+				s.AddPaid++
+			}
+		case "tier_change":
+			s.TierChange++
+			if free {
+				s.TierChangeFree++
+			} else {
+				s.TierChangePaid++
+			}
+		case "nochange":
+			s.NoChange++
+		case "protected":
+			s.Protected++
+		}
+	}
+	s.Selectable = s.Add + s.TierChange
+	s.SelectableFree = s.AddFree + s.TierChangeFree
+	s.SelectablePaid = s.AddPaid + s.TierChangePaid
+	return s
 }

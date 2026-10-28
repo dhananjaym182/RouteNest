@@ -27,6 +27,9 @@ type RequestLog struct {
 	// Upstream is "cline", "opencode", or "provider".
 	Upstream     string `json:"upstream,omitempty"`
 	ProviderName string `json:"providerName,omitempty"`
+	// ProviderID 是实际服务方自定义 provider 的 ID（仅 Upstream=="provider" 时归因，
+	// 供月度 token 配额按 provider 归集）。
+	ProviderID string `json:"providerId,omitempty"`
 	// ConnectionID and ConnectionEmail identify the serving login connection.
 	ConnectionID    string `json:"connectionId,omitempty"`
 	ConnectionEmail string `json:"connectionEmail,omitempty"`

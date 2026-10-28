@@ -103,7 +103,7 @@ func buildImportBatch(p CustomProvider, entries []upstreamModelEntry) *importBat
 		existing[m.ID] = modelcatalog.Existing{Source: m.Source, TierSignal: m.TierSignal, Cost: m.Cost}
 	}
 	poolMu.Unlock()
-	batch.Items = modelcatalog.BuildImportItems(entries, p.Free, existing, freeIDAllowlist)
+	batch.Items, batch.Stats = modelcatalog.BuildImportItems(entries, p.Free, existing, freeIDAllowlist)
 	importsMu.Lock()
 	for id, old := range pendingImports {
 		if len(pendingImports) >= 20 && time.Since(old.CreatedAt) > time.Hour {

@@ -171,7 +171,7 @@ func resolveProvidersForModel(model string) []*CustomProvider {
 				break // 该 provider 的该模型冷却中
 			}
 			// 预算上限：超限的 provider 不入候选，路由在派发前就避开配额墙
-			if providerBudgetExceeded(p.ID, model, p.RpmLimit, p.DailyLimit) {
+			if providerBudgetExceeded(p.ID, model, p.RpmLimit, p.DailyLimit, p.TokenLimit, p.TokenWindow) {
 				break
 			}
 			// Bound connections: provider stays out of candidates only when EVERY
@@ -501,7 +501,7 @@ func pinProviderPresent(providerID, model string) *CustomProvider {
 		if until, cool := providerCooldowns[providerID+":"+model]; cool && time.Now().Before(until) {
 			return nil
 		}
-		if providerBudgetExceeded(providerID, model, p.RpmLimit, p.DailyLimit) {
+		if providerBudgetExceeded(providerID, model, p.RpmLimit, p.DailyLimit, p.TokenLimit, p.TokenWindow) {
 			return nil
 		}
 		cp := *p
@@ -595,14 +595,28 @@ var (
 	budgetMu      sync.Mutex
 	providerRPM   = map[string][]time.Time{}      // providerID:model → 分钟窗口内派发时间
 	providerDaily = map[string]map[string]int64{} // providerID → UTC 日 → 计数
+	// providerTokens token 用量：providerID → 时间键（月窗 "2006-01" / 日窗
+	// "2006-01-02"）→ token 数，请求日志落盘时按实际计量归集，重启后从零学起。
+	providerTokens = map[string]map[string]int64{}
 )
 
 const providerRPMWindow = time.Minute
 
+// utcTokenKey 当前 UTC 时间键，按 token 配额窗口取粒度：daily 用整日
+// （"2006-01-02"），monthly（含空/未知值）用整月（"2006-01"）。与 providerDaily
+// 的日键同风格：直接按当前键计数，过期键自然废弃。
+func utcTokenKey(tokenWindow string) string {
+	if tokenWindow == "daily" {
+		return time.Now().UTC().Format("2006-01-02")
+	}
+	return time.Now().UTC().Format("2006-01")
+}
+
 // providerBudgetExceeded 判断该 provider:model 是否已超配（超一票都算超）。
-// rpmLimit/dailyLimit 任一超限即返回 true；不超过顺带清理过期窗口数据。
-func providerBudgetExceeded(providerID, model string, rpmLimit, dailyLimit int) bool {
-	if rpmLimit <= 0 && dailyLimit <= 0 {
+// rpmLimit/dailyLimit/tokenLimit 任一超限即返回 true；不超过顺带清理过期窗口数据。
+// tokenWindow 为 token 配额窗口（"monthly"/"daily"，空视同 monthly）。
+func providerBudgetExceeded(providerID, model string, rpmLimit, dailyLimit int, tokenLimit int64, tokenWindow string) bool {
+	if rpmLimit <= 0 && dailyLimit <= 0 && tokenLimit <= 0 {
 		return false
 	}
 	budgetMu.Lock()
@@ -627,6 +641,10 @@ func providerBudgetExceeded(providerID, model string, rpmLimit, dailyLimit int) 
 			return true
 		}
 	}
+	// token 预算：本窗口（月或日）已归集 token 达上限即超配，派发前就避开
+	if tokenLimit > 0 && providerTokens[providerID][utcTokenKey(tokenWindow)] >= tokenLimit {
+		return true
+	}
 	return false
 }
 
@@ -643,6 +661,38 @@ func recordProviderDispatch(providerID, model string) {
 		providerDaily[providerID] = map[string]int64{}
 	}
 	providerDaily[providerID][day]++
+}
+
+// providerTokenWindow 查询 provider 的 token 配额窗口；未找到或空值视同
+// "monthly"。请求日志落盘归集用量时用它取窗口，避免调用方透传窗口。
+func providerTokenWindow(providerID string) string {
+	loadProviders()
+	providersMu.Lock()
+	defer providersMu.Unlock()
+	for _, p := range customProviders {
+		if p.ID == providerID {
+			if p.TokenWindow == "daily" {
+				return "daily"
+			}
+			return "monthly"
+		}
+	}
+	return "monthly"
+}
+
+// recordProviderTokenUsage 落盘请求日志时归集 token 用量（发出即消耗，不论
+// 成败都按上游回报的计量累加）。tokens<0 的异常回报直接忽略。tokenWindow
+// 决定时间键粒度（"daily" 用日键，其余用月键）。
+func recordProviderTokenUsage(providerID string, tokens int64, tokenWindow string) {
+	if providerID == "" || tokens < 0 {
+		return
+	}
+	budgetMu.Lock()
+	defer budgetMu.Unlock()
+	if providerTokens[providerID] == nil {
+		providerTokens[providerID] = map[string]int64{}
+	}
+	providerTokens[providerID][utcTokenKey(tokenWindow)] += tokens
 }
 
 // ---- 候选排序 --------------------------------------------------------
@@ -932,18 +982,14 @@ func syncProviderModels() {
 			}
 			if _, ok := claimed[id]; !ok {
 				// Classify ids at seed time (same semantics as Cline/Zen sync):
-				// :free / -free suffixes and the zen-seed allowlist land in the
-				// pool as free without the import wizard. Id-only word segments
-				// and the provider-level free flag are metadata: provenance is
-				// stamped but cost stays paid-default until per-model evidence
-				// arrives via the catalog import path.
+				// ":free"/"-free" suffixes, a standalone "free" word anywhere in
+				// the id, the zen-seed allowlist, and the provider-level free
+				// flag all land in the pool as free immediately, without the
+				// import wizard. Only a parsed non-zero price (catalog path)
+				// can override to paid.
 				c := claim{name: p.Name, cost: "pass"}
 				if tier, sig := classifyUpstreamModel(upstreamModelEntry{ID: id}, p.Free); tier == "free" {
 					c.cost, c.signal = "free", sig
-				} else if sig == tierSignalProviderFree || sig == tierSignalNameToken || sig == tierSignalDisplayName {
-					// Weak/metadata signals: record provenance so Free-only
-					// routing treats the route as unverified, cost stays pass.
-					c.signal = sig
 				}
 				claimed[id] = c
 				ids = append(ids, id)
@@ -1050,6 +1096,7 @@ func callCustomProviderAPI(params map[string]any, stream bool) (*http.Response, 
 				resp, err := callProvider(p, params, stream)
 				if err == nil {
 					stickySet(sk, pin.providerID, model)
+					params[providerIDParam] = pin.providerID
 					return resp, nil, true, p.Name
 				}
 				log.Printf("  provider attempt failed name=%s model=%q (pinned): %v", p.Name, model, err)
@@ -1059,6 +1106,7 @@ func callCustomProviderAPI(params map[string]any, stream bool) (*http.Response, 
 					}
 					if stop {
 						stickyClear(sk)
+						params[providerIDParam] = pin.providerID
 						logRuleHit("stop", clineErrorStatus(err), "provider "+p.Name+" (sticky)")
 						return nil, &requestErrorStop{err: err}, true, p.Name
 					}
@@ -1073,28 +1121,33 @@ func callCustomProviderAPI(params map[string]any, stream bool) (*http.Response, 
 	}
 	var lastErr error
 	var lastName string
+	var lastID string
 	for _, p := range provs {
 		resp, err := callProvider(p, params, stream)
 		if err == nil {
 			if sk != "" {
 				stickySet(sk, p.ID, model)
 			}
+			params[providerIDParam] = p.ID
 			return resp, nil, true, p.Name
 		}
 		log.Printf("  provider attempt failed name=%s model=%q: %v", p.Name, model, err)
 		lastErr = err
 		lastName = p.Name
+		lastID = p.ID
 		if stop, cooldown, matched := ruleDecision(err); matched {
 			if cooldown {
 				setProviderCooldown(p.ID, model, ruleCooldownUntil(clineErrorStatus(err)))
 			}
 			if stop {
+				params[providerIDParam] = p.ID
 				logRuleHit("stop", clineErrorStatus(err), "provider "+p.Name)
 				return nil, &requestErrorStop{err: err}, true, p.Name
 			}
 			logRuleHit("continue", clineErrorStatus(err), "provider "+p.Name)
 		}
 	}
+	params[providerIDParam] = lastID
 	return nil, lastErr, true, lastName
 }
 
@@ -1158,7 +1211,7 @@ func resolveProvidersNamedForModel(model, name string) []*CustomProvider {
 			if until, cool := providerCooldowns[p.ID+":"+model]; cool && now.Before(until) {
 				break // 该 provider 的该模型冷却中
 			}
-			if providerBudgetExceeded(p.ID, model, p.RpmLimit, p.DailyLimit) {
+			if providerBudgetExceeded(p.ID, model, p.RpmLimit, p.DailyLimit, p.TokenLimit, p.TokenWindow) {
 				break
 			}
 			cs = append(cs, providerCand{p: *p})
@@ -1190,14 +1243,17 @@ func callCustomProviderAPINamed(params map[string]any, stream bool, name string)
 	}
 	var lastErr error
 	var lastName string
+	var lastID string
 	for _, p := range provs {
 		resp, err := callProvider(p, params, stream)
 		if err == nil {
+			params[providerIDParam] = p.ID
 			return resp, nil, true, p.Name
 		}
 		log.Printf("  provider attempt failed name=%s model=%q (pinned): %v", p.Name, model, err)
 		lastErr = err
 		lastName = p.Name
+		lastID = p.ID
 		// A pinned-provider failure is already fatal to the caller; rules can
 		// only add the cooldown side effect here, not change the flow.
 		if _, cooldown, matched := ruleDecision(err); matched && cooldown {
@@ -1205,6 +1261,7 @@ func callCustomProviderAPINamed(params map[string]any, stream bool, name string)
 			logRuleHit("cooldown", clineErrorStatus(err), "provider "+p.Name+" (pinned)")
 		}
 	}
+	params[providerIDParam] = lastID
 	return nil, lastErr, true, lastName
 }
 
@@ -1286,6 +1343,17 @@ func handleProviderSave(w http.ResponseWriter, r *http.Request) {
 	}
 	if p.DailyLimit < 0 {
 		p.DailyLimit = 0
+	}
+	if p.TokenLimit < 0 {
+		p.TokenLimit = 0
+	}
+	// token 配额窗口：空默认 monthly；未知值拒绝，避免静默落到错误粒度。
+	p.TokenWindow = strings.ToLower(strings.TrimSpace(p.TokenWindow))
+	if p.TokenWindow == "" {
+		p.TokenWindow = "monthly"
+	} else if p.TokenWindow != "monthly" && p.TokenWindow != "daily" {
+		writeAPI(w, http.StatusBadRequest, apiResponse{Error: `tokenWindow must be "monthly" or "daily"`})
+		return
 	}
 	// Wave-4 pool hygiene: keep only connection IDs that still exist.
 	seenConn := map[string]bool{}

@@ -208,6 +208,32 @@ html[data-nav="collapsed"] .nav-edge-toggle svg{transform:rotate(180deg)}
 .chip-row .model-tag{margin:0}
 @media (max-width:760px){.drawer{width:100vw;border-left:none}}
 
+/* ===== 编辑 Provider 抽屉：宽版栅格（详情抽屉走 .drawer-wide，其余抽屉仍 560px） =====
+   760px 时内容区 ≈711px：两列字段各 ≈347px，长标签单行不折行；≤760px 仍由上方规则铺满整屏。 */
+.drawer.drawer-edit{width:min(760px,100vw)}
+#providerEditor .drawer-header{padding:var(--sp-4) var(--sp-6)}
+#providerEditor .drawer-title{font-size:16px;letter-spacing:-0.01em}
+#providerEditor .drawer-body{padding:var(--sp-6);gap:var(--sp-6)}
+#providerEditor .drawer-footer{padding:var(--sp-4) var(--sp-6);gap:10px;box-shadow:0 -10px 24px -20px rgba(0,0,0,.55)}
+/* 分组标题：左侧强调条 + 略深文字，分组层级比默认灰色小标题更清楚 */
+#providerEditor .drawer-group>.form-group-label{margin:0 0 var(--sp-4);padding-bottom:8px;font-size:12px;letter-spacing:0.5px;color:var(--text2)}
+#providerEditor .drawer-group>.form-group-label::before{content:"";display:inline-block;width:3px;height:11px;margin-right:8px;vertical-align:-1px;border-radius:2px;background:var(--accent)}
+/* 行节奏：组内最后一行不再留尾距，分组之间只保留 .drawer-body 的一层间距 */
+#providerEditor .drawer-group>.form-row:last-child{margin-bottom:0}
+#providerEditor .field-hint{margin-top:8px}
+/* 模型芯片：有内容时呈现为内嵌卡片，与上方按钮行、下方高级输入分开 */
+#providerEditor .chip-row{gap:6px;padding:10px 12px;margin:0 0 var(--sp-3);border:1px solid var(--border2);border-radius:var(--radius-sm);background:var(--surface)}
+@media (min-width:761px){
+  #providerEditor .form-row{gap:var(--sp-4)}
+  /* 主操作靠左，测试 / 导入预览靠右（窄屏换行时不再使用，避免分隔线孤悬） */
+  #providerEditor .drawer-footer .drawer-footer-sep{margin-left:auto}
+}
+@media (max-width:760px){
+  #providerEditor .drawer-header{padding:var(--sp-4)}
+  #providerEditor .drawer-body{padding:var(--sp-4);gap:var(--sp-5)}
+  #providerEditor .drawer-footer{padding:var(--sp-3) var(--sp-4)}
+}
+
 /* ===== 弹窗层标准化（模态壳 + 卡片 + 通用槽位） ===== */
 .overlay-modal{position:fixed;inset:0;z-index:var(--z-modal);display:none;align-items:center;justify-content:center;padding:20px;background:var(--overlay-bg);backdrop-filter:saturate(150%) blur(6px);-webkit-backdrop-filter:saturate(150%) blur(6px)}
 .overlay-top{z-index:var(--z-topmost)} /* pickers opened from the drawer must float above it */
@@ -230,7 +256,8 @@ html[data-nav="collapsed"] .nav-edge-toggle svg{transform:rotate(180deg)}
 .th-sort{cursor:pointer}
 .headers-table th:first-child{width:240px}
 
-/* ===== 模型添加行（组合页统计条复用 .model-stats-bar） ===== */
+/* ===== 模型统计条（组合页复用 .model-stats-bar） ===== */
+/* 兼容保留：模型添加 composer 已移除（现改在 Provider 页添加），以下规则当前无引用，勿删以免影响其他页面 / 旧缓存。 */
 .model-composer{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:0 0 14px;padding:10px 12px;border:1px dashed var(--border);border-radius:var(--radius-sm);background:var(--surface2)}
 .model-composer .composer-input{flex:2;min-width:200px;font-family:ui-monospace,'SF Mono','Cascadia Code','Consolas',monospace;font-size:var(--fs-sm);background:var(--surface)}
 .model-composer .cost-seg{width:auto;flex-shrink:0;background:var(--surface)}
@@ -418,6 +445,9 @@ textarea{resize:vertical;min-height:88px;font-family:ui-monospace,'SF Mono','Cas
 .form-row{display:flex;gap:var(--sp-3);align-items:flex-end;margin-bottom:var(--sp-3)}
 .form-row .field{flex:1;min-width:0}
 .form-row .field label{display:block;font-size:var(--fs-base);color:var(--text2);margin-bottom:6px;font-weight:500}
+/* 调度与限额（Provider 抽屉）：两列排布 —— Token 配额行数字框占余下宽度、重置周期下拉固定窄宽；出口代理比权重更宽 */
+.form-row.quota-win-row .field-win{flex:0 0 132px}
+.form-row.proxy-row .field-proxy{flex:2}
 /* Bare .field (modal bodies without .form-row) needs the same label/stack geometry. */
 .field{min-width:0}
 .field label{display:block;font-size:var(--fs-base);color:var(--text2);margin-bottom:6px;font-weight:500}
@@ -461,11 +491,12 @@ textarea{resize:vertical;min-height:88px;font-family:ui-monospace,'SF Mono','Cas
 .model-item{display:inline-flex;align-items:center;gap:2px;margin:3px}
 .model-item .model-tag{margin:0}
 .model-group{margin:4px 0 10px}
-.model-group-head{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:var(--text2);cursor:pointer;user-select:none;padding:5px 0}
+.model-group-head{display:flex;flex-wrap:wrap;align-items:center;gap:6px;font-size:12px;font-weight:600;color:var(--text2);cursor:pointer;user-select:none;padding:5px 0}
 .model-group-head:hover{color:var(--text)}
-.model-group-caret{display:inline-block;width:12px;font-size:11px;color:var(--text3);transition:transform .15s}
+.model-group-caret{display:inline-flex;align-items:center;justify-content:center;color:var(--text3);transition:transform .15s}
+.model-group-caret .ui-ic{width:12px;height:12px}
 .model-group-head.expanded .model-group-caret{transform:rotate(90deg)}
-.model-group-count{font-size:11px;color:var(--text3);font-weight:400;background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:0 7px;line-height:16px}
+.model-group-count{font-size:11px;color:var(--text3);font-weight:400;background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:0 7px;line-height:16px;white-space:nowrap}
 .model-group-body{margin:2px 0 4px 18px}
 .warn-box{display:flex;align-items:flex-start;gap:8px;margin-top:10px;padding:10px 12px;border-radius:8px;background:var(--yellow-soft);color:var(--yellow);font-size:13px;line-height:1.5;border:1px solid var(--yellow)}
 .subtabs{display:flex;gap:2px;border:1px solid var(--border2);border-radius:10px;background:var(--surface2);padding:3px;margin-bottom:18px;width:max-content;max-width:100%;overflow-x:auto}
@@ -501,11 +532,14 @@ textarea{resize:vertical;min-height:88px;font-family:ui-monospace,'SF Mono','Cas
 .model-list{border:1px solid var(--border2);border-radius:var(--radius-sm);overflow:hidden}
 .model-list .model-group{margin:0}
 .model-list .model-group + .model-group{border-top:1px solid var(--border2)}
-.model-list .model-group-head{padding:9px 14px;margin:0}
+.model-list .model-group-head{padding:9px 14px;margin:0;font-size:13px}
 .model-list .model-group-body{margin:0}
-/* ===== 模型管理：两级分组（来源 → 厂商） ===== */
+/* ===== 模型管理：单级分组（主来源 = 提供商） ===== */
+/* 组头即主提供商：模型行直接平铺在其下方，与列头同一起点（不再为二级厂商留缩进） */
 .model-group-src-head{font-weight:700;color:var(--text)}
-.model-group-src > .model-group-body{border-left:2px solid var(--border2);padding-left:12px}
+.model-group-label{min-width:0;overflow-wrap:anywhere}
+.model-list .model-group-src > .model-group-body{border-top:1px solid var(--border2)}
+/* 二级厂商分组已停用：渲染不再产出 .model-group-vendor，以下样式仅作兼容保留 */
 .model-list .model-group-body .model-group-body{margin:2px 0 4px 14px}
 .model-group-vendor .model-group-head{font-weight:600}
 .model-row{display:grid;grid-template-columns:44px minmax(0,1fr) 84px 84px 110px 126px;align-items:center;gap:10px;padding:8px 14px;border-bottom:1px solid var(--border2);background:var(--surface);transition:background 0.15s var(--ease)}
@@ -516,13 +550,13 @@ textarea{resize:vertical;min-height:88px;font-family:ui-monospace,'SF Mono','Cas
 .model-row-cell{font-size:12px;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-variant-numeric:tabular-nums}
 .model-row-test{font-size:11px;color:var(--text2);min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .model-untested{color:var(--text3)}
-.model-col-head{display:grid;grid-template-columns:44px minmax(0,1fr) 84px 84px 110px 126px;align-items:center;gap:10px;padding:6px 14px 6px 42px;background:var(--surface2);border-bottom:1px solid var(--border);font-size:11px;font-weight:600;color:var(--text3);letter-spacing:.03em;text-transform:uppercase;border-radius:var(--radius-sm) var(--radius-sm) 0 0}
+.model-col-head{display:grid;grid-template-columns:44px minmax(0,1fr) 84px 84px 110px 126px;align-items:center;gap:10px;padding:6px 14px;background:var(--surface2);border-bottom:1px solid var(--border);font-size:11px;font-weight:600;color:var(--text3);letter-spacing:.03em;text-transform:uppercase;border-radius:var(--radius-sm) var(--radius-sm) 0 0}
 .model-col-head .model-col-actions{text-align:right}
 .model-col-sort{all:unset;cursor:pointer;display:inline-flex;align-items:center;gap:4px;font:inherit;color:inherit;padding:2px 6px;border-radius:6px}
 .model-col-sort:hover{color:var(--accent);background:var(--accent-soft)}
 .model-col-sort.active{color:var(--accent)}
 .model-col-arrow{font-size:11px}
-.model-group-fail{font-size:11px;color:var(--red);margin-left:2px}
+.model-group-fail{font-size:11px;color:var(--red);margin-left:2px;white-space:nowrap}
 .model-row-actions{display:flex;align-items:center;gap:4px;flex-shrink:0;justify-content:flex-end}
 .model-row-main{min-width:0;display:flex;flex-direction:column;align-items:flex-start;gap:3px}
 .model-row-tags{display:flex;align-items:center;gap:4px;flex-wrap:wrap;min-width:0}
@@ -589,6 +623,10 @@ textarea{resize:vertical;min-height:88px;font-family:ui-monospace,'SF Mono','Cas
 .imp-stats{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin:2px 0 4px}
 .imp-stat{display:inline-flex;align-items:center;gap:5px;color:var(--text2);font-size:12px;white-space:nowrap}
 .imp-stat b{font-size:15px;font-weight:700;color:var(--text);font-variant-numeric:tabular-nums}
+.imp-stat .imp-sub{font-size:10.5px;color:var(--text3);font-weight:400;white-space:nowrap}
+.imp-stats .imp-free .imp-sub,.imp-stats .imp-pass .imp-sub{color:inherit;opacity:.75}
+/* 兼容保留：.imp-scope-note / .imp-basis 已无引用（预览弹窗的说明段落已移除），规则保留以免影响旧缓存页面。 */
+.imp-scope-note{color:var(--text3)}
 .imp-stat.imp-add{color:var(--accent)}
 .imp-stat.imp-add b{color:var(--accent);font-size:17px}
 .imp-stat.imp-free{color:var(--green)}
@@ -599,17 +637,36 @@ textarea{resize:vertical;min-height:88px;font-family:ui-monospace,'SF Mono','Cas
 .imp-free .imp-dot{background:var(--green)}
 .imp-pass .imp-dot{background:var(--yellow)}
 .imp-sep{width:1px;height:16px;background:var(--border2);flex-shrink:0}
-/* 判定依据：全摘要条只保留一句、跟随摘要条不再占位第二屏 */
+/* 兼容保留（无引用）：摘要条下方的判定说明段落已移除，见下方 .imp-basis 规则 */
 .imp-basis{font-size:11px;color:var(--text3);display:flex;gap:4px;align-items:baseline;flex-wrap:wrap}
 .import-group-head{position:sticky;top:0;z-index:2;display:flex;align-items:center;gap:8px;padding:6px 10px;font-size:11px;font-weight:700;color:var(--text2);background:var(--surface2);border-bottom:1px solid var(--border2)}
 .import-group-count{font-variant-numeric:tabular-nums;color:var(--text3);font-weight:600}
 .import-group-tiers{margin-left:auto;font-weight:400;color:var(--text3);font-variant-numeric:tabular-nums}
 .import-basis{font-size:11px;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:220px}
 
+/* ===== 导入分级预览：把高度让给勾选列表（仅此弹窗） =====
+   标题 / 统计条 / 搜索 / 过滤 / 底部操作栏不收缩，列表 flex 填满剩余空间；
+   .modal-card-col 的 max-height 保证整体不超出视口，列表内部滚动、页脚始终可见。 */
+#importPreviewModal .modal-card{overflow-y:auto}
+#importPreviewModal .modal-title,
+#importPreviewModal #importPreviewSummary,
+#importPreviewModal .modal-search-row,
+#importPreviewModal .import-filter-row,
+#importPreviewModal .modal-actions{flex-shrink:0}
+/* 说明段落移除后收紧留白，让统计 / 搜索 / 过滤三行贴着标题 */
+#importPreviewModal #importPreviewSummary{margin-bottom:6px}
+#importPreviewModal .import-filter-row{margin-top:6px}
+#importPreviewModal .combo-picker-list{flex:1 1 auto;min-height:0;max-height:min(560px,64vh);margin-top:8px}
+/* 窄屏：列表退回普通块，卡片自身可滚动，避免列表被压到无法使用 */
+@media (max-width:760px){
+  #importPreviewModal .combo-picker-list{flex:0 1 auto;max-height:min(52vh,420px)}
+}
+
 /* 弹窗遮罩统一由 .overlay-modal / .overlay-top 提供（见弹窗层标准化区块） */
 
 .preset-group-title{position:sticky;top:0;z-index:1;background:var(--surface);padding:7px 10px;font-size:11px;font-weight:700;color:var(--text2);border-bottom:1px solid var(--border2)}
 .preset-group-title .preset-group-desc{font-weight:400;color:var(--text3);margin-left:6px}
+.preset-group-title .grp-scope{font-weight:400;color:var(--text3);margin-left:6px;font-size:10.5px}
 .preset-row{display:flex;align-items:center;gap:8px;padding:8px 10px;border-bottom:1px solid var(--border2);cursor:pointer;font-size:13px}
 .preset-row:last-child{border-bottom:none}
 .preset-row:hover{background:var(--surface2)}
@@ -712,6 +769,11 @@ textarea{resize:vertical;min-height:88px;font-family:ui-monospace,'SF Mono','Cas
 .model-chips-all{max-height:220px;overflow-y:auto}
 /* 已下架子节：与联动连接同一行语言；id 尽量不截断可点标题 */
 .delist-sub{margin-top:10px}
+.model-tag.delisted-chip{border-color:var(--red);color:var(--text);background:var(--red-soft);display:inline-flex;align-items:center;gap:4px}
+.model-tag.delisted-chip .delisted-badge{margin-left:0}
+.delist-inline-x{display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:4px;color:var(--red);flex-shrink:0}
+.delist-inline-x:hover{background:var(--red-soft);color:var(--red)}
+.delist-inline-x svg{width:12px;height:12px}
 .delist-sub .form-group-label{font-size:var(--fs-sm);font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.4px;margin:0 0 var(--sp-3);padding-bottom:6px;border-bottom:1px solid var(--border2)}
 .delist-row .mono{flex:1 1 auto;min-width:0}
 .delist-remove{margin-left:auto;flex-shrink:0}
@@ -821,6 +883,7 @@ input:focus-visible,textarea:focus-visible,select:focus-visible{outline:none}
   .tab{padding:11px 12px;font-size:13px}
   .form-row{flex-direction:column;align-items:stretch;gap:0;margin-bottom:0}
   .form-row .field{margin-bottom:14px}
+  .form-row.quota-win-row .field-win,.form-row.proxy-row .field-proxy{flex:1 1 auto}
   .form-actions,.action-row{gap:8px}
 	  table{min-width:680px}
   .section-body.flush{overflow-x:auto}
@@ -1029,6 +1092,9 @@ input:focus-visible,textarea:focus-visible,select:focus-visible{outline:none}
 .quota-meter span.ok{background:var(--green)}
 .quota-meter span.warn{background:var(--yellow)}
 .quota-meter span.bad{background:var(--red)}
+/* Token 月配额：重置说明 + 超量数字提示（复用其余 .quota-row/.quota-meter 结构） */
+.quota-reset-note{font-size:11px;color:var(--text3);margin-top:2px}
+.quota-row .quota-num.over{color:var(--red)}
 .quota-num{font-size:11px;color:var(--text3);font-variant-numeric:tabular-nums;white-space:nowrap}
 /* 健康行：紧凑微型状态（计量表在详情抽屉全尺寸渲染） */
 .heat-blocks{display:inline-flex;gap:2px;align-items:center;vertical-align:middle}
@@ -1236,3 +1302,34 @@ input:focus-visible,textarea:focus-visible,select:focus-visible{outline:none}
 .green-txt{color:var(--green)}
 .sync-title{margin:0 0 10px;font-size:18px}
 .sync-body{font-size:13px;max-height:320px;overflow-y:auto;color:var(--text);line-height:1.6}
+
+/* ===== 导入 Token 弹窗（连接池：手动 / 批量） ===== */
+.conn-imp-head .modal-sub{margin-bottom:0}
+.conn-imp-head,.conn-imp-tabs,.conn-imp-foot{flex:0 0 auto}
+.conn-imp-tabs{padding:0;margin-top:var(--sp-3)}
+.conn-imp-body{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:var(--sp-4) 0 var(--sp-1)}
+.conn-imp-body .tab-content{padding:0}
+.conn-imp-body textarea{min-height:132px}
+.conn-imp-secret{display:flex;align-items:center;gap:var(--sp-2)}
+.conn-imp-secret input{flex:1;min-width:0}
+.conn-imp-reveal{flex:0 0 auto;white-space:nowrap}
+.conn-imp-custom{margin-top:var(--sp-2)}
+.conn-imp-fileline{display:flex;align-items:center;gap:var(--sp-2);margin-top:var(--sp-2);flex-wrap:wrap}
+.conn-imp-preview{margin-top:var(--sp-2);font-size:var(--fs-sm);line-height:1.6;color:var(--text2)}
+.conn-imp-preview.err{color:var(--red)}
+.conn-imp-invalid{display:block;margin-top:2px;font-size:var(--fs-xs);color:var(--text3)}
+.conn-imp-result{margin-top:var(--sp-3)}
+.conn-imp-result:empty{display:none}
+.conn-imp-sum{display:flex;align-items:center;gap:6px;font-size:var(--fs-base);font-weight:600;color:var(--text)}
+.conn-imp-sum svg{width:14px;height:14px;flex-shrink:0}
+.conn-imp-sum.ok{color:var(--green)}
+.conn-imp-sum.warn{color:var(--yellow)}
+.conn-imp-sum.bad{color:var(--red)}
+.conn-imp-fails{margin:8px 0 0;padding:0;list-style:none;max-height:160px;overflow-y:auto;font-size:var(--fs-sm);color:var(--text2);border-top:1px solid var(--border2)}
+.conn-imp-fails li{display:flex;align-items:baseline;gap:8px;padding:6px 0;border-bottom:1px solid var(--border2);flex-wrap:wrap}
+.conn-imp-idx{color:var(--text3);flex:0 0 auto}
+.conn-imp-err{color:var(--red);min-width:0;word-break:break-word}
+.conn-imp-foot{flex-wrap:wrap}
+@media (max-width:560px){
+  .conn-imp-foot .btn{flex:1 1 auto}
+}

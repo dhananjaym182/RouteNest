@@ -36,9 +36,9 @@ func TestClassifyUpstreamModel(t *testing.T) {
 		{"unknown payload → paid", upstreamModelEntry{ID: "brand/new-thing"}, false, "pass", tierSignalPaidDefault},
 		{"free bool flag", upstreamModelEntry{ID: "vendor/x", FreeFlag: true}, false, "free", tierSignalFlagFree},
 		{"mode free field (Cline catalog style)", upstreamModelEntry{ID: "vendor/y", Mode: "Free"}, false, "free", tierSignalFlagFree},
-		{"free leading token is weak metadata", upstreamModelEntry{ID: "vendor/free-gpt-mini"}, false, "pass", tierSignalNameToken},
-		{"cline-free prefix is weak metadata", upstreamModelEntry{ID: "cline-free/gemini-3.8-flash"}, false, "pass", tierSignalNameToken},
-		{"free mid segment is weak metadata", upstreamModelEntry{ID: "vendor/model:free:vision"}, false, "pass", tierSignalNameToken},
+		{"free leading token", upstreamModelEntry{ID: "vendor/free-gpt-mini"}, false, "free", tierSignalNameToken},
+		{"cline-free prefix", upstreamModelEntry{ID: "cline-free/gemini-3.8-flash"}, false, "free", tierSignalNameToken},
+		{"free mid segment", upstreamModelEntry{ID: "vendor/model:free:vision"}, false, "free", tierSignalNameToken},
 		{"freemap substring must not match", upstreamModelEntry{ID: "vendor/freemap-search", PricingPrompt: f64(0.2), PricingComplet: f64(0.2)}, false, "pass", tierSignalPricingPaid},
 		{"explicit :free outranks list pricing", upstreamModelEntry{ID: "deepseek/deepseek-v4.1-flash:free", PricingPrompt: f64(0.2), PricingComplet: f64(0.6)}, false, "free", tierSignalSuffixFree},
 		{"-free suffix outranks list pricing", upstreamModelEntry{ID: "deepseek/deepseek-v4.1-flash-free", PricingPrompt: f64(0.2), PricingComplet: f64(0.6)}, false, "free", tierSignalSuffixFree},
@@ -154,6 +154,9 @@ func TestModelImportPreviewApplyFlow(t *testing.T) {
 	batch := prev.Data.Batch
 	if len(batch.Items) != 4 {
 		t.Fatalf("items: %+v", batch.Items)
+	}
+	if batch.Stats.Total != len(batch.Items) || batch.Stats.Protected != 2 {
+		t.Errorf("preview must carry server-computed stats: %+v", batch.Stats)
 	}
 	actions := map[string]string{}
 	for _, it := range batch.Items {
@@ -279,8 +282,8 @@ func TestSyncProviderModelsSeedsFreeSignals(t *testing.T) {
 	if m := got["old/declared-chat:free"]; m.Cost != "free" || m.TierSignal != tierSignalSuffixFree || m.TierDecidedAt == 0 {
 		t.Errorf("untiered :free entry not repaired: %+v", m)
 	}
-	if m := got["new/free-token-model"]; m.Cost != "pass" || m.TierSignal != tierSignalNameToken {
-		t.Errorf("free-token model is weak metadata, stays paid-unverified: %+v", m)
+	if m := got["new/free-token-model"]; m.Cost != "free" || m.TierSignal != tierSignalNameToken {
+		t.Errorf("new free-token model not seeded free: %+v", m)
 	}
 	if m := got["new/plain-paid"]; m.Cost != "pass" || m.TierSignal != "" {
 		t.Errorf("no-signal model should stay paid-untiered: %+v", m)

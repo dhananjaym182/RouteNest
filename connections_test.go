@@ -578,6 +578,232 @@ func TestQoderDeviceLogin(t *testing.T) {
 	})
 }
 
+// ---------- 批量导入（admin UI 批量 tab 契约） ----------
+
+type batchImportResponse struct {
+	Success bool `json:"success"`
+	Data    struct {
+		Total    int `json:"total"`
+		Imported int `json:"imported"`
+		Failed   int `json:"failed"`
+		Results  []struct {
+			Index    int    `json:"index"`
+			OK       bool   `json:"ok"`
+			ID       string `json:"id"`
+			Provider string `json:"provider"`
+			Email    string `json:"email"`
+			Error    string `json:"error"`
+		} `json:"results"`
+	} `json:"data"`
+}
+
+func postImportBatch(t *testing.T, body string) (*httptest.ResponseRecorder, batchImportResponse) {
+	t.Helper()
+	rec := httptest.NewRecorder()
+	handleConnectionImportBatch(rec, httptest.NewRequest("POST", "/admin/api/connections/import-batch", strings.NewReader(body)))
+	var out batchImportResponse
+	if rec.Code == http.StatusOK {
+		if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil {
+			t.Fatalf("decode batch response: %v (body %s)", err, rec.Body.String())
+		}
+	}
+	return rec, out
+}
+
+// 混合批次：2 条有效（不同 provider）+ 缺 token + 缺 provider，失败项不中断整批。
+func TestConnectionImportBatchMixed(t *testing.T) {
+	isolateConnections(t)
+	rec, out := postImportBatch(t, `{"items":[
+		{"provider":"kilocode","accessToken":"tok-a","email":"a@b.c"},
+		{"provider":"qoder","accessToken":"tok-b","email":"q@b.c"},
+		{"provider":"kilocode","email":"missing-token@b.c"},
+		{"accessToken":"tok-d","email":"missing-provider@b.c"}
+	]}`)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("batch code %d body %s", rec.Code, rec.Body.String())
+	}
+	if !out.Success {
+		t.Errorf("success flag false: %s", rec.Body.String())
+	}
+	if out.Data.Total != 4 || out.Data.Imported != 2 || out.Data.Failed != 2 {
+		t.Errorf("counts wrong: total=%d imported=%d failed=%d", out.Data.Total, out.Data.Imported, out.Data.Failed)
+	}
+	if len(out.Data.Results) != 4 {
+		t.Fatalf("want 4 results got %d", len(out.Data.Results))
+	}
+	for i, r := range out.Data.Results {
+		if r.Index != i {
+			t.Errorf("result %d: index %d", i, r.Index)
+		}
+	}
+	for _, i := range []int{0, 1} {
+		r := out.Data.Results[i]
+		if !r.OK || r.ID == "" || r.Error != "" {
+			t.Errorf("result %d should be ok: %+v", i, r)
+		}
+	}
+	if out.Data.Results[0].Provider != "kilocode" || out.Data.Results[0].Email != "a@b.c" {
+		t.Errorf("result 0 wrong: %+v", out.Data.Results[0])
+	}
+	if out.Data.Results[1].Provider != "qoder" || out.Data.Results[1].Email != "q@b.c" {
+		t.Errorf("result 1 wrong: %+v", out.Data.Results[1])
+	}
+	if r := out.Data.Results[2]; r.OK || r.ID != "" || r.Provider != "kilocode" || r.Error != "provider and accessToken required" {
+		t.Errorf("missing token result wrong: %+v", r)
+	}
+	if r := out.Data.Results[3]; r.OK || r.ID != "" || r.Provider != "" || r.Error != "provider and accessToken required" {
+		t.Errorf("missing provider result wrong: %+v", r)
+	}
+	connectionsMu.Lock()
+	n := len(connections)
+	connectionsMu.Unlock()
+	if n != 2 {
+		t.Errorf("want 2 persisted connections, got %d", n)
+	}
+}
+
+// 同一批内 provider+email 重复 → 两条都 ok、同一连接 id，列表只增 1。
+func TestConnectionImportBatchDedup(t *testing.T) {
+	isolateConnections(t)
+	rec, out := postImportBatch(t, `{"items":[
+		{"provider":"kilocode","accessToken":"dup-t1","email":"dup@b.c"},
+		{"provider":"kilocode","accessToken":"dup-t2","email":"dup@b.c"}
+	]}`)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("batch code %d body %s", rec.Code, rec.Body.String())
+	}
+	if out.Data.Imported != 2 || out.Data.Failed != 0 {
+		t.Fatalf("counts wrong: %+v", out.Data)
+	}
+	if len(out.Data.Results) != 2 || !out.Data.Results[0].OK || !out.Data.Results[1].OK {
+		t.Fatalf("both items should be ok: %+v", out.Data.Results)
+	}
+	if out.Data.Results[0].ID == "" || out.Data.Results[0].ID != out.Data.Results[1].ID {
+		t.Errorf("dedup should return same connection id: %q vs %q",
+			out.Data.Results[0].ID, out.Data.Results[1].ID)
+	}
+	connectionsMu.Lock()
+	n := len(connections)
+	tok := ""
+	if n > 0 {
+		tok = connections[0].AccessToken
+	}
+	connectionsMu.Unlock()
+	if n != 1 {
+		t.Errorf("dedup should add exactly 1 connection, got %d", n)
+	}
+	if tok != "dup-t2" {
+		t.Errorf("last token should win, got %q", tok)
+	}
+}
+
+// orgId（trim 后）写入 ProviderSpecificData，且 provider/accessToken 走共享语义。
+func TestConnectionImportBatchPersistsOrgID(t *testing.T) {
+	isolateConnections(t)
+	rec, out := postImportBatch(t, `{"items":[{"provider":" kilocode ","accessToken":" tok-org ","email":" o@b.c ","orgId":" org-42 "}]}`)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("batch code %d body %s", rec.Code, rec.Body.String())
+	}
+	if out.Data.Imported != 1 || len(out.Data.Results) != 1 || !out.Data.Results[0].OK {
+		t.Fatalf("item should be imported: %+v", out.Data)
+	}
+	id := out.Data.Results[0].ID
+	connectionsMu.Lock()
+	var c *Connection
+	for _, cur := range connections {
+		if cur.ID == id {
+			cp := *cur
+			c = &cp
+			break
+		}
+	}
+	connectionsMu.Unlock()
+	if c == nil {
+		t.Fatalf("connection %s not persisted", id)
+	}
+	if c.ProviderSpecificData["orgId"] != "org-42" {
+		t.Errorf("orgId not persisted: %+v", c.ProviderSpecificData)
+	}
+	if c.Provider != "kilocode" || c.Email != "o@b.c" || c.AccessToken != "tok-org" {
+		t.Errorf("trimmed fields wrong: %+v", c)
+	}
+	if c.AuthType != "import_token" || c.Status != "active" {
+		t.Errorf("authType/status wrong: %+v", c)
+	}
+}
+
+// 空/缺失 items 与超上限 → 400。
+func TestConnectionImportBatchValidation(t *testing.T) {
+	isolateConnections(t)
+	for _, body := range []string{`{"items":[]}`, `{}`, `{"items":null}`, `not-json`} {
+		rec, _ := postImportBatch(t, body)
+		if rec.Code != http.StatusBadRequest {
+			t.Errorf("body %q: want 400 got %d", body, rec.Code)
+			continue
+		}
+		var er struct {
+			Error string `json:"error"`
+		}
+		json.Unmarshal(rec.Body.Bytes(), &er)
+		if er.Error != "items required" {
+			t.Errorf("body %q: want items required, got %q", body, er.Error)
+		}
+	}
+
+	var b strings.Builder
+	b.WriteString(`{"items":[`)
+	for i := 0; i < 501; i++ {
+		if i > 0 {
+			b.WriteString(",")
+		}
+		b.WriteString(`{"provider":"kilocode","accessToken":"t"}`)
+	}
+	b.WriteString(`]}`)
+	rec, _ := postImportBatch(t, b.String())
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("501 items: want 400 got %d", rec.Code)
+	}
+	var er struct {
+		Error string `json:"error"`
+	}
+	json.Unmarshal(rec.Body.Bytes(), &er)
+	if er.Error != "too many items (max 500)" {
+		t.Errorf("501 items error = %q", er.Error)
+	}
+}
+
+// 响应体不得包含 accessToken / tokenFp 字段名或任何 token / 指纹值。
+func TestConnectionImportBatchRedactsTokens(t *testing.T) {
+	isolateConnections(t)
+	rec, _ := postImportBatch(t, `{"items":[
+		{"provider":"kilocode","accessToken":"super-secret-token","email":"s@b.c"},
+		{"provider":"kilocode","accessToken":"no-email-secret"}
+	]}`)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("batch code %d body %s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+	for _, bad := range []string{"accessToken", "tokenFp", "super-secret-token", "no-email-secret"} {
+		if strings.Contains(body, bad) {
+			t.Errorf("response leaks %q: %s", bad, body)
+		}
+	}
+	connectionsMu.Lock()
+	fp := ""
+	for _, c := range connections {
+		if c.ProviderSpecificData["tokenFp"] != "" {
+			fp = c.ProviderSpecificData["tokenFp"]
+		}
+	}
+	connectionsMu.Unlock()
+	if fp == "" {
+		t.Fatal("expected a token fingerprint for the email-less item")
+	}
+	if strings.Contains(body, fp) {
+		t.Errorf("response leaks token fingerprint %q: %s", fp, body)
+	}
+}
+
 func TestQoderExpiryMs(t *testing.T) {
 	if got := qoderExpiryMs(map[string]any{"expires_in": float64(0)}); got < time.Now().Add(23*time.Hour).UnixMilli() {
 		t.Errorf("expired lifetime should be floored to >= 1 day, got %d", got)

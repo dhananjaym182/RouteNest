@@ -21,6 +21,7 @@ type modelCooldown struct {
 type providerHealth struct {
 	Daily        int64           `json:"daily"`
 	Rpm          int             `json:"rpm"`
+	Tokens       int64           `json:"tokens"` // 本配额窗口（月/日）已归集 token 数
 	Cooldowns    []modelCooldown `json:"cooldowns"`
 	RecoveryAt   string          `json:"recoveryAt,omitempty"` // 最早恢复（排序用）
 	Rate         float64         `json:"rate"`
@@ -39,13 +40,19 @@ func providerHealthSnapshot() map[string]*providerHealth {
 	providersMu.Lock()
 	ids := make([]string, 0, len(customProviders))
 	limits := map[string]map[string]any{}
+	windows := map[string]string{} // providerID → token 配额窗口（"monthly"/"daily"）
 	cooldowns := map[string]time.Time{}
 	for k, v := range providerCooldowns {
 		cooldowns[k] = v
 	}
 	for _, p := range customProviders {
 		ids = append(ids, p.ID)
-		limits[p.ID] = map[string]any{"rpm": p.RpmLimit, "daily": p.DailyLimit}
+		window := p.TokenWindow
+		if window != "daily" {
+			window = "monthly" // 空/未知统一按月窗展示
+		}
+		windows[p.ID] = window
+		limits[p.ID] = map[string]any{"rpm": p.RpmLimit, "daily": p.DailyLimit, "tokens": p.TokenLimit, "tokenWindow": window}
 	}
 	providersMu.Unlock()
 
@@ -80,6 +87,11 @@ func providerHealthSnapshot() map[string]*providerHealth {
 	for id, days := range providerDaily {
 		if h := health(id); h != nil {
 			h.Daily = days[today]
+		}
+	}
+	for id, periods := range providerTokens {
+		if h := health(id); h != nil {
+			h.Tokens = periods[utcTokenKey(windows[id])]
 		}
 	}
 	budgetMu.Unlock()

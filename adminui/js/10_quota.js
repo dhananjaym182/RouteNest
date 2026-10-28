@@ -70,6 +70,11 @@ function renderQuotaCard(p, health) {
     cdHtml = '<div class="quota-cd-list">' + rows + '</div>' +
       '<button class="btn btn-sm" onclick="resetProviderCooldown(\'' + escAttr(p.id) + '\',\'\',this)">' + esc(t('重置全部冷却')) + '</button>';
   }
+  // Token 配额：有上限才显示重置说明；窗口（limits.tokenWindow，缺省 monthly）决定文案与计量表标签
+  // quotaMeter 的 limit=0 分支已按「未设预算」语言呈现
+  const tokWin = lim.tokenWindow === 'daily' ? 'daily' : 'monthly';
+  const tokLim = Number(lim.tokens) || 0;
+  const resetNote = tokLim > 0 ? '<div class="quota-reset-note">' + esc(t(tokWin === 'daily' ? '每天 0 点（UTC）重置' : '每月 1 日（UTC）重置')) + '</div>' : '';
   return '<div class="section quota-card">' +
     '<div class="section-title"><span>' + esc(p.name || p.id) + '</span>' +
       (p.enabled ? '' : ' <span class="model-tag">' + esc(t('已停用')) + '</span>') +
@@ -78,7 +83,8 @@ function renderQuotaCard(p, health) {
       '<div class="quota-meters">' +
         quotaMeter('每分钟请求', h.rpm, lim.rpm) +
         quotaMeter('每日请求', h.daily, lim.daily) +
-      '</div>' +
+        quotaMeter(tokWin === 'daily' ? 'Token 配额/日' : 'Token 配额/月', h.tokens, lim.tokens) +
+      '</div>' + resetNote +
       '<div class="quota-cooldowns">' +
         '<div class="quota-cd-title">' + esc(t('冷却中的模型')) + '<span class="quota-cd-count">' + cds.length + '</span></div>' +
         cdHtml +
@@ -93,12 +99,15 @@ function renderQuota() {
   const d = _quotaData;
   if (!d) { listEl.innerHTML = ''; return; }
   const st = d.stats || {};
+  // Provider 侧本月 Token 合计（health.Tokens，UTC 月内），与左侧账号累计 Token 区分开
+  const monthTokens = (d.providers || []).reduce((s, p) => s + (Number((d.health || {})[p.id] && (d.health || {})[p.id].tokens) || 0), 0);
   if (sumEl) {
     sumEl.innerHTML =
       '<div class="quota-stat"><div class="quota-stat-n">' + formatNumber(st.total || 0) + '</div><div class="quota-stat-l">' + esc(t('账号总数')) + '</div></div>' +
       '<div class="quota-stat"><div class="quota-stat-n">' + formatNumber(st.active || 0) + '</div><div class="quota-stat-l">' + esc(t('活跃账号')) + '</div></div>' +
       '<div class="quota-stat"><div class="quota-stat-n">' + formatNumber(st.usageCount || 0) + '</div><div class="quota-stat-l">' + esc(t('总请求')) + '</div></div>' +
       '<div class="quota-stat"><div class="quota-stat-n">' + formatTokenCount(st.totalTokens || 0) + '</div><div class="quota-stat-l">' + esc(t('总 Token')) + '</div></div>' +
+      '<div class="quota-stat"><div class="quota-stat-n">' + formatNumber(monthTokens) + '</div><div class="quota-stat-l">' + esc(t('本月 Provider Token')) + '</div></div>' +
       '<div class="quota-stat"><div class="quota-stat-n">' + esc(fmtDurationZh(utcMidnightCountdown())) + '</div><div class="quota-stat-l">' + esc(t('距每日预算 UTC 重置')) + '</div></div>';
   }
   const provs = d.providers || [];

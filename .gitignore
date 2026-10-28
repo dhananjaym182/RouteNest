@@ -79,3 +79,4 @@ docs/
 .freebuff/
 .qoder/
 routenest.log
+.routenest-connections.json

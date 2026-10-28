@@ -633,6 +633,7 @@ func callSingleModel(params map[string]any, entry ComboEntry, stream bool, sessi
 	ep := withModel(params, model)
 	delete(ep, servedByParam)
 	delete(ep, providerNameParam)
+	delete(ep, providerIDParam)
 
 	switch entryRouteKind(entry) {
 	case "reject":
@@ -844,6 +845,7 @@ func runCombo(params map[string]any, combo ModelCombo, stream bool, sessionID st
 			} else {
 				delete(params, servedByParam)
 				delete(params, providerNameParam)
+				delete(params, providerIDParam)
 			}
 			trace = append(trace, AttemptLog{
 				Model: m, Order: order, Upstream: upstream, Outcome: "success", DurationMs: elapsed,
@@ -890,8 +892,10 @@ func runCombo(params map[string]any, combo ModelCombo, stream bool, sessionID st
 			}
 			if v, ok := fp[providerNameParam].(string); ok {
 				params[providerNameParam] = v // free 链经 provider 服务时同步归因名
+				params[providerIDParam] = fp[providerIDParam]
 			} else {
 				delete(params, providerNameParam)
+				delete(params, providerIDParam)
 			}
 			trace = append(trace, AttemptLog{
 				Model: fm, Order: -1, Upstream: upstreamCline, Outcome: "success",

@@ -77,7 +77,7 @@ function provCardHTML(p) {
       '<div class="prov-card-head">' +
         '<div class="prov-card-title">' +
           '<button type="button" class="prov-card-name" onclick="event.stopPropagation();openProvDetail(\'' + id + '\')" title="' + t('打开详情') + '" aria-haspopup="dialog">' + esc(p.name) + '</button>' +
-          (p.free ? '<span class="green-xs">free</span>' : '') +
+          (p.free ? '<span class="green-xs" title="' + escAttr(t('整源免费标记，不代表池内每个模型都免费；逐模型计费以分级预览为准')) + '">free</span>' : '') +
           (n ? '<span class="acc-xs" title="' + t('连接池轮转派发') + '">token×' + n + '</span>' : '') +
         '</div>' +
         '<span class="prov-card-status">' + (p.enabled
@@ -145,6 +145,25 @@ function provQuotaHtml(p) {
       '<span class="quota-meter narrow"><span class="' + tone + '" style="width:' + (Math.min(1, used / rpm) * 100).toFixed(1) + '%"></span></span>' +
       '<span class="quota-num">' + used + '/' + rpm + '</span></div>';
   }
+  // Token 配额：health.Tokens = 当前窗口（UTC 月/日）用量，limits.tokens = 窗口上限（0=未设）；
+  // limits.tokenWindow = "monthly"|"daily"（缺省 monthly，与后端默认一致）
+  const tokWin = lim.tokenWindow === 'daily' ? 'daily' : 'monthly';
+  const tokLim = Number(lim.tokens) || 0;
+  const tokUsed = Number.isFinite(Number(h.tokens)) ? Math.max(0, Number(h.tokens)) : 0;
+  if (tokLim > 0) {
+    const ratio = tokUsed / tokLim;
+    // 已打满/超出 → 直接坏色调，剩余不再按梯度降级；≥70% 即告警
+    const tone = ratio >= 1 ? 'bad' : (ratio >= 0.7 ? 'warn' : 'ok');
+    const pct = Math.round(ratio * 100);
+    out += '<div class="quota-row tokens" title="' + escAttr(t(tokWin === 'daily' ? '今日 Token 已用 ' : '本月 Token 已用 ') + formatNumber(tokUsed) + '/' + formatNumber(tokLim)) + '">' +
+      '<span class="quota-label">Token</span>' +
+      '<span class="quota-meter"><span class="' + tone + '" style="width:' + (Math.min(1, ratio) * 100).toFixed(1) + '%"></span></span>' +
+      '<span class="quota-num ' + (ratio >= 1 ? 'over' : '') + '">' + formatNumber(tokUsed) + '/' + formatNumber(tokLim) + (pct >= 70 ? '（' + pct + '%）' : '') + '</span></div>';
+  } else {
+    out += '<div class="quota-row tokens" title="' + escAttr(t(tokWin === 'daily' ? '未设 Token 日配额' : '未设 Token 月配额')) + '">' +
+      '<span class="quota-label">Token</span>' +
+      '<span class="quota-num mut">—</span></div>';
+  }
   return out;
 }
 
@@ -177,10 +196,11 @@ function provMiniHealthHTML(p) {
   const daily = Number(lim.daily) || 0, rpm = Number(lim.rpm) || 0;
   const cool = (h.cooldowns || []).length;
   const dailyUsed = Number(h.daily) || 0, rpmUsed = Number(h.rpm) || 0;
+  const tok = Number(lim.tokens) || 0, tokUsed = Number(h.tokens) || 0;
   let tone = 'ok', label = '正常';
   if (cool) { tone = 'bad'; label = '冷却中'; }
   else if (!st.lastCheckedMs && st.lastError) { tone = 'bad'; label = '检测出错'; }
-  else if (daily > 0 && dailyUsed / daily >= 0.7 || rpm > 0 && rpmUsed / rpm >= 0.7 || h.rate !== undefined && h.rate < 0.5) { tone = 'warn'; label = '接近上限'; }
+  else if (daily > 0 && dailyUsed / daily >= 0.7 || rpm > 0 && rpmUsed / rpm >= 0.7 || tok > 0 && tokUsed / tok >= 0.7 || h.rate !== undefined && h.rate < 0.5) { tone = 'warn'; label = '接近上限'; }
   let html = '<span class="pmini tone-' + tone + '"><span class="pmini-dot" aria-hidden="true"></span>' + t(label) + '</span>';
   if (rpm > 0) html += ' <span class="pmini-rpm mono" title="' + escAttr(t('每分钟已用 ') + rpmUsed + '/' + rpm) + '">RPM ' + rpmUsed + '/' + rpm + '</span>';
   if (cool) html += ' <button type="button" class="chip warn cooldown-chip" onclick="event.stopPropagation();resetProviderCooldown(\'' + escAttr(p.id) + '\', \'\', this)" title="' + escAttr(t('点击清除该 Provider 全部冷却')) + '">' + uiIcon('hourglass') + ' ' + cool + ' · ' + fmtLeft(h.recoveryAt) + '</button>';
@@ -224,18 +244,25 @@ function provDetailSectionsHTML(p) {
       : '<span class="status disabled"><span class="status-dot disabled"></span>' + t('已停用') + '</span>') +
     kv('Base URL', '<span class="mono detail-clip">' + esc(p.baseURL) + '</span>') +
     kv('API Key', p.apiKey ? t('已设置') : '<span class="mut">' + t('未设置') + '</span>') +
-    kv(t('免费来源'), p.free
-      ? '<span class="model-source-badge custom">' + t('免费') + '</span>'
-      : '<span class="model-source-badge provider">' + t('付费') + '</span>') +
+    kv(t('免费来源（整源）'), p.free
+      ? '<span class="model-source-badge custom" title="' + escAttr(t('整源免费标记，不代表池内每个模型都免费；逐模型计费以分级预览为准')) + '">' + t('整源免费') + '</span>'
+      : '<span class="model-source-badge provider" title="' + escAttr(t('整源按付费标记；池内个别模型仍可能被判定为免费')) + '">' + t('整源付费') + '</span>') +
     kv(t('优先级'), esc(String(p.priority))) +
     kv(t('权重'), esc(String(p.weight))) +
     kv(t('代理'), p.proxyUrl ? '<span class="mono detail-clip">' + esc(p.proxyUrl) + '</span>' : '<span class="mut">' + t('未设置') + '</span>') +
     kv(t('创建时间'), p.createdAt ? esc(new Date(p.createdAt).toLocaleString(LC())) : '<span class="mut">—</span>');
 
-  // §2 模型：全量芯片 + 待审计数
+  // §2 模型：全量芯片 + 待审计数；已下架模型就地标记并提供一键移除
   const totalModes = (p.modelIds || []).length;
+  const delistedSet = {};
+  ((_provDelisted && _provDelisted[p.name || '']) || []).forEach(r => { delistedSet[r.id] = true; });
   const models = '<div class="model-chips model-chips-all">' +
-      (p.modelIds || []).map(m => '<span class="model-tag chip-clip" title="' + escAttr(m) + '">' + esc(m) + '</span>').join('') +
+      (p.modelIds || []).map(m => delistedSet[m]
+        ? '<span class="model-tag chip-clip delisted-chip" title="' + escAttr(t('已从上游官方列表移除，实测可能仍可用；同步只标记不删除，上游报模型不存在时自动清理')) + '">' +
+            esc(m) + ' <span class="delisted-badge">' + t('已下架') + '</span>' +
+            '<a href="javascript:void(0)" class="delist-inline-x" onclick="removeProvDelistedModel(\'' + escAttrJS(m) + '\')" title="' + escAttr(t('移除')) + '" aria-label="' + escAttr(t('移除') + ' ' + m) + '">' + uiIcon('close') + '</a>' +
+          '</span>'
+        : '<span class="model-tag chip-clip" title="' + escAttr(m) + '">' + esc(m) + '</span>').join('') +
     '</div>' +
     '<div class="detail-meta">' +
       '<span class="hint-xs">' + totalModes + t(' 个模型') + '</span>' +
@@ -612,6 +639,8 @@ async function toggleProvider(id, enable, btn) {
 function showProviderEditor(p) {
   _editingProviderId = p ? p.id : '';
   _previewAfterSave = false;
+  // 切换编辑对象 = 新上下文：丢弃上一轮的预览批次缓存（池/源变化后不得复用旧统计）
+  invalidateImportPreviewCache();
   const adv = _('provModelsAdv');
   if (adv) adv.style.display = 'none';
   const title = _('providerEditorTitle');
@@ -634,6 +663,18 @@ function showProviderEditor(p) {
   openDrawer('providerEditor');
 }
 
+// Token 配额窗口联动：数字框 label/tooltip 与配额提示行随「重置周期」（月度/每日）切换
+function syncProvTokenWindowUI() {
+  const win = _('provTokenWindow') && _('provTokenWindow').value === 'daily' ? 'daily' : 'monthly';
+  const lab = _('provTokenLimitLabel');
+  if (lab) {
+    lab.textContent = t(win === 'daily' ? 'Token 配额/日' : 'Token 配额/月');
+    lab.title = t(win === 'daily' ? '每日 Token 上限（如 10000000 = 10M），0=不限' : '月度 Token 上限（如 10000000 = 10M），0=不限');
+  }
+  const hint = _('provQuotaWinHint');
+  if (hint) hint.textContent = t(win === 'daily' ? 'Token 配额按每日重置（每天 0 点 UTC），0=不限。' : 'Token 配额按月度重置（每月 1 日 UTC），0=不限。');
+}
+
 // 表单字段回填（showProviderEditor 与「放弃更改」共用）
 function applyProviderForm(p) {
   _('provName').value = p ? p.name : '';
@@ -643,6 +684,9 @@ function applyProviderForm(p) {
   _('provTimeout').value = p ? (p.timeoutSec || 300) : 300;
   _('provRpmLimit').value = p ? (p.rpmLimit || 0) : 0;
   _('provDailyLimit').value = p ? (p.dailyRequestLimit || 0) : 0;
+  _('provTokenLimit').value = p ? (p.tokenLimit || 0) : 0;
+  // tokenWindow 后端缺省 monthly；仅接受显式 "daily"
+  _('provTokenWindow').value = p && p.tokenWindow === 'daily' ? 'daily' : 'monthly';
   _('provProxyUrl').value = p ? (p.proxyUrl || '') : '';
   _('provWeight').value = p ? (p.weight || 0) : 0;
   _('provModels').value = p ? (p.modelIds || []).join(', ') : '';
@@ -651,13 +695,14 @@ function applyProviderForm(p) {
   // 手动新建默认付费：整源标 free 会把付费模型误标为免费（审计 §9.2）；free 来源应由预设/导入按模型判定
   _('provFree').value = p ? String(!!p.free) : 'false';
   initConnPick(p ? (p.connectionIds && p.connectionIds.length ? p.connectionIds : (p.connectionId ? [p.connectionId] : [])) : []);
+  syncProvTokenWindowUI();
   renderProvModelChips();
 }
 
 // 脏检查基线：稳定 ASCII 键（切语言不影响快照）；展示时再经 PROV_FIELD_LABELS 本地化
 const PROV_FIELD_LABELS = {
   name: '名称', baseURL: 'Base URL', apiKey: 'API Key', priority: '优先级', timeoutSec: '超时(秒)',
-  rpmLimit: '分钟请求上限', dailyLimit: '每日请求上限', proxyUrl: '出口代理', weight: '权重',
+  rpmLimit: '分钟请求上限', dailyLimit: '每日请求上限', tokenLimit: 'Token 配额/月', tokenWindow: '重置周期', proxyUrl: '出口代理', weight: '权重',
   models: '模型', headers: '自定义请求头', enabled: '启用', free: '免费来源', connections: '连接池',
 };
 function serializeProvForm() {
@@ -669,6 +714,8 @@ function serializeProvForm() {
     timeoutSec: _('provTimeout').value,
     rpmLimit: _('provRpmLimit').value,
     dailyLimit: _('provDailyLimit').value,
+    tokenLimit: _('provTokenLimit').value,
+    tokenWindow: _('provTokenWindow').value === 'daily' ? 'daily' : 'monthly',
     proxyUrl: _('provProxyUrl').value.trim(),
     weight: _('provWeight').value,
     models: _('provModels').value.split(',').map(s => s.trim()).filter(Boolean).join(', '),
@@ -683,8 +730,13 @@ let _provBaseJson = '';
 function rebaselineProvForm() { _provBaseJson = JSON.stringify(serializeProvForm()); }
 function provFormDirty() { return JSON.stringify(serializeProvForm()) !== _provBaseJson; }
 function provFormChanges() {
+  // tokenLimit 的展示名随窗口变化（月→「Token 配额/月」，日→「Token 配额/日」）
+  const winDaily = _('provTokenWindow') && _('provTokenWindow').value === 'daily';
   return diffFlat(JSON.parse(_provBaseJson || '{}'), serializeProvForm())
-    .map(ch => ({ label: t(PROV_FIELD_LABELS[ch.label] || ch.label), from: ch.from, to: ch.to }));
+    .map(ch => ({
+      label: t(ch.label === 'tokenLimit' && winDaily ? 'Token 配额/日' : (PROV_FIELD_LABELS[ch.label] || ch.label)),
+      from: ch.from, to: ch.to,
+    }));
 }
 function discardProviderForm() {
   applyProviderForm(_provBaseData);
@@ -717,12 +769,20 @@ function removeProvModel(id) {
 function toggleProvModelsAdv() {
   const d = _('provModelsAdv');
   if (!d) return;
-  const open = d.style.display !== 'none';
-  d.style.display = open ? 'none' : '';
+  const open = d.style.display !== 'none' && d.style.display !== '';
+  // .adv-body CSS 默认 display:none，展开必须显式设为 block（设 '' 会落回 CSS 的 none）
+  d.style.display = open ? 'none' : 'block';
   if (!open) { try { _('provModels').focus(); } catch (e) {} }
 }
 
 async function saveProvider(btn) {
+  // Token 配额：int64（可达 10^12）超出 parseInt 安全解析习惯，用 Number；空=0，非数值/负数校验拦截
+  const tokenRaw = _('provTokenLimit').value.trim();
+  const tokenNum = tokenRaw === '' ? 0 : Number(tokenRaw);
+  if (!Number.isFinite(tokenNum) || tokenNum < 0) {
+    toast(t(_('provTokenWindow').value === 'daily' ? 'Token 配额/日需为 ≥0 的整数' : 'Token 配额/月需为 ≥0 的整数'), 'error');
+    return;
+  }
   const payload = {
     id: _editingProviderId,
     name: _('provName').value.trim(),
@@ -732,6 +792,9 @@ async function saveProvider(btn) {
     timeoutSec: parseInt(_('provTimeout').value, 10) || 300,
     rpmLimit: parseInt(_('provRpmLimit').value, 10) || 0,
     dailyRequestLimit: parseInt(_('provDailyLimit').value, 10) || 0,
+    tokenLimit: Math.floor(tokenNum),
+    // 契约：tokenWindow = "monthly"|"daily"，后端缺省 monthly
+    tokenWindow: _('provTokenWindow').value === 'daily' ? 'daily' : 'monthly',
     proxyUrl: _('provProxyUrl').value.trim(),
     weight: parseInt(_('provWeight').value, 10) || 0,
     modelIds: _('provModels').value.split(',').map(s => s.trim()).filter(Boolean),
@@ -755,6 +818,8 @@ async function saveProvider(btn) {
     toast(t('Provider 已保存'), 'success');
     hideProviderEditor();
     loadProviders();
+    // 保存后池状态已变：先失效预览缓存，再按需重新拉取（不能复用保存前的批次）
+    invalidateImportPreviewCache();
     // 从免费/免密钥预设新建后，自动跑一次分级预览，弹出勾选导入（仍受控，不静默写入）
     if (isNew && _previewAfterSave) {
       const newId = d && d.data && d.data.provider && d.data.provider.id;
@@ -765,6 +830,7 @@ async function saveProvider(btn) {
           const pr = pd.data || {};
           if (!pr.error && pr.batch) {
             _importBatch = pr.batch;
+            importPreviewCacheSet('id:' + newId, pr.batch);
             renderImportPreviewList();
             _('importPreviewModal').style.display = 'flex';
           }
@@ -788,6 +854,7 @@ async function deleteProvider(id) {
     await api('POST', '/providers/delete', { id });
     delete _provRowResults['test:' + id];
     delete _provRowResults['recheck:' + id];
+    invalidateImportPreviewCache('id:' + id);
     toast(t('已删除'), 'success');
     loadProviders();
   } catch (e) { toast(t('删除失败: ') + e.message, 'error'); }
@@ -861,6 +928,7 @@ let _provPickerModels = [];   // 上游返回的全部模型 id（服务端已�
 let _provPickerTiers = {};    // id → 'free' | 其他（来自分级预览的有序信号判定）
 let _provPickerOrder = [];    // 勾选顺序（确认后即追加顺序）
 let _provPickerExisting = {}; // 编辑器中已有的模型 id（预勾选且禁用，确认时跳过）
+let _provPickerStats = null;  // 本批次服务端 stats（免费/付费全量口径，与导入预览同一批次）
 
 // 已有 Provider 用 {id}（服务端补全 baseURL/key/headers）；新建直接传表单未保存值
 function provEditorPayload() {
@@ -881,19 +949,33 @@ async function fetchProviderModels(btn) {
   const out = _('provTestResult');
   if (out) out.innerHTML = '';
   try {
-    // 分级预览端点一次给回 id + free/paid 判定（pricing/后缀/白名单/整源免费有序信号）
-    const d = await api('POST', '/models/import/preview', payload);
-    const r = d.data || {};
-    const items = ((r.batch && r.batch.items) || []).filter(it => it && it.modelId);
+    // 与导入预览共用同一批次：同一 Provider/草稿在 60s 内已预览过就直接复用，
+    // 保证选择器与导入预览的免费/付费数完全一致（不再各自拉一次上游）。
+    const key = importPreviewCacheKey(payload);
+    let batch = importPreviewCacheGet(key);
+    if (!batch) {
+      // 分级预览端点一次给回 id + free/paid 判定（pricing/后缀/白名单/整源免费有序信号）
+      const d = await api('POST', '/models/import/preview', payload);
+      const r = d.data || {};
+      batch = r.batch;
+      if (!batch) {
+        // 上游失败（HTTP 200 + {error}）：不是 API 错误，就地提示排查 Base URL / Key
+        if (out) out.innerHTML = renderTestResultHTML(false,
+          t('未获取到模型：请先检查 Base URL 与 API Key') + (r.error ? ' — ' + r.error : ''));
+        return;
+      }
+      importPreviewCacheSet(key, batch);
+    }
+    const items = ((batch && batch.items) || []).filter(it => it && it.modelId);
     if (!items.length) {
-      // 上游失败（HTTP 200 + {error}）：不是 API 错误，就地提示排查 Base URL / Key
       if (out) out.innerHTML = renderTestResultHTML(false,
-        t('未获取到模型：请先检查 Base URL 与 API Key') + (r.error ? ' — ' + r.error : ''));
+        t('未获取到模型：请先检查 Base URL 与 API Key'));
       return;
     }
     _provPickerModels = Array.from(new Set(items.map(it => it.modelId)));
     _provPickerTiers = {};
     items.forEach(it => { _provPickerTiers[it.modelId] = it.tier; });
+    _provPickerStats = importStatsFromBatch(batch);
     _provPickerOrder = [];
     _provPickerExisting = {};
     _('provModels').value.split(',').map(s => s.trim()).filter(Boolean).forEach(id => { _provPickerExisting[id] = true; });
@@ -966,14 +1048,20 @@ function renderProvPickerList() {
       (rank !== -1 ? '<span class="combo-pick-rank" title="' + t('勾选顺序即尝试优先级') + '">#' + (rank + 1) + '</span>' : '') +
     '</label>';
   };
-  const groupTitle = (label, n, tier) =>
-    '<div class="preset-group-title">' + label + ' · ' + n +
+  const groupTitle = (label, n, tier, total) =>
+    '<div class="preset-group-title">' + label + ' ' + n + (total > n ? ' / ' + total : '') +
+    '<span class="grp-scope">' + t('（全部可拉取）') + '</span>' +
     '<button type="button" class="btn btn-sm float-note" onclick="event.preventDefault();provPickerSelectAllTier(\'' + tier + '\')">' + t('全选') + '</button></div>';
   const freeIds = visible.filter(id => _provPickerTiers[id] === 'free');
   const paidIds = visible.filter(id => _provPickerTiers[id] !== 'free');
+  const localFree = _provPickerModels.filter(id => _provPickerTiers[id] === 'free').length;
+  const localPaid = _provPickerModels.length - localFree;
+  const st = _provPickerStats || {};
+  const totalFree = Number.isFinite(Number(st.free)) ? Number(st.free) : localFree;
+  const totalPaid = Number.isFinite(Number(st.paid)) ? Number(st.paid) : localPaid;
   box.innerHTML =
-    (freeIds.length ? groupTitle(t('免费'), freeIds.length, 'free') + freeIds.map(row).join('') : '') +
-    (paidIds.length ? groupTitle(t('付费'), paidIds.length, 'pass') + paidIds.map(row).join('') : '');
+    (freeIds.length ? groupTitle(t('免费'), freeIds.length, 'free', totalFree) + freeIds.map(row).join('') : '') +
+    (paidIds.length ? groupTitle(t('付费'), paidIds.length, 'pass', totalPaid) + paidIds.map(row).join('') : '');
   box.scrollTop = scrollTop;
   renderProvPickerCount();
 }
@@ -982,8 +1070,9 @@ function renderProvPickerCount() {
   const el = _('provPickerCount');
   if (!el) return;
   const nFree = _provPickerOrder.filter(id => _provPickerTiers[id] === 'free').length;
+  // 这里统计的是「勾选里」的免费数，与批次全量免费数区分开
   el.textContent = t('已选 ') + _provPickerOrder.length + ' / ' + _provPickerModels.length + t(' 个模型') +
-    (nFree ? ' · ' + nFree + ' ' + t('免费') : '');
+    (nFree ? ' · ' + t('勾选中免费') + ' ' + nFree : '');
 }
 
 // 确认：写入「模型 ID」真值（隐藏的高级输入框），芯片即时回显
@@ -1131,16 +1220,98 @@ let _importActionFilter = '';
 // 计费筛选：''|'free'|'paid' — 与操作筛选(AND)与搜索(AND)三者取交集
 let _importTierFilter = '';
 
+// 预览批次短缓存：选择模型弹窗（fetchProviderModels）与导入预览共用同一批次，
+// 避免两次拉取（池状态变化 / 上游抖动）给出不一致的免费/付费数。
+// key = id:<providerId>（已有 Provider）或 draft:<baseURL>|free:<0|1>（未保存草稿），TTL 60s；
+// 保存 Provider / 切换编辑对象 / 导入落盘后主动失效。
+const IMPORT_PREVIEW_TTL_MS = 60000;
+const _importPreviewCache = {}; // key -> { batch, ts }
+
+function importPreviewCacheKey(payload) {
+  if (payload && payload.id) return 'id:' + payload.id;
+  const url = String((payload && payload.baseURL) || '').trim().replace(/\/+$/, '').toLowerCase();
+  return 'draft:' + url + '|free:' + (payload && payload.free === true ? '1' : '0');
+}
+function importPreviewCacheGet(key) {
+  const hit = _importPreviewCache[key];
+  if (!hit) return null;
+  if (Date.now() - hit.ts > IMPORT_PREVIEW_TTL_MS) { delete _importPreviewCache[key]; return null; }
+  return hit.batch || null;
+}
+function importPreviewCacheSet(key, batch) {
+  if (key && batch) _importPreviewCache[key] = { batch: batch, ts: Date.now() };
+}
+function invalidateImportPreviewCache(key) {
+  if (key) { delete _importPreviewCache[key]; return; }
+  Object.keys(_importPreviewCache).forEach(k => { delete _importPreviewCache[k]; });
+}
+
+// 本地兜底统计：仅当服务端 batch.stats 缺失/不完整时用来补齐，字段口径与 Go 侧 BatchStats 一致。
+function computeImportStats(items) {
+  const s = {
+    total: 0, free: 0, paid: 0,
+    add: 0, addFree: 0, addPaid: 0,
+    tierChange: 0, tierChangeFree: 0, tierChangePaid: 0,
+    noChange: 0, protected: 0,
+    selectable: 0, selectableFree: 0, selectablePaid: 0,
+  };
+  (items || []).forEach(it => {
+    if (!it) return;
+    const free = it.tier === 'free';
+    s.total++;
+    if (free) s.free++; else s.paid++;
+    switch (it.action) {
+      case 'add':
+        s.add++; if (free) s.addFree++; else s.addPaid++;
+        break;
+      case 'tier_change':
+        s.tierChange++; if (free) s.tierChangeFree++; else s.tierChangePaid++;
+        break;
+      case 'nochange': s.noChange++; break;
+      case 'protected': s.protected++; break;
+    }
+  });
+  s.selectable = s.add + s.tierChange;
+  s.selectableFree = s.addFree + s.tierChangeFree;
+  s.selectablePaid = s.addPaid + s.tierChangePaid;
+  return s;
+}
+
+// 服务端 stats 优先；缺失字段用本地同口径值补齐（不回退整个对象，避免部分字段缺失时数字跳变）。
+function importStatsFromBatch(batch) {
+  const items = (batch && batch.items) || [];
+  const local = computeImportStats(items);
+  const src = batch && batch.stats;
+  if (!src || typeof src !== 'object') return local;
+  const num = (v, d) => (v === null || v === undefined || v === '' || !Number.isFinite(Number(v)) ? d : Number(v));
+  return {
+    total: num(src.total, local.total),
+    free: num(src.free, local.free),
+    paid: num(src.paid, local.paid),
+    add: num(src.add, local.add),
+    addFree: num(src.addFree, local.addFree),
+    addPaid: num(src.addPaid, local.addPaid),
+    tierChange: num(src.tierChange, local.tierChange),
+    tierChangeFree: num(src.tierChangeFree, local.tierChangeFree),
+    tierChangePaid: num(src.tierChangePaid, local.tierChangePaid),
+    noChange: num(src.noChange, local.noChange),
+    protected: num(src.protected, local.protected),
+    selectable: num(src.selectable, local.selectable),
+    selectableFree: num(src.selectableFree, local.selectableFree),
+    selectablePaid: num(src.selectablePaid, local.selectablePaid),
+  };
+}
+
 // Per-signal explanation shown as the row tooltip, so the tier basis is explicit
 // instead of just a badge ("free"/"paid") with no justification.
 const _tierSignalWhy = {
   'pricing-zero': '上游返回 prompt/completion 价格为 0',
   'flag-free': '上游返回 free 标志或 mode=free',
   'suffix-free': '模型 id 以 :free 或 -free 结尾',
-  'name-token-free': '模型 id 含独立的 free 词段（弱信号，不授予免费）',
-  'display-name-free': '模型显示名含 free 词段（弱信号，不授予免费）',
+  'name-token-free': '模型 id 含独立的 free 词段',
+  'display-name-free': '模型显示名含 free 词段',
   'allowlist': '免费标签或内置白名单命中',
-  'provider-free': '整个 Provider 标记为免费，但无逐模型证据（元数据，不授予免费）',
+  'provider-free': '整个 Provider 标记为免费',
   'pricing-paid': '上游定价非零 → 付费',
   'paid-default': '没有任何免费信号，保守归为付费',
 };
@@ -1154,30 +1325,37 @@ function tierBadge(tier) {
     ? '<span class="model-source-badge custom">' + t('免费') + '</span>'
     : '<span class="model-source-badge provider">' + t('付费') + '</span>';
 }
-function tierSplit(items) {
-  const free = items.filter(x => x.tier === 'free').length;
-  return t('免费') + ' ' + free + ' · ' + t('付费') + ' ' + (items.length - free);
+// 批次摘要条：全部/免费/付费 + 新增/层级变化/无变化/受保护，全部数字取服务端 batch.stats。
+// 免费/付费明确标注「全部」（不是只统计新增），新增/层级变化的括号内是该组免费数。
+function importSummaryHTML(st) {
+  const stat = (label, n, cls, title, sub) =>
+    '<span class="imp-stat' + (cls ? ' ' + cls : '') + '" role="listitem"' +
+    (title ? ' title="' + escAttr(title) + '"' : '') + '>' +
+    label + '<b>' + n + '</b>' + (sub ? '<span class="imp-sub">' + sub + '</span>' : '') + '</span>';
+  const subFree = n => '<span class="imp-sub">' + t('· 免费 ') + n + '</span>';
+  return '<div class="imp-stats" role="list" aria-label="' + t('批次统计') + '">' +
+    stat(t('全部'), st.total, '', t('批次内全部条目')) +
+    '<span class="imp-sep" aria-hidden="true"></span>' +
+    '<span class="imp-stat imp-free" role="listitem" title="' + escAttr(t('全部条目中免费的数量（不是仅新增）')) + '">' +
+      '<span class="imp-dot" aria-hidden="true"></span>' + t('免费') + '<b>' + st.free + '</b><span class="imp-sub">' + t('（全部）') + '</span></span>' +
+    '<span class="imp-stat imp-pass" role="listitem" title="' + escAttr(t('全部条目中付费的数量（不是仅新增）')) + '">' +
+      '<span class="imp-dot" aria-hidden="true"></span>' + t('付费') + '<b>' + st.paid + '</b><span class="imp-sub">' + t('（全部）') + '</span></span>' +
+    '<span class="imp-sep" aria-hidden="true"></span>' +
+    stat(t('新增'), st.add, 'imp-add', t('可导入的新模型'), subFree(st.addFree)) +
+    stat(t('层级变化'), st.tierChange, '', t('可导入的层级变化'), subFree(st.tierChangeFree)) +
+    stat(t('无变化'), st.noChange, '', t('已在池内且层级一致')) +
+    stat(t('受保护'), st.protected, '', t('池内已存在且受保护，导入不会改动')) +
+  '</div>';
 }
 
-// 批次摘要条：新增突出 + 免费/付费双色统计 + 其余操作数；判定依据只在一处一句话说明
-// （基线 tier 由服务端分类给回，前端不做重算，只显示）。
-function importSummaryHTML(items) {
-  const cnt = a => items.filter(x => x.action === a).length;
-  const freeN = items.filter(x => x.tier === 'free').length;
-  const stat = (label, n, cls) =>
-    '<span class="imp-stat' + (cls ? ' ' + cls : '') + '"><b>' + n + '</b>' + label + '</span>';
-  return '<div class="imp-stats" role="list" aria-label="' + t('批次统计') + '">' +
-    stat(t('新增'), cnt('add'), 'imp-add') +
-    '<span class="imp-sep" aria-hidden="true"></span>' +
-    '<span class="imp-stat imp-free" role="listitem"><span class="imp-dot" aria-hidden="true"></span><b>' + freeN + '</b>' + t('免费') + '</span>' +
-    '<span class="imp-stat imp-pass" role="listitem"><span class="imp-dot" aria-hidden="true"></span><b>' + (items.length - freeN) + '</b>' + t('付费') + '</span>' +
-    '<span class="imp-sep" aria-hidden="true"></span>' +
-    stat(t('层级变化'), cnt('tier_change'), '') +
-    stat(t('无变化'), cnt('nochange'), '') +
-    stat(t('受保护'), cnt('protected'), '') +
-  '</div>' +
-  '<div class="imp-basis">' +
-    '<span>' + t('批次判定只来自服务端信号：定价为零 / free 标志 / :free、:paid 后缀；悬停任一行可见具体依据') + '</span></div>';
+// 分组表头计数：add/tier_change 直接取 stats 的组内 total/免费/付费；
+// nochange/protected 的 total 取 stats，免费/付费拆分按本组行计算（仅用于组内展示）。
+function importGroupStats(action, st, rows) {
+  if (action === 'add') return { total: st.add, free: st.addFree, paid: st.addPaid };
+  if (action === 'tier_change') return { total: st.tierChange, free: st.tierChangeFree, paid: st.tierChangePaid };
+  const total = action === 'nochange' ? st.noChange : st.protected;
+  const free = (rows || []).filter(x => x && x.tier === 'free').length;
+  return { total: total, free: free, paid: Math.max(0, total - free) };
 }
 
 async function previewModelImport(btn) {
@@ -1187,6 +1365,14 @@ async function previewModelImport(btn) {
         headers: parseHeaderText(_('provHeaders').value),
         free: _('provFree').value === 'true', name: _('provName').value.trim() };
   if (!_editingProviderId && !body.baseURL) { toast(t('请先填写 Base URL'), 'info'); return; }
+  const key = importPreviewCacheKey(body);
+  const cached = importPreviewCacheGet(key);
+  if (cached) {
+    _importBatch = cached;
+    renderImportPreviewList();
+    _('importPreviewModal').style.display = 'flex';
+    return;
+  }
   const orig = btn ? btn.innerHTML : '';
   if (btn) { btn.disabled = true; btn.innerHTML = '<span class="loading"></span> ' + t('扫描中...'); }
   try {
@@ -1194,6 +1380,7 @@ async function previewModelImport(btn) {
     const r = d.data || {};
     if (r.error) { toast(t('上游拉取失败') + ': ' + r.error, 'error'); return; }
     _importBatch = r.batch;
+    importPreviewCacheSet(key, _importBatch);
     renderImportPreviewList();
     _('importPreviewModal').style.display = 'flex';
   } catch (e) {
@@ -1215,21 +1402,27 @@ function closeImportPreview() {
 
 function renderImportPreviewList() {
   const items = (_importBatch && _importBatch.items) || [];
-  const freeN = items.filter(x => x.tier === 'free').length;
+  const st = importStatsFromBatch(_importBatch);
   _('importPreviewProv').textContent = _importBatch ? _importBatch.providerName : '';
   _('importPreviewSummary').innerHTML = items.length
-    ? importSummaryHTML(items)
+    ? importSummaryHTML(st)
     : '<div class="empty">' + t('没有可导入的模型') + '</div>';
   _importActionFilter = '';
   _importTierFilter = '';
   document.querySelectorAll('.import-act-filter').forEach(b => b.classList.toggle('active', !b.dataset.act));
   document.querySelectorAll('.import-tier-filter').forEach(b => b.classList.toggle('active', !b.dataset.tier));
+  // 计费 chip 数字：批次 stats 的全量免费/付费（不是当前筛选结果）
   const tcF = _('tierCntFree'), tcP = _('tierCntPaid');
-  if (tcF) tcF.textContent = freeN;
-  if (tcP) tcP.textContent = items.length - freeN;
+  if (tcF) tcF.textContent = st.free;
+  if (tcP) tcP.textContent = st.paid;
+  const chipF = document.querySelector('.import-tier-filter[data-tier="free"]');
+  const chipP = document.querySelector('.import-tier-filter[data-tier="paid"]');
+  if (chipF) chipF.title = t('免费') + ': ' + st.free + ' / ' + st.total + ' ' + t('全部条目');
+  if (chipP) chipP.title = t('付费') + ': ' + st.paid + ' / ' + st.total + ' ' + t('全部条目');
   if (!items.length) {
     _('importPreviewList').innerHTML = '<div class="empty">' + t('没有可导入的模型') + '</div>';
     _('importPreviewCount').textContent = '';
+    updateImportSelectFreeLabel();
     return;
   }
   // Fresh batch: clear any filter from the previous preview.
@@ -1247,9 +1440,10 @@ function renderImportPreviewList() {
     const rows = items.filter(it => it.action === g.action);
     if (!rows.length) return '';
     rows.sort((a, b) => String(a.modelId).localeCompare(String(b.modelId)));
-    const head = '<div class="import-group-head">' + g.label +
-      ' <span class="import-group-count">' + rows.length + '</span>' +
-      ' <span class="import-group-tiers">' + tierSplit(rows) + '</span></div>';
+    const gs = importGroupStats(g.action, st, rows);
+    const head = '<div class="import-group-head" title="' + escAttr(t('本组计数，与批次统计同口径')) + '">' + g.label +
+      ' <span class="import-group-count">' + gs.total + '</span>' +
+      ' <span class="import-group-tiers">' + t('组内免费') + ' ' + gs.free + ' · ' + t('付费') + ' ' + gs.paid + '</span></div>';
     const body = rows.map(it => {
       const selectable = it.action === 'add' || it.action === 'tier_change';
       const why = tierBasisTitle(it);
@@ -1270,9 +1464,44 @@ function renderImportPreviewList() {
   updateImportCount();
 }
 
+function importFilterActive() {
+  const q = ((_('importPreviewSearch') || {}).value || '').trim();
+  return !!(q || _importActionFilter || _importTierFilter);
+}
+
+// 当前可见且可勾选的免费行数（仅用于筛选态下按钮标签，避免按钮承诺一个当前看不到的数字）
+function visibleSelectableFreeCount() {
+  let n = 0;
+  document.querySelectorAll('#importPreviewList .import-approve').forEach(cb => {
+    if (cb.disabled) return;
+    const row = cb.closest('.combo-pick-row');
+    if (row && row.style.display === 'none') return;
+    if (row && row.dataset.tier !== 'free') return;
+    n++;
+  });
+  return n;
+}
+
+// 「只选免费」标签：无筛选 → stats.selectableFree（全部可导入免费数）；
+// 有筛选 → 当前可见可勾选免费数（操作仍是只作用于可见行，标签必须同步）。
+function updateImportSelectFreeLabel() {
+  const btn = _('importSelectFreeBtn');
+  if (!btn) return;
+  const st = importStatsFromBatch(_importBatch);
+  const filtered = importFilterActive();
+  const n = filtered ? visibleSelectableFreeCount() : st.selectableFree;
+  btn.textContent = filtered
+    ? t('只选免费') + '·' + t('当前') + ' ' + n
+    : t('只选免费') + ' (' + n + ')';
+}
+
 function updateImportCount() {
   const n = document.querySelectorAll('#importPreviewList .import-approve:checked').length;
-  _('importPreviewCount').textContent = n + ' ' + t('个已选');
+  const st = importStatsFromBatch(_importBatch);
+  // stats 缺失时用 DOM 里实际可勾选行数兜底；stats.selectable = add + tier_change
+  const selectable = st.total ? st.selectable : document.querySelectorAll('#importPreviewList .import-approve:not([disabled])').length;
+  _('importPreviewCount').textContent = n + t('个已选') + ' / ' + selectable + t('个可导入');
+  updateImportSelectFreeLabel();
 }
 
 // Hide/show preview rows by id substring and/or action group and/or tier —
@@ -1295,9 +1524,11 @@ function filterImportPreview() {
     group.style.display = groupShown ? '' : 'none';
     shown += groupShown;
   });
-  const total = (_importBatch && _importBatch.items.length) || 0;
+  const st = importStatsFromBatch(_importBatch);
+  const total = st.total;
   const matchEl = _('importPreviewMatch');
   if (matchEl) matchEl.textContent = (q || act || tier) ? shown + ' / ' + total : '';
+  updateImportSelectFreeLabel();
 }
 
 // Action-group filter (all / add / tier_change / nochange / protected).
@@ -1351,6 +1582,7 @@ async function importPreviewApply(btn) {
     renderProvModelChips();
     closeImportPreview();
     _importBatch = null;
+    invalidateImportPreviewCache();
     toast(t('所选模型已并入，正在保存 Provider...'), 'info');
     await saveProvider(null);
     return;
@@ -1363,6 +1595,7 @@ async function importPreviewApply(btn) {
     toast(t('已导入 ') + (r.added || 0) + t(' 个新模型，调整 ') + (r.changed || 0) + t(' 个层级'), 'success');
     closeImportPreview();
     _importBatch = null;
+    invalidateImportPreviewCache();
     loadProviders();
     loadModels();
   } catch (e) {
@@ -1398,8 +1631,9 @@ async function loadConnections() {
   }
   renderConnectionProviders();
   renderConnectionsList();
-  const dl = _('connProviderList');
-  if (dl) dl.innerHTML = _connFlows.map(p => '<option value="' + esc(p) + '" label="' + esc(flowLabel(p)) + '">').join('');
+  // 导入弹窗的 Provider 下拉随连接列表刷新（流程 / 已有连接分组可能变化）
+  const imp = _('connImportModal');
+  if (imp && imp.style.display === 'flex') connImportBuildSelect();
   const ed = _('providerEditor');
   if (ed && ed.classList.contains('open')) renderConnPick();
   refreshProvDetailIfOpen();
@@ -1632,32 +1866,418 @@ function copyDeviceCode() {
   } catch (e) {}
 }
 
-function showConnectionImport() {
-  _('connImpProvider').value = (_connFlows[0]) || '';
-  _('connImpToken').value = ''; _('connImpEmail').value = ''; _('connImpOrg').value = '';
-  _('connImportModal').style.display = 'flex';
-  try { _('connImpToken').focus(); } catch (e) {}
+// ===== 导入 Token 弹窗：Provider 下拉（流程 / 已有连接 / Provider 列表）+ 手动 / 批量 =====
+let _connImpProvFetch = null;
+let _connBatchBusy = false;
+let _connBatchGen = 0;
+
+// 分组去重：同一个 key 只出现在第一个命中的分组里（case-sensitive）
+function connImpProviderGroups() {
+  const seen = new Set();
+  const take = keys => {
+    const out = [];
+    keys.forEach(k => { if (!k || seen.has(k)) return; seen.add(k); out.push(k); });
+    return out;
+  };
+  const byLabel = (a, b) => flowLabel(a).localeCompare(flowLabel(b));
+  const flowKeys = take(_connFlows.filter(Boolean).slice().sort(byLabel));
+  const connKeys = take(Array.from(new Set(_connList.map(c => c.provider).filter(Boolean))).sort(byLabel));
+  const provKeys = take(Object.keys(_provCache)
+    .map(id => (_provCache[id] && _provCache[id].name) || '')
+    .filter(Boolean)
+    .sort((a, b) => a.localeCompare(b)));
+  return [
+    { label: t('已登录流程'), keys: flowKeys, labelOf: flowLabel },
+    { label: t('已有连接'), keys: connKeys, labelOf: flowLabel },
+    { label: t('Provider 列表'), keys: provKeys, labelOf: k => k },
+  ].filter(g => g.keys.length);
 }
 
-function hideConnectionImport() { _('connImportModal').style.display = 'none'; }
+function connImpOptionsHTML(groups, selected) {
+  let html = '';
+  groups.forEach(g => {
+    html += '<optgroup label="' + escAttr(g.label) + '">';
+    g.keys.forEach(k => {
+      html += '<option value="' + escAttr(k) + '"' + (k === selected ? ' selected' : '') + '>' +
+        esc(g.labelOf(k)) + '</option>';
+    });
+    html += '</optgroup>';
+  });
+  html += '<option value="__custom__"' + (selected === '__custom__' ? ' selected' : '') + '>' + esc(t('自定义…')) + '</option>';
+  return html;
+}
+
+// 每次打开弹窗都重建，避免下拉为空或停留在过期数据上
+function connImportBuildSelect() {
+  const selM = _('connImpProvider');
+  if (!selM) return;
+  const groups = connImpProviderGroups();
+  const valid = v => v === '__custom__' || (!!v && groups.some(g => g.keys.indexOf(v) >= 0));
+  const selB = _('connBatchProvider');
+  const curM = selM.value || '';
+  const mSel = valid(curM) ? curM : (groups.length ? '' : '__custom__');
+  const curB = selB ? (selB.value || '') : '';
+  const bSel = valid(curB) ? curB : mSel;
+  selM.innerHTML = connImpOptionsHTML(groups, mSel);
+  if (selB) selB.innerHTML = connImpOptionsHTML(groups, bSel);
+  connImportProviderChange();
+  connBatchProviderChange(true);
+  const panel = _('connImpPanelBatch');
+  if (panel && panel.classList.contains('active')) connBatchPreview();
+}
+
+// 手动 / 批量两个下拉保持同一个 provider key；自定义输入各自独立
+function connImportProviderChange() {
+  const sel = _('connImpProvider'), box = _('connImpProviderCustom');
+  if (!sel || !box) return;
+  const custom = sel.value === '__custom__';
+  box.hidden = !custom;
+  const other = _('connBatchProvider');
+  if (other && other.value !== sel.value) {
+    other.value = sel.value;
+    const ob = _('connBatchProviderCustom');
+    if (ob) ob.hidden = !custom;
+  }
+  if (custom && document.activeElement === sel) { try { box.focus(); } catch (e) {} }
+}
+
+function connBatchProviderChange(fromBuild) {
+  const sel = _('connBatchProvider'), box = _('connBatchProviderCustom');
+  if (!sel || !box) return;
+  const custom = sel.value === '__custom__';
+  box.hidden = !custom;
+  const other = _('connImpProvider');
+  if (other && other.value !== sel.value) {
+    other.value = sel.value;
+    const ob = _('connImpProviderCustom');
+    if (ob) ob.hidden = !custom;
+  }
+  if (custom && !fromBuild && document.activeElement === sel) { try { box.focus(); } catch (e) {} }
+  if (!fromBuild) connBatchPreview();
+}
+
+// 弹窗内的 tab 切换（不复用页面级 importTabs 的事件绑定）
+function connImportTab(name) {
+  const modal = _('connImportModal');
+  if (!modal) return;
+  name = name === 'batch' ? 'batch' : 'manual';
+  modal.querySelectorAll('.conn-imp-tabs .tab').forEach(el => {
+    const on = el.dataset.connTab === name;
+    el.classList.toggle('active', on);
+    el.setAttribute('aria-selected', on ? 'true' : 'false');
+    el.tabIndex = on ? 0 : -1;
+  });
+  modal.querySelectorAll('[data-conn-panel]').forEach(el => {
+    el.classList.toggle('active', el.dataset.connPanel === name);
+  });
+  const mf = _('connImpManualFoot'), bf = _('connImpBatchFoot');
+  if (mf) mf.hidden = name !== 'manual';
+  if (bf) bf.hidden = name !== 'batch';
+  if (name === 'batch') { connBatchPreview(); return; }
+  if (modal.style.display === 'flex') { try { _('connImpToken').focus(); } catch (e) {} }
+}
+
+function connImportTabKey(e) {
+  if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+  e.preventDefault();
+  const to = e.key === 'ArrowLeft' ? 'manual' : 'batch';
+  connImportTab(to);
+  const next = _(to === 'manual' ? 'connImpTabManual' : 'connImpTabBatch');
+  if (next) next.focus();
+}
+
+function connImportToggleToken(btn) {
+  const inp = _('connImpToken');
+  if (!inp) return;
+  const show = inp.type === 'password';
+  inp.type = show ? 'text' : 'password';
+  if (btn) {
+    btn.textContent = show ? t('隐藏') : t('显示');
+    btn.setAttribute('aria-pressed', show ? 'true' : 'false');
+  }
+}
+
+// 解析 select / 自定义输入得到最终 provider key
+function connImpResolvedProvider(selId, customId) {
+  const sel = _(selId), box = _(customId);
+  const v = sel ? (sel.value || '') : '';
+  if (v === '__custom__') return box ? (box.value || '').trim() : '';
+  return v.trim();
+}
+
+function connImpShowResult(ok, msg) {
+  const el = _('connImpResult');
+  if (!el) return;
+  el.innerHTML = '<div class="save-result ' + (ok ? 'ok' : 'err') + '">' +
+    uiIcon(ok ? 'check' : 'close') + '<span>' + esc(msg) + '</span></div>';
+}
+
+async function showConnectionImport() {
+  const modal = _('connImportModal');
+  if (!modal) return;
+  modal.style.display = 'flex';
+  connImportTab('manual');
+  connImportBuildSelect(); // 先用现有缓存填充，避免下拉空白
+  // 流程 / 连接可能还没加载过（例如从 Provider 抽屉直接打开）
+  if (!_connFlows.length) { await loadConnections(); }
+  // Provider 下拉数据源：仅在缓存为空时补一次请求
+  if (!Object.keys(_provCache).length) {
+    if (!_connImpProvFetch) {
+      _connImpProvFetch = api('GET', '/providers')
+        .then(d => { ((d.data && d.data.providers) || []).forEach(p => { if (p && p.id) _provCache[p.id] = p; }); })
+        .catch(() => {})
+        .then(() => { _connImpProvFetch = null; });
+    }
+    await _connImpProvFetch;
+  }
+  connImportBuildSelect();
+}
+
+function hideConnectionImport() {
+  const modal = _('connImportModal');
+  if (modal) modal.style.display = 'none';
+  _connBatchBusy = false;
+  _connBatchGen++;
+  ['connImpToken', 'connImpEmail', 'connImpOrg', 'connBatchInput', 'connImpProviderCustom', 'connBatchProviderCustom']
+    .forEach(id => { const el = _(id); if (el) el.value = ''; });
+  ['connImpResult', 'connBatchResult', 'connBatchPreview', 'connBatchFileName']
+    .forEach(id => { const el = _(id); if (el) el.innerHTML = ''; });
+  const selM = _('connImpProvider'), selB = _('connBatchProvider');
+  if (selM) selM.value = '';
+  if (selB) selB.value = '';
+  const file = _('connBatchFile'); if (file) file.value = '';
+  const tok = _('connImpToken');
+  if (tok) tok.type = 'password';
+  const reveal = _('connImpReveal');
+  if (reveal) { reveal.textContent = t('显示'); reveal.setAttribute('aria-pressed', 'false'); }
+  connImportTab('manual');
+}
 
 async function submitConnectionImport(btn) {
+  const provider = connImpResolvedProvider('connImpProvider', 'connImpProviderCustom');
+  const token = ((_('connImpToken') || {}).value || '').trim();
+  if (!provider) {
+    connImpShowResult(false, t('请选择服务'));
+    toast(t('请选择服务'), 'error');
+    try { _('connImpProvider').focus(); } catch (e) {}
+    return;
+  }
+  if (!token) {
+    connImpShowResult(false, t('请填写 Access Token'));
+    toast(t('请填写 Access Token'), 'error');
+    try { _('connImpToken').focus(); } catch (e) {}
+    return;
+  }
   const body = {
-    provider: _('connImpProvider').value.trim(),
-    accessToken: _('connImpToken').value.trim(),
-    email: _('connImpEmail').value.trim(),
-    orgId: _('connImpOrg').value.trim(),
+    provider: provider,
+    accessToken: token,
+    email: ((_('connImpEmail') || {}).value || '').trim(),
+    orgId: ((_('connImpOrg') || {}).value || '').trim(),
   };
-  if (!body.provider || !body.accessToken) { toast(t('服务与 Token 必填'), 'error'); return; }
   const orig = btn ? btn.innerHTML : '';
   if (btn) { btn.disabled = true; btn.innerHTML = '<span class="loading"></span> ' + t('保存中...'); }
   try {
     await api('POST', '/connections/import', body);
+    connImpShowResult(true, t('连接已保存') + ' · ' + provider);
     toast(t('连接已保存'), 'success');
-    hideConnectionImport();
+    _('connImpToken').value = '';
     loadConnections();
-  } catch (e) { toast(t('保存失败: ') + e.message, 'error'); }
+  } catch (e) {
+    connImpShowResult(false, t('保存失败: ') + e.message);
+    toast(t('保存失败: ') + e.message, 'error');
+  }
   finally { if (btn) { btn.disabled = false; btn.innerHTML = orig; } }
+}
+
+// ===== 批量导入：宽松解析 → 预览 → 逐项结果 =====
+function connImpNormalizeItem(raw, fallback) {
+  if (raw == null) return { provider: fallback, accessToken: '', email: '', orgId: '' };
+  if (typeof raw === 'string' || typeof raw === 'number') {
+    return { provider: fallback, accessToken: String(raw).trim(), email: '', orgId: '' };
+  }
+  if (typeof raw !== 'object') return { provider: fallback, accessToken: '', email: '', orgId: '' };
+  return {
+    provider: String(raw.provider || '').trim() || fallback,
+    accessToken: String(raw.accessToken || raw.access_token || raw.token || '').trim(),
+    email: String(raw.email || '').trim(),
+    orgId: String(raw.orgId || raw.org_id || '').trim(),
+  };
+}
+
+// 纯文本：每行一条；`provider,token[,email]`（逗号或制表符分隔），空行与 # 注释跳过
+function connImpParseText(text, fallback) {
+  const out = [];
+  String(text || '').split(/\r?\n/).forEach(line => {
+    const s = line.trim();
+    if (!s || s.charAt(0) === '#') return;
+    const parts = (s.indexOf('\t') >= 0 ? s.split('\t') : s.split(',')).map(x => x.trim());
+    if (parts.length <= 1) out.push({ provider: fallback, accessToken: parts[0] || '', email: '', orgId: '' });
+    else out.push({ provider: parts[0], accessToken: parts[1], email: parts[2] || '', orgId: '' });
+  });
+  return out;
+}
+
+// 解析顺序：JSON 数组 → {items|tokens} → 单对象 → 纯文本
+function parseConnBatch(text, fallback) {
+  const raw = String(text || '').trim();
+  const result = { items: [], total: 0, duplicates: 0, invalid: [] };
+  if (!raw) return result;
+  let list;
+  try {
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) list = parsed;
+    else if (parsed && typeof parsed === 'object') {
+      if (Array.isArray(parsed.items)) list = parsed.items;
+      else if (Array.isArray(parsed.tokens)) list = parsed.tokens;
+      else list = [parsed];
+    } else if (typeof parsed === 'string' || typeof parsed === 'number') list = [parsed];
+    else list = [];
+  } catch (e) {
+    list = connImpParseText(raw, fallback);
+  }
+  const seen = new Set();
+  list.forEach((entry, i) => {
+    const item = connImpNormalizeItem(entry, fallback);
+    result.total++;
+    if (!item.accessToken) {
+      result.invalid.push({ row: i + 1, provider: item.provider, reason: t('缺少 Token') });
+      return;
+    }
+    if (!item.provider) {
+      result.invalid.push({ row: i + 1, provider: '', reason: t('缺少服务') });
+      return;
+    }
+    const key = item.provider + '\n' + item.accessToken;
+    if (seen.has(key)) { result.duplicates++; return; }
+    seen.add(key);
+    result.items.push(item);
+  });
+  return result;
+}
+
+function connBatchPreview() {
+  const box = _('connBatchPreview');
+  if (!box) return;
+  const ta = _('connBatchInput');
+  const fallback = connImpResolvedProvider('connBatchProvider', 'connBatchProviderCustom');
+  const parsed = parseConnBatch(ta ? ta.value : '', fallback);
+  box.classList.remove('err');
+  if (!parsed.total) {
+    box.innerHTML = esc(t('粘贴或选择文件后自动解析'));
+    return;
+  }
+  let html = t('解析到 ') + parsed.total + t(' · 去重后 ') + parsed.items.length;
+  if (parsed.duplicates) html += t(' · 跳过重复 ') + parsed.duplicates;
+  if (parsed.invalid.length) {
+    html += t(' · 无效 ') + parsed.invalid.length;
+    html += '<span class="conn-imp-invalid">' +
+      parsed.invalid.slice(0, 4).map(x => esc(t('行 ') + x.row + ' · ' + x.reason)).join(' · ') +
+      (parsed.invalid.length > 4 ? ' …' : '') + '</span>';
+  }
+  box.innerHTML = html;
+}
+
+function connBatchPickFile() {
+  const f = _('connBatchFile');
+  if (f) f.click();
+}
+
+async function connBatchFileChosen(event) {
+  const input = event && event.target;
+  const file = input && input.files && input.files[0];
+  if (!file) return;
+  const box = _('connBatchPreview');
+  const nameEl = _('connBatchFileName');
+  if (file.size > 1024 * 1024) {
+    if (input) input.value = '';
+    if (nameEl) nameEl.textContent = '';
+    if (box) { box.classList.add('err'); box.innerHTML = esc(t('文件不能超过 1 MB')); }
+    toast(t('文件不能超过 1 MB'), 'error');
+    return;
+  }
+  try {
+    const text = await file.text();
+    const ta = _('connBatchInput');
+    if (ta) ta.value = text; // 只回填，交给用户确认后再导入
+    if (nameEl) nameEl.textContent = t('已选择 ') + file.name;
+    connBatchPreview();
+  } catch (e) {
+    if (box) { box.classList.add('err'); box.innerHTML = esc(t('读取文件失败: ') + e.message); }
+  } finally {
+    if (input) input.value = ''; // 允许重复选择同一个文件
+  }
+}
+
+function connBatchRenderResult(r) {
+  const box = _('connBatchResult');
+  if (!box) return;
+  const imported = Number(r.imported) || 0;
+  const failed = Number(r.failed) || 0;
+  const fails = (r.results || []).filter(x => x && x.ok === false);
+  let html = '<div class="conn-imp-sum ' + (failed ? (imported ? 'warn' : 'bad') : 'ok') + '">' +
+    uiIcon(failed ? 'close' : 'check') +
+    '<span>' + t('成功 ') + imported + t(' · 失败 ') + failed + '</span></div>';
+  if (fails.length) {
+    html += '<ul class="conn-imp-fails">' + fails.map(x => {
+      const n = Number(x.index);
+      return '<li><span class="mono conn-imp-idx">#' + (Number.isFinite(n) ? n + 1 : '?') + '</span>' +
+        (x.provider ? '<span class="mono">' + esc(x.provider) + '</span>' : '') +
+        '<span class="conn-imp-err">' + esc(x.error || '') + '</span></li>';
+    }).join('') + '</ul>';
+  }
+  box.innerHTML = html;
+}
+
+async function submitConnBatch(btn) {
+  if (_connBatchBusy) return; // 防重复提交
+  const ta = _('connBatchInput');
+  const resBox = _('connBatchResult');
+  const raw = ta ? ta.value.trim() : '';
+  if (!raw) {
+    if (resBox) resBox.innerHTML = '<div class="save-result err">' + uiIcon('close') +
+      '<span>' + esc(t('请先粘贴数据或选择文件')) + '</span></div>';
+    toast(t('请先粘贴数据或选择文件'), 'error');
+    return;
+  }
+  const fallback = connImpResolvedProvider('connBatchProvider', 'connBatchProviderCustom');
+  const parsed = parseConnBatch(raw, fallback);
+  if (!parsed.items.length) {
+    connBatchPreview();
+    if (resBox) resBox.innerHTML = '<div class="save-result err">' + uiIcon('close') +
+      '<span>' + esc(t('没有可导入的条目：请检查数据格式')) + '</span></div>';
+    toast(t('没有可导入的条目：请检查数据格式'), 'error');
+    return;
+  }
+  _connBatchBusy = true;
+  const gen = _connBatchGen;
+  const orig = btn ? btn.innerHTML : '';
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="loading"></span> ' + t('导入中...'); }
+  if (resBox) resBox.innerHTML = '';
+  try {
+    const d = await api('POST', '/connections/import-batch', { items: parsed.items });
+    if (gen !== _connBatchGen) return; // 弹窗已关闭，丢弃迟到的响应
+    const r = (d && d.data) || {};
+    const imported = Number(r.imported) || 0;
+    const failed = Number(r.failed) || 0;
+    connBatchRenderResult(r);
+    toast(t('导入完成') + ' · ' + t('成功 ') + imported + t(' · 失败 ') + failed,
+      failed ? (imported ? 'info' : 'error') : 'success');
+    if (imported > 0) loadConnections();
+    if (!failed) {
+      if (ta) ta.value = '';
+      const nameEl = _('connBatchFileName'); if (nameEl) nameEl.textContent = '';
+      const file = _('connBatchFile'); if (file) file.value = '';
+      connBatchPreview();
+    }
+  } catch (e) {
+    if (gen === _connBatchGen && resBox) resBox.innerHTML = '<div class="save-result err">' + uiIcon('close') +
+      '<span>' + esc(t('导入失败: ') + e.message) + '</span></div>';
+    if (gen === _connBatchGen) toast(t('导入失败: ') + e.message, 'error');
+  }
+  finally {
+    _connBatchBusy = false;
+    if (btn) { btn.disabled = false; btn.innerHTML = orig; }
+  }
 }
 
 async function testConnection(id, cell) {

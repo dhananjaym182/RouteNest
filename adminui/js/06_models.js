@@ -9,7 +9,7 @@ try {
   if (_mgo && typeof _mgo === 'object') _modelGroupOpen = _mgo;
 } catch (e) {}
 
-// ===== 两级分组：一级 = 真实来源（Cline / Zen / Provider / 自定义），二级 = 厂商 =====
+// ===== 分组：一级 = 真实来源（Cline / Zen / Provider / 自定义），列表只按这一级渲染 =====
 // mergedSourceKey：合并行的主来源，优先级 自定义 > Provider > zen > Cline
 function mergedSourceKey(m) {
   if (m._customAny) return 'custom';
@@ -43,7 +43,8 @@ function sourceSortKey(a, b) {
   return a.localeCompare(b);
 }
 
-// 二级（厂商）key：模型 ID 第一个 "/" 前的前缀；无前缀回退 provider 字段
+// 模型 ID 前缀（旧二级厂商 key）：渲染已不再使用，仅保留给 mergedRowsForGroupKey 兼容
+// 历史 localStorage 分组 key（形如 src:xxx/vendor），避免旧状态解析失效
 function vendorKey(m) {
   const idx = (m.id || '').indexOf('/');
   if (idx > 0) return m.id.slice(0, idx);
@@ -293,8 +294,9 @@ function modelColHead() {
   '</div>';
 }
 
-// 模型管理列表渲染：两级分组（来源 → 厂商）+ 表头排序 + 工具栏筛选；
+// 模型管理列表渲染：单级分组（主来源 / 提供商）+ 表头排序 + 工具栏筛选；
 // 分组默认折叠、组头显示「启用数/总数」与测试失败数，展开仅按需
+// （模型 ID 前缀不再作为二级厂商分组：同一个提供商下只平铺模型行）
 function renderModelList() {
   const listEl = _('modelsList');
   if (!listEl) return;
@@ -310,15 +312,12 @@ function renderModelList() {
     listEl.innerHTML = listEmptyState(ICON_MODELS, t('无匹配模型'));
     return;
   }
-  // 一级：来源；二级：厂商
-  const sources = new Map(); // sourceKey -> Map(vendorKey -> rows[])
+  // 单级分组：主来源（提供商）→ 该来源下的全部模型行
+  const sources = new Map(); // sourceKey -> rows[]
   for (const m of filtered) {
     const sk = sourceGroupKey(m);
-    const vk = vendorKey(m);
-    if (!sources.has(sk)) sources.set(sk, new Map());
-    const vmap = sources.get(sk);
-    if (!vmap.has(vk)) vmap.set(vk, []);
-    vmap.get(vk).push(m);
+    if (!sources.has(sk)) sources.set(sk, []);
+    sources.get(sk).push(m);
   }
   const groupActions = () =>
     '<span class="model-group-actions" onclick="event.stopPropagation()">' +
@@ -336,7 +335,7 @@ function renderModelList() {
   const groupHead = (key, label, rows, open, src) => {
     const st = groupStats(rows);
     return '<div class="model-group-head' + (src ? ' model-group-src-head' : '') + (open ? ' expanded' : '') + '" data-key="' + escAttr(key) + '" onclick="toggleModelGroupEl(this)" title="' + t('点击展开/折叠') + '">' +
-      ''+uiIcon('caretRight')+'</span>' +
+      '<span class="model-group-caret">' + uiIcon('caretRight') + '</span>' +
       '<span class="model-group-label">' + esc(label) + '</span>' +
       '<span class="model-group-count">' + st.en + '/' + rows.length + '</span>' +
       (st.fail ? '<span class="model-group-fail">' + st.fail + ' ' + t('测试失败') + '</span>' : '') +
@@ -344,23 +343,11 @@ function renderModelList() {
     '</div>';
   };
   listEl.innerHTML = modelColHead() + Array.from(sources.keys()).sort(sourceSortKey).map(sk => {
-    const vmap = sources.get(sk);
-    let allRows = [];
-    vmap.forEach(rows => { allRows = allRows.concat(rows); });
+    const rows = sources.get(sk).slice().sort(modelSortCmp);
     const sOpen = _modelGroupOpen[sk] === true;
-    const vendors = Array.from(vmap.keys()).sort(vendorSortKey);
-    const inner = vendors.map(vk => {
-      const rows = vmap.get(vk).slice().sort(modelSortCmp);
-      const vPath = sk + '/' + vk;
-      const vOpen = _modelGroupOpen[vPath] === true;
-      return '<div class="model-group model-group-vendor">' +
-        groupHead(vPath, vendorLabel(vk), rows, vOpen, false) +
-        '<div class="model-group-body" style="display:' + (vOpen ? 'block' : 'none') + '">' + rows.map(renderModelRow).join('') + '</div>' +
-      '</div>';
-    }).join('');
     return '<div class="model-group model-group-src">' +
-      groupHead(sk, sourceGroupLabel(sk), allRows, sOpen, true) +
-      '<div class="model-group-body" style="display:' + (sOpen ? 'block' : 'none') + '">' + inner + '</div>' +
+      groupHead(sk, sourceGroupLabel(sk), rows, sOpen, true) +
+      '<div class="model-group-body" style="display:' + (sOpen ? 'block' : 'none') + '">' + rows.map(renderModelRow).join('') + '</div>' +
     '</div>';
   }).join('');
 }
@@ -485,19 +472,6 @@ async function bulkModelToggle(mode) {
   if (btn) btn.disabled = false;
   await loadModels();
   if (_('settingDefModel')) loadConfig();
-}
-
-function toggleAddModelRow() {
-  const row = _('modelAddRow');
-  row.style.display = (row.style.display === 'none') ? 'flex' : 'none';
-  if (row.style.display === 'flex') { setModelCost(_('newModelCost').value || 'pass'); _('newModelId').focus(); }
-}
-
-// 计费分段按钮：真值写入保留的隐藏 select#newModelCost（addModel 读取路径不变）
-function setModelCost(v) {
-  const sel = _('newModelCost');
-  if (sel) sel.value = v;
-  document.querySelectorAll('#modelCostSeg button').forEach(b => b.classList.toggle('active', b.dataset.cost === v));
 }
 
 // ===== 模型工具栏「更多」溢出菜单：开关 + 点击外部收起（vanilla，无外部库） =====
@@ -765,22 +739,6 @@ function showModelSyncModal(res) {
 function closeModelSyncModal() {
   const ov = _('modelSyncOverlay');
   if (ov) ov.style.display = 'none';
-}
-
-async function addModel(btn) {
-  const id = _('newModelId').value.trim();
-  const cost = _('newModelCost').value;
-  if (!id) { toast(t('请输入模型 ID'), 'error'); return; }
-  const orig = btn ? btn.innerHTML : '';
-  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="loading"></span> ' + t('添加中...'); }
-  try {
-    await api('POST', '/models/add', { id, cost });
-    toast(t('模型已添加: ') + id, 'success');
-    _('newModelId').value = '';
-    await loadModels();
-    await loadConfig();
-  } catch (e) { toast(t('添加失败: ') + e.message, 'error'); }
-  finally { if (btn) { btn.disabled = false; btn.innerHTML = orig; } }
 }
 
 async function deleteModel(id) {
