@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -17,6 +18,19 @@ import (
 	"cline-go-proxy/internal/transport"
 	zenupstream "cline-go-proxy/internal/upstream/zen"
 )
+
+// marshalZenJSON encodes a zen body without HTML escaping: the free-tier gate
+// compares tool descriptions and the <env> marker literally, so "<" and ">"
+// must reach the wire as-is (Go's default encoder rewrites them to \u003c).
+func marshalZenJSON(v any) ([]byte, error) {
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	if err := enc.Encode(v); err != nil {
+		return nil, err
+	}
+	return bytes.TrimRight(buf.Bytes(), "\n"), nil
+}
 
 // ============================================================================
 // opencode Zen 免费模型支持
@@ -413,6 +427,44 @@ func zenConversationSeed(params map[string]any) string {
 
 var zenSessions = zenupstream.NewSessionCache()
 
+var (
+	zenPoolMu    sync.Mutex
+	zenPoolStamp time.Time
+)
+
+// zenRefreshSessionPool installs registered upstream sessions: configured ones
+// first, otherwise read-only harvesting from local clients. The free tier only
+// serves sessions the upstream already knows, so this pool is what makes free
+// models usable at all. Harvesting is throttled; force skips the throttle.
+func zenRefreshSessionPool(force bool) int {
+	zenPoolMu.Lock()
+	defer zenPoolMu.Unlock()
+	if !force && time.Since(zenPoolStamp) < 30*time.Second {
+		return zenSessions.PoolLen()
+	}
+	cfg := getZenConfig()
+	ids := cfg.SessionIDs
+	if len(ids) == 0 && cfg.AutoHarvestSessions() {
+		ids = zenupstream.HarvestRegisteredSessions()
+	}
+	zenSessions.SetPool(ids)
+	zenPoolStamp = time.Now()
+	if n := zenSessions.PoolLen(); n > 0 {
+		log.Printf("  zen sessions: %d registered session(s) available", n)
+	}
+	return zenSessions.PoolLen()
+}
+
+// zenEnsureSessionPool loads the pool once per process.
+func zenEnsureSessionPool() {
+	zenPoolMu.Lock()
+	loaded := !zenPoolStamp.IsZero()
+	zenPoolMu.Unlock()
+	if !loaded {
+		zenRefreshSessionPool(true)
+	}
+}
+
 // zenSessionID returns a conversation-stable opencode-shaped session ID.
 func zenSessionID(params map[string]any) string {
 	return zenSessions.SessionID(params)
@@ -455,13 +507,30 @@ func buildZenBody(params map[string]any, stream bool, anonymous bool) map[string
 	})
 }
 
+// zenMaxSessionRotations caps how many registered sessions one upstream call
+// will try before giving up.
+const zenMaxSessionRotations = 4
+
+// zenAPIKeyFor picks the outgoing Authorization identity: free zen models are
+// served anonymously (Bearer public) even when a real key is configured.
+func zenAPIKeyFor(params map[string]any, cfgKey string) string {
+	if m, ok := resolveZenInfo(zenUpstreamModelID(params)); ok && isZenFreeModel(m) {
+		return "public"
+	}
+	return cfgKey
+}
+
 // callZenAPI 调用 zen 上游：并发信号量 + 指数退避重试 + 代理冷却 + 故障转移计数。
 // 匿名（public key）免费层自 2026-09 起只接受 agent 形态的流式请求：
 // 上游强制 stream:true，下游要 JSON 时把 SSE 折叠回单个 chat.completion 响应。
 // 返回的响应由调用方关闭。
 func callZenAPI(params map[string]any, stream bool) (*http.Response, error) {
 	cfg := getZenConfig()
-	anonymous := cfg.Key == "public"
+	zenEnsureSessionPool()
+	// 免费模型统一用匿名身份（Bearer public），与官方 CLI 无 key 时的行为一致；
+	// 付费模型保留配置的 key。
+	apiKey := zenAPIKeyFor(params, cfg.Key)
+	anonymous := apiKey == "public"
 	// muse-spark 系走 OpenAI Responses 协议（/responses），其余走 chat/completions；
 	// 两条路径统一在返回前转回 chat 协议，调用方无感
 	useResponses := zenUpstreamNeedsResponses(params)
@@ -470,9 +539,9 @@ func callZenAPI(params map[string]any, stream bool) (*http.Response, error) {
 	var err error
 	if useResponses {
 		protoName = "responses"
-		bodyJSON, err = json.Marshal(buildZenResponsesBody(params))
+		bodyJSON, err = marshalZenJSON(buildZenResponsesBody(params))
 	} else {
-		bodyJSON, err = json.Marshal(buildZenBody(params, stream, anonymous))
+		bodyJSON, err = marshalZenJSON(buildZenBody(params, stream, anonymous))
 	}
 	if err != nil {
 		return nil, fmt.Errorf("marshal zen body: %w", err)
@@ -480,7 +549,7 @@ func callZenAPI(params map[string]any, stream bool) (*http.Response, error) {
 	zc := zenupstream.Client{
 		HTTP:     getZenHTTPClient(),
 		BaseURL:  cfg.BaseURL,
-		APIKey:   cfg.Key,
+		APIKey:   apiKey,
 		Headers:  cfg.ZenHeaders,
 		IDs:      zenIDs,
 		Sessions: zenSessions,
@@ -501,6 +570,7 @@ func callZenAPI(params map[string]any, stream bool) (*http.Response, error) {
 		retries = 3
 	}
 	delay := time.Second
+	sessionRotations := 0
 
 	for attempt := 0; ; attempt++ {
 		// 响应头看门狗：黑洞场景（TCP 通、握手/响应头静默丢弃）请求会永久挂起，
@@ -588,6 +658,21 @@ func callZenAPI(params map[string]any, stream bool) (*http.Response, error) {
 
 		if isRateLimited(resp.StatusCode, string(bodyBytes)) {
 			ra := parseRetryAfter(resp.Header.Get("Retry-After"))
+			// 免费层按 (session, ip) 计量：换一个已注册会话即可立即恢复，
+			// 不需要冷却出口代理。只有匿名通道适用。
+			if anonymous && sessionRotations < zenMaxSessionRotations {
+				rotated := false
+				if zenSessions.PoolLen() > 1 {
+					_, rotated = zenSessions.Rotate()
+				} else if zenRefreshSessionPool(true) > 1 {
+					_, rotated = zenSessions.Rotate()
+				}
+				if rotated {
+					sessionRotations++
+					log.Printf("  zen free-tier limit, rotating registered session %d/%d", sessionRotations, zenMaxSessionRotations)
+					continue
+				}
+			}
 			// 冷却当前出口代理（Retry-After 优先，默认 10 分钟，封顶 30 分钟）：
 			// 单个本地代理端口背后可切换节点（出口 IP 变化），长冷却有害无益
 			if idx := lastZenProxyIdx(); idx >= 0 {
@@ -615,6 +700,9 @@ func callZenAPI(params map[string]any, stream bool) (*http.Response, error) {
 				continue
 			}
 			markZenFail()
+			if anonymous && zenSessions.PoolLen() == 0 {
+				return nil, fmt.Errorf("%s（未找到已注册的 opencode 会话：免费层只服务上游已登记的 session；请在管理页填入 sessionIds，或在本机用 opencode/wu 正常对话一次以生成）", reason)
+			}
 			if ra > 10*time.Minute {
 				return nil, fmt.Errorf("%s（opencode 免费层出口 IP 限流 ~%s，切换代理节点后可立即重试）", reason, ra.Truncate(time.Minute))
 			}
@@ -1144,9 +1232,18 @@ func buildZenResponsesBody(params map[string]any) map[string]any {
 			}
 		}
 	}
-	if len(instr) > 0 {
-		body["instructions"] = strings.Join(instr, "\n\n")
+	instrText := strings.Join(instr, "\n\n")
+	// 免费层 agent 形态校验要求 system 提示里带 CLI 的 <env> 环境块；与 chat
+	// 路径一致，缺失时补上，已有则不动。
+	if !strings.Contains(instrText, "<env>") {
+		env := zenupstream.EnvBlock()
+		if instrText == "" {
+			instrText = env
+		} else {
+			instrText += "\n\n" + env
+		}
 	}
+	body["instructions"] = instrText
 	body["input"] = input
 	// 定稿前清洗 tools（扁平形态）：null 可选字段会被上游网关硬拒 400
 	sanitizeToolsForUpstream(body)

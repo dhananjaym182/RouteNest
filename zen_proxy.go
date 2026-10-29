@@ -20,6 +20,8 @@ import (
 	utls "github.com/refraction-networking/utls"
 	"golang.org/x/net/http2"
 	"golang.org/x/net/proxy"
+
+	zenupstream "cline-go-proxy/internal/upstream/zen"
 )
 
 // ============================================================================
@@ -195,7 +197,10 @@ func zenProbeALPN(ctx context.Context, host string) (string, error) {
 	return "http/1.1", nil
 }
 
-// dialZenTLSWithProtos 统一的 uTLS Chrome_120 握手入口（经 zen 代理/环境代理/直连）。
+// dialZenTLSWithProtos 统一的 uTLS 握手入口（经 zen 代理/环境代理/直连）。
+// 指纹固定为 opencode CLI（Bun/BoringSSL）的 ClientHello：免费层按 TLS
+// 指纹放行，Go/Node/curl 的 hello 一律被伪装成 429 拒绝。该 hello 只提供
+// http/1.1（ALPN 是 JA4 的组成部分），因此 nextProtos 参数仅为兼容保留。
 func dialZenTLSWithProtos(ctx context.Context, network, addr string, nextProtos []string) (*utls.UConn, error) {
 	raw, err := zenDialContext(ctx, network, addr)
 	if err != nil {
@@ -208,8 +213,12 @@ func dialZenTLSWithProtos(ctx context.Context, network, addr string, nextProtos 
 	}
 	uconn := utls.UClient(raw, &utls.Config{
 		ServerName: host,
-		NextProtos: nextProtos,
-	}, utls.HelloChrome_120)
+		NextProtos: zenupstream.BunALPN,
+	}, utls.HelloCustom)
+	if err := uconn.ApplyPreset(zenupstream.BunClientHelloSpec()); err != nil {
+		raw.Close()
+		return nil, fmt.Errorf("zen egress: apply client hello: %w", err)
+	}
 	// 握手限时；握手成功后 cancel 不影响已建立的连接
 	hsCtx, cancel := context.WithTimeout(ctx, zenTLSHandshakeTimeout)
 	defer cancel()

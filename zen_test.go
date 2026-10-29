@@ -500,7 +500,8 @@ func TestBuildZenBodyAnonymousInjectsToolsAndStream(t *testing.T) {
 		}
 	}
 
-	// 客户端已声明的工具保持原样，缺的才补
+	// 客户端已声明的工具保持原样，缺的才补；read/shell 由网关校验，必须替换成
+	// CLI 原始定义
 	params2 := map[string]any{
 		"model":    "mimo-v2.6-flash-free",
 		"messages": []any{map[string]any{"role": "user", "content": "hi"}},
@@ -508,8 +509,20 @@ func TestBuildZenBodyAnonymousInjectsToolsAndStream(t *testing.T) {
 	}
 	body2 := buildZenBody(params2, false, true)
 	tools2, _ := body2["tools"].([]any)
-	if len(tools2) != len(anonymousCoreTools) {
-		t.Fatalf("want %d tools (1 declared + %d injected), got %d", len(anonymousCoreTools), len(anonymousCoreTools)-1, len(tools2))
+	if len(tools2) != len(anonymousCoreTools)+1 {
+		t.Fatalf("want %d tools (1 caller tool + %d injected), got %d", len(anonymousCoreTools)+1, len(anonymousCoreTools), len(tools2))
+	}
+	kept := false
+	for _, item := range tools2 {
+		entry, _ := item.(map[string]any)
+		fn, _ := entry["function"].(map[string]any)
+		name, _ := fn["name"].(string)
+		if name == "bash" {
+			kept = true
+		}
+	}
+	if !kept {
+		t.Error("caller tool must be preserved")
 	}
 }
 
@@ -672,5 +685,17 @@ func TestOpenAIToAnthropicThinkingBlock(t *testing.T) {
 	}
 	if b, _ := blocks2[0].(map[string]any); b["type"] != "text" {
 		t.Errorf("block type = %v, want text", b["type"])
+	}
+}
+
+func TestZenAPIKeyForFreeModel(t *testing.T) {
+	if got := zenAPIKeyFor(map[string]any{"model": "mimo-v2.6-flash-free"}, "sk-real"); got != "public" {
+		t.Fatalf("free model key = %q, want public", got)
+	}
+	if got := zenAPIKeyFor(map[string]any{"model": "mimo-v2.6-flash"}, "sk-real"); got != "public" {
+		t.Fatalf("free alias key = %q, want public", got)
+	}
+	if got := zenAPIKeyFor(map[string]any{"model": "gpt-5"}, "sk-real"); got != "sk-real" {
+		t.Fatalf("paid model key = %q, want sk-real", got)
 	}
 }

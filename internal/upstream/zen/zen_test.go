@@ -158,7 +158,17 @@ func TestBuildChatBody(t *testing.T) {
 		t.Fatal("reasoning_effort must be removed")
 	}
 	msgs := body["messages"].([]any)
-	if _, ok := msgs[1].(map[string]any)["tool_calls"]; ok {
+	var assistant map[string]any
+	for _, raw := range msgs {
+		m, _ := raw.(map[string]any)
+		if role, _ := m["role"].(string); role == "assistant" {
+			assistant = m
+		}
+	}
+	if assistant == nil {
+		t.Fatal("assistant message missing")
+	}
+	if _, ok := assistant["tool_calls"]; ok {
 		t.Fatal("invalid tool_calls must be removed")
 	}
 	if tools, _ := body["tools"].([]any); len(tools) != len(AnonymousCoreTools) {
@@ -176,5 +186,110 @@ func TestBuildChatBody(t *testing.T) {
 	}
 	if _, ok := body["stream_options"]; ok {
 		t.Fatal("stream_options only applies to anonymous streams")
+	}
+}
+
+func TestFingerprintToolSchemasExact(t *testing.T) {
+	tools := FingerprintTools()
+	if len(tools) != 2 {
+		t.Fatalf("tools = %d, want read+shell", len(tools))
+	}
+	byName := map[string]map[string]any{}
+	for _, raw := range tools {
+		entry, _ := raw.(map[string]any)
+		fn, _ := entry["function"].(map[string]any)
+		name, _ := fn["name"].(string)
+		byName[name] = fn
+	}
+	read, ok := byName["read"]
+	if !ok {
+		t.Fatal("read tool missing")
+	}
+	if desc, _ := read["description"].(string); !strings.Contains(desc, "1-based line number") || !strings.Contains(desc, "PDFs") {
+		t.Fatalf("read description = %q", desc)
+	}
+	rp, _ := read["parameters"].(map[string]any)
+	if rp["additionalProperties"] != false {
+		t.Fatal("read parameters must set additionalProperties=false")
+	}
+	if req, _ := rp["required"].([]any); len(req) != 1 || req[0] != "path" {
+		t.Fatalf("read required = %v", rp["required"])
+	}
+	props, _ := rp["properties"].(map[string]any)
+	for _, k := range []string{"path", "offset", "limit"} {
+		if _, ok := props[k]; !ok {
+			t.Fatalf("read parameter %q missing", k)
+		}
+	}
+
+	shell, ok := byName["shell"]
+	if !ok {
+		t.Fatal("shell tool missing")
+	}
+	if desc, _ := shell["description"].(string); !strings.Contains(desc, "Execute a shell command") || !strings.Contains(desc, "using ") {
+		t.Fatalf("shell description = %q", desc)
+	}
+	sp, _ := shell["parameters"].(map[string]any)
+	if sp["additionalProperties"] != false {
+		t.Fatal("shell parameters must set additionalProperties=false")
+	}
+	if req, _ := sp["required"].([]any); len(req) != 1 || req[0] != "command" {
+		t.Fatalf("shell required = %v", sp["required"])
+	}
+}
+
+func TestBuildChatBodyInjectsEnv(t *testing.T) {
+	params := map[string]any{
+		"model":    "deepseek-v4.1-flash-free",
+		"messages": []any{map[string]any{"role": "user", "content": "hi"}},
+	}
+	body := BuildChatBody(params, true, true, BodyOptions{})
+	msgs, _ := body["messages"].([]any)
+	if len(msgs) != 2 {
+		t.Fatalf("messages = %d, want system+user", len(msgs))
+	}
+	first, _ := msgs[0].(map[string]any)
+	if role, _ := first["role"].(string); role != "system" {
+		t.Fatalf("first role = %v, want system", first["role"])
+	}
+	content, _ := first["content"].(string)
+	for _, want := range []string{"<env>", "</env>", "Working directory:", "Workspace root folder:", "Is directory a git repo:", "Platform:", "Prefer "} {
+		if !strings.Contains(content, want) {
+			t.Fatalf("env block missing %q: %q", want, content)
+		}
+	}
+
+	// idempotent: a second injection must not duplicate the block
+	InjectEnv(body)
+	msgs, _ = body["messages"].([]any)
+	if len(msgs) != 2 {
+		t.Fatalf("env injection not idempotent: %d messages", len(msgs))
+	}
+	first, _ = msgs[0].(map[string]any)
+	if n := strings.Count(first["content"].(string), "<env>"); n != 1 {
+		t.Fatalf("env block duplicated: %d", n)
+	}
+}
+
+func TestBuildChatBodyEnvAppendsToExistingSystem(t *testing.T) {
+	params := map[string]any{
+		"model": "deepseek-v4.1-flash-free",
+		"messages": []any{
+			map[string]any{"role": "system", "content": "be brief"},
+			map[string]any{"role": "user", "content": "hi"},
+		},
+	}
+	body := BuildChatBody(params, true, true, BodyOptions{})
+	msgs, _ := body["messages"].([]any)
+	if len(msgs) != 2 {
+		t.Fatalf("messages = %d", len(msgs))
+	}
+	first, _ := msgs[0].(map[string]any)
+	content, _ := first["content"].(string)
+	if !strings.HasPrefix(content, "be brief") {
+		t.Fatalf("existing system prompt lost: %q", content)
+	}
+	if !strings.Contains(content, "<env>") {
+		t.Fatalf("env not appended: %q", content)
 	}
 }

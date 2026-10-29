@@ -75,7 +75,7 @@ func TestBuildZenResponsesBody(t *testing.T) {
 	if body["temperature"] != 0.5 {
 		t.Errorf("temperature = %v", body["temperature"])
 	}
-	if instr, _ := body["instructions"].(string); instr != "be brief" {
+	if instr, _ := body["instructions"].(string); !strings.HasPrefix(instr, "be brief") || !strings.Contains(instr, "<env>") {
 		t.Errorf("instructions = %v", body["instructions"])
 	}
 	tools, _ := body["tools"].([]any)

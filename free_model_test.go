@@ -693,10 +693,19 @@ func TestCallClineAPIFreeDoesNotPickCoolingAccount(t *testing.T) {
 	oldPool := pool
 	oldConfig := getProxyConfig()
 	oldTransport := httpClient.Transport
+	// 本用例只验证 Cline 账号挑选：zen 故障转移如今能真正应答，必须关掉才能
+	// 让"全部冷却"如预期地失败。
+	zenConfigMu.Lock()
+	oldZen := zenConfig
+	zenConfig = &zenConfigData{BaseURL: zenAPIBase, Key: "public", Enabled: false}
+	zenConfigMu.Unlock()
 	t.Cleanup(func() {
 		pool = oldPool
 		setProxyConfig(oldConfig)
 		httpClient.Transport = oldTransport
+		zenConfigMu.Lock()
+		zenConfig = oldZen
+		zenConfigMu.Unlock()
 	})
 
 	account := &Account{

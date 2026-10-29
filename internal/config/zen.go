@@ -39,7 +39,14 @@ type Zen struct {
 	// ZenHeaders overrides the built-in fingerprint headers. The special values
 	// "$session", "$request", "$project", and "$client" inject per-request identity.
 	ZenHeaders map[string]string `json:"zenHeaders,omitempty"`
-	Compaction ZenCompact        `json:"compaction"`
+	// SessionIDs are registered opencode session ids. The free tier meters usage
+	// per (session, ip) and rejects self-minted ids outright, so at least one
+	// real session is required for free models to answer at all.
+	SessionIDs []string `json:"sessionIds,omitempty"`
+	// SessionAutoHarvest recovers registered sessions from local clients when
+	// SessionIDs is empty. Read-only; nil means enabled.
+	SessionAutoHarvest *bool      `json:"sessionAutoHarvest,omitempty"`
+	Compaction         ZenCompact `json:"compaction"`
 }
 
 // DefaultZen returns the built-in configuration for the given inference base URL.
@@ -118,4 +125,13 @@ func SaveZen(path string, cfg *Zen) error {
 		return err
 	}
 	return platform.WriteFileAtomic(path, data, 0600)
+}
+
+// AutoHarvestSessions reports whether registered sessions may be recovered from
+// local clients when none are configured.
+func (z *Zen) AutoHarvestSessions() bool {
+	if z == nil || z.SessionAutoHarvest == nil {
+		return true
+	}
+	return *z.SessionAutoHarvest
 }

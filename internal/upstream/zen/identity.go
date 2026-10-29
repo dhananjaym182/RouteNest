@@ -122,6 +122,14 @@ func ConversationSeed(params map[string]any) string {
 type SessionCache struct {
 	mu     sync.Mutex
 	bySeed map[string]string
+
+	// pool holds session ids the upstream already knows about. The free tier
+	// meters usage per (session, ip): a self-minted id is rejected outright, so
+	// without a registered session no amount of shape-correct requests pass.
+	// assignIdx spreads conversations across the pool; rotation is separate.
+	pool      []string
+	assignIdx int
+	lastIdx   int
 }
 
 // NewSessionCache returns an empty session cache.
@@ -149,11 +157,22 @@ func (c *SessionCache) Lookup(seed []byte) string {
 	return sess
 }
 
-// SessionID returns the upstream session for a request: a stable shaped
-// session derived from the conversation seed, or a random one when the request
-// carries no conversation signal.
+// SessionID returns the upstream session for a request. When a pool of
+// registered sessions is installed those are used (and a conversation keeps
+// prompt-cache affinity); otherwise it falls back to a locally minted id, which
+// the free tier rejects.
 func (c *SessionCache) SessionID(params map[string]any) string {
-	if signal := ConversationSeed(params); signal != "" {
+	signal := ConversationSeed(params)
+	c.mu.Lock()
+	pooled := len(c.pool) > 0
+	c.mu.Unlock()
+	if pooled {
+		if signal != "" {
+			return c.lookupPooled([]byte("ses\x00" + signal))
+		}
+		return c.nextPooled()
+	}
+	if signal != "" {
 		return c.Lookup([]byte("ses\x00" + signal))
 	}
 	return NewIdentifier().New("ses", true)

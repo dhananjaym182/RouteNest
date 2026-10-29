@@ -80,3 +80,6 @@ docs/
 .qoder/
 routenest.log
 .routenest-connections.json
+
+# local editor/tool state (not project config)
+.wu/
