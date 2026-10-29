@@ -467,7 +467,7 @@ const I18N = {
   '仅决定多个出口代理地址之间的选择；Cline 账号轮询与 Provider 评分在': 'Only picks among egress proxy addresses; Cline account rotation and provider scoring live on',
   '「路由与模型」': 'Routing and Models',
   '密钥与安全': 'Keys & Security',
-  '默认模型、轮询策略、回退链与可用模型': 'Default model, rotation strategy, fallback chain & models',
+  '默认模型、轮询策略、回退链、调优参数与可用模型': 'Default model, rotation strategy, fallback chain, tuning parameters & models',
   'opencode zen、Cline 出口代理与请求头': 'opencode zen, Cline egress proxies & headers',
   'Cline 请求头': 'Cline Request Headers',
   'opencode 请求头': 'OpenCode Request Headers',
@@ -1398,8 +1398,12 @@ function switchPageSubTab(page, sub, skipSave) {
       g.style.display = (g.dataset.subpage === sub) ? '' : 'none';
     });
   }
-  if (!skipSave) { try { localStorage.setItem(SUBTAB_KEY_PREFIX + page, sub); } catch(e) {} }
-  if (!skipSave) onPageSubTabShown(page, sub);
+  if (!skipSave) {
+    try { localStorage.setItem(SUBTAB_KEY_PREFIX + page, sub); } catch(e) {}
+    onPageSubTabShown(page, sub);
+    // 子页切换后立即刷新悬浮保存条：调优卡的保存条只在其子页显示，切走即收起
+    refreshSaveBar();
+  }
 }
 
 // 子页显示时的按需加载钩子（用户点击切换时触发；首次进入由 applyTab 处理）
@@ -1552,7 +1556,12 @@ function refreshSaveBar() {
   const diffBtn = _('saveBarDiff');
   if (diffBtn) diffBtn.hidden = !(ctx && typeof ctx.diff === 'function');
   // 有未保存更改时，关闭/刷新页面前提示（浏览器统一展示原生确认文案）
-  if (ctx) window.onbeforeunload = e => { e.preventDefault(); return ''; };
+  // 这里不看 host：脏数据藏在别的子页或收起的抽屉里时同样要提醒，避免静默丢失
+  const anyDirty = Object.keys(_saveBarCtxs).some(k => {
+    const c = _saveBarCtxs[k];
+    return !!c && c.dirty();
+  });
+  if (anyDirty) window.onbeforeunload = e => { e.preventDefault(); return ''; };
   else window.onbeforeunload = null;
 }
 function discardSaveBar() { const c = _currentSaveBarCtx(); if (c) c.discard(); }

@@ -455,7 +455,12 @@ function fillTuning(c) {
   _tunBaseJson = JSON.stringify(collectTuningPayload());
   _tunBaseCfg = c;
   setSaveBarCtx('tuning', {
-    host: () => { const el = document.querySelector('.nav-item.active'); return !!el && el.dataset.tab === 'routing'; },
+    host: () => {
+      const el = document.querySelector('.nav-item.active');
+      if (!el || el.dataset.tab !== 'routing') return false;
+      const st = document.querySelector('.page-subtabs[data-page="routing"] .subtab.active');
+      return !!st && st.dataset.sub === 'tuning';
+    },
     dirty: tuningDirty,
     diff: tuningDiff,
     discard: discardTuning,
