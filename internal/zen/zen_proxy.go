@@ -1,4 +1,4 @@
-package main
+package zen
 
 import (
 	"context"
@@ -29,25 +29,25 @@ import (
 // ============================================================================
 
 var (
-	zenHTTPClient  = &http.Client{Transport: buildZenTransport()}
-	zenProxyCount  atomic.Uint64
-	zenTransportMu sync.Mutex
+	HTTPClient    = &http.Client{Transport: buildZenTransport()}
+	zenProxyCount atomic.Uint64
+	TransportMu   sync.Mutex
 
 	zenProxyCooldowns   = map[int]time.Time{} // 代理索引 → 冷却截止
 	zenProxyCooldownsMu sync.Mutex
 )
 
 func getZenHTTPClient() *http.Client {
-	zenTransportMu.Lock()
-	defer zenTransportMu.Unlock()
-	return zenHTTPClient
+	TransportMu.Lock()
+	defer TransportMu.Unlock()
+	return HTTPClient
 }
 
 // rebuildZenTransport 代理或配置变化时重建 HTTP 客户端。
 func rebuildZenTransport() {
-	zenTransportMu.Lock()
-	defer zenTransportMu.Unlock()
-	zenHTTPClient = &http.Client{Transport: buildZenTransport()}
+	TransportMu.Lock()
+	defer TransportMu.Unlock()
+	HTTPClient = &http.Client{Transport: buildZenTransport()}
 }
 
 func buildZenTransport() *zenEgressTransport {
@@ -273,7 +273,7 @@ func zenDialContext(ctx context.Context, network, addr string) (net.Conn, error)
 // pickZenProxy 按策略选代理，返回 (代理URL, 索引)；未配置返回 ("", -1)。
 // 冷却中的代理线性探测跳过；轮询计数与日志索引保持一致。
 func pickZenProxy() (string, int) {
-	cfg := getZenConfig()
+	cfg := GetConfig()
 	n := len(cfg.Proxies)
 	if n == 0 {
 		return "", -1
@@ -300,7 +300,7 @@ func lastZenProxyIdx() int {
 	if v <= 0 {
 		return -1
 	}
-	n := len(getZenConfig().Proxies)
+	n := len(GetConfig().Proxies)
 	if n == 0 {
 		n = 1
 	}
@@ -334,9 +334,9 @@ func zenProxyAvailable(idx int) bool {
 	return false
 }
 
-// zenProxyCooldownStatus 供管理后台展示：代理 URL → 冷却截止时刻。
-func zenProxyCooldownStatus() map[string]string {
-	cfg := getZenConfig()
+// ProxyCooldownStatus 供管理后台展示：代理 URL → 冷却截止时刻。
+func ProxyCooldownStatus() map[string]string {
+	cfg := GetConfig()
 	zenProxyCooldownsMu.Lock()
 	defer zenProxyCooldownsMu.Unlock()
 	out := map[string]string{}
@@ -348,7 +348,7 @@ func zenProxyCooldownStatus() map[string]string {
 	return out
 }
 
-func maskProxyURL(raw string) string {
+func MaskProxyURL(raw string) string {
 	u, err := url.Parse(raw)
 	if err != nil || u.User == nil {
 		return raw

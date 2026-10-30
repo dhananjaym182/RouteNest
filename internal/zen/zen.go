@@ -1,4 +1,4 @@
-package main
+package zen
 
 import (
 	"bufio"
@@ -16,8 +16,34 @@ import (
 	"cline-go-proxy/internal/accounts"
 	"cline-go-proxy/internal/config"
 	"cline-go-proxy/internal/dispatch"
+	"cline-go-proxy/internal/domain"
+	"cline-go-proxy/internal/platform"
+	"cline-go-proxy/internal/protocol/openaichat"
+	responsesconv "cline-go-proxy/internal/protocol/responses"
 	"cline-go-proxy/internal/transport"
+	"cline-go-proxy/internal/upstream/openaicompat"
 	zenupstream "cline-go-proxy/internal/upstream/zen"
+)
+
+type Model = domain.Model
+
+// SyncResult is one model-catalog synchronization result.
+type SyncResult struct {
+	Changed  bool     `json:"changed"`
+	Added    []string `json:"added"`
+	Removed  []string `json:"removed"`
+	SyncedAt string   `json:"syncedAt"`
+	Total    int      `json:"total"`
+	Error    string   `json:"error,omitempty"`
+}
+
+var (
+	DataPathResolver    = func(name string) string { return platform.ResolveDataPath(name, nil) }
+	BodyOptionsProvider = func() openaicompat.BodyOptions {
+		return openaicompat.BodyOptions{MinMaxTokens: 16, DefaultMaxTokens: 32000}
+	}
+	IsModelGoneError = func(int, string) bool { return false }
+	MarkModelGone    = func(string) {}
 )
 
 // marshalZenJSON encodes a zen body without HTML escaping: the free-tier gate
@@ -41,15 +67,15 @@ func marshalZenJSON(v any) ([]byte, error) {
 // 同步采用全量替换：官方下架的模型自动移除，不会残留僵尸条目。
 // ============================================================================
 
-// zenAPIBase 自 2026-10 中旬起免费模型只在 inference API 应答：
+// APIBase 自 2026-10 中旬起免费模型只在 inference API 应答：
 // /zen/v1 上的同款请求直接 403 FreeTierError（magpie zen-free 插件 0.1.6 实测）。
-const zenAPIBase = "https://opencode.ai/inference/v1"
+const APIBase = "https://opencode.ai/inference/v1"
 
 // 请求日志中的上游标记
 const (
-	upstreamCline    = "cline"
-	upstreamOpenCode = "opencode"
-	upstreamProvider = "provider"
+	UpstreamCline    = "cline"
+	UpstreamOpenCode = "opencode"
+	UpstreamProvider = "provider"
 )
 
 const zenModelSyncInterval = 10 * time.Minute
@@ -83,20 +109,20 @@ func (b *cancelOnCloseBody) Close() error {
 	return b.ReadCloser.Close()
 }
 
-// zenSeedModels 内置 zen 免费模型种子表（含别名），仅作为从未同步成功时的离线 fallback。
+// SeedModels 内置 zen 免费模型种子表（含别名），仅作为从未同步成功时的离线 fallback。
 // 与 builtinModels（Cline 侧）同一模式：同步成功后以远程列表为准。
 // 列表与 2026-09-22 线上 /models 实测的免费模型保持一致。
-type zenSeedModel struct {
+type SeedModel struct {
 	ID      string
 	Aliases []string
 	Context int
 	Output  int
 }
 
-// zenSeedModels 种子表三用途：离线 fallback、免费判定白名单、别名解析。
+// SeedModels 种子表三用途：离线 fallback、免费判定白名单、别名解析。
 // Context 默认 1M（2026-09 主流模型普遍 1M 上下文；压缩阈值按此计算，
 // 偏小会让压缩过早触发——曾导致 200K 默认值把 1M 模型压到几万 token）。
-var zenSeedModels = []zenSeedModel{
+var SeedModels = []SeedModel{
 	{ID: "deepseek-v4-flash-free", Aliases: []string{"deepseek-v4-flash", "deepseek-v4"}, Context: 200000, Output: 128000},
 	{ID: "mimo-v2.6-flash-free", Aliases: []string{"mimo-v2.6-flash", "mimo-v2.6", "mimo"}, Context: 200000, Output: 32000},
 	{ID: "mimo-v2.5-free", Aliases: []string{"mimo-v2.5"}, Context: 200000, Output: 32000},
@@ -109,10 +135,10 @@ var zenSeedModels = []zenSeedModel{
 	{ID: "big-pickle", Context: 200000, Output: 32000},
 }
 
-// builtinZenModels 把种子表转成 Model 条目（离线 fallback 用，Source="seed"）。
-func builtinZenModels() []Model {
-	out := make([]Model, 0, len(zenSeedModels))
-	for _, m := range zenSeedModels {
+// BuiltinModels 把种子表转成 Model 条目（离线 fallback 用，Source="seed"）。
+func BuiltinModels() []Model {
+	out := make([]Model, 0, len(SeedModels))
+	for _, m := range SeedModels {
 		out = append(out, Model{
 			ID:       m.ID,
 			Provider: "opencode",
@@ -127,54 +153,54 @@ func builtinZenModels() []Model {
 	return out
 }
 
-// remoteZenEnabled：zen 官方 /models 同步成功过 → 以远程列表为准，
+// RemoteEnabled：zen 官方 /models 同步成功过 → 以远程列表为准，
 // 种子表中已下架的模型自动休眠（不再出现在列表和路由里）。与 remoteModelsEnabled 同一模式。
 var (
-	remoteZenEnabled   bool
-	remoteZenEnabledMu sync.Mutex
+	RemoteEnabled   bool
+	RemoteEnabledMu sync.Mutex
 )
 
-func remoteZenActive() bool {
-	remoteZenEnabledMu.Lock()
-	defer remoteZenEnabledMu.Unlock()
-	return remoteZenEnabled
+func RemoteActive() bool {
+	RemoteEnabledMu.Lock()
+	defer RemoteEnabledMu.Unlock()
+	return RemoteEnabled
 }
 
-// isZenSource 判断模型来源是否属于 opencode 体系（同步条目 "zen" / 内置种子 "seed"）。
-func isZenSource(m Model) bool {
+// IsSource 判断模型来源是否属于 opencode 体系（同步条目 "zen" / 内置种子 "seed"）。
+func IsSource(m Model) bool {
 	return m.Source == "zen" || m.Source == "seed"
 }
 
-// currentZenModels 返回当前生效的 zen 模型（pool 中 zen 来源条目；
+// CurrentModels 返回当前生效的 zen 模型（pool 中 zen 来源条目；
 // 从未同步成功时回退到种子表）。
-func currentZenModels() []Model {
+func CurrentModels() []Model {
 	p := accounts.LoadPool()
 	accounts.PoolMu.Lock()
 	var zen []Model
 	for _, m := range p.Models {
-		if isZenSource(m) {
+		if IsSource(m) {
 			zen = append(zen, m)
 		}
 	}
 	accounts.PoolMu.Unlock()
-	if len(zen) > 0 || remoteZenActive() {
+	if len(zen) > 0 || RemoteActive() {
 		return zen
 	}
-	return builtinZenModels()
+	return BuiltinModels()
 }
 
-// resolveZenInfo 解析模型名到当前生效的 zen 模型。支持别名与 "opencode/" 前缀。
+// ResolveInfo 解析模型名到当前生效的 zen 模型。支持别名与 "opencode/" 前缀。
 // 别名优先于精确 ID 匹配之后、但优先级高于付费同名 ID（种子的 free 别名不会被覆盖）。
-func resolveZenInfo(id string) (Model, bool) {
+func ResolveInfo(id string) (Model, bool) {
 	id = strings.TrimSpace(id)
 	if id == "" {
 		return Model{}, false
 	}
-	models := currentZenModels()
+	models := CurrentModels()
 
 	// 别名表：seed 模型的别名 → 正式 ID（用种子表数据补全上下文）
 	contextOf := func(m Model) Model { return m }
-	for _, sm := range zenSeedModels {
+	for _, sm := range SeedModels {
 		for _, a := range sm.Aliases {
 			if a == id {
 				// 种子模型必须在当前生效列表里才算数（否则就是被下架了）
@@ -207,13 +233,13 @@ func resolveZenInfo(id string) (Model, bool) {
 	return Model{}, false
 }
 
-// isZenFreeModel 判定 zen 模型是否免费（用于路由：非免费的 zen 模型直接拒绝）。
+// IsFreeModel 判定 zen 模型是否免费（用于路由：非免费的 zen 模型直接拒绝）。
 // 种子白名单兜底：官方免费模型即使同步条目漏标 -free 后缀也不会被误拒。
-func isZenFreeModel(m Model) bool {
+func IsFreeModel(m Model) bool {
 	if m.Cost == "free" || strings.HasSuffix(m.ID, "-free") {
 		return true
 	}
-	for _, sm := range zenSeedModels {
+	for _, sm := range SeedModels {
 		if sm.ID == m.ID {
 			return true
 		}
@@ -221,29 +247,29 @@ func isZenFreeModel(m Model) bool {
 	return false
 }
 
-// routeModel 三态路由："zen" / "reject" / "cline"。
+// RouteModel 三态路由："zen" / "reject" / "cline"。
 // 故障转移开启且 zen 连续失败期间，免费模型请求临时改走 cline 账号池。
-func routeModel(id string) string {
-	m, ok := resolveZenInfo(id)
+func RouteModel(id string) string {
+	m, ok := ResolveInfo(id)
 	if !ok {
 		return "cline"
 	}
-	if !isZenFreeModel(m) {
+	if !IsFreeModel(m) {
 		return "reject"
 	}
 	// 极端情况：同名 ID 同时是 cline 模型（自定义冲突）→ 让给 cline
 	p := accounts.LoadPool()
 	accounts.PoolMu.Lock()
 	for _, pm := range p.Models {
-		if !isZenSource(pm) && pm.ID == strings.TrimPrefix(strings.TrimSpace(id), "opencode/") {
+		if !IsSource(pm) && pm.ID == strings.TrimPrefix(strings.TrimSpace(id), "opencode/") {
 			accounts.PoolMu.Unlock()
 			return "cline"
 		}
 	}
 	accounts.PoolMu.Unlock()
 
-	cfg := getZenConfig()
-	if cfg.Failover && zenFailedNow() {
+	cfg := GetConfig()
+	if cfg.Failover && FailedNow() {
 		log.Printf("  failover: zen degraded, %q routed to cline pool", id)
 		return "cline"
 	}
@@ -252,51 +278,51 @@ func routeModel(id string) string {
 
 // ============ zen 配置 ============
 
-type zenCompactConfig = config.ZenCompact
+type CompactConfig = config.ZenCompact
 
-type zenConfigData = config.Zen
+type ConfigData = config.Zen
 
-func defaultZenConfig() *zenConfigData {
-	return config.DefaultZen(zenAPIBase)
+func DefaultConfig() *ConfigData {
+	return config.DefaultZen(APIBase)
 }
 
 var (
-	zenConfig   *zenConfigData
-	zenConfigMu sync.Mutex
+	Config   *ConfigData
+	ConfigMu sync.Mutex
 )
 
-// getZenConfig 惰性加载配置（避免依赖包初始化顺序）。
-func getZenConfig() *zenConfigData {
-	zenConfigMu.Lock()
-	defer zenConfigMu.Unlock()
-	if zenConfig == nil {
-		path := resolveDataPath(config.ZenPath)
-		cfg, err := config.LoadZen(path, zenAPIBase)
+// GetConfig 惰性加载配置（避免依赖包初始化顺序）。
+func GetConfig() *ConfigData {
+	ConfigMu.Lock()
+	defer ConfigMu.Unlock()
+	if Config == nil {
+		path := DataPathResolver(config.ZenPath)
+		cfg, err := config.LoadZen(path, APIBase)
 		if err != nil {
-			backupCorruptFile(path, err)
+			platform.BackupCorruptFile(path, err)
 		}
-		zenConfig = cfg
+		Config = cfg
 	}
-	return zenConfig
+	return Config
 }
 
-// setZenConfig 原子替换配置并持久化，重建信号量与 HTTP 传输层。
-func setZenConfig(c *zenConfigData) {
-	c.NormalizeForSave(zenAPIBase)
-	zenConfigMu.Lock()
-	zenConfig = c
-	zenConfigMu.Unlock()
+// SetConfig 原子替换配置并持久化，重建信号量与 HTTP 传输层。
+func SetConfig(c *ConfigData) {
+	c.NormalizeForSave(APIBase)
+	ConfigMu.Lock()
+	Config = c
+	ConfigMu.Unlock()
 
-	if err := config.SaveZen(resolveDataPath(config.ZenPath), c); err != nil {
+	if err := config.SaveZen(DataPathResolver(config.ZenPath), c); err != nil {
 		log.Printf("zen config save failed: %v", err)
 	}
 	// 关闭故障转移时立即解除已武装的窗口：否则 UI 仍显示“故障转移中”，
 	// 反向降级 clineFailoverToZen 也会被旧窗口挡住直到超时。
 	if !c.Failover {
-		zenStateMu.Lock()
-		zenFailCount = 0
-		zenFailUntil = time.Time{}
-		zenStateMu.Unlock()
+		StateMu.Lock()
+		FailCount = 0
+		FailUntil = time.Time{}
+		StateMu.Unlock()
 	}
 	rebuildZenTransport()
 	rebuildZenSem()
@@ -305,39 +331,39 @@ func setZenConfig(c *zenConfigData) {
 // ============ 限流防御状态机 ============
 
 var (
-	zenSem       chan struct{} // 并发信号量（防上游瞬时超限）
-	zenFailCount int           // 连续失败计数
-	zenFailUntil time.Time     // 故障转移截止时间
-	zenStateMu   sync.Mutex
+	zenSem    chan struct{} // 并发信号量（防上游瞬时超限）
+	FailCount int           // 连续失败计数
+	FailUntil time.Time     // 故障转移截止时间
+	StateMu   sync.Mutex
 )
 
 func rebuildZenSem() {
-	n := getZenConfig().MaxConcurrency
+	n := GetConfig().MaxConcurrency
 	if n <= 0 {
 		n = 8
 	}
-	zenStateMu.Lock()
+	StateMu.Lock()
 	zenSem = make(chan struct{}, n)
-	zenStateMu.Unlock()
+	StateMu.Unlock()
 }
 
 func markZenSuccess() {
-	zenStateMu.Lock()
-	zenFailCount = 0
-	zenFailUntil = time.Time{}
-	zenStateMu.Unlock()
+	StateMu.Lock()
+	FailCount = 0
+	FailUntil = time.Time{}
+	StateMu.Unlock()
 }
 
-func markZenFail() {
-	cfg := getZenConfig()
+func MarkFail() {
+	cfg := GetConfig()
 	// 故障转移关闭时不计数也不报警：否则会打出 “routing to cline pool” 的
-	// 误导性日志，而实际路由（routeModel）与降级（zenFailoverToCline）都会跳过。
+	// 误导性日志，而实际路由（RouteModel）与降级（zenFailoverToCline）都会跳过。
 	// 同时清掉已武装的窗口，确保 UI 的 “故障转移中” 状态立即消失。
 	if !cfg.Failover {
-		zenStateMu.Lock()
-		zenFailCount = 0
-		zenFailUntil = time.Time{}
-		zenStateMu.Unlock()
+		StateMu.Lock()
+		FailCount = 0
+		FailUntil = time.Time{}
+		StateMu.Unlock()
 		return
 	}
 	thr := cfg.FailoverCount
@@ -348,25 +374,25 @@ func markZenFail() {
 	if window <= 0 {
 		window = 5
 	}
-	zenStateMu.Lock()
-	zenFailCount++
-	if zenFailCount >= thr {
-		zenFailUntil = time.Now().Add(time.Duration(window) * time.Minute)
-		log.Printf("  zen failover armed: %d consecutive failures, routing to cline pool for %dm", zenFailCount, window)
+	StateMu.Lock()
+	FailCount++
+	if FailCount >= thr {
+		FailUntil = time.Now().Add(time.Duration(window) * time.Minute)
+		log.Printf("  zen failover armed: %d consecutive failures, routing to cline pool for %dm", FailCount, window)
 	}
-	zenStateMu.Unlock()
+	StateMu.Unlock()
 }
 
-// zenFailedNow 当前是否处于故障转移窗口内。
-func zenFailedNow() bool {
-	zenStateMu.Lock()
-	defer zenStateMu.Unlock()
-	if zenFailUntil.IsZero() {
+// FailedNow 当前是否处于故障转移窗口内。
+func FailedNow() bool {
+	StateMu.Lock()
+	defer StateMu.Unlock()
+	if FailUntil.IsZero() {
 		return false
 	}
-	if time.Now().After(zenFailUntil) {
-		zenFailCount = 0
-		zenFailUntil = time.Time{}
+	if time.Now().After(FailUntil) {
+		FailCount = 0
+		FailUntil = time.Time{}
 		return false
 	}
 	return true
@@ -382,8 +408,8 @@ func parseRetryAfter(h string) time.Duration {
 	return dispatch.ParseRetryAfter(h)
 }
 
-// validateProxyList 校验代理列表格式：支持 http/https/socks5/socks5h，必须含 host:port。
-func validateProxyList(proxies []string) error {
+// ValidateProxyList 校验代理列表格式：支持 http/https/socks5/socks5h，必须含 host:port。
+func ValidateProxyList(proxies []string) error {
 	return transport.ValidateProxyList(proxies)
 }
 
@@ -443,7 +469,7 @@ func zenRefreshSessionPool(force bool) int {
 	if !force && time.Since(zenPoolStamp) < 30*time.Second {
 		return zenSessions.PoolLen()
 	}
-	cfg := getZenConfig()
+	cfg := GetConfig()
 	ids := cfg.SessionIDs
 	if len(ids) == 0 && cfg.AutoHarvestSessions() {
 		ids = zenupstream.HarvestRegisteredSessions()
@@ -497,10 +523,11 @@ func anonymousToolset(names []string) []any {
 
 // buildZenBody constructs a zen chat request body.
 func buildZenBody(params map[string]any, stream bool, anonymous bool) map[string]any {
+	opts := BodyOptionsProvider()
 	return zenupstream.BuildChatBody(params, stream, anonymous, zenupstream.BodyOptions{
-		PassThroughKeys: passThroughKeys,
+		PassThroughKeys: opts.PassThroughKeys,
 		ResolveModel: func(model string) (string, bool) {
-			if m, ok := resolveZenInfo(model); ok {
+			if m, ok := ResolveInfo(model); ok {
 				return m.ID, true
 			}
 			return "", false
@@ -515,18 +542,18 @@ const zenMaxSessionRotations = 4
 // zenAPIKeyFor picks the outgoing Authorization identity: free zen models are
 // served anonymously (Bearer public) even when a real key is configured.
 func zenAPIKeyFor(params map[string]any, cfgKey string) string {
-	if m, ok := resolveZenInfo(zenUpstreamModelID(params)); ok && isZenFreeModel(m) {
+	if m, ok := ResolveInfo(zenUpstreamModelID(params)); ok && IsFreeModel(m) {
 		return "public"
 	}
 	return cfgKey
 }
 
-// callZenAPI 调用 zen 上游：并发信号量 + 指数退避重试 + 代理冷却 + 故障转移计数。
+// Call 调用 zen 上游：并发信号量 + 指数退避重试 + 代理冷却 + 故障转移计数。
 // 匿名（public key）免费层自 2026-09 起只接受 agent 形态的流式请求：
 // 上游强制 stream:true，下游要 JSON 时把 SSE 折叠回单个 chat.completion 响应。
 // 返回的响应由调用方关闭。
-func callZenAPI(params map[string]any, stream bool) (*http.Response, error) {
-	cfg := getZenConfig()
+func Call(params map[string]any, stream bool) (*http.Response, error) {
+	cfg := GetConfig()
 	zenEnsureSessionPool()
 	// 免费模型统一用匿名身份（Bearer public），与官方 CLI 无 key 时的行为一致；
 	// 付费模型保留配置的 key。
@@ -556,13 +583,13 @@ func callZenAPI(params map[string]any, stream bool) (*http.Response, error) {
 		Sessions: zenSessions,
 	}
 
-	zenStateMu.Lock()
+	StateMu.Lock()
 	sem := zenSem
 	if sem == nil {
 		rebuildZenSemLocked()
 		sem = zenSem
 	}
-	zenStateMu.Unlock()
+	StateMu.Unlock()
 	sem <- struct{}{}
 	defer func() { <-sem }()
 
@@ -575,7 +602,7 @@ func callZenAPI(params map[string]any, stream bool) (*http.Response, error) {
 
 	for attempt := 0; ; attempt++ {
 		// 响应头看门狗：黑洞场景（TCP 通、握手/响应头静默丢弃）请求会永久挂起，
-		// 且 callZenAPI 不返回则 markZenFail 不触发、故障转移永远无法激活。
+		// 且 Call 不返回则 MarkFail 不触发、故障转移永远无法激活。
 		// 60s 内未收到响应头则取消本次尝试（计为网络错误、走重试/故障转移）；
 		// 响应头到达后立即停掉看门狗，流式传输时长不受限制。
 		watchCtx, watchCancel := context.WithCancel(context.Background())
@@ -583,7 +610,7 @@ func callZenAPI(params map[string]any, stream bool) (*http.Response, error) {
 
 		modelID := ""
 		if model, _ := params["model"].(string); model != "" {
-			if m, ok := resolveZenInfo(model); ok {
+			if m, ok := ResolveInfo(model); ok {
 				modelID = m.ID
 			}
 		}
@@ -595,7 +622,7 @@ func callZenAPI(params map[string]any, stream bool) (*http.Response, error) {
 		}
 		sess := req.Header.Get("x-opencode-session")
 		log.Printf("  zen upstream: model=%v proto=%s stream=%v(下游=%v) msgs=%d via=%s attempt=%d session=%s",
-			bodyParamsModel(params), protoName, anonymous, stream, getMsgCount(params), describeZenProxy(), attempt+1, truncate(sess, 30))
+			bodyParamsModel(params), protoName, anonymous, stream, getMsgCount(params), describeZenProxy(), attempt+1, platform.Truncate(sess, 30))
 
 		resp, err := zc.HTTP.Do(req)
 		if err != nil {
@@ -609,7 +636,7 @@ func callZenAPI(params map[string]any, stream bool) (*http.Response, error) {
 				delay *= 2
 				continue
 			}
-			markZenFail()
+			MarkFail()
 			msg := fmt.Errorf("zen request: %w", err)
 			if strings.Contains(err.Error(), "timeout") || strings.Contains(err.Error(), "handshake") ||
 				strings.Contains(err.Error(), "connection refused") || strings.Contains(err.Error(), "unreachable") ||
@@ -638,11 +665,11 @@ func callZenAPI(params map[string]any, stream bool) (*http.Response, error) {
 		watchCancel()
 		bodyBytes := readAllLimited(resp.Body, 64<<10)
 		resp.Body.Close()
-		reason := fmt.Sprintf("zen API %d: %s", resp.StatusCode, truncate(string(bodyBytes), 500))
+		reason := fmt.Sprintf("zen API %d: %s", resp.StatusCode, platform.Truncate(string(bodyBytes), 500))
 
 		// 上游明确报「模型不存在」时清理下架残留（同步标记 Delisted 保留的模型）
-		if model := bodyParamsModel(params); model != "" && isModelGoneError(resp.StatusCode, string(bodyBytes)) {
-			markModelGone(model)
+		if model := bodyParamsModel(params); model != "" && IsModelGoneError(resp.StatusCode, string(bodyBytes)) {
+			MarkModelGone(model)
 		}
 
 		// 上游 500/502/504 多为瞬时故障，退避重试（503 走限流分支）
@@ -653,7 +680,7 @@ func callZenAPI(params map[string]any, stream bool) (*http.Response, error) {
 				delay *= 2
 				continue
 			}
-			markZenFail()
+			MarkFail()
 			return nil, fmt.Errorf("%s", reason)
 		}
 
@@ -700,7 +727,7 @@ func callZenAPI(params map[string]any, stream bool) (*http.Response, error) {
 				delay *= 2
 				continue
 			}
-			markZenFail()
+			MarkFail()
 			if anonymous && zenSessions.PoolLen() == 0 {
 				return nil, fmt.Errorf("%s（未找到已注册的 opencode 会话：免费层只服务上游已登记的 session；请在管理页填入 sessionIds，或在本机用 opencode/wu 正常对话一次以生成）", reason)
 			}
@@ -710,7 +737,7 @@ func callZenAPI(params map[string]any, stream bool) (*http.Response, error) {
 			return nil, fmt.Errorf("%s", reason)
 		}
 
-		markZenFail()
+		MarkFail()
 		return nil, fmt.Errorf("%s", reason)
 	}
 }
@@ -718,6 +745,13 @@ func callZenAPI(params map[string]any, stream bool) (*http.Response, error) {
 func bodyParamsModel(params map[string]any) string {
 	m, _ := params["model"].(string)
 	return m
+}
+
+func getMsgCount(params map[string]any) int {
+	if msgs, ok := params["messages"].([]any); ok {
+		return len(msgs)
+	}
+	return 0
 }
 
 // collapseZenStreamResponse 消费匿名免费层强制返回的 SSE 流，
@@ -797,7 +831,7 @@ func collapseZenStreamResponse(resp *http.Response, model string) (*http.Respons
 			}
 		}
 		if chunk.Usage != nil {
-			acc.Usage = mergeTokenUsage(acc.Usage, parseTokenUsage(chunk.Usage))
+			acc.Usage = openaichat.MergeUsage(acc.Usage, openaichat.ParseUsage(chunk.Usage))
 		}
 	}
 	if err := scanner.Err(); err != nil {
@@ -814,7 +848,7 @@ func readAllLimited(r io.Reader, limit int64) []byte {
 }
 
 func rebuildZenSemLocked() {
-	n := zenConfig.MaxConcurrency
+	n := Config.MaxConcurrency
 	if n <= 0 {
 		n = 8
 	}
@@ -822,7 +856,7 @@ func rebuildZenSemLocked() {
 }
 
 func describeZenProxy() string {
-	cfg := getZenConfig()
+	cfg := GetConfig()
 	if len(cfg.Proxies) == 0 {
 		return "direct"
 	}
@@ -831,17 +865,17 @@ func describeZenProxy() string {
 		idx = 0
 	}
 	idx %= len(cfg.Proxies)
-	return fmt.Sprintf("proxy[%d]=%s", idx+1, truncate(maskProxyURL(cfg.Proxies[idx]), 60))
+	return fmt.Sprintf("proxy[%d]=%s", idx+1, platform.Truncate(MaskProxyURL(cfg.Proxies[idx]), 60))
 }
 
 // ============ 模型同步 ============
 
-// syncZenModels 拉取 zen 官方 /models 并全量替换 pool 中 Source=="zen" 条目：
+// SyncModels 拉取 zen 官方 /models 并全量替换 pool 中 Source=="zen" 条目：
 // 计算新增/移除清单 —— 官方下架的模型自动从列表消失，不留僵尸条目。
 // 自定义模型（Custom=true 或其他 Source）不受影响。
-func syncZenModels() modelSyncResult {
-	res := modelSyncResult{SyncedAt: time.Now().Format(time.RFC3339)}
-	fail := func(err error) modelSyncResult {
+func SyncModels() SyncResult {
+	res := SyncResult{SyncedAt: time.Now().Format(time.RFC3339)}
+	fail := func(err error) SyncResult {
 		msg := err.Error()
 		// 网络类错误给出代理配置提示（opencode.ai 被网络封锁时直连必然失败）
 		if strings.Contains(msg, "timeout") || strings.Contains(msg, "handshake") ||
@@ -854,7 +888,7 @@ func syncZenModels() modelSyncResult {
 		return res
 	}
 
-	cfg := getZenConfig()
+	cfg := GetConfig()
 	endpoint := strings.TrimRight(cfg.BaseURL, "/") + "/models"
 	req, err := http.NewRequest("GET", endpoint, nil)
 	if err != nil {
@@ -888,8 +922,8 @@ func syncZenModels() modelSyncResult {
 	}
 
 	// 组装远程 zen 模型（去重；计费按 -free 后缀或种子白名单判定）
-	seedFree := make(map[string]bool, len(zenSeedModels))
-	for _, sm := range zenSeedModels {
+	seedFree := make(map[string]bool, len(SeedModels))
+	for _, sm := range SeedModels {
 		seedFree[sm.ID] = true
 	}
 	seen := make(map[string]bool)
@@ -941,7 +975,7 @@ func syncZenModels() modelSyncResult {
 				return m
 			}
 		}
-		for _, sm := range zenSeedModels {
+		for _, sm := range SeedModels {
 			if sm.ID == m.ID {
 				m.Context, m.Output = sm.Context, sm.Output
 				return m
@@ -994,26 +1028,26 @@ func syncZenModels() modelSyncResult {
 	accounts.PoolMu.Unlock()
 	accounts.SavePool()
 
-	remoteZenEnabledMu.Lock()
-	remoteZenEnabled = true
-	remoteZenEnabledMu.Unlock()
+	RemoteEnabledMu.Lock()
+	RemoteEnabled = true
+	RemoteEnabledMu.Unlock()
 
 	log.Printf("zen models sync: %d models, +%d added, -%d removed", res.Total, len(res.Added), len(res.Removed))
 	return res
 }
 
-// startZenModelsRefresher 启动定时同步（10 分钟一次，不阻塞启动）。
-func startZenModelsRefresher() {
+// StartModelsRefresher 启动定时同步（10 分钟一次，不阻塞启动）。
+func StartModelsRefresher() {
 	go func() {
 		time.Sleep(2 * time.Second) // 错开启动高峰
-		if cfg := getZenConfig(); cfg.Enabled {
-			setLastZenModelSync(syncZenModels())
+		if cfg := GetConfig(); cfg.Enabled {
+			SetLastModelSync(SyncModels())
 		}
 		ticker := time.NewTicker(zenModelSyncInterval)
 		defer ticker.Stop()
 		for range ticker.C {
-			if cfg := getZenConfig(); cfg.Enabled {
-				setLastZenModelSync(syncZenModels())
+			if cfg := GetConfig(); cfg.Enabled {
+				SetLastModelSync(SyncModels())
 			}
 		}
 	}()
@@ -1022,50 +1056,25 @@ func startZenModelsRefresher() {
 // ============ 最近一次同步结果（管理后台展示） ============
 
 var (
-	lastZenSync    modelSyncResult
+	lastZenSync    SyncResult
 	lastZenSyncRan bool
 	lastZenSyncMu  sync.Mutex
 )
 
-func setLastZenModelSync(res modelSyncResult) {
+func SetLastModelSync(res SyncResult) {
 	lastZenSyncMu.Lock()
 	lastZenSync = res
 	lastZenSyncRan = true
 	lastZenSyncMu.Unlock()
 }
 
-func lastZenModelSync() modelSyncResult {
+func LastModelSync() SyncResult {
 	lastZenSyncMu.Lock()
 	defer lastZenSyncMu.Unlock()
 	if !lastZenSyncRan {
-		return modelSyncResult{SyncedAt: ""}
+		return SyncResult{SyncedAt: ""}
 	}
 	return lastZenSync
-}
-
-// opencodeUsageToday 从请求日志聚合今日 opencode 上游用量（后台仪表盘卡片用）。
-func opencodeUsageToday() map[string]any {
-	requestLogsMu.Lock()
-	defer requestLogsMu.Unlock()
-
-	var requests int64
-	var input, output, total int64
-	today := time.Now().Format("2006-01-02")
-	for _, e := range requestLogs {
-		if e.Upstream != upstreamOpenCode || e.StartedAt.Format("2006-01-02") != today {
-			continue
-		}
-		requests++
-		input += e.InputTokens
-		output += e.OutputTokens
-		total += e.TotalTokens
-	}
-	return map[string]any{
-		"requests":     requests,
-		"inputTokens":  input,
-		"outputTokens": output,
-		"totalTokens":  total,
-	}
 }
 
 // ============ Responses 协议上游（muse-spark 系） ============
@@ -1093,7 +1102,7 @@ func zenUpstreamModelID(params map[string]any) string {
 	if m == "" {
 		return m
 	}
-	if zm, ok := resolveZenInfo(m); ok {
+	if zm, ok := ResolveInfo(m); ok {
 		return zm.ID
 	}
 	return strings.TrimPrefix(m, "opencode/")
@@ -1106,6 +1115,7 @@ func zenUpstreamNeedsResponses(params map[string]any) bool {
 // buildZenResponsesBody 把下游 chat 参数构造成 Responses 请求体。
 // 匿名免费层的 agent 形态要求（强制流式 + 核心工具）同样适用于该协议。
 func buildZenResponsesBody(params map[string]any) map[string]any {
+	opts := BodyOptionsProvider()
 	body := map[string]any{"stream": true}
 	body["model"] = zenUpstreamModelID(params)
 	// max_tokens → max_output_tokens；Meta 系上游要求 >= 16，推理模型预算太小
@@ -1117,9 +1127,9 @@ func buildZenResponsesBody(params map[string]any) map[string]any {
 		if n <= 0 {
 			continue
 		}
-		if n < minUpstreamMaxTokens {
-			log.Printf("  zen clamp max_output_tokens=%d -> %d (upstream requires >= %d)", n, defaultMaxTokens, minUpstreamMaxTokens)
-			n = defaultMaxTokens
+		if n < int64(opts.MinMaxTokens) {
+			log.Printf("  zen clamp max_output_tokens=%d -> %d (upstream requires >= %d)", n, opts.DefaultMaxTokens, opts.MinMaxTokens)
+			n = int64(opts.DefaultMaxTokens)
 		}
 		body["max_output_tokens"] = n
 		break
@@ -1178,21 +1188,21 @@ func buildZenResponsesBody(params map[string]any) map[string]any {
 	var instr []string
 	input := make([]any, 0, 16)
 	if msgs, ok := params["messages"].([]any); ok {
-		for _, m := range sanitizeMessages(msgs) {
+		for _, m := range openaichat.SanitizeMessages(msgs) {
 			mm, ok := m.(map[string]any)
 			if !ok {
 				continue
 			}
 			switch role, _ := mm["role"].(string); role {
 			case "system", "developer":
-				if s := stringifyResponsesContent(mm["content"]); s != "" {
+				if s := responsesconv.StringifyContent(mm["content"]); s != "" {
 					instr = append(instr, s)
 				}
 			case "tool":
 				input = append(input, map[string]any{
 					"type":    "function_call_output",
 					"call_id": mm["tool_call_id"],
-					"output":  stringifyResponsesContent(mm["content"]),
+					"output":  responsesconv.StringifyContent(mm["content"]),
 				})
 			case "assistant":
 				if tcs, ok := mm["tool_calls"].([]any); ok {
@@ -1221,7 +1231,7 @@ func buildZenResponsesBody(params map[string]any) map[string]any {
 						})
 					}
 				}
-				if s := stringifyResponsesContent(mm["content"]); s != "" {
+				if s := responsesconv.StringifyContent(mm["content"]); s != "" {
 					input = append(input, map[string]any{"type": "message", "role": "assistant", "content": s})
 				}
 			default: // user
@@ -1247,7 +1257,7 @@ func buildZenResponsesBody(params map[string]any) map[string]any {
 	body["instructions"] = instrText
 	body["input"] = input
 	// 定稿前清洗 tools（扁平形态）：null 可选字段会被上游网关硬拒 400
-	sanitizeToolsForUpstream(body)
+	openaichat.SanitizeTools(body)
 	return body
 }
 

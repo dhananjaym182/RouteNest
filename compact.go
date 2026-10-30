@@ -2,6 +2,7 @@ package main
 
 import (
 	"cline-go-proxy/internal/accounts"
+	"cline-go-proxy/internal/zen"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -268,8 +269,8 @@ func generateSummary(modelID, prompt string, maxSummary int) (string, error) {
 // When zen is in its failover window every zen candidate is skipped: each
 // attempt costs several retries of backoff before the same 429.
 func summaryModelCandidates(preferred string) []string {
-	cfg := getZenConfig()
-	zenDown := cfg.Failover && zenFailedNow()
+	cfg := zen.GetConfig()
+	zenDown := cfg.Failover && zen.FailedNow()
 	var out []string
 	seen := map[string]bool{}
 	add := func(m string) {
@@ -285,8 +286,8 @@ func summaryModelCandidates(preferred string) []string {
 	}
 	add("free")
 	if !zenDown {
-		for _, m := range currentZenModels() {
-			if isZenFreeModel(m) {
+		for _, m := range zen.CurrentModels() {
+			if zen.IsFreeModel(m) {
 				add(m.ID)
 				break
 			}
@@ -296,7 +297,7 @@ func summaryModelCandidates(preferred string) []string {
 }
 
 // callSummaryModel routes one summary request: zen free models go through
-// callZenAPI, everything else reuses the regular Cline/provider path (which
+// zen.Call, everything else reuses the regular Cline/provider path (which
 // also owns the free-chain fallback).
 func callSummaryModel(model, prompt string, maxSummary int) (string, error) {
 	body := map[string]any{
@@ -310,8 +311,8 @@ func callSummaryModel(model, prompt string, maxSummary int) (string, error) {
 	}
 	var resp *http.Response
 	var err error
-	if zm, ok := resolveZenInfo(model); ok && isZenFreeModel(zm) {
-		resp, err = callZenAPI(body, false)
+	if zm, ok := zen.ResolveInfo(model); ok && zen.IsFreeModel(zm) {
+		resp, err = zen.Call(body, false)
 	} else {
 		resp, _, err = callClineAPI(body, false)
 	}
@@ -471,7 +472,7 @@ func modelForCompaction(model string) Model {
 	if model == "" {
 		return Model{}
 	}
-	if zm, ok := resolveZenInfo(model); ok {
+	if zm, ok := zen.ResolveInfo(model); ok {
 		return zm
 	}
 	p := accounts.LoadPool()
@@ -499,7 +500,7 @@ func compactForRequest(params map[string]any, zm Model, sessionID, label string)
 
 // maybeCompact 估算超限时执行摘要压缩并原地改写 params["messages"]。
 func maybeCompact(params map[string]any, zm Model, sessionID string) compactOutcome {
-	cfg := getZenConfig()
+	cfg := zen.GetConfig()
 	if !cfg.Compaction.Auto {
 		return compactOutcome{}
 	}

@@ -3,6 +3,7 @@ package main
 import (
 	"cline-go-proxy/internal/accounts"
 	"cline-go-proxy/internal/egress"
+	"cline-go-proxy/internal/zen"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -32,15 +33,15 @@ func cmMockUpstream(t *testing.T, jsonBody, sseBody string) func() {
 	})
 	oldTransport := egress.Client.Transport
 	egress.Client.Transport = rt
-	zenTransportMu.Lock()
-	oldZenClient := zenHTTPClient
-	zenHTTPClient = &http.Client{Transport: rt}
-	zenTransportMu.Unlock()
+	zen.TransportMu.Lock()
+	oldZenClient := zen.HTTPClient
+	zen.HTTPClient = &http.Client{Transport: rt}
+	zen.TransportMu.Unlock()
 	return func() {
 		egress.Client.Transport = oldTransport
-		zenTransportMu.Lock()
-		zenHTTPClient = oldZenClient
-		zenTransportMu.Unlock()
+		zen.TransportMu.Lock()
+		zen.HTTPClient = oldZenClient
+		zen.TransportMu.Unlock()
 	}
 }
 
@@ -89,18 +90,18 @@ func TestContextManagementCountTokens(t *testing.T) {
 
 func cmSetZenCompact(t *testing.T) {
 	t.Helper()
-	zenConfigMu.Lock()
-	if zenConfig == nil {
-		zenConfig = &zenConfigData{BaseURL: "http://x", Key: "test-key"}
+	zen.ConfigMu.Lock()
+	if zen.Config == nil {
+		zen.Config = &zen.ConfigData{BaseURL: "http://x", Key: "test-key"}
 	}
-	zenConfig.Key = "test-key"
-	zenConfig.Enabled = true
-	zenConfig.Compaction = zenCompactConfig{KeepTokens: 1, MaxSummary: 64, Buffer: 1}
-	zenConfigMu.Unlock()
+	zen.Config.Key = "test-key"
+	zen.Config.Enabled = true
+	zen.Config.Compaction = zen.CompactConfig{KeepTokens: 1, MaxSummary: 64, Buffer: 1}
+	zen.ConfigMu.Unlock()
 	t.Cleanup(func() {
-		zenConfigMu.Lock()
-		zenConfig = nil
-		zenConfigMu.Unlock()
+		zen.ConfigMu.Lock()
+		zen.Config = nil
+		zen.ConfigMu.Unlock()
 	})
 }
 

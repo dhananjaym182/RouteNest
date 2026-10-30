@@ -3,6 +3,8 @@ package main
 import (
 	"cline-go-proxy/internal/accounts"
 	"cline-go-proxy/internal/egress"
+	"cline-go-proxy/internal/requestlog"
+	"cline-go-proxy/internal/zen"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -697,17 +699,17 @@ func TestCallClineAPIFreeDoesNotPickCoolingAccount(t *testing.T) {
 	oldTransport := egress.Client.Transport
 	// 本用例只验证 Cline 账号挑选：zen 故障转移如今能真正应答，必须关掉才能
 	// 让"全部冷却"如预期地失败。
-	zenConfigMu.Lock()
-	oldZen := zenConfig
-	zenConfig = &zenConfigData{BaseURL: zenAPIBase, Key: "public", Enabled: false}
-	zenConfigMu.Unlock()
+	zen.ConfigMu.Lock()
+	oldZen := zen.Config
+	zen.Config = &zen.ConfigData{BaseURL: zen.APIBase, Key: "public", Enabled: false}
+	zen.ConfigMu.Unlock()
 	t.Cleanup(func() {
 		accounts.Pool = oldPool
 		setProxyConfig(oldConfig)
 		egress.Client.Transport = oldTransport
-		zenConfigMu.Lock()
-		zenConfig = oldZen
-		zenConfigMu.Unlock()
+		zen.ConfigMu.Lock()
+		zen.Config = oldZen
+		zen.ConfigMu.Unlock()
 	})
 
 	account := &Account{
@@ -916,30 +918,30 @@ func TestHandleResponsesFreeReturnsTooManyRequestsWhenBothPoolsUnavailable(t *te
 	oldPool := accounts.Pool
 	oldConfig := getProxyConfig()
 	oldTransport := egress.Client.Transport
-	oldZenCfg := getZenConfig()
-	requestLogsMu.Lock()
-	oldLogs := requestLogs
-	requestLogs = nil
-	requestLogsMu.Unlock()
+	oldZenCfg := zen.GetConfig()
+	requestlog.Mu.Lock()
+	oldLogs := requestlog.Logs
+	requestlog.Logs = nil
+	requestlog.Mu.Unlock()
 	t.Cleanup(func() {
 		accounts.Pool = oldPool
 		setProxyConfig(oldConfig)
 		egress.Client.Transport = oldTransport
-		zenConfigMu.Lock()
-		zenConfig = oldZenCfg
-		zenConfigMu.Unlock()
-		requestLogsMu.Lock()
-		requestLogs = oldLogs
-		requestLogsMu.Unlock()
+		zen.ConfigMu.Lock()
+		zen.Config = oldZenCfg
+		zen.ConfigMu.Unlock()
+		requestlog.Mu.Lock()
+		requestlog.Logs = oldLogs
+		requestlog.Mu.Unlock()
 	})
 	// zen 池指向死端口：本测试只验证「双池不可用 → 429」，
 	// zen 走独立 uTLS 客户端不受 egress.Client.Transport mock 拦截，
 	// 不隔离会真实打到 opencode（免费层补齐核心工具后请求会成功）
 	deadZen := *oldZenCfg
 	deadZen.BaseURL = "http://127.0.0.1:1"
-	zenConfigMu.Lock()
-	zenConfig = &deadZen
-	zenConfigMu.Unlock()
+	zen.ConfigMu.Lock()
+	zen.Config = &deadZen
+	zen.ConfigMu.Unlock()
 
 	account := &Account{
 		AccountID:   "quota-account",
@@ -972,14 +974,14 @@ func TestHandleResponsesFreeReturnsTooManyRequestsWhenBothPoolsUnavailable(t *te
 		t.Fatalf("upstream calls = %d, want one attempt per model (%d)", calls, len(freeModelChain))
 	}
 
-	requestLogsMu.Lock()
-	defer requestLogsMu.Unlock()
-	if len(requestLogs) != 1 {
-		t.Fatalf("request log count = %d, want 1", len(requestLogs))
+	requestlog.Mu.Lock()
+	defer requestlog.Mu.Unlock()
+	if len(requestlog.Logs) != 1 {
+		t.Fatalf("request log count = %d, want 1", len(requestlog.Logs))
 	}
 	lastModel := freeModelChain[len(freeModelChain)-1]
-	if requestLogs[0].Model != lastModel {
-		t.Fatalf("request log model = %q, want %q", requestLogs[0].Model, lastModel)
+	if requestlog.Logs[0].Model != lastModel {
+		t.Fatalf("request log model = %q, want %q", requestlog.Logs[0].Model, lastModel)
 	}
 }
 
@@ -1126,14 +1128,14 @@ func TestSortModelsByAvailabilityPrefersAvailableThenLeastUsed(t *testing.T) {
 // 更新为实际请求上游的模型），不再发空串 —— 客户端不丢失流式消息的模型身份。
 // Anthropic 协议 message_start 每条消息只发一次，上游 payload 的 model 不会回写。
 func TestHandleAnthropicStreamPreservesUpstreamModel(t *testing.T) {
-	requestLogsMu.Lock()
-	oldLogs := requestLogs
-	requestLogs = nil
-	requestLogsMu.Unlock()
+	requestlog.Mu.Lock()
+	oldLogs := requestlog.Logs
+	requestlog.Logs = nil
+	requestlog.Mu.Unlock()
 	t.Cleanup(func() {
-		requestLogsMu.Lock()
-		requestLogs = oldLogs
-		requestLogsMu.Unlock()
+		requestlog.Mu.Lock()
+		requestlog.Logs = oldLogs
+		requestlog.Mu.Unlock()
 	})
 
 	recorder := httptest.NewRecorder()
@@ -1159,14 +1161,14 @@ func TestHandleAnthropicStreamPreservesUpstreamModel(t *testing.T) {
 // message_start 只发一次、先于内容块，且携带请求的服务模型（reqLog.Model），
 // 后续上游 payload 的 model 元数据不回写已发出的信封。
 func TestHandleAnthropicStreamFallsBackOnFirstPayloadWithoutModel(t *testing.T) {
-	requestLogsMu.Lock()
-	oldLogs := requestLogs
-	requestLogs = nil
-	requestLogsMu.Unlock()
+	requestlog.Mu.Lock()
+	oldLogs := requestlog.Logs
+	requestlog.Logs = nil
+	requestlog.Mu.Unlock()
 	t.Cleanup(func() {
-		requestLogsMu.Lock()
-		requestLogs = oldLogs
-		requestLogsMu.Unlock()
+		requestlog.Mu.Lock()
+		requestlog.Logs = oldLogs
+		requestlog.Mu.Unlock()
 	})
 
 	recorder := httptest.NewRecorder()
@@ -1197,14 +1199,14 @@ func TestHandleAnthropicStreamFallsBackOnFirstPayloadWithoutModel(t *testing.T) 
 
 // 上游首条 payload 迟迟不来时，响应头（含信封 + ping）必须先于等待刷出去。
 func TestHandleAnthropicStreamFlushesHeadersBeforeFirstPayload(t *testing.T) {
-	requestLogsMu.Lock()
-	oldLogs := requestLogs
-	requestLogs = nil
-	requestLogsMu.Unlock()
+	requestlog.Mu.Lock()
+	oldLogs := requestlog.Logs
+	requestlog.Logs = nil
+	requestlog.Mu.Unlock()
 	t.Cleanup(func() {
-		requestLogsMu.Lock()
-		requestLogs = oldLogs
-		requestLogsMu.Unlock()
+		requestlog.Mu.Lock()
+		requestlog.Logs = oldLogs
+		requestlog.Mu.Unlock()
 	})
 
 	reader, writer := io.Pipe()

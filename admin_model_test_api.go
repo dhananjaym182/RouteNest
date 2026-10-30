@@ -11,6 +11,7 @@ package main
 // 上游失败 ≠ API 失败：一律 200 包裹 {success:true, data:{ok:false, error:...}}。
 
 import (
+	"cline-go-proxy/internal/zen"
 	"context"
 	"encoding/json"
 	"errors"
@@ -130,35 +131,35 @@ func runQuickModelTest(model string, forcedProvider *CustomProvider, pinSource s
 	tryProvider := func(p *CustomProvider) {
 		resp, err := providers.Call(p, params, false)
 		if err != nil {
-			setResult(upstreamProvider, err.Error())
+			setResult(zen.UpstreamProvider, err.Error())
 			return
 		}
-		recordSuccess(upstreamProvider, resp)
+		recordSuccess(zen.UpstreamProvider, resp)
 	}
 
 	// ---- zen 路径 ----
 	tryZen := func() {
-		zm, ok := resolveZenInfo(model)
-		if !ok || !isZenFreeModel(zm) {
-			setResult(upstreamOpenCode, fmt.Sprintf("model %q is not an available free zen model", model))
+		zm, ok := zen.ResolveInfo(model)
+		if !ok || !zen.IsFreeModel(zm) {
+			setResult(zen.UpstreamOpenCode, fmt.Sprintf("model %q is not an available free zen model", model))
 			return
 		}
-		resp, err := callZenAPI(params, false)
+		resp, err := zen.Call(params, false)
 		if err != nil {
-			setResult(upstreamOpenCode, err.Error())
+			setResult(zen.UpstreamOpenCode, err.Error())
 			return
 		}
-		recordSuccess(upstreamOpenCode, resp)
+		recordSuccess(zen.UpstreamOpenCode, resp)
 	}
 
 	// ---- Cline 账号池路径 ----
 	tryPool := func() {
 		resp, err := quickPoolAttempt(model, params, poolTimeout)
 		if err != nil {
-			setResult(upstreamCline, err.Error())
+			setResult(zen.UpstreamCline, err.Error())
 			return
 		}
-		recordSuccess(upstreamCline, resp)
+		recordSuccess(zen.UpstreamCline, resp)
 	}
 
 	switch strings.TrimSpace(pinSource) {
@@ -167,7 +168,7 @@ func runQuickModelTest(model string, forcedProvider *CustomProvider, pinSource s
 			tryProvider(forcedProvider)
 			return result
 		}
-		setResult(upstreamProvider, "provider not resolvable for test")
+		setResult(zen.UpstreamProvider, "provider not resolvable for test")
 		return result
 	case "cline":
 		tryPool()
@@ -186,10 +187,10 @@ func runQuickModelTest(model string, forcedProvider *CustomProvider, pinSource s
 	kind := comboRouteKind(model)
 	switch kind {
 	case "reject":
-		setResult(upstreamOpenCode, fmt.Sprintf("model %q is a paid opencode model; only free models are proxied", model))
+		setResult(zen.UpstreamOpenCode, fmt.Sprintf("model %q is a paid opencode model; only free models are proxied", model))
 		return result
 	case "zen-degraded":
-		setResult(upstreamOpenCode, fmt.Sprintf("model %q temporarily unavailable (opencode zen degraded)", model))
+		setResult(zen.UpstreamOpenCode, fmt.Sprintf("model %q temporarily unavailable (opencode zen degraded)", model))
 		return result
 	case "zen":
 		tryZen()
@@ -201,7 +202,7 @@ func runQuickModelTest(model string, forcedProvider *CustomProvider, pinSource s
 	for _, p := range providers.ResolveForModel(model) {
 		resp, err := providers.Call(p, params, false)
 		if err == nil {
-			recordSuccess(upstreamProvider, resp)
+			recordSuccess(zen.UpstreamProvider, resp)
 			return result
 		}
 		lastProviderErr = err
@@ -335,7 +336,7 @@ func comboEntryTest(entry ComboEntry) map[string]any {
 		p := findEnabledProviderByName(name)
 		if p == nil {
 			return map[string]any{
-				"ok": false, "model": m, "upstream": upstreamProvider, "durationMs": 0,
+				"ok": false, "model": m, "upstream": zen.UpstreamProvider, "durationMs": 0,
 				"error": fmt.Sprintf("provider %q not found or disabled", name),
 			}
 		}

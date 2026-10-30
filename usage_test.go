@@ -64,3 +64,20 @@ func TestParseTokenUsageRejectsMissingUsage(t *testing.T) {
 		t.Fatalf("usage should be invalid: %+v", usage)
 	}
 }
+
+func TestParseTokenUsageCachePrecedence(t *testing.T) {
+	usage := parseTokenUsage(map[string]any{
+		"prompt_tokens": float64(100),
+		"prompt_tokens_details": map[string]any{
+			"cached_tokens": float64(40),
+		},
+		"cache_read_input_tokens":     float64(10),
+		"cache_creation_input_tokens": float64(5),
+	})
+	if usage.Cached != 40 {
+		t.Fatalf("expected nested precedence cached=40, got %d", usage.Cached)
+	}
+	if usage.Prompt != 100 {
+		t.Fatalf("expected prompt=100, got %d", usage.Prompt)
+	}
+}

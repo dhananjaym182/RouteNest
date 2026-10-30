@@ -1,6 +1,7 @@
 package main
 
 import (
+	"cline-go-proxy/internal/zen"
 	"errors"
 	"log"
 	"net/http"
@@ -16,6 +17,7 @@ import (
 	"cline-go-proxy/internal/httpx"
 	"cline-go-proxy/internal/i18n"
 	"cline-go-proxy/internal/providers"
+	"cline-go-proxy/internal/requestlog"
 )
 
 type apiResponse = httpx.Response
@@ -80,22 +82,22 @@ var adminMonitoring = &adminapi.Monitoring{
 	ModelChain:    func() []string { return getProxyConfig().ModelChain },
 	Version:       func() string { return buildinfo.AppVersion },
 	StartedAt:     func() time.Time { return buildinfo.ServerStartedAt },
-	OpencodeToday: func() any { return opencodeUsageToday() },
+	OpencodeToday: func() any { return requestlog.OpenCodeUsageToday() },
 	ListRequestLogs: func(limit int, cursor string) (any, error) {
-		return listRequestLogs(limit, cursor)
+		return requestlog.List(limit, cursor)
 	},
 	Translate: func(r *http.Request, key string) string { return i18n.TAPI(r, key) },
 }
 
 var adminOpencode = &adminapi.Opencode{
-	Get:            getZenConfig,
-	Set:            setZenConfig,
-	ValidateProxy:  validateProxyList,
-	MaskProxy:      maskProxyURL,
-	ProxyCooldowns: zenProxyCooldownStatus,
-	FailedNow:      zenFailedNow,
-	SyncedModels:   func() int { return len(currentZenModels()) },
-	LastSync:       func() any { return lastZenModelSync() },
+	Get:            zen.GetConfig,
+	Set:            zen.SetConfig,
+	ValidateProxy:  zen.ValidateProxyList,
+	MaskProxy:      zen.MaskProxyURL,
+	ProxyCooldowns: zen.ProxyCooldownStatus,
+	FailedNow:      zen.FailedNow,
+	SyncedModels:   func() int { return len(zen.CurrentModels()) },
+	LastSync:       func() any { return zen.LastModelSync() },
 	Translate:      func(r *http.Request, key string) string { return i18n.TAPI(r, key) },
 }
 
@@ -103,8 +105,8 @@ var adminClineEgress = &adminapi.ClineEgress{
 	Get:           egress.GetClineProxyConfig,
 	Set:           egress.SetClineProxyConfig,
 	PersistErr:    egress.GetClineProxyPersistErr,
-	ValidateProxy: validateProxyList,
-	MaskProxy:     maskProxyURL,
+	ValidateProxy: zen.ValidateProxyList,
+	MaskProxy:     zen.MaskProxyURL,
 	Translate:     func(r *http.Request, key string) string { return i18n.TAPI(r, key) },
 }
 
@@ -179,7 +181,7 @@ func registerAdminRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/admin/api/combos/test", auth(handleComboTest))
 	mux.HandleFunc("/admin/api/password", auth(handleAdminPassword))
 	mux.HandleFunc("/admin/api/request-logs", auth(handleAdminRequestLogs))
-	mux.HandleFunc("/admin/api/request-logs/clear", auth(handleAdminRequestLogsClear))
+	mux.HandleFunc("/admin/api/request-logs/clear", auth(requestlog.HandleClear))
 	mux.HandleFunc("/admin/api/providers/cooldown-reset", auth(providers.HandleCooldownReset))
 	mux.HandleFunc("/admin/api/account-health", auth(providers.HandleAccountHealth))
 	mux.HandleFunc("/admin/api/version-check", auth(buildinfo.HandleAdminVersionCheck))

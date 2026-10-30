@@ -15,6 +15,7 @@
 package main
 
 import (
+	"cline-go-proxy/internal/zen"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -296,7 +297,7 @@ func applyClearToolUses(openAIReq map[string]any, e *CMEdit) (int, int) {
 // ---------- compaction ----------
 
 func runCompaction(ctx context.Context, req anthropicReq, openAIReq map[string]any, edit *CMEdit, origMessages []any) (status, summary string, paused bool) {
-	cfg := getZenConfig()
+	cfg := zen.GetConfig()
 	messages, _ := openAIReq["messages"].([]any)
 	if len(messages) == 0 {
 		return "skipped", "", false
@@ -329,7 +330,7 @@ func runCompaction(ctx context.Context, req anthropicReq, openAIReq map[string]a
 	}
 
 	// model context window if known? zm not available here for CM path; use default.
-	// Try to honor zm via resolveZenInfo? keep simple: default 200k.
+	// Try to honor zm via zen.ResolveInfo? keep simple: default 200k.
 
 	// Prior compaction block / summary detection.
 	previousSummary := findExistingSummary(messages, len(messages))

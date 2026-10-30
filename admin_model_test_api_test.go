@@ -5,6 +5,7 @@ package main
 
 import (
 	"cline-go-proxy/internal/providers"
+	"cline-go-proxy/internal/zen"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -16,9 +17,9 @@ import (
 // installTransport 拦不到）；用完还原，杜绝测试触网。
 func installZenClient(t *testing.T, fn func(req *http.Request) *http.Response) {
 	t.Helper()
-	old := zenHTTPClient
-	t.Cleanup(func() { zenHTTPClient = old })
-	zenHTTPClient = &http.Client{Transport: freeModelRoundTripper(func(req *http.Request) (*http.Response, error) {
+	old := zen.HTTPClient
+	t.Cleanup(func() { zen.HTTPClient = old })
+	zen.HTTPClient = &http.Client{Transport: freeModelRoundTripper(func(req *http.Request) (*http.Response, error) {
 		return fn(req), nil
 	})}
 }
@@ -223,15 +224,15 @@ func TestQuickModelTestRoutes(t *testing.T) {
 	})
 
 	res := quickModelTest("mprov", nil)
-	if res["ok"] != true || res["upstream"] != upstreamProvider {
+	if res["ok"] != true || res["upstream"] != zen.UpstreamProvider {
 		t.Fatalf("provider route: %v", res)
 	}
 	res = quickModelTest("mcline", nil)
-	if res["ok"] != true || res["upstream"] != upstreamCline {
+	if res["ok"] != true || res["upstream"] != zen.UpstreamCline {
 		t.Fatalf("pool route: %v", res)
 	}
 	res = quickModelTest("zen-free-x", nil)
-	if res["ok"] != true || res["upstream"] != upstreamOpenCode {
+	if res["ok"] != true || res["upstream"] != zen.UpstreamOpenCode {
 		t.Fatalf("zen route: %v", res)
 	}
 	if _, ok := res["durationMs"]; !ok {
@@ -262,22 +263,22 @@ func TestQuickModelTestPinnedSemantics(t *testing.T) {
 	// 固定 provider：直接走该家（不看冷却/预算解析）
 	prov := findEnabledProviderByName("PP")
 	res := runQuickModelTest("mprov", prov, "provider", 0)
-	if res["ok"] != true || res["upstream"] != upstreamProvider {
+	if res["ok"] != true || res["upstream"] != zen.UpstreamProvider {
 		t.Fatalf("pinned provider: %v", res)
 	}
 	// 固定 cline：provider-served 模型也不给 provider
 	res = runQuickModelTest("mprov", nil, "cline", quickTestPoolTimeout)
-	if res["upstream"] != upstreamCline {
+	if res["upstream"] != zen.UpstreamCline {
 		t.Fatalf("pinned cline went %v not cline", res["upstream"])
 	}
 	// 固定 zen 但模型不是 zen → 明确失败
 	res = runQuickModelTest("mprov", nil, "zen", quickTestPoolTimeout)
-	if res["ok"] != false || res["upstream"] != upstreamOpenCode {
+	if res["ok"] != false || res["upstream"] != zen.UpstreamOpenCode {
 		t.Fatalf("pinned zen on non-zen: %v", res)
 	}
 	// zen 模型固定 zen → ok
 	res = runQuickModelTest("zen-free-x", nil, "zen", quickTestPoolTimeout)
-	if res["ok"] != true || res["upstream"] != upstreamOpenCode {
+	if res["ok"] != true || res["upstream"] != zen.UpstreamOpenCode {
 		t.Fatalf("pinned zen on zen: %v", res)
 	}
 }
@@ -294,7 +295,7 @@ func TestQuickModelTestProviderFailureFallsToPool(t *testing.T) {
 		return stubResp(req, http.StatusOK, okCompletion)
 	})
 	res := quickModelTest("mprov", nil)
-	if res["ok"] != true || res["upstream"] != upstreamCline {
+	if res["ok"] != true || res["upstream"] != zen.UpstreamCline {
 		t.Fatalf("expected provider failed → pool success: %v", res)
 	}
 }
@@ -311,7 +312,7 @@ func TestAdminModelTestHandler(t *testing.T) {
 	})
 	// 池内账号存在但上游 418 → 200 + ok:false（上游失败 ≠ API 失败）
 	res := quickModelTest("nope-404", nil)
-	if res["ok"] != false || res["upstream"] != upstreamCline {
+	if res["ok"] != false || res["upstream"] != zen.UpstreamCline {
 		t.Fatalf("unexpected result %v", res)
 	}
 }
@@ -360,7 +361,7 @@ func TestHandleComboTest(t *testing.T) {
 		}
 	}
 	first := results[0].(map[string]any)
-	if first["model"] != "mprov" || first["upstream"] != upstreamProvider || first["source"] != "provider" {
+	if first["model"] != "mprov" || first["upstream"] != zen.UpstreamProvider || first["source"] != "provider" {
 		t.Fatalf("provider entry result wrong: %v", first)
 	}
 	if d["allOk"] != true || d["comboId"] != "ct" {

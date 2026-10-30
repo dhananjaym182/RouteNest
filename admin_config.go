@@ -1,6 +1,7 @@
 package main
 
 import (
+	"cline-go-proxy/internal/zen"
 	"log"
 	"net/http"
 	"runtime"
@@ -47,7 +48,7 @@ var adminConfig = &adminapi.Config{
 		}
 		return m
 	},
-	ZenHeaders:      func() map[string]string { return getZenConfig().ZenHeaders },
+	ZenHeaders:      func() map[string]string { return zen.GetConfig().ZenHeaders },
 	PoolPath:        accounts.PoolPath,
 	HasPassword:     func() bool { return accounts.LoadPool().AdminPasswordHash != "" },
 	RestartListener: restartListener,

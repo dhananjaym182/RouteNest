@@ -5,15 +5,16 @@ import (
 	"time"
 
 	"cline-go-proxy/internal/buildinfo"
+	"cline-go-proxy/internal/requestlog"
 )
 
 func TestDashboardOverviewAggregatesWindow(t *testing.T) {
-	old := requestLogs
-	requestLogsMu.Lock()
+	old := requestlog.Logs
+	requestlog.Mu.Lock()
 	defer func() {
-		requestLogsMu.Lock()
-		requestLogs = old
-		requestLogsMu.Unlock()
+		requestlog.Mu.Lock()
+		requestlog.Logs = old
+		requestlog.Mu.Unlock()
 	}()
 
 	now := time.Now()
@@ -24,8 +25,8 @@ func TestDashboardOverviewAggregatesWindow(t *testing.T) {
 		// Outside the 24h window: the newest-first walk must stop here.
 		{ID: "a", StartedAt: now.Add(-30 * time.Hour), Completed: true, Upstream: "cline", Model: "old-z", TotalTokens: 9999},
 	}
-	requestLogs = logs
-	requestLogsMu.Unlock()
+	requestlog.Logs = logs
+	requestlog.Mu.Unlock()
 
 	got := dashboardOverview(24)
 
@@ -86,14 +87,14 @@ func TestDashboardOverviewAggregatesWindow(t *testing.T) {
 }
 
 func TestDashboardOverviewBucketSizing(t *testing.T) {
-	old := requestLogs
-	requestLogsMu.Lock()
-	requestLogs = nil
-	requestLogsMu.Unlock()
+	old := requestlog.Logs
+	requestlog.Mu.Lock()
+	requestlog.Logs = nil
+	requestlog.Mu.Unlock()
 	defer func() {
-		requestLogsMu.Lock()
-		requestLogs = old
-		requestLogsMu.Unlock()
+		requestlog.Mu.Lock()
+		requestlog.Logs = old
+		requestlog.Mu.Unlock()
 	}()
 
 	for _, tc := range []struct {

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"cline-go-proxy/internal/zen"
 	"net/http"
 
 	"cline-go-proxy/internal/adminapi"
@@ -14,8 +15,8 @@ var adminSync = &adminapi.Sync{
 		return res, res.Error
 	},
 	ZenModelSync: func() (any, string) {
-		res := syncZenModels()
-		setLastZenModelSync(res)
+		res := zen.SyncModels()
+		zen.SetLastModelSync(res)
 		return res, res.Error
 	},
 	RecheckAll: func() any { return providers.RunAllRechecks() },

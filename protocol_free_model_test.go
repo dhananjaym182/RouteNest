@@ -3,6 +3,8 @@ package main
 import (
 	"cline-go-proxy/internal/accounts"
 	"cline-go-proxy/internal/egress"
+	"cline-go-proxy/internal/requestlog"
+	"cline-go-proxy/internal/zen"
 	"context"
 	"encoding/json"
 	"io"
@@ -33,10 +35,10 @@ func protocolTestServer(t *testing.T) string {
 		modelSyncMu.Unlock()
 	})
 
-	zenConfigMu.Lock()
-	oldZenConfig := zenConfig
-	zenConfig = &zenConfigData{BaseURL: zenAPIBase, Key: "public"}
-	zenConfigMu.Unlock()
+	zen.ConfigMu.Lock()
+	oldZenConfig := zen.Config
+	zen.Config = &zen.ConfigData{BaseURL: zen.APIBase, Key: "public"}
+	zen.ConfigMu.Unlock()
 
 	oldServerMux := serverMux
 	serverMu.Lock()
@@ -53,9 +55,9 @@ func protocolTestServer(t *testing.T) string {
 			cancel()
 		}
 		serverMux = oldServerMux
-		zenConfigMu.Lock()
-		zenConfig = oldZenConfig
-		zenConfigMu.Unlock()
+		zen.ConfigMu.Lock()
+		zen.Config = oldZenConfig
+		zen.ConfigMu.Unlock()
 	})
 
 	serverErr := make(chan error, 1)
@@ -193,23 +195,23 @@ func TestOpenAIResponsesFreeFallsBackToDSAndPreservesResponseFormat(t *testing.T
 	oldPool := accounts.Pool
 	oldConfig := getProxyConfig()
 	oldTransport := egress.Client.Transport
-	oldLogData, oldLogErr := os.ReadFile(requestLogsPath)
-	requestLogsMu.Lock()
-	oldLogs := requestLogs
-	requestLogs = nil
-	requestLogsMu.Unlock()
-	_ = os.Remove(requestLogsPath)
+	oldLogData, oldLogErr := os.ReadFile(requestlog.Path)
+	requestlog.Mu.Lock()
+	oldLogs := requestlog.Logs
+	requestlog.Logs = nil
+	requestlog.Mu.Unlock()
+	_ = os.Remove(requestlog.Path)
 	t.Cleanup(func() {
 		accounts.Pool = oldPool
 		setProxyConfig(oldConfig)
 		egress.Client.Transport = oldTransport
-		requestLogsMu.Lock()
-		requestLogs = oldLogs
-		requestLogsMu.Unlock()
+		requestlog.Mu.Lock()
+		requestlog.Logs = oldLogs
+		requestlog.Mu.Unlock()
 		if oldLogErr != nil {
-			_ = os.Remove(requestLogsPath)
+			_ = os.Remove(requestlog.Path)
 		} else {
-			_ = os.WriteFile(requestLogsPath, oldLogData, 0600)
+			_ = os.WriteFile(requestlog.Path, oldLogData, 0600)
 		}
 	})
 
@@ -304,13 +306,13 @@ func TestOpenAIResponsesFreeFallsBackToDSAndPreservesResponseFormat(t *testing.T
 		t.Fatalf("models = %q, want %q", got, want)
 	}
 
-	requestLogsMu.Lock()
-	defer requestLogsMu.Unlock()
-	if len(requestLogs) != 1 {
-		t.Fatalf("request log count = %d, want 1", len(requestLogs))
+	requestlog.Mu.Lock()
+	defer requestlog.Mu.Unlock()
+	if len(requestlog.Logs) != 1 {
+		t.Fatalf("request log count = %d, want 1", len(requestlog.Logs))
 	}
-	if requestLogs[0].Model != freeModelFallback {
-		t.Fatalf("request log model = %q, want %q", requestLogs[0].Model, freeModelFallback)
+	if requestlog.Logs[0].Model != freeModelFallback {
+		t.Fatalf("request log model = %q, want %q", requestlog.Logs[0].Model, freeModelFallback)
 	}
 }
 

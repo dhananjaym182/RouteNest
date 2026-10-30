@@ -8,6 +8,7 @@ package main
 import (
 	"cline-go-proxy/internal/accounts"
 	"cline-go-proxy/internal/egress"
+	"cline-go-proxy/internal/zen"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -383,7 +384,7 @@ func TestComboEntryUsesProviderPath(t *testing.T) {
 	if run.Err != nil {
 		t.Fatalf("run err: %v", run.Err)
 	}
-	if run.Model != "prov-x" || run.Upstream != upstreamProvider {
+	if run.Model != "prov-x" || run.Upstream != zen.UpstreamProvider {
 		t.Fatalf("served model=%q upstream=%q, want prov-x/provider", run.Model, run.Upstream)
 	}
 	if providerCalls != 1 || clineCalls != 0 {
@@ -419,7 +420,7 @@ func TestComboSpansSourcesFallback(t *testing.T) {
 	if run.Err != nil {
 		t.Fatalf("run err: %v", run.Err)
 	}
-	if run.Model != "cline-y" || run.Upstream != upstreamCline {
+	if run.Model != "cline-y" || run.Upstream != zen.UpstreamCline {
 		t.Fatalf("served model=%q upstream=%q, want cline-y/cline", run.Model, run.Upstream)
 	}
 	if providerCalls != 1 {
@@ -449,7 +450,7 @@ func TestComboSameModelProviderRedundancy(t *testing.T) {
 	if run.Err != nil {
 		t.Fatalf("run err: %v", run.Err)
 	}
-	if run.Model != "m-r" || run.Upstream != upstreamProvider {
+	if run.Model != "m-r" || run.Upstream != zen.UpstreamProvider {
 		t.Fatalf("served model=%q upstream=%q, want m-r/provider via redundancy group", run.Model, run.Upstream)
 	}
 }
@@ -511,8 +512,8 @@ func TestApplyComboLogFields(t *testing.T) {
 	rl := RequestLog{Model: "c"}
 	combo := ModelCombo{ID: "c", Name: "Combo Display"}
 	trace := []AttemptLog{
-		{Model: "combo-a", Order: 1, Upstream: upstreamCline, Status: 500, Outcome: "failed", Reason: "API 500: boom"},
-		{Model: "combo-b", Order: 2, Upstream: upstreamOpenCode, Outcome: "success"},
+		{Model: "combo-a", Order: 1, Upstream: zen.UpstreamCline, Status: 500, Outcome: "failed", Reason: "API 500: boom"},
+		{Model: "combo-b", Order: 2, Upstream: zen.UpstreamOpenCode, Outcome: "success"},
 	}
 	applyComboLog(&rl, combo, trace, "combo-b")
 
@@ -560,45 +561,45 @@ func TestComboConcurrentConfigAccess(t *testing.T) {
 // ============================ 回归（review 修复） ============================
 
 // 回归 H1：zen 故障转移窗口内，组合条目的分类必须是 zen-degraded（跳过），
-// 不能沿用 routeModel 的 cline 降级（否则会把 zen 模型 ID 原样发给 Cline → 400）。
+// 不能沿用 zen.RouteModel 的 cline 降级（否则会把 zen 模型 ID 原样发给 Cline → 400）。
 func TestComboRouteKindZenDegraded(t *testing.T) {
 	installPool(t, []Model{{ID: "deepseek-v4-flash-free", Source: "zen", Cost: "free", Status: "active"}})
 
-	zenConfigMu.Lock()
-	oldZC := zenConfig
-	zenConfig = defaultZenConfig() // Enabled/Failover=true
-	zenConfigMu.Unlock()
+	zen.ConfigMu.Lock()
+	oldZC := zen.Config
+	zen.Config = zen.DefaultConfig() // Enabled/Failover=true
+	zen.ConfigMu.Unlock()
 	t.Cleanup(func() {
-		zenConfigMu.Lock()
-		zenConfig = oldZC
-		zenConfigMu.Unlock()
+		zen.ConfigMu.Lock()
+		zen.Config = oldZC
+		zen.ConfigMu.Unlock()
 	})
 
-	zenStateMu.Lock()
-	oldCount, oldUntil := zenFailCount, zenFailUntil
-	zenStateMu.Unlock()
+	zen.StateMu.Lock()
+	oldCount, oldUntil := zen.FailCount, zen.FailUntil
+	zen.StateMu.Unlock()
 	t.Cleanup(func() {
-		zenStateMu.Lock()
-		zenFailCount, zenFailUntil = oldCount, oldUntil
-		zenStateMu.Unlock()
+		zen.StateMu.Lock()
+		zen.FailCount, zen.FailUntil = oldCount, oldUntil
+		zen.StateMu.Unlock()
 	})
 
 	const model = "deepseek-v4-flash-free"
 
-	// 健康：routeModel 判 zen，组合分类也是 zen。
-	zenStateMu.Lock()
-	zenFailCount, zenFailUntil = 0, time.Time{}
-	zenStateMu.Unlock()
+	// 健康：zen.RouteModel 判 zen，组合分类也是 zen。
+	zen.StateMu.Lock()
+	zen.FailCount, zen.FailUntil = 0, time.Time{}
+	zen.StateMu.Unlock()
 	if k := comboRouteKind(model); k != "zen" {
 		t.Fatalf("healthy comboRouteKind = %q, want zen", k)
 	}
 
-	// 降级窗口：routeModel 降级为 cline，但组合必须判 zen-degraded。
-	zenStateMu.Lock()
-	zenFailCount = 99
-	zenFailUntil = time.Now().Add(time.Minute)
-	zenStateMu.Unlock()
-	if got := routeModel(model); got != "cline" {
+	// 降级窗口：zen.RouteModel 降级为 cline，但组合必须判 zen-degraded。
+	zen.StateMu.Lock()
+	zen.FailCount = 99
+	zen.FailUntil = time.Now().Add(time.Minute)
+	zen.StateMu.Unlock()
+	if got := zen.RouteModel(model); got != "cline" {
 		t.Fatalf("routeModel in failover window = %q, want cline", got)
 	}
 	if k := comboRouteKind(model); k != "zen-degraded" {

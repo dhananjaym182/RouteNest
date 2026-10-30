@@ -25,6 +25,7 @@ import (
 	"time"
 
 	responsesconv "cline-go-proxy/internal/protocol/responses"
+	"cline-go-proxy/internal/requestlog"
 )
 
 // streamHeartbeatInterval is a variable so tests can shorten it.
@@ -473,7 +474,7 @@ func handleStreamResponse(ctx context.Context, w http.ResponseWriter, upstream *
 			return
 		}
 		recordUsage(acc, upstream, reqLog, reqLog.Model, latestUsage)
-		finalizeRequestLog(reqLog, latestUsage, res.firstOutputAt, reqLog.StartedAt, ok, reason)
+		requestlog.Finalize(reqLog, latestUsage, res.firstOutputAt, reqLog.StartedAt, ok, reason)
 	}
 
 	gone := func() streamResult {
@@ -481,7 +482,7 @@ func handleStreamResponse(ctx context.Context, w http.ResponseWriter, upstream *
 		res.clientGone = true
 		res.usage = latestUsage
 		if reqLog != nil {
-			finalizeRequestLog(reqLog, latestUsage, res.firstOutputAt, reqLog.StartedAt, false, "client disconnected")
+			requestlog.Finalize(reqLog, latestUsage, res.firstOutputAt, reqLog.StartedAt, false, "client disconnected")
 		}
 		return res
 	}
@@ -672,7 +673,7 @@ func serveWithBootstrap(
 		}
 		if retry == nil || attempt >= maxBoot {
 			emitError(w, message)
-			finalizeRequestLog(reqLog, res.usage, res.firstOutputAt, reqLog.StartedAt, false, message)
+			requestlog.Finalize(reqLog, res.usage, res.firstOutputAt, reqLog.StartedAt, false, message)
 			return
 		}
 		if currentAcc != nil && reqLog.Model != "" {
@@ -685,7 +686,7 @@ func serveWithBootstrap(
 				err = fmt.Errorf("retry returned no response")
 			}
 			emitError(w, message+": "+err.Error())
-			finalizeRequestLog(reqLog, res.usage, res.firstOutputAt, reqLog.StartedAt, false, message)
+			requestlog.Finalize(reqLog, res.usage, res.firstOutputAt, reqLog.StartedAt, false, message)
 			return
 		}
 		current, currentAcc = retryResp, retryAcc

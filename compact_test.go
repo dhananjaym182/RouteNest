@@ -3,6 +3,7 @@ package main
 import (
 	"cline-go-proxy/internal/accounts"
 	"cline-go-proxy/internal/egress"
+	"cline-go-proxy/internal/zen"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -45,16 +46,16 @@ func TestEstimateRequestTokensIsConservative(t *testing.T) {
 // does not make every compaction wait through zen retries before falling back.
 func TestSummaryCandidatesSkipZenWhenDegraded(t *testing.T) {
 	resetZenTestState(t)
-	cfg := defaultZenConfig()
+	cfg := zen.DefaultConfig()
 	cfg.Failover = true
 	cfg.FailoverCount = 1
-	zenConfigMu.Lock()
-	zenConfig = cfg
-	zenConfigMu.Unlock()
-	markZenFail()
+	zen.ConfigMu.Lock()
+	zen.Config = cfg
+	zen.ConfigMu.Unlock()
+	zen.MarkFail()
 
 	for _, m := range summaryModelCandidates("deepseek-v4-flash-free") {
-		if _, ok := resolveZenInfo(m); ok {
+		if _, ok := zen.ResolveInfo(m); ok {
 			t.Fatalf("summary candidates include zen model %q while zen is degraded: %v", m, summaryModelCandidates("deepseek-v4-flash-free"))
 		}
 	}
@@ -70,14 +71,14 @@ func TestMaybeCompactFallsBackToClineSummary(t *testing.T) {
 	oldPool := accounts.Pool
 	oldConfig := getProxyConfig()
 	oldTransport := egress.Client.Transport
-	oldZenClient := zenHTTPClient
+	oldZenClient := zen.HTTPClient
 	t.Cleanup(func() {
 		accounts.Pool = oldPool
 		setProxyConfig(oldConfig)
 		egress.Client.Transport = oldTransport
-		zenTransportMu.Lock()
-		zenHTTPClient = oldZenClient
-		zenTransportMu.Unlock()
+		zen.TransportMu.Lock()
+		zen.HTTPClient = oldZenClient
+		zen.TransportMu.Unlock()
 	})
 
 	cfg := defaultProxyConfig()
@@ -93,17 +94,17 @@ func TestMaybeCompactFallsBackToClineSummary(t *testing.T) {
 		Status:      "active",
 	}}}
 
-	zenCfg := defaultZenConfig()
+	zenCfg := zen.DefaultConfig()
 	zenCfg.Failover = true
-	zenCfg.Compaction = zenCompactConfig{Auto: true, Buffer: 100, KeepTokens: 200, MaxSummary: 64}
-	zenConfigMu.Lock()
-	zenConfig = zenCfg
-	zenConfigMu.Unlock()
+	zenCfg.Compaction = zen.CompactConfig{Auto: true, Buffer: 100, KeepTokens: 200, MaxSummary: 64}
+	zen.ConfigMu.Lock()
+	zen.Config = zenCfg
+	zen.ConfigMu.Unlock()
 
 	// Zen is healthy (not in its failover window) but rate-limited: the first
 	// summary candidate must fail fast and hand over to the Cline free chain.
-	zenTransportMu.Lock()
-	zenHTTPClient = &http.Client{Transport: freeModelRoundTripper(func(req *http.Request) (*http.Response, error) {
+	zen.TransportMu.Lock()
+	zen.HTTPClient = &http.Client{Transport: freeModelRoundTripper(func(req *http.Request) (*http.Response, error) {
 		return &http.Response{
 			StatusCode: http.StatusTooManyRequests,
 			Header:     http.Header{"Retry-After": []string{"3600"}},
@@ -111,7 +112,7 @@ func TestMaybeCompactFallsBackToClineSummary(t *testing.T) {
 			Request:    req,
 		}, nil
 	})}
-	zenTransportMu.Unlock()
+	zen.TransportMu.Unlock()
 
 	var clineCalls int
 	egress.Client.Transport = freeModelRoundTripper(func(req *http.Request) (*http.Response, error) {

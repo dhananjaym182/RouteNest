@@ -8,6 +8,7 @@ import (
 
 	"cline-go-proxy/internal/buildinfo"
 	"cline-go-proxy/internal/i18n"
+	"cline-go-proxy/internal/requestlog"
 )
 
 // Dashboard overview aggregation. The admin UI's dashboard tab calls
@@ -44,7 +45,7 @@ type dashModelRow struct {
 }
 
 // dashboardOverview aggregates the in-memory request log over the trailing
-// window. requestLogs is newest-first, so the walk stops at the window start.
+// window. requestlog.Logs is newest-first, so the walk stops at the window start.
 func dashboardOverview(hours int) map[string]any {
 	if hours < 1 {
 		hours = dashboardDefaultHours
@@ -103,8 +104,8 @@ func dashboardOverview(hours int) map[string]any {
 		return idx
 	}
 
-	requestLogsMu.Lock()
-	for _, e := range requestLogs {
+	requestlog.Mu.Lock()
+	for _, e := range requestlog.Logs {
 		if e.StartedAt.Before(from) {
 			break // newest-first: everything after this is older
 		}
@@ -171,7 +172,7 @@ func dashboardOverview(hours int) map[string]any {
 		mo.requests++
 		mo.tokens += e.TotalTokens
 	}
-	requestLogsMu.Unlock()
+	requestlog.Mu.Unlock()
 
 	// Only fleet rows for providers seen inside the window get a series; rows
 	// created after the walk (none) keep lengths consistent.

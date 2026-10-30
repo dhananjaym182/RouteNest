@@ -6,6 +6,7 @@ package main
 
 import (
 	"cline-go-proxy/internal/providers"
+	"cline-go-proxy/internal/zen"
 	"net/http"
 	"path/filepath"
 	"testing"
@@ -43,21 +44,21 @@ func TestEntryRouteKind(t *testing.T) {
 		{ID: "zen-free-x", Source: "zen", Cost: "free", Status: "active"},
 	})
 
-	zenConfigMu.Lock()
-	oldZC := zenConfig
-	zenConfig = defaultZenConfig() // Enabled/Failover=true
-	zenConfigMu.Unlock()
-	zenStateMu.Lock()
-	oldCount, oldUntil := zenFailCount, zenFailUntil
-	zenFailCount, zenFailUntil = 0, time.Time{}
-	zenStateMu.Unlock()
+	zen.ConfigMu.Lock()
+	oldZC := zen.Config
+	zen.Config = zen.DefaultConfig() // Enabled/Failover=true
+	zen.ConfigMu.Unlock()
+	zen.StateMu.Lock()
+	oldCount, oldUntil := zen.FailCount, zen.FailUntil
+	zen.FailCount, zen.FailUntil = 0, time.Time{}
+	zen.StateMu.Unlock()
 	t.Cleanup(func() {
-		zenConfigMu.Lock()
-		zenConfig = oldZC
-		zenConfigMu.Unlock()
-		zenStateMu.Lock()
-		zenFailCount, zenFailUntil = oldCount, oldUntil
-		zenStateMu.Unlock()
+		zen.ConfigMu.Lock()
+		zen.Config = oldZC
+		zen.ConfigMu.Unlock()
+		zen.StateMu.Lock()
+		zen.FailCount, zen.FailUntil = oldCount, oldUntil
+		zen.StateMu.Unlock()
 	})
 
 	// 空固定 = 自动：与 comboRouteKind 完全一致。
@@ -82,15 +83,15 @@ func TestEntryRouteKind(t *testing.T) {
 	}
 
 	// 降级窗口：source=zen 仍指向 zen，但运行时不可用 → zen-degraded（跳过）。
-	zenStateMu.Lock()
-	zenFailCount, zenFailUntil = 99, time.Now().Add(time.Minute)
-	zenStateMu.Unlock()
+	zen.StateMu.Lock()
+	zen.FailCount, zen.FailUntil = 99, time.Now().Add(time.Minute)
+	zen.StateMu.Unlock()
 	if got := entryRouteKind(ComboEntry{Model: "zen-free-x", Source: "zen"}); got != "zen-degraded" {
 		t.Fatalf("source=zen degraded route = %q, want zen-degraded", got)
 	}
-	zenStateMu.Lock()
-	zenFailCount, zenFailUntil = 0, time.Time{}
-	zenStateMu.Unlock()
+	zen.StateMu.Lock()
+	zen.FailCount, zen.FailUntil = 0, time.Time{}
+	zen.StateMu.Unlock()
 
 	// 非 zen 模型固定到 zen → 不可用。
 	if got := entryRouteKind(ComboEntry{Model: "m-a", Source: "zen"}); got != "unavailable" {
@@ -123,7 +124,7 @@ func TestRunComboPinsProvider(t *testing.T) {
 	if run.Err != nil {
 		t.Fatalf("run err: %v", run.Err)
 	}
-	if run.Model != "m-r" || run.Upstream != upstreamProvider {
+	if run.Model != "m-r" || run.Upstream != zen.UpstreamProvider {
 		t.Fatalf("served model=%q upstream=%q, want m-r/provider", run.Model, run.Upstream)
 	}
 	if len(hosts) != 1 || hosts[0] != "p2.test" {
@@ -296,21 +297,21 @@ func TestEntryRouteKindZenPinWinsOverClineCollision(t *testing.T) {
 		{ID: "dual-free", Source: "provider", Provider: "P", Cost: "free", Status: "active"},
 	})
 
-	zenConfigMu.Lock()
-	oldZC := zenConfig
-	zenConfig = defaultZenConfig() // Enabled/Failover=true
-	zenConfigMu.Unlock()
-	zenStateMu.Lock()
-	oldCount, oldUntil := zenFailCount, zenFailUntil
-	zenFailCount, zenFailUntil = 0, time.Time{}
-	zenStateMu.Unlock()
+	zen.ConfigMu.Lock()
+	oldZC := zen.Config
+	zen.Config = zen.DefaultConfig() // Enabled/Failover=true
+	zen.ConfigMu.Unlock()
+	zen.StateMu.Lock()
+	oldCount, oldUntil := zen.FailCount, zen.FailUntil
+	zen.FailCount, zen.FailUntil = 0, time.Time{}
+	zen.StateMu.Unlock()
 	t.Cleanup(func() {
-		zenConfigMu.Lock()
-		zenConfig = oldZC
-		zenConfigMu.Unlock()
-		zenStateMu.Lock()
-		zenFailCount, zenFailUntil = oldCount, oldUntil
-		zenStateMu.Unlock()
+		zen.ConfigMu.Lock()
+		zen.Config = oldZC
+		zen.ConfigMu.Unlock()
+		zen.StateMu.Lock()
+		zen.FailCount, zen.FailUntil = oldCount, oldUntil
+		zen.StateMu.Unlock()
 	})
 
 	// AUTO（空固定）仍让给 cline（既有行为不变）。

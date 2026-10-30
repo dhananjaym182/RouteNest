@@ -1,4 +1,4 @@
-package main
+package requestlog
 
 import (
 	"encoding/base64"
@@ -9,40 +9,47 @@ import (
 	"sync"
 	"time"
 
+	"cline-go-proxy/internal/domain"
+	"cline-go-proxy/internal/httpx"
 	"cline-go-proxy/internal/i18n"
+	"cline-go-proxy/internal/platform"
+	"cline-go-proxy/internal/protocol/openaichat"
 	"cline-go-proxy/internal/providers"
-	"cline-go-proxy/internal/store/requestlog"
+	requestlogstore "cline-go-proxy/internal/store/requestlog"
 )
+
+type requestLog = domain.RequestLog
 
 const (
 	requestLogMaxEntries   = 5000
 	requestLogMaxAge       = 30 * 24 * time.Hour
 	requestLogDefaultLimit = 50
 	requestLogMaxLimit     = 100
+	upstreamOpenCode       = "opencode"
 )
 
 var (
-	requestLogs     []RequestLog
-	requestLogsMu   sync.Mutex
-	requestLogsPath string
+	Logs []requestLog
+	Mu   sync.Mutex
+	Path string
 )
 
 func init() {
-	requestLogsPath = resolveDataPath(".routenest-request-logs.json")
+	Path = platform.ResolveDataPath(requestlogstore.FileName, nil)
 }
 
-func loadRequestLogs() {
-	entries, err := requestlog.Load(requestLogsPath)
+func Load() {
+	entries, err := requestlogstore.Load(Path)
 	if err != nil {
-		backupCorruptFile(requestLogsPath, err)
+		platform.BackupCorruptFile(Path, err)
 		return
 	}
-	requestLogsMu.Lock()
-	requestLogs = pruneRequestLogsLocked(entries)
-	requestLogsMu.Unlock()
+	Mu.Lock()
+	Logs = pruneRequestLogsLocked(entries)
+	Mu.Unlock()
 }
 
-func pruneRequestLogsLocked(entries []RequestLog) []RequestLog {
+func pruneRequestLogsLocked(entries []requestLog) []requestLog {
 	if len(entries) == 0 {
 		return entries
 	}
@@ -68,43 +75,43 @@ func pruneRequestLogsLocked(entries []RequestLog) []RequestLog {
 }
 
 func saveRequestLogsLocked() {
-	if err := requestlog.Save(requestLogsPath, requestLogs); err != nil {
+	if err := requestlogstore.Save(Path, Logs); err != nil {
 		log.Printf("request logs save failed: %v", err)
 	}
 }
 
 // POST /admin/api/request-logs/clear — drop all persisted request logs.
-func handleAdminRequestLogsClear(w http.ResponseWriter, r *http.Request) {
+func HandleClear(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		writeAPI(w, http.StatusMethodNotAllowed, apiResponse{Error: i18n.TAPI(r, "method_not_allowed")})
+		httpx.WriteAPI(w, http.StatusMethodNotAllowed, httpx.Response{Error: i18n.TAPI(r, "method_not_allowed")})
 		return
 	}
-	requestLogsMu.Lock()
-	requestLogs = nil
+	Mu.Lock()
+	Logs = nil
 	saveRequestLogsLocked()
-	requestLogsMu.Unlock()
+	Mu.Unlock()
 	log.Printf("admin: request logs cleared")
-	writeAPI(w, http.StatusOK, apiResponse{Success: true})
+	httpx.WriteAPI(w, http.StatusOK, httpx.Response{Success: true})
 }
 
-func appendRequestLog(entry RequestLog) {
+func appendRequestLog(entry requestLog) {
 	if entry.ID == "" {
 		entry.ID = fmt.Sprintf("req_%d", entry.StartedAt.UnixNano())
 	}
-	requestLogsMu.Lock()
-	requestLogs = append(requestLogs, entry)
-	requestLogs = pruneRequestLogsLocked(requestLogs)
+	Mu.Lock()
+	Logs = append(Logs, entry)
+	Logs = pruneRequestLogsLocked(Logs)
 	saveRequestLogsLocked()
-	requestLogsMu.Unlock()
+	Mu.Unlock()
 }
 
 type requestLogPage struct {
-	Items      []RequestLog `json:"items"`
+	Items      []requestLog `json:"items"`
 	NextCursor string       `json:"nextCursor"`
 	HasMore    bool         `json:"hasMore"`
 }
 
-func encodeCursor(entry RequestLog) string {
+func encodeCursor(entry requestLog) string {
 	key := fmt.Sprintf("%d|%s", entry.StartedAt.UnixNano(), entry.ID)
 	return base64.RawURLEncoding.EncodeToString([]byte(key))
 }
@@ -122,7 +129,7 @@ func decodeCursor(cursor string) (time.Time, string, error) {
 	return time.Unix(0, ts), id, nil
 }
 
-func listRequestLogs(limit int, cursor string) (requestLogPage, error) {
+func List(limit int, cursor string) (requestLogPage, error) {
 	if limit <= 0 {
 		limit = requestLogDefaultLimit
 	}
@@ -141,12 +148,12 @@ func listRequestLogs(limit int, cursor string) (requestLogPage, error) {
 		afterID = id
 	}
 
-	requestLogsMu.Lock()
-	defer requestLogsMu.Unlock()
+	Mu.Lock()
+	defer Mu.Unlock()
 
-	result := make([]RequestLog, 0, limit)
-	var lastEntry RequestLog
-	for _, e := range requestLogs {
+	result := make([]requestLog, 0, limit)
+	var lastEntry requestLog
+	for _, e := range Logs {
 		if cursor != "" {
 			if e.StartedAt.After(afterTime) {
 				continue
@@ -170,11 +177,11 @@ func listRequestLogs(limit int, cursor string) (requestLogPage, error) {
 	return page, nil
 }
 
-func finalizeRequestLog(entry *RequestLog, usage tokenUsage, firstOutputAt time.Time, startedAt time.Time, completed bool, errMsg string) {
+func Finalize(entry *requestLog, usage openaichat.Usage, firstOutputAt time.Time, startedAt time.Time, completed bool, errMsg string) {
 	entry.FinishedAt = time.Now()
 	entry.DurationMs = entry.FinishedAt.Sub(startedAt).Milliseconds()
 	entry.Completed = completed
-	entry.Error = truncate(errMsg, 200)
+	entry.Error = platform.Truncate(errMsg, 200)
 
 	if usage.Valid {
 		entry.UsageAvailable = true
@@ -200,4 +207,29 @@ func finalizeRequestLog(entry *RequestLog, usage tokenUsage, firstOutputAt time.
 	}
 
 	appendRequestLog(*entry)
+}
+
+// OpenCodeUsageToday 从请求日志聚合今日 opencode 上游用量（后台仪表盘卡片用）。
+func OpenCodeUsageToday() map[string]any {
+	Mu.Lock()
+	defer Mu.Unlock()
+
+	var requests int64
+	var input, output, total int64
+	today := time.Now().Format("2006-01-02")
+	for _, e := range Logs {
+		if e.Upstream != upstreamOpenCode || e.StartedAt.Format("2006-01-02") != today {
+			continue
+		}
+		requests++
+		input += e.InputTokens
+		output += e.OutputTokens
+		total += e.TotalTokens
+	}
+	return map[string]any{
+		"requests":     requests,
+		"inputTokens":  input,
+		"outputTokens": output,
+		"totalTokens":  total,
+	}
 }

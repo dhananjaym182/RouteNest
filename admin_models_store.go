@@ -1,6 +1,7 @@
 package main
 
 import (
+	"cline-go-proxy/internal/zen"
 	"net/http"
 
 	"cline-go-proxy/internal/accounts"
@@ -124,7 +125,7 @@ func (rootModelStore) SetDisabled(ids []string, disabled bool) int {
 // zen free models always display as free, matching route classification.
 func normalizeAdminModels(models []domain.Model) []domain.Model {
 	for i := range models {
-		if isZenSource(models[i]) && isZenFreeModel(models[i]) && models[i].Cost != "free" {
+		if zen.IsSource(models[i]) && zen.IsFreeModel(models[i]) && models[i].Cost != "free" {
 			models[i].Cost = "free"
 		}
 	}

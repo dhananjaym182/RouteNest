@@ -1,6 +1,7 @@
 package main
 
 import (
+	"cline-go-proxy/internal/zen"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -56,7 +57,7 @@ func TestCallClineAPIPinnedProvider(t *testing.T) {
 	if pn, _ := params[providerNameParam].(string); pn != "Beta" {
 		t.Errorf("provider name attribution = %q", pn)
 	}
-	if sb, _ := params[servedByParam].(string); sb != upstreamProvider {
+	if sb, _ := params[servedByParam].(string); sb != zen.UpstreamProvider {
 		t.Errorf("served-by = %q", sb)
 	}
 

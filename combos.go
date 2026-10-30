@@ -9,7 +9,7 @@ package main
 // 关键约束（实现时严格遵守）：
 //   - 组合内的顺序是唯一权威。**不**按用量/延迟/质量/随机/账号轮询重排健康条目；
 //     运行时可用性只会让某个条目被「跳过」，不会改变配置顺序。
-//   - 每个条目的派发复用既有路径：zen 免费模型走 callZenAPI；自定义 provider 走
+//   - 每个条目的派发复用既有路径：zen 免费模型走 zen.Call；自定义 provider 走
 //     providers.CallAPI（含冗余组、粘性会话）；其余走 Cline 账号池（含账号轮询、
 //     模型级冷却、402/429 处理）。**不**对每个条目递归调用全局 ModelChain / free 链。
 //   - 默认情况下组合只走自己的序列；只有管理员显式开启 emergencyFallback 才允许
@@ -20,6 +20,7 @@ package main
 // 也**不**从模型名推断质量。
 
 import (
+	"cline-go-proxy/internal/zen"
 	"context"
 	"errors"
 	"fmt"
@@ -147,7 +148,7 @@ func knownModelIDs() map[string]bool {
 			}
 		}
 	}
-	for _, sm := range zenSeedModels {
+	for _, sm := range zen.SeedModels {
 		if sm.ID != "" {
 			known[sm.ID] = true
 		}
@@ -219,7 +220,7 @@ func validateCombo(c ModelCombo, existing []ModelCombo) error {
 		if !known[m] {
 			return fmt.Errorf("unknown model reference %q", m)
 		}
-		if routeModel(m) == "reject" {
+		if zen.RouteModel(m) == "reject" {
 			return fmt.Errorf("model %q is a paid opencode model and cannot be used in a combo", m)
 		}
 		if err := validateComboEntryPin(en, m); err != nil {
@@ -276,8 +277,8 @@ func validateComboEntryPin(en ComboEntry, model string) error {
 		}
 		return nil
 	case "zen":
-		zm, ok := resolveZenInfo(model)
-		if !ok || !isZenFreeModel(zm) {
+		zm, ok := zen.ResolveInfo(model)
+		if !ok || !zen.IsFreeModel(zm) {
 			return &comboPinError{
 				key:  "combo_entry_zen_not_free",
 				msg:  fmt.Sprintf("model %q is not an available free zen model; cannot pin source=zen", model),
@@ -339,7 +340,7 @@ func upsertCombo(c ModelCombo) (ModelCombo, error) {
 	c = normalizeCombo(c)
 
 	// 校验在**不持有** proxyConfigMu 的情况下进行：validateCombo 会读取模型目录、
-	// provider 列表并做 zen 路由判定（涉及 accounts.PoolMu / providersMu / zenConfigMu）。
+	// provider 列表并做 zen 路由判定（涉及 accounts.PoolMu / providersMu / zen.ConfigMu）。
 	// 在配置锁内做这些外部读取会扩大锁范围并带来锁序风险，故先快照再校验。
 	existing := listCombos()
 	others := make([]ModelCombo, 0, len(existing))
@@ -528,38 +529,38 @@ func attemptStatus(err error) int {
 // comboRouteKind 判定组合条目的派发路径：zen / reject（付费 zen）/ cline，以及
 // zen-degraded（zen 处于故障转移窗口，条目运行时不可用应跳过）。
 //
-// 与 routeModel 的唯一区别：routeModel 在 zen 故障转移窗口会把 zen 免费模型降级
+// 与 zen.RouteModel 的唯一区别：zen.RouteModel 在 zen 故障转移窗口会把 zen 免费模型降级
 // 为 "cline"，而组合**不能**沿用该降级 —— 组合没有全局 free 链可改写，若把 zen
 // 模型 ID 原样发给 Cline 会得到 400 "invalid model format"，进而被误判为永久失败
-// 并中止整条组合。故这里显式区分「同名 cline 冲突」（走 cline，与 routeModel 一致）
+// 并中止整条组合。故这里显式区分「同名 cline 冲突」（走 cline，与 zen.RouteModel 一致）
 // 与「zen 降级」（走 zen-degraded → 跳过条目）。
 func comboRouteKind(model string) string {
-	switch routeModel(model) {
+	switch zen.RouteModel(model) {
 	case "reject":
 		return "reject"
 	case "zen":
 		return "zen"
 	}
-	// routeModel == "cline"
-	zm, ok := resolveZenInfo(model)
-	if !ok || !isZenFreeModel(zm) {
+	// zen.RouteModel == "cline"
+	zm, ok := zen.ResolveInfo(model)
+	if !ok || !zen.IsFreeModel(zm) {
 		return "cline" // 普通 cline 模型
 	}
 	if clineModelWithIDExists(model) {
-		return "cline" // 同名 cline 冲突：cline 优先（与 routeModel 一致）
+		return "cline" // 同名 cline 冲突：cline 优先（与 zen.RouteModel 一致）
 	}
 	return "zen-degraded"
 }
 
 // clineModelWithIDExists 判断池内是否存在与给定模型同名的非 zen 模型
-// （自定义冲突场景，routeModel 会把同名 zen 模型让给 cline）。
+// （自定义冲突场景，zen.RouteModel 会把同名 zen 模型让给 cline）。
 func clineModelWithIDExists(model string) bool {
 	id := strings.TrimPrefix(strings.TrimSpace(model), "opencode/")
 	p := accounts.LoadPool()
 	accounts.PoolMu.Lock()
 	defer accounts.PoolMu.Unlock()
 	for _, pm := range p.Models {
-		if !isZenSource(pm) && pm.ID == id {
+		if !zen.IsSource(pm) && pm.ID == id {
 			return true
 		}
 	}
@@ -575,7 +576,7 @@ func clinePoolModelExists(model string) bool {
 	accounts.PoolMu.Lock()
 	defer accounts.PoolMu.Unlock()
 	for _, pm := range p.Models {
-		if !isZenSource(pm) && pm.Source != "provider" && pm.ID == id {
+		if !zen.IsSource(pm) && pm.Source != "provider" && pm.ID == id {
 			return true
 		}
 	}
@@ -610,11 +611,11 @@ func entryRouteKind(e ComboEntry) string {
 	case "zen":
 		// 显式 zen 固定压过 AUTO 的「同名 cline 冲突」降级：这正是用 zen 固定来
 		// 消歧的用途。只按 zen 自身状态判定，与 validateComboEntryPin 保持一致。
-		zm, ok := resolveZenInfo(e.Model)
-		if !ok || !isZenFreeModel(zm) {
+		zm, ok := zen.ResolveInfo(e.Model)
+		if !ok || !zen.IsFreeModel(zm) {
 			return "unavailable"
 		}
-		if cfg := getZenConfig(); cfg.Failover && zenFailedNow() {
+		if cfg := zen.GetConfig(); cfg.Failover && zen.FailedNow() {
 			return "zen-degraded"
 		}
 		return "zen"
@@ -626,7 +627,7 @@ func entryRouteKind(e ComboEntry) string {
 // callSingleModel 通过既有 provider/账号路径调用**单个**模型，不触发全局 ModelChain
 // 或 free 链：这是组合回退的安全基础。
 //
-//   - zen 免费模型 → callZenAPI（含匿名免费层处理）
+//   - zen 免费模型 → zen.Call（含匿名免费层处理）
 //   - 自定义 provider → providers.CallAPI（冗余组 + 粘性会话）；条目固定到
 //     某一 provider 时改走 providers.CallAPINamed（只看该家，不回退账号池）
 //   - 其余 → Cline 账号池（模型级冷却、402/429 换号，账号轮询）
@@ -642,42 +643,42 @@ func callSingleModel(params map[string]any, entry ComboEntry, stream bool, sessi
 
 	switch entryRouteKind(entry) {
 	case "reject":
-		return nil, nil, upstreamOpenCode, "", fmt.Errorf("model %q is a paid opencode model; only free models are proxied", model)
+		return nil, nil, zen.UpstreamOpenCode, "", fmt.Errorf("model %q is a paid opencode model; only free models are proxied", model)
 	case "zen-degraded":
 		// zen 处于故障转移窗口：绝不把 zen 免费模型 ID 原样发给 Cline（会被判
 		// 400 "invalid model format"，进而被组合误判为永久失败）。按运行时不可用
 		// 跳过该条目 —— 返回可重试错误，组合继续尝试下一个条目。
-		return nil, nil, upstreamOpenCode, "", &freeModelUnavailableError{
+		return nil, nil, zen.UpstreamOpenCode, "", &freeModelUnavailableError{
 			message: fmt.Sprintf("model %q temporarily unavailable (opencode zen degraded)", model),
 		}
 	case "unavailable":
 		// 条目固定的上游当前无法服务该模型（zen 固定到非免费/非 zen 模型，或
 		// cline 固定到 provider-only 模型等）：按运行时不可用跳过，返回可重试错误，
 		// 让组合继续尝试下一个条目而不是中止。
-		return nil, nil, upstreamOpenCode, "", &freeModelUnavailableError{
+		return nil, nil, zen.UpstreamOpenCode, "", &freeModelUnavailableError{
 			message: fmt.Sprintf("model %q is not available on the pinned source", model),
 		}
 	case "zen":
-		if zm, ok := resolveZenInfo(model); ok {
+		if zm, ok := zen.ResolveInfo(model); ok {
 			if out := maybeCompact(ep, zm, sessionID); out.changed {
 				log.Printf("  combo %s", out.note)
 			}
 		}
-		resp, err := callZenAPI(ep, stream)
+		resp, err := zen.Call(ep, stream)
 		// 上游返回「上下文超限」400：压缩后重试一次
 		if err != nil && isContextLengthError(err) {
-			if zm, ok := resolveZenInfo(model); ok {
+			if zm, ok := zen.ResolveInfo(model); ok {
 				log.Printf("  combo: context length exceeded, compacting and retrying")
 				if out := fallbackTruncate(ep, zm); out.changed {
 					log.Printf("  combo %s", out.note)
-					resp, err = callZenAPI(ep, stream)
+					resp, err = zen.Call(ep, stream)
 				}
 			}
 		}
 		if err != nil {
-			return nil, nil, upstreamOpenCode, "", err
+			return nil, nil, zen.UpstreamOpenCode, "", err
 		}
-		return resp, nil, upstreamOpenCode, "", nil
+		return resp, nil, zen.UpstreamOpenCode, "", nil
 	}
 
 	// cline 侧：默认先自定义 provider（该模型若接入 provider），失败后走账号池。
@@ -687,24 +688,24 @@ func callSingleModel(params map[string]any, entry ComboEntry, stream bool, sessi
 		// （用户明确指定了唯一上游）。
 		resp, perr, attempted, provName := providers.CallAPINamed(ep, stream, entry.Provider)
 		if !attempted {
-			return nil, nil, upstreamProvider, "", &freeModelUnavailableError{
+			return nil, nil, zen.UpstreamProvider, "", &freeModelUnavailableError{
 				message: fmt.Sprintf("model %q is not served by provider %q", model, strings.TrimSpace(entry.Provider)),
 			}
 		}
 		if perr != nil {
 			// 固定 provider 失败：包装成可重试的「跳过」，避免 400/401/403（如
 			// 一把被轮换的 API key）被 comboRetryable 判为永久错误而中止整条组合。
-			return nil, nil, upstreamProvider, provName, &freeModelUnavailableError{
+			return nil, nil, zen.UpstreamProvider, provName, &freeModelUnavailableError{
 				message: fmt.Sprintf("pinned provider %q failed for %q: %s", strings.TrimSpace(entry.Provider), model, truncate(perr.Error(), 200)),
 			}
 		}
-		return resp, nil, upstreamProvider, provName, nil
+		return resp, nil, zen.UpstreamProvider, provName, nil
 	case "cline":
 		// 显式固定到 Cline 账号池：跳过自定义 provider 尝试，直接走账号池。
 	default:
 		if resp, perr, attempted, provName := providers.CallAPI(ep, stream); attempted {
 			if perr == nil {
-				return resp, nil, upstreamProvider, provName, nil
+				return resp, nil, zen.UpstreamProvider, provName, nil
 			}
 			// provider 已逐个记录失败原因；继续用账号池兜底同一模型。
 		}
@@ -714,17 +715,17 @@ func callSingleModel(params map[string]any, entry ComboEntry, stream bool, sessi
 	for {
 		acc := accounts.PickAccountForModelStrict(model)
 		if acc == nil {
-			return nil, nil, upstreamCline, "", &freeModelUnavailableError{message: fmt.Sprintf("model %q has no available account", model)}
+			return nil, nil, zen.UpstreamCline, "", &freeModelUnavailableError{message: fmt.Sprintf("model %q has no available account", model)}
 		}
 		if tried[acc.AccountID] {
 			// 防呆：账号轮询下也不应无限重试同一个账号（fill 策略等边界）。
-			return nil, acc, upstreamCline, "", &freeModelUnavailableError{message: fmt.Sprintf("model %q unavailable on all eligible accounts", model)}
+			return nil, acc, zen.UpstreamCline, "", &freeModelUnavailableError{message: fmt.Sprintf("model %q unavailable on all eligible accounts", model)}
 		}
 		tried[acc.AccountID] = true
 
 		resp, usedAcc, err := callClineAPIWithAccountCtx(context.Background(), acc, ep, stream)
 		if err == nil {
-			return resp, usedAcc, upstreamCline, "", nil
+			return resp, usedAcc, zen.UpstreamCline, "", nil
 		}
 		var accountErr *clineAccountUnavailableError
 		if errors.As(err, &accountErr) {
@@ -734,7 +735,7 @@ func callSingleModel(params map[string]any, entry ComboEntry, stream bool, sessi
 		// 换账号不可能自愈，立即上抛 —— 不在账号池上空转注定失败的上游往返。
 		// （上下文超限 400 除外：runCombo 层有压缩+重试路径。）
 		if isDeterministicRequestError(err) {
-			return nil, usedAcc, upstreamCline, "", err
+			return nil, usedAcc, zen.UpstreamCline, "", err
 		}
 		if apiErr, ok := err.(*egress.APIError); ok {
 			switch apiErr.StatusCode {
@@ -747,7 +748,7 @@ func callSingleModel(params map[string]any, entry ComboEntry, stream bool, sessi
 				continue // 模型级冷却已记录，换号
 			}
 		}
-		return nil, usedAcc, upstreamCline, "", err
+		return nil, usedAcc, zen.UpstreamCline, "", err
 	}
 }
 
@@ -844,8 +845,8 @@ func runCombo(params map[string]any, combo ModelCombo, stream bool, sessionID st
 		}
 		if err == nil {
 			params["model"] = m
-			if upstream == upstreamProvider {
-				params[servedByParam] = upstreamProvider
+			if upstream == zen.UpstreamProvider {
+				params[servedByParam] = zen.UpstreamProvider
 				params[providerNameParam] = provName
 			} else {
 				delete(params, servedByParam)
@@ -903,14 +904,14 @@ func runCombo(params map[string]any, combo ModelCombo, stream bool, sessionID st
 				delete(params, providers.ProviderIDParam)
 			}
 			trace = append(trace, AttemptLog{
-				Model: fm, Order: -1, Upstream: upstreamCline, Outcome: "success",
+				Model: fm, Order: -1, Upstream: zen.UpstreamCline, Outcome: "success",
 				Reason: "emergency fallback outside combo (opt-in)",
 			})
-			return comboRun{Resp: resp, Acc: acc, Upstream: upstreamCline, Model: fm, Trace: trace}
+			return comboRun{Resp: resp, Acc: acc, Upstream: zen.UpstreamCline, Model: fm, Trace: trace}
 		} else {
 			lastErr = err
 			trace = append(trace, AttemptLog{
-				Model: "free", Order: -1, Upstream: upstreamCline, Outcome: "failed",
+				Model: "free", Order: -1, Upstream: zen.UpstreamCline, Outcome: "failed",
 				Reason: truncate(err.Error(), 200), Status: attemptStatus(err),
 			})
 		}
@@ -976,7 +977,7 @@ func combosCatalog() []map[string]any {
 	out := make([]map[string]any, 0, len(models))
 	for _, m := range models {
 		cost := m.Cost
-		if isZenSource(m) && isZenFreeModel(m) {
+		if zen.IsSource(m) && zen.IsFreeModel(m) {
 			cost = "free" // 与路由判定保持一致
 		}
 		out = append(out, map[string]any{

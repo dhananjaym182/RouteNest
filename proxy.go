@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"cline-go-proxy/internal/zen"
 	"context"
 	"encoding/json"
 	"errors"
@@ -28,6 +29,7 @@ import (
 	anthropicconv "cline-go-proxy/internal/protocol/anthropic"
 	"cline-go-proxy/internal/protocol/openaichat"
 	"cline-go-proxy/internal/providers"
+	"cline-go-proxy/internal/requestlog"
 	clineupstream "cline-go-proxy/internal/upstream/cline"
 )
 
@@ -164,29 +166,29 @@ func getAllModels() []Model {
 
 	var custom []Model
 	var remote []Model
-	var zen []Model
+	var zenModels []Model
 	for _, m := range p.Models {
 		switch m.Source {
 		case "remote":
 			remote = append(remote, m)
 		case "zen":
-			zen = append(zen, m)
+			zenModels = append(zenModels, m)
 		default:
 			custom = append(custom, m)
 		}
 	}
 
-	if len(remote) > 0 || len(zen) > 0 || remoteZenActive() {
-		result := make([]Model, 0, len(remote)+len(zen)+len(custom))
+	if len(remote) > 0 || len(zenModels) > 0 || zen.RemoteActive() {
+		result := make([]Model, 0, len(remote)+len(zenModels)+len(custom))
 		result = append(result, remote...)
-		result = append(result, zen...)
+		result = append(result, zenModels...)
 		result = append(result, custom...)
 		return result
 	}
 
-	builtin := make([]Model, 0, len(builtinModels)+len(zenSeedModels))
+	builtin := make([]Model, 0, len(builtinModels)+len(zen.SeedModels))
 	builtin = append(builtin, builtinModels...)
-	builtin = append(builtin, builtinZenModels()...)
+	builtin = append(builtin, zen.BuiltinModels()...)
 
 	result := make([]Model, 0, len(builtin)+len(custom))
 	result = append(result, builtin...)
@@ -424,13 +426,13 @@ func isFreeModelEntry(m Model) bool {
 	if m.Cost == "free" {
 		return true
 	}
-	return isZenSource(m) && isZenFreeModel(m)
+	return zen.IsSource(m) && zen.IsFreeModel(m)
 }
 
 func startProxy(host string, port int) error {
 	log.Printf("Data directory: %s (set %s to override)", currentDataDir(), dataDirEnv)
 	p := accounts.LoadPool()
-	loadRequestLogs()
+	requestlog.Load()
 	// 自定义 provider 声明的模型同步进池：模型管理页可见、可启停、参与自动回退
 	providers.SyncModels()
 	activeCount := 0
@@ -455,8 +457,8 @@ func startProxy(host string, port int) error {
 	providers.StartModelRecheck()
 
 	// opencode zen：定时同步免费模型列表 + 压缩会话状态清理
-	if getZenConfig().Enabled {
-		startZenModelsRefresher()
+	if zen.GetConfig().Enabled {
+		zen.StartModelsRefresher()
 	}
 	startCompactCleanup()
 
@@ -552,7 +554,7 @@ func startProxy(host string, port int) error {
 		// Free-only routing rejects models whose route access is not verified
 		// free (or free_tier with an active allowance).
 		if msg := freeOnlyRejection(model); msg != "" {
-			finalizeRequestLog(&reqLog, tokenUsage{}, time.Time{}, reqLog.StartedAt, false, msg)
+			requestlog.Finalize(&reqLog, tokenUsage{}, time.Time{}, reqLog.StartedAt, false, msg)
 			writeJSON(w, http.StatusBadRequest, map[string]any{
 				"error": map[string]string{"message": msg, "type": "invalid_request_error"},
 			})
@@ -596,7 +598,7 @@ func startProxy(host string, port int) error {
 		if combo, ok := findCombo(model); ok {
 			if !combo.Enabled {
 				msg := fmt.Sprintf("model combo %q is disabled", model)
-				finalizeRequestLog(&reqLog, tokenUsage{}, time.Time{}, reqLog.StartedAt, false, msg)
+				requestlog.Finalize(&reqLog, tokenUsage{}, time.Time{}, reqLog.StartedAt, false, msg)
 				writeJSON(w, http.StatusBadRequest, map[string]any{
 					"error": map[string]string{"message": msg, "type": "invalid_request_error"},
 				})
@@ -613,7 +615,7 @@ func startProxy(host string, port int) error {
 			if run.Err != nil {
 				log.Printf("  combo %q error: %v", combo.ID, run.Err)
 				msg := comboTraceSummary(combo, run)
-				finalizeRequestLog(&reqLog, tokenUsage{}, time.Time{}, reqLog.StartedAt, false, msg)
+				requestlog.Finalize(&reqLog, tokenUsage{}, time.Time{}, reqLog.StartedAt, false, msg)
 				writeJSON(w, clineErrorHTTPStatus(run.Err), map[string]any{
 					"error": map[string]string{"message": msg, "type": "api_error"},
 				})
@@ -632,29 +634,29 @@ func startProxy(host string, port int) error {
 		}
 
 		// 按 model 自动分流：zen 免费模型 / zen 付费拒绝 / 其余走 Cline 池
-		switch routeModel(model) {
+		switch zen.RouteModel(model) {
 		case "reject":
 			msg := fmt.Sprintf("model %q is a paid opencode model; only free models are proxied", model)
-			finalizeRequestLog(&reqLog, tokenUsage{}, time.Time{}, reqLog.StartedAt, false, msg)
+			requestlog.Finalize(&reqLog, tokenUsage{}, time.Time{}, reqLog.StartedAt, false, msg)
 			writeJSON(w, http.StatusBadRequest, map[string]any{
 				"error": map[string]string{"message": msg, "type": "invalid_request_error"},
 			})
 			return
 		case "zen":
-			reqLog.Upstream = upstreamOpenCode
-			zm, _ := resolveZenInfo(model)
+			reqLog.Upstream = zen.UpstreamOpenCode
+			zm, _ := zen.ResolveInfo(model)
 			out := maybeCompact(params, zm, requestSessionID(params, r.Header))
 			if out.changed {
 				log.Printf("  chat %s", out.note)
 			}
-			resp, err := callZenAPI(params, isStream)
+			resp, err := zen.Call(params, isStream)
 			// 上游返回「上下文超限」400：压缩后重试一次，避免 Claude Code 大上下文直接失败
 			if err != nil && isContextLengthError(err) {
 				log.Printf("  chat: context length exceeded, compacting and retrying")
 				out2 := fallbackTruncate(params, zm)
 				if out2.changed {
 					log.Printf("  chat %s", out2.note)
-					resp, err = callZenAPI(params, isStream)
+					resp, err = zen.Call(params, isStream)
 				}
 			}
 			if err != nil {
@@ -690,7 +692,7 @@ func startProxy(host string, port int) error {
 					err = fmt.Errorf("zen: %v; cline free chain: %w", err, fbErr)
 				}
 				log.Printf("  api error: %v", err)
-				finalizeRequestLog(&reqLog, tokenUsage{}, time.Time{}, reqLog.StartedAt, false, err.Error())
+				requestlog.Finalize(&reqLog, tokenUsage{}, time.Time{}, reqLog.StartedAt, false, err.Error())
 				writeJSON(w, http.StatusBadGateway, map[string]any{
 					"error": map[string]string{"message": err.Error(), "type": "api_error"},
 				})
@@ -751,7 +753,7 @@ func startProxy(host string, port int) error {
 		}
 		if err != nil {
 			log.Printf("  api error: %v", err)
-			finalizeRequestLog(&reqLog, tokenUsage{}, time.Time{}, reqLog.StartedAt, false, err.Error())
+			requestlog.Finalize(&reqLog, tokenUsage{}, time.Time{}, reqLog.StartedAt, false, err.Error())
 			writeJSON(w, clineErrorHTTPStatus(err), map[string]any{
 				"error": map[string]string{"message": err.Error(), "type": "api_error"},
 			})
@@ -847,7 +849,7 @@ func startProxy(host string, port int) error {
 	fmt.Println("  API Key: any value")
 	fmt.Printf("  Model:   %s\n", getDefaultModel())
 	fmt.Printf("  Accounts: %d total, %d active\n", len(accounts.LoadPool().Accounts), activeCount)
-	if zc := getZenConfig(); zc.Enabled {
+	if zc := zen.GetConfig(); zc.Enabled {
 		fmt.Printf("  OpenCode: enabled (%s free models)\n", strings.TrimRight(zc.BaseURL, "/"))
 	} else {
 		fmt.Println("  OpenCode: disabled")
@@ -920,7 +922,7 @@ func modelMaxOutputLimit(model string) int {
 	accounts.PoolMu.Lock()
 	defer accounts.PoolMu.Unlock()
 	for _, m := range p.Models {
-		if m.ID == model && !isZenSource(m) && m.Output > 0 {
+		if m.ID == model && !zen.IsSource(m) && m.Output > 0 {
 			return m.Output
 		}
 	}
@@ -1069,8 +1071,8 @@ func isDeterministicRequestError(err error) bool {
 }
 
 // servedByParam 是 callClineAPI 族回写在 params 上的「实际服务方」标记：
-// 自定义 provider 成功服务时写入 upstreamProvider。仅用于请求日志归因——
-// buildUpstreamBody / providers.Call / callZenAPI 只拷贝白名单键，不会外发。
+// 自定义 provider 成功服务时写入 zen.UpstreamProvider。仅用于请求日志归因——
+// buildUpstreamBody / providers.Call / zen.Call 只拷贝白名单键，不会外发。
 const servedByParam = "__served_by"
 
 // providerNameParam 与 servedByParam 配套：自定义 provider 成功服务时回写实际
@@ -1080,21 +1082,21 @@ const providerNameParam = "__served_by_name"
 // stampUpstream 按实际服务结果写入请求日志的上游归因：
 // provider 标记 > 生效模型是 zen 模型（反向故障转移）> Cline 账号池。
 func stampUpstream(reqLog *RequestLog, params map[string]any) {
-	if v, _ := params[servedByParam].(string); v == upstreamProvider {
-		reqLog.Upstream = upstreamProvider
+	if v, _ := params[servedByParam].(string); v == zen.UpstreamProvider {
+		reqLog.Upstream = zen.UpstreamProvider
 		reqLog.ProviderName, _ = params[providerNameParam].(string)
 		reqLog.ProviderID, _ = params[providers.ProviderIDParam].(string)
 		return
 	}
 	if m, _ := params["model"].(string); m != "" {
-		if _, isZen := resolveZenInfo(m); isZen {
-			reqLog.Upstream = upstreamOpenCode
+		if _, isZen := zen.ResolveInfo(m); isZen {
+			reqLog.Upstream = zen.UpstreamOpenCode
 			reqLog.ProviderName = ""
 			reqLog.ProviderID = ""
 			return
 		}
 	}
-	reqLog.Upstream = upstreamCline
+	reqLog.Upstream = zen.UpstreamCline
 	reqLog.ProviderName = ""
 	reqLog.ProviderID = ""
 }
@@ -1115,7 +1117,7 @@ func callClineAPI(params map[string]any, stream bool) (*http.Response, *Account,
 		resp, perr, attempted, provName := providers.CallAPINamed(params, stream, pin)
 		switch {
 		case attempted && perr == nil:
-			params[servedByParam] = upstreamProvider
+			params[servedByParam] = zen.UpstreamProvider
 			params[providerNameParam] = provName
 			return resp, nil, nil
 		case !attempted:
@@ -1145,7 +1147,7 @@ func callClineAPI(params map[string]any, stream bool) (*http.Response, *Account,
 	// zen 免费模型进入 cline 池仅发生在 zen 故障转移期间：改写成 cline 侧可用的
 	// free 模型链，否则 Cline 上游会报 "invalid model format. Expected format:
 	// modelType/model"（zen 的裸模型 ID 不符合 Cline 的 provider/model 格式）。
-	if zm, ok := resolveZenInfo(model); ok && isZenFreeModel(zm) {
+	if zm, ok := zen.ResolveInfo(model); ok && zen.IsFreeModel(zm) {
 		log.Printf("  zen failover: rewriting zen model %q to cline free chain", model)
 		return callFreeClineAPI(params, stream)
 	}
@@ -1202,7 +1204,7 @@ func callClineAPI(params map[string]any, stream bool) (*http.Response, *Account,
 						log.Printf("  model fallback: %q unavailable, serving via provider %q", model, m)
 					}
 					params["model"] = m // 回写实际服务模型，供请求日志归因
-					params[servedByParam] = upstreamProvider
+					params[servedByParam] = zen.UpstreamProvider
 					params[providerNameParam] = provName
 					return pResp, nil, nil
 				}
@@ -1401,7 +1403,7 @@ func liveModelSet(p *AccountPool) map[string]bool {
 }
 
 // isModelDisabled 判断模型是否被管理员在管理页手动停用（Disabled 标记）。
-// 支持 "opencode/" 前缀别名（与 routeModel 的匹配方式一致）。
+// 支持 "opencode/" 前缀别名（与 zen.RouteModel 的匹配方式一致）。
 // 停用语义：不进客户端模型列表、直接请求在入口处拒绝、默认模型与回退链跳过。
 func isModelDisabled(id string) bool {
 	id = strings.TrimSpace(id)
@@ -1514,7 +1516,7 @@ func callFreeClineAPI(params map[string]any, stream bool) (*http.Response, *Acco
 		// 失败（记冷却）后继续用账号池兜底——free 别名不再绕过 provider。
 		if pResp, pErr, attempted, provName := providers.CallAPI(params, stream); attempted {
 			if pErr == nil {
-				params[servedByParam] = upstreamProvider
+				params[servedByParam] = zen.UpstreamProvider
 				params[providerNameParam] = provName
 				return pResp, nil, nil
 			}
@@ -1955,7 +1957,7 @@ func handleNonStreamResponse(w http.ResponseWriter, upstream *http.Response, acc
 	copyPassthroughHeaders(w, upstream.Header)
 	var raw map[string]any
 	if err := json.NewDecoder(upstream.Body).Decode(&raw); err != nil {
-		finalizeRequestLog(reqLog, tokenUsage{}, time.Time{}, reqLog.StartedAt, false, "decode response: "+err.Error())
+		requestlog.Finalize(reqLog, tokenUsage{}, time.Time{}, reqLog.StartedAt, false, "decode response: "+err.Error())
 		writeJSON(w, http.StatusInternalServerError, map[string]any{
 			"error": map[string]string{"message": err.Error(), "type": "parse_error"},
 		})
@@ -1974,7 +1976,7 @@ func handleNonStreamResponse(w http.ResponseWriter, upstream *http.Response, acc
 	restoreToolCallsInResponse(out, reqLog.ToolNames)
 	usage := parseTokenUsage(out["usage"])
 	recordUsage(acc, upstream, reqLog, reqLog.Model, usage)
-	finalizeRequestLog(reqLog, usage, time.Time{}, reqLog.StartedAt, true, "")
+	requestlog.Finalize(reqLog, usage, time.Time{}, reqLog.StartedAt, true, "")
 
 	if msg, ok := getNested(out, "choices", 0, "message").(map[string]any); ok {
 		tc, _ := msg["tool_calls"].([]any)
@@ -2064,10 +2066,10 @@ func openAIToAnthropic(openAI map[string]any) map[string]any {
 
 // zenFailoverToCline zen 调用失败后的透明降级：改走 cline 账号池 free 模型链。
 // attempted=false 表示未启用故障转移，调用方维持原错误路径。
-// 注意：失败计数由 callZenAPI 内部标记（每请求恰好一次），此处不再重复计数，
+// 注意：失败计数由 zen.Call 内部标记（每请求恰好一次），此处不再重复计数，
 // 否则限流/服务错误路径 + 此处各计一次，故障转移会被过早触发。
 func zenFailoverToCline(params map[string]any, stream bool) (*http.Response, *Account, error, bool) {
-	cfg := getZenConfig()
+	cfg := zen.GetConfig()
 	if !cfg.Failover {
 		return nil, nil, nil, false
 	}
@@ -2083,14 +2085,14 @@ func zenFailoverToCline(params map[string]any, stream bool) (*http.Response, *Ac
 // 任一免费上游挂掉，流量自动落到另一条。zen 未启用或处于故障转移窗口
 // （连续失败被判定不可达）时不尝试；最多试 3 个免费模型，避免在坏模型上反复烧时间。
 func clineFailoverToZen(params map[string]any, stream bool) (*http.Response, bool) {
-	cfg := getZenConfig()
-	if !cfg.Enabled || zenFailedNow() {
+	cfg := zen.GetConfig()
+	if !cfg.Enabled || zen.FailedNow() {
 		return nil, false
 	}
 	orig, _ := params["model"].(string)
 	attempts := 0
-	for _, m := range currentZenModels() {
-		if !isZenFreeModel(m) || m.ID == orig {
+	for _, m := range zen.CurrentModels() {
+		if !zen.IsFreeModel(m) || m.ID == orig {
 			continue
 		}
 		attempts++
@@ -2099,7 +2101,7 @@ func clineFailoverToZen(params map[string]any, stream bool) (*http.Response, boo
 		}
 		log.Printf("  cline failover: %q exhausted, trying zen free model %q", orig, m.ID)
 		params["model"] = m.ID
-		resp, err := callZenAPI(params, stream)
+		resp, err := zen.Call(params, stream)
 		if err == nil {
 			return resp, true
 		}
@@ -2142,7 +2144,7 @@ func handleAnthropicMessages(w http.ResponseWriter, r *http.Request) {
 
 	// Administrator model policy: alias rewrite + wildcard exclusions.
 	if resolved, reject := resolveClientModel(req.Model); reject != "" {
-		finalizeRequestLog(&reqLog, tokenUsage{}, time.Time{}, reqLog.StartedAt, false, reject)
+		requestlog.Finalize(&reqLog, tokenUsage{}, time.Time{}, reqLog.StartedAt, false, reject)
 		writeJSON(w, http.StatusBadRequest, map[string]any{
 			"error": map[string]string{"message": reject, "type": "invalid_request_error"},
 		})
@@ -2154,7 +2156,7 @@ func handleAnthropicMessages(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if msg := freeOnlyRejection(req.Model); msg != "" {
-		finalizeRequestLog(&reqLog, tokenUsage{}, time.Time{}, reqLog.StartedAt, false, msg)
+		requestlog.Finalize(&reqLog, tokenUsage{}, time.Time{}, reqLog.StartedAt, false, msg)
 		writeJSON(w, http.StatusBadRequest, map[string]any{
 			"error": map[string]string{"message": msg, "type": "invalid_request_error"},
 		})
@@ -2171,7 +2173,7 @@ func handleAnthropicMessages(w http.ResponseWriter, r *http.Request) {
 		res, err := applyContextManagement(r.Context(), req, openAIReq)
 		if err != nil {
 			msg := err.Error()
-			finalizeRequestLog(&reqLog, tokenUsage{}, time.Time{}, reqLog.StartedAt, false, msg)
+			requestlog.Finalize(&reqLog, tokenUsage{}, time.Time{}, reqLog.StartedAt, false, msg)
 			writeJSON(w, http.StatusBadRequest, map[string]any{"error": map[string]string{"message": msg, "type": "invalid_request_error"}})
 			return
 		}
@@ -2221,7 +2223,7 @@ func handleAnthropicMessages(w http.ResponseWriter, r *http.Request) {
 				"context_management": cmContextManagementResponse(cmApplied),
 			})
 			emit("message_stop", map[string]any{"type": "message_stop"})
-			finalizeRequestLog(&reqLog, tokenUsage{}, time.Time{}, reqLog.StartedAt, true, "")
+			requestlog.Finalize(&reqLog, tokenUsage{}, time.Time{}, reqLog.StartedAt, true, "")
 			return
 		}
 		writeJSON(w, http.StatusOK, map[string]any{
@@ -2234,14 +2236,14 @@ func handleAnthropicMessages(w http.ResponseWriter, r *http.Request) {
 			"usage":              map[string]any{"input_tokens": 0, "output_tokens": 0},
 			"context_management": cmContextManagementResponse(cmApplied),
 		})
-		finalizeRequestLog(&reqLog, tokenUsage{}, time.Time{}, reqLog.StartedAt, true, "")
+		requestlog.Finalize(&reqLog, tokenUsage{}, time.Time{}, reqLog.StartedAt, true, "")
 		return
 	}
 
 	// 管理员手动停用的模型在入口直接拒绝（不进列表，也不可点名调用）
 	if req.Model != "" && isModelDisabled(req.Model) {
 		msg := fmt.Sprintf("model %q is disabled", req.Model)
-		finalizeRequestLog(&reqLog, tokenUsage{}, time.Time{}, reqLog.StartedAt, false, msg)
+		requestlog.Finalize(&reqLog, tokenUsage{}, time.Time{}, reqLog.StartedAt, false, msg)
 		writeJSON(w, http.StatusBadRequest, map[string]any{
 			"error": map[string]string{"message": msg, "type": "invalid_request_error"},
 		})
@@ -2253,7 +2255,7 @@ func handleAnthropicMessages(w http.ResponseWriter, r *http.Request) {
 	if combo, ok := findCombo(req.Model); ok {
 		if !combo.Enabled {
 			msg := fmt.Sprintf("model combo %q is disabled", req.Model)
-			finalizeRequestLog(&reqLog, tokenUsage{}, time.Time{}, reqLog.StartedAt, false, msg)
+			requestlog.Finalize(&reqLog, tokenUsage{}, time.Time{}, reqLog.StartedAt, false, msg)
 			writeJSON(w, http.StatusBadRequest, map[string]any{
 				"error": map[string]string{"message": msg, "type": "invalid_request_error"},
 			})
@@ -2277,7 +2279,7 @@ func handleAnthropicMessages(w http.ResponseWriter, r *http.Request) {
 		if run.Err != nil {
 			log.Printf("  anthropic combo %q error: %v", combo.ID, run.Err)
 			msg := comboTraceSummary(combo, run)
-			finalizeRequestLog(&reqLog, tokenUsage{}, time.Time{}, reqLog.StartedAt, false, msg)
+			requestlog.Finalize(&reqLog, tokenUsage{}, time.Time{}, reqLog.StartedAt, false, msg)
 			writeJSON(w, clineErrorHTTPStatus(run.Err), map[string]any{
 				"error": map[string]string{"message": msg, "type": "api_error"},
 			})
@@ -2287,7 +2289,7 @@ func handleAnthropicMessages(w http.ResponseWriter, r *http.Request) {
 		copyPassthroughHeaders(w, run.Resp.Header)
 		var raw map[string]any
 		if err := json.NewDecoder(run.Resp.Body).Decode(&raw); err != nil {
-			finalizeRequestLog(&reqLog, tokenUsage{}, time.Time{}, reqLog.StartedAt, false, "decode response: "+err.Error())
+			requestlog.Finalize(&reqLog, tokenUsage{}, time.Time{}, reqLog.StartedAt, false, "decode response: "+err.Error())
 			writeJSON(w, http.StatusInternalServerError, map[string]any{
 				"error": map[string]string{"message": err.Error(), "type": "parse_error"},
 			})
@@ -2296,7 +2298,7 @@ func handleAnthropicMessages(w http.ResponseWriter, r *http.Request) {
 		out := normalizeOpenAIResponse(unwrapDataEnvelope(raw))
 		usage := parseTokenUsage(out["usage"])
 		recordUsage(run.Acc, run.Resp, &reqLog, reqLog.Model, usage)
-		finalizeRequestLog(&reqLog, usage, time.Time{}, reqLog.StartedAt, true, "")
+		requestlog.Finalize(&reqLog, usage, time.Time{}, reqLog.StartedAt, true, "")
 		restoreToolCallsInResponse(out, reqLog.ToolNames)
 		anthropicResp := openAIToAnthropic(out)
 		applyCMToResponse(anthropicResp, cmResult)
@@ -2308,29 +2310,29 @@ func handleAnthropicMessages(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 按 model 自动分流（与 chat 端点一致）：zen 免费/付费拒绝/Cline 池
-	switch routeModel(req.Model) {
+	switch zen.RouteModel(req.Model) {
 	case "reject":
 		msg := fmt.Sprintf("model %q is a paid opencode model; only free models are proxied", req.Model)
-		finalizeRequestLog(&reqLog, tokenUsage{}, time.Time{}, reqLog.StartedAt, false, msg)
+		requestlog.Finalize(&reqLog, tokenUsage{}, time.Time{}, reqLog.StartedAt, false, msg)
 		writeJSON(w, http.StatusBadRequest, map[string]any{
 			"error": map[string]string{"message": msg, "type": "invalid_request_error"},
 		})
 		return
 	case "zen":
-		reqLog.Upstream = upstreamOpenCode
-		zm, _ := resolveZenInfo(req.Model)
+		reqLog.Upstream = zen.UpstreamOpenCode
+		zm, _ := zen.ResolveInfo(req.Model)
 		out := maybeCompact(openAIReq, zm, requestSessionID(map[string]any{"session_id": r.Header.Get("x-opencode-session")}, nil))
 		if out.changed {
 			log.Printf("  anthropic %s", out.note)
 		}
-		resp, err := callZenAPI(openAIReq, req.Stream)
+		resp, err := zen.Call(openAIReq, req.Stream)
 		// 上游返回「上下文超限」400：压缩后重试一次
 		if err != nil && isContextLengthError(err) {
 			log.Printf("  anthropic: context length exceeded, compacting and retrying")
 			out2 := fallbackTruncate(openAIReq, zm)
 			if out2.changed {
 				log.Printf("  anthropic %s", out2.note)
-				resp, err = callZenAPI(openAIReq, req.Stream)
+				resp, err = zen.Call(openAIReq, req.Stream)
 			}
 		}
 		if err != nil {
@@ -2360,7 +2362,7 @@ func handleAnthropicMessages(w http.ResponseWriter, r *http.Request) {
 					} else {
 						var raw map[string]any
 						if err := json.NewDecoder(fbResp.Body).Decode(&raw); err != nil {
-							finalizeRequestLog(&reqLog, tokenUsage{}, time.Time{}, reqLog.StartedAt, false, "decode response: "+err.Error())
+							requestlog.Finalize(&reqLog, tokenUsage{}, time.Time{}, reqLog.StartedAt, false, "decode response: "+err.Error())
 							writeJSON(w, http.StatusInternalServerError, map[string]any{
 								"error": map[string]string{"message": err.Error(), "type": "parse_error"},
 							})
@@ -2369,7 +2371,7 @@ func handleAnthropicMessages(w http.ResponseWriter, r *http.Request) {
 						out2 := normalizeOpenAIResponse(unwrapDataEnvelope(raw))
 						usage := parseTokenUsage(out2["usage"])
 						recordUsage(fbAcc, fbResp, &reqLog, reqLog.Model, usage)
-						finalizeRequestLog(&reqLog, usage, time.Time{}, reqLog.StartedAt, true, "")
+						requestlog.Finalize(&reqLog, usage, time.Time{}, reqLog.StartedAt, true, "")
 						restoreToolCallsInResponse(out2, reqLog.ToolNames)
 						anthropicResp := openAIToAnthropic(out2)
 						applyCMToResponse(anthropicResp, cmResult)
@@ -2385,7 +2387,7 @@ func handleAnthropicMessages(w http.ResponseWriter, r *http.Request) {
 				err = fmt.Errorf("zen: %v; cline free chain: %w", err, fbErr)
 			}
 			log.Printf("  anthropic api error: %v", err)
-			finalizeRequestLog(&reqLog, tokenUsage{}, time.Time{}, reqLog.StartedAt, false, err.Error())
+			requestlog.Finalize(&reqLog, tokenUsage{}, time.Time{}, reqLog.StartedAt, false, err.Error())
 			writeJSON(w, http.StatusBadGateway, map[string]any{
 				"error": map[string]string{"message": err.Error(), "type": "api_error"},
 			})
@@ -2404,7 +2406,7 @@ func handleAnthropicMessages(w http.ResponseWriter, r *http.Request) {
 		} else {
 			var raw map[string]any
 			if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {
-				finalizeRequestLog(&reqLog, tokenUsage{}, time.Time{}, reqLog.StartedAt, false, "decode response: "+err.Error())
+				requestlog.Finalize(&reqLog, tokenUsage{}, time.Time{}, reqLog.StartedAt, false, "decode response: "+err.Error())
 				writeJSON(w, http.StatusInternalServerError, map[string]any{
 					"error": map[string]string{"message": err.Error(), "type": "parse_error"},
 				})
@@ -2412,7 +2414,7 @@ func handleAnthropicMessages(w http.ResponseWriter, r *http.Request) {
 			}
 			out2 := normalizeOpenAIResponse(unwrapDataEnvelope(raw))
 			usage := parseTokenUsage(out2["usage"])
-			finalizeRequestLog(&reqLog, usage, time.Time{}, reqLog.StartedAt, true, "")
+			requestlog.Finalize(&reqLog, usage, time.Time{}, reqLog.StartedAt, true, "")
 			anthropicResp := openAIToAnthropic(out2)
 			applyCMToResponse(anthropicResp, cmResult)
 			if hasToolUseBlocks(anthropicResp["content"]) {
@@ -2487,7 +2489,7 @@ func handleAnthropicMessages(w http.ResponseWriter, r *http.Request) {
 	}
 	if err != nil {
 		log.Printf("  anthropic api error: %v", err)
-		finalizeRequestLog(&reqLog, tokenUsage{}, time.Time{}, reqLog.StartedAt, false, err.Error())
+		requestlog.Finalize(&reqLog, tokenUsage{}, time.Time{}, reqLog.StartedAt, false, err.Error())
 		writeJSON(w, clineErrorHTTPStatus(err), map[string]any{
 			"error": map[string]string{"message": err.Error(), "type": "api_error"},
 		})
@@ -2503,7 +2505,7 @@ func handleAnthropicMessages(w http.ResponseWriter, r *http.Request) {
 	{
 		var raw map[string]any
 		if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {
-			finalizeRequestLog(&reqLog, tokenUsage{}, time.Time{}, reqLog.StartedAt, false, "decode response: "+err.Error())
+			requestlog.Finalize(&reqLog, tokenUsage{}, time.Time{}, reqLog.StartedAt, false, "decode response: "+err.Error())
 			writeJSON(w, http.StatusInternalServerError, map[string]any{
 				"error": map[string]string{"message": err.Error(), "type": "parse_error"},
 			})
@@ -2518,7 +2520,7 @@ func handleAnthropicMessages(w http.ResponseWriter, r *http.Request) {
 		out = normalizeOpenAIResponse(out)
 		usage := parseTokenUsage(out["usage"])
 		recordUsage(acc, resp, &reqLog, reqLog.Model, usage)
-		finalizeRequestLog(&reqLog, usage, time.Time{}, reqLog.StartedAt, true, "")
+		requestlog.Finalize(&reqLog, usage, time.Time{}, reqLog.StartedAt, true, "")
 		restoreToolCallsInResponse(out, reqLog.ToolNames)
 		anthropicResp := openAIToAnthropic(out)
 
@@ -2578,7 +2580,7 @@ func emitAnthropicErrorEvent(sw *sseWriter, msg string) {
 // finishAnthropicStreamFailure 统一处理流式尝试失败后的报错：
 // 响应头尚未发送 → JSON 状态码；已经发出 → 带内 error 事件（避免重复 WriteHeader）。
 func finishAnthropicStreamFailure(sw *sseWriter, w http.ResponseWriter, reqLog *RequestLog, status int, note, msg string) {
-	finalizeRequestLog(reqLog, tokenUsage{}, time.Time{}, reqLog.StartedAt, false, note)
+	requestlog.Finalize(reqLog, tokenUsage{}, time.Time{}, reqLog.StartedAt, false, note)
 	if sw.Started {
 		log.Printf("  anthropic stream: %s (reported as in-band error event)", note)
 		emitAnthropicErrorEvent(sw, msg)
@@ -2684,8 +2686,8 @@ func streamAnthropicCombo(ctx context.Context, w http.ResponseWriter, params map
 			continue
 		}
 		params["model"] = c.model
-		if upstream == upstreamProvider {
-			params[servedByParam] = upstreamProvider
+		if upstream == zen.UpstreamProvider {
+			params[servedByParam] = zen.UpstreamProvider
 			params[providerNameParam] = provName
 		} else {
 			delete(params, servedByParam)
@@ -2927,7 +2929,7 @@ L:
 			upstream.Body.Close()
 			if committed {
 				log.Printf("  anthropic stream aborted: client disconnected")
-				finalizeRequestLog(reqLog, latestUsage, firstOutputAt, reqLog.StartedAt, false, "client disconnected")
+				requestlog.Finalize(reqLog, latestUsage, firstOutputAt, reqLog.StartedAt, false, "client disconnected")
 			} else {
 				log.Printf("  anthropic stream: client disconnected before first token")
 			}
@@ -2957,7 +2959,7 @@ L:
 				}
 				log.Printf("  anthropic stream broken: upstream closed unexpectedly")
 				emit("error", map[string]any{"type": "error", "error": map[string]any{"type": "api_error", "message": "upstream connection closed unexpectedly"}})
-				finalizeRequestLog(reqLog, latestUsage, firstOutputAt, reqLog.StartedAt, false, "upstream closed unexpectedly")
+				requestlog.Finalize(reqLog, latestUsage, firstOutputAt, reqLog.StartedAt, false, "upstream closed unexpectedly")
 				return true
 			}
 			if sl.err != nil {
@@ -2973,7 +2975,7 @@ L:
 				// 真实的读取错误（超时/重置）：记录原因、通知客户端，而不是无声截断
 				log.Printf("  anthropic stream broken: %v", sl.err)
 				emit("error", map[string]any{"type": "error", "error": map[string]any{"type": "api_error", "message": sl.err.Error()}})
-				finalizeRequestLog(reqLog, latestUsage, firstOutputAt, reqLog.StartedAt, false, "stream read error: "+sl.err.Error())
+				requestlog.Finalize(reqLog, latestUsage, firstOutputAt, reqLog.StartedAt, false, "stream read error: "+sl.err.Error())
 				return true
 			}
 			line := strings.TrimRight(sl.line, "\r\n")
@@ -3023,7 +3025,7 @@ L:
 				}
 				log.Printf("  anthropic stream broken by upstream error: %s", string(errBody))
 				emit("error", map[string]any{"type": "error", "error": errPayload})
-				finalizeRequestLog(reqLog, latestUsage, firstOutputAt, reqLog.StartedAt, false, "upstream error: "+string(errBody))
+				requestlog.Finalize(reqLog, latestUsage, firstOutputAt, reqLog.StartedAt, false, "upstream error: "+string(errBody))
 				return true
 			}
 
@@ -3078,7 +3080,7 @@ L:
 	}
 	emit("message_delta", msgDelta)
 	recordUsage(acc, upstream, reqLog, reqLog.Model, latestUsage)
-	finalizeRequestLog(reqLog, latestUsage, firstOutputAt, reqLog.StartedAt, true, "")
+	requestlog.Finalize(reqLog, latestUsage, firstOutputAt, reqLog.StartedAt, true, "")
 
 	emit("message_stop", map[string]any{"type": "message_stop"})
 	log.Printf("  anthropic stream done: hasText=%v tools=%d reason=%s", st.TextStarted(), st.ToolCount(), st.StopReason())

@@ -1,4 +1,4 @@
-package main
+package zen
 
 import (
 	"encoding/json"
@@ -7,6 +7,8 @@ import (
 
 	zenupstream "cline-go-proxy/internal/upstream/zen"
 )
+
+const defaultMaxTokens = 32000
 
 // TestZenModelUsesResponses 协议族判定：muse-spark 系走 Responses，其余仍走 chat。
 func TestZenModelUsesResponses(t *testing.T) {

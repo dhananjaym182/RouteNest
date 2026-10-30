@@ -1,6 +1,7 @@
 package main
 
 import (
+	"cline-go-proxy/internal/zen"
 	"fmt"
 	"strings"
 
@@ -28,7 +29,7 @@ func modelRouteAccess(id string) dispatch.RouteAccess {
 		}
 	}
 	accounts.PoolMu.Unlock()
-	if zm, ok := resolveZenInfo(id); ok {
+	if zm, ok := zen.ResolveInfo(id); ok {
 		return dispatch.RouteAccess{Class: dispatch.ModelAccessClass(zm.Cost, zm.TierSignal, zm.Source)}
 	}
 	return dispatch.RouteAccess{Class: domain.AccessUnknown}
