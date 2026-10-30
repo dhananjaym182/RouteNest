@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"time"
 
+	"cline-go-proxy/internal/accounts"
 	"cline-go-proxy/internal/adminapi"
 	"cline-go-proxy/internal/i18n"
 )
@@ -12,7 +13,7 @@ import (
 var adminOAuth = &adminapi.OAuth{
 	Store: rootAccountStore{},
 	StartDevice: func() (adminapi.DeviceAuthorization, error) {
-		d, err := workosDeviceAuth()
+		d, err := accounts.WorkosDeviceAuth()
 		if err != nil {
 			return adminapi.DeviceAuthorization{}, err
 		}
@@ -26,14 +27,14 @@ var adminOAuth = &adminapi.OAuth{
 		}, nil
 	},
 	PollToken: func(deviceCode string, interval, expiresIn int) (adminapi.OAuthToken, error) {
-		tok, err := pollWorkosToken(deviceCode, interval, expiresIn)
+		tok, err := accounts.PollWorkosToken(deviceCode, interval, expiresIn)
 		if err != nil {
 			return adminapi.OAuthToken{}, err
 		}
 		return adminapi.OAuthToken{AccessToken: tok.AccessToken, RefreshToken: tok.RefreshToken}, nil
 	},
 	RegisterAccount: func(accessToken, refreshToken string) (adminapi.OAuthAccount, error) {
-		resp, err := registerWithCline(accessToken, refreshToken)
+		resp, err := accounts.RegisterWithCline(accessToken, refreshToken)
 		if err != nil {
 			return adminapi.OAuthAccount{}, err
 		}
@@ -45,7 +46,7 @@ var adminOAuth = &adminapi.OAuth{
 			Email:        email,
 			AccessToken:  resp.Data.AccessToken,
 			RefreshToken: resp.Data.RefreshToken,
-			ExpiresAt:    parseExpiry(resp.Data.ExpiresAt),
+			ExpiresAt:    accounts.ParseExpiry(resp.Data.ExpiresAt),
 		}, nil
 	},
 	Now:       time.Now,

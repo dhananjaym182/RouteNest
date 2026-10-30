@@ -1,6 +1,7 @@
 package main
 
 import (
+	"cline-go-proxy/internal/accounts"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -12,18 +13,18 @@ import (
 // isolateProviderRecheck 把 recheck 的池/状态文件/批次表重置到临时隔离环境。
 func isolateProviderRecheck(t *testing.T) {
 	t.Helper()
-	oldPool, oldPoolPath := pool, poolPath
+	oldPool, oldPoolPath := accounts.Pool, accounts.PoolPath
 	oldSyncPath, oldStat := providerSyncFilePath, providerRecheckStat
 	oldMiss, oldLoaded := provRecheckMiss, provRecheckLoaded
 	oldImports := pendingImports
-	poolPath = filepath.Join(t.TempDir(), ".cline-accounts.json")
+	accounts.PoolPath = filepath.Join(t.TempDir(), ".cline-accounts.json")
 	providerSyncFilePath = filepath.Join(t.TempDir(), ".cline-providers-sync.json")
 	providerRecheckStat = map[string]*providerRecheckState{}
 	provRecheckMiss = map[string]map[string]int{}
 	provRecheckLoaded = true
 	pendingImports = map[string]*importBatch{}
 	t.Cleanup(func() {
-		pool, poolPath = oldPool, oldPoolPath
+		accounts.Pool, accounts.PoolPath = oldPool, oldPoolPath
 		providerSyncFilePath, providerRecheckStat = oldSyncPath, oldStat
 		provRecheckMiss, provRecheckLoaded = oldMiss, oldLoaded
 		pendingImports = oldImports
@@ -49,7 +50,7 @@ func (u *mutableUpstream) server() *httptest.Server {
 		paid := u.paid
 		u.mu.Unlock()
 		type item struct {
-			ID      string  `json:"id"`
+			ID      string `json:"id"`
 			Pricing struct {
 				Prompt     string `json:"prompt"`
 				Completion string `json:"completion"`
@@ -73,9 +74,9 @@ func (u *mutableUpstream) server() *httptest.Server {
 }
 
 func poolModelByID(id string) (Model, bool) {
-	p := loadPool()
-	poolMu.Lock()
-	defer poolMu.Unlock()
+	p := accounts.LoadPool()
+	accounts.PoolMu.Lock()
+	defer accounts.PoolMu.Unlock()
 	for _, m := range p.Models {
 		if m.ID == id {
 			return m, true
@@ -91,7 +92,7 @@ func TestProviderRecheckDelistCycleAndAutoBatch(t *testing.T) {
 	srv := up.server()
 	defer srv.Close()
 
-	pool = &AccountPool{Accounts: []*Account{}, Models: []Model{
+	accounts.Pool = &AccountPool{Accounts: []*Account{}, Models: []Model{
 		{ID: "a", Provider: "TestProv", Cost: "free", Status: "active", Source: "provider"},
 		{ID: "b", Provider: "TestProv", Cost: "free", Status: "active", Source: "provider"},
 	}}
@@ -180,7 +181,7 @@ func TestProviderRecheckNewModelPaidDefault(t *testing.T) {
 	up := &mutableUpstream{paid: true}
 	srv := up.server()
 	defer srv.Close()
-	pool = &AccountPool{Accounts: []*Account{}, Models: []Model{}}
+	accounts.Pool = &AccountPool{Accounts: []*Account{}, Models: []Model{}}
 	p := CustomProvider{ID: "provP", Name: "PaidProv", BaseURL: srv.URL, Enabled: true}
 	up.set([]string{"claude-opus-x"})
 	st := recheckProviderModels(p)
@@ -202,7 +203,7 @@ func TestProviderRecheckConnectionUnavailable(t *testing.T) {
 	connections, connectionsLoaded = nil, true
 	t.Cleanup(func() { connections, connectionsLoaded = oldConns, oldConnsLoaded })
 
-	pool = &AccountPool{Accounts: []*Account{}, Models: []Model{
+	accounts.Pool = &AccountPool{Accounts: []*Account{}, Models: []Model{
 		{ID: "a", Provider: "ConnProv", Status: "active", Source: "provider"},
 	}}
 	p := CustomProvider{ID: "provC", Name: "ConnProv", BaseURL: "http://127.0.0.1:1", ModelIDs: []string{"a"}, ConnectionID: "missing-conn", Enabled: true}
@@ -224,11 +225,11 @@ func TestProviderRecheckConnectionUnavailable(t *testing.T) {
 
 // syncProviderModels 刷新 provider 条目时保留 Delisted 标记（下架≠删除的存续前提）。
 func TestSyncProviderModelsPreservesDelisted(t *testing.T) {
-	oldPool, oldPoolPath := pool, poolPath
-	poolPath = filepath.Join(t.TempDir(), ".cline-accounts.json")
-	t.Cleanup(func() { pool, poolPath = oldPool, oldPoolPath })
+	oldPool, oldPoolPath := accounts.Pool, accounts.PoolPath
+	accounts.PoolPath = filepath.Join(t.TempDir(), ".cline-accounts.json")
+	t.Cleanup(func() { accounts.Pool, accounts.PoolPath = oldPool, oldPoolPath })
 	installProviders(t, &CustomProvider{ID: "provS", Name: "SyncProv", ModelIDs: []string{"a", "b"}, Enabled: true, Free: true})
-	pool = &AccountPool{Accounts: []*Account{}, Models: []Model{
+	accounts.Pool = &AccountPool{Accounts: []*Account{}, Models: []Model{
 		{ID: "a", Provider: "SyncProv", Cost: "free", Status: "active", Source: "provider", Delisted: true},
 	}}
 	syncProviderModels()

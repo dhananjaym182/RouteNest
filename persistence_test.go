@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"cline-go-proxy/internal/accounts"
 	"cline-go-proxy/internal/platform"
 )
 
@@ -30,9 +31,9 @@ func chdir(t *testing.T, dir string) {
 // usePoolPath 把账号池文件指向指定路径并清空内存缓存，测试结束后恢复。
 func usePoolPath(t *testing.T, path string) {
 	t.Helper()
-	oldPool, oldPath := pool, poolPath
-	pool, poolPath = nil, path
-	t.Cleanup(func() { pool, poolPath = oldPool, oldPath })
+	oldPool, oldPath := accounts.Pool, accounts.PoolPath
+	accounts.Pool, accounts.PoolPath = nil, path
+	t.Cleanup(func() { accounts.Pool, accounts.PoolPath = oldPool, oldPath })
 }
 
 // TestResolveDataPathEnvOverride 设置了 CLINE2API_DATA_DIR 时，
@@ -58,7 +59,7 @@ func TestResolveDataPathEnvOverride(t *testing.T) {
 
 // TestResolveDataPathIsolationUnderGoTest go test 运行时（未设置环境变量），
 // cwd/exe 里哪怕存在同名文件也不会被选中：隔离目录优先生效。旧启发式
-//（cwd → exe → 主目录）只在编译出的正式二进制（testing.Testing()==false）
+// （cwd → exe → 主目录）只在编译出的正式二进制（testing.Testing()==false）
 // 中可达，行为由 TestResolveDataPathLegacyHeuristicOnBinary 手工在二进制上回归。
 func TestResolveDataPathIsolationUnderGoTest(t *testing.T) {
 	t.Setenv(dataDirEnv, "") // 显式置空，屏蔽运行环境中可能存在的同名变量
@@ -165,9 +166,9 @@ func TestLoadPoolCorruptFileBackup(t *testing.T) {
 	}
 	usePoolPath(t, path)
 
-	p := loadPool()
+	p := accounts.LoadPool()
 	if p == nil || len(p.Accounts) != 0 || len(p.Keys) != 0 {
-		t.Fatalf("expected fresh empty pool, got %+v", p)
+		t.Fatalf("expected fresh empty accounts.Pool, got %+v", p)
 	}
 
 	backups, err := filepath.Glob(path + ".corrupt-*")
@@ -179,7 +180,7 @@ func TestLoadPoolCorruptFileBackup(t *testing.T) {
 		t.Fatalf("backup content = %q, err %v; want original %q", data, err, corrupt)
 	}
 
-	savePool()
+	accounts.SavePool()
 	if _, err := os.Stat(path); err != nil {
 		t.Fatalf("fresh pool file missing after save: %v", err)
 	}
@@ -195,10 +196,10 @@ func TestPoolPersistenceRoundTrip(t *testing.T) {
 	path := filepath.Join(dir, ".cline-accounts.json")
 	usePoolPath(t, path)
 
-	addAccount(&Account{AccountID: "acc-1", Email: "a@b.c", RefreshToken: "rt-1", Status: "active"})
+	accounts.AddAccount(&Account{AccountID: "acc-1", Email: "a@b.c", RefreshToken: "rt-1", Status: "active"})
 
-	pool = nil // 模拟进程重启
-	p := loadPool()
+	accounts.Pool = nil // 模拟进程重启
+	p := accounts.LoadPool()
 	if len(p.Accounts) != 1 || p.Accounts[0].AccountID != "acc-1" || p.Accounts[0].RefreshToken != "rt-1" {
 		t.Fatalf("round-trip account mismatch: %+v", p.Accounts)
 	}
@@ -221,7 +222,7 @@ func TestPoolPersistenceRoundTrip(t *testing.T) {
 func TestFindCredentialsFileEnv(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv(dataDirEnv, dir)
-	if got := findCredentialsFile(); got != filepath.Join(dir, ".routenest-credentials.json") {
+	if got := accounts.FindCredentialsFile(); got != filepath.Join(dir, ".routenest-credentials.json") {
 		t.Fatalf("findCredentialsFile = %q, want %q", got, filepath.Join(dir, ".routenest-credentials.json"))
 	}
 }

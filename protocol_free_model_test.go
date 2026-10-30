@@ -1,6 +1,7 @@
 package main
 
 import (
+	"cline-go-proxy/internal/accounts"
 	"context"
 	"encoding/json"
 	"io"
@@ -89,11 +90,11 @@ func protocolTestServer(t *testing.T) string {
 }
 
 func TestOpenAIChatCompletionsFreeFallsBackToDS(t *testing.T) {
-	oldPool := pool
+	oldPool := accounts.Pool
 	oldConfig := getProxyConfig()
 	oldTransport := httpClient.Transport
 	t.Cleanup(func() {
-		pool = oldPool
+		accounts.Pool = oldPool
 		setProxyConfig(oldConfig)
 		httpClient.Transport = oldTransport
 	})
@@ -112,7 +113,7 @@ func TestOpenAIChatCompletionsFreeFallsBackToDS(t *testing.T) {
 		ExpiresAt:   time.Now().Add(time.Hour).UnixMilli(),
 		Status:      "active",
 	}
-	pool = &AccountPool{Accounts: []*Account{first, second}}
+	accounts.Pool = &AccountPool{Accounts: []*Account{first, second}}
 	config := defaultProxyConfig()
 	config.Strategy = "fill"
 	setProxyConfig(config)
@@ -188,7 +189,7 @@ func TestOpenAIChatCompletionsFreeFallsBackToDS(t *testing.T) {
 }
 
 func TestOpenAIResponsesFreeFallsBackToDSAndPreservesResponseFormat(t *testing.T) {
-	oldPool := pool
+	oldPool := accounts.Pool
 	oldConfig := getProxyConfig()
 	oldTransport := httpClient.Transport
 	oldLogData, oldLogErr := os.ReadFile(requestLogsPath)
@@ -198,7 +199,7 @@ func TestOpenAIResponsesFreeFallsBackToDSAndPreservesResponseFormat(t *testing.T
 	requestLogsMu.Unlock()
 	_ = os.Remove(requestLogsPath)
 	t.Cleanup(func() {
-		pool = oldPool
+		accounts.Pool = oldPool
 		setProxyConfig(oldConfig)
 		httpClient.Transport = oldTransport
 		requestLogsMu.Lock()
@@ -225,7 +226,7 @@ func TestOpenAIResponsesFreeFallsBackToDSAndPreservesResponseFormat(t *testing.T
 		ExpiresAt:   time.Now().Add(time.Hour).UnixMilli(),
 		Status:      "active",
 	}
-	pool = &AccountPool{Accounts: []*Account{first, second}}
+	accounts.Pool = &AccountPool{Accounts: []*Account{first, second}}
 	config := defaultProxyConfig()
 	config.Strategy = "fill"
 	setProxyConfig(config)
@@ -313,11 +314,11 @@ func TestOpenAIResponsesFreeFallsBackToDSAndPreservesResponseFormat(t *testing.T
 }
 
 func TestAnthropicMessagesFreeFallsBackToDSAndPreservesResponseFormat(t *testing.T) {
-	oldPool := pool
+	oldPool := accounts.Pool
 	oldConfig := getProxyConfig()
 	oldTransport := httpClient.Transport
 	t.Cleanup(func() {
-		pool = oldPool
+		accounts.Pool = oldPool
 		setProxyConfig(oldConfig)
 		httpClient.Transport = oldTransport
 	})
@@ -336,7 +337,7 @@ func TestAnthropicMessagesFreeFallsBackToDSAndPreservesResponseFormat(t *testing
 		ExpiresAt:   time.Now().Add(time.Hour).UnixMilli(),
 		Status:      "active",
 	}
-	pool = &AccountPool{Accounts: []*Account{first, second}}
+	accounts.Pool = &AccountPool{Accounts: []*Account{first, second}}
 	config := defaultProxyConfig()
 	config.Strategy = "fill"
 	setProxyConfig(config)
@@ -424,11 +425,11 @@ func TestAnthropicMessagesFreeFallsBackToDSAndPreservesResponseFormat(t *testing
 }
 
 func TestOpenAIChatCompletionsFreeStreamFallsBackBeforeResponseHeaders(t *testing.T) {
-	oldPool := pool
+	oldPool := accounts.Pool
 	oldConfig := getProxyConfig()
 	oldTransport := httpClient.Transport
 	t.Cleanup(func() {
-		pool = oldPool
+		accounts.Pool = oldPool
 		setProxyConfig(oldConfig)
 		httpClient.Transport = oldTransport
 	})
@@ -447,7 +448,7 @@ func TestOpenAIChatCompletionsFreeStreamFallsBackBeforeResponseHeaders(t *testin
 		ExpiresAt:   time.Now().Add(time.Hour).UnixMilli(),
 		Status:      "active",
 	}
-	pool = &AccountPool{Accounts: []*Account{first, second}}
+	accounts.Pool = &AccountPool{Accounts: []*Account{first, second}}
 	config := defaultProxyConfig()
 	config.Strategy = "fill"
 	setProxyConfig(config)
@@ -516,11 +517,11 @@ func TestOpenAIChatCompletionsFreeStreamFallsBackBeforeResponseHeaders(t *testin
 }
 
 func TestOpenAIChatCompletionsFreeStreamDoesNotRetryAfterResponseStarts(t *testing.T) {
-	oldPool := pool
+	oldPool := accounts.Pool
 	oldConfig := getProxyConfig()
 	oldTransport := httpClient.Transport
 	t.Cleanup(func() {
-		pool = oldPool
+		accounts.Pool = oldPool
 		setProxyConfig(oldConfig)
 		httpClient.Transport = oldTransport
 	})
@@ -539,7 +540,7 @@ func TestOpenAIChatCompletionsFreeStreamDoesNotRetryAfterResponseStarts(t *testi
 		ExpiresAt:   time.Now().Add(time.Hour).UnixMilli(),
 		Status:      "active",
 	}
-	pool = &AccountPool{Accounts: []*Account{first, second}}
+	accounts.Pool = &AccountPool{Accounts: []*Account{first, second}}
 	config := defaultProxyConfig()
 	config.Strategy = "fill"
 	setProxyConfig(config)

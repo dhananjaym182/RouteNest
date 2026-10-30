@@ -1,6 +1,7 @@
 package main
 
 import (
+	"cline-go-proxy/internal/accounts"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -44,14 +45,14 @@ func cmMockUpstream(t *testing.T, jsonBody, sseBody string) func() {
 
 func cmInstallPool(t *testing.T) {
 	t.Helper()
-	oldPool := pool
+	oldPool := accounts.Pool
 	oldConfig := getProxyConfig()
 	t.Cleanup(func() {
-		pool = oldPool
+		accounts.Pool = oldPool
 		setProxyConfig(oldConfig)
 	})
 	account := &Account{AccountID: "cm-test", Email: "cm@test.com", AccessToken: "cm-token", ExpiresAt: time.Now().Add(time.Hour).UnixMilli(), Status: "active"}
-	pool = &AccountPool{Accounts: []*Account{account}}
+	accounts.Pool = &AccountPool{Accounts: []*Account{account}}
 	config := defaultProxyConfig()
 	config.Strategy = "fill"
 	setProxyConfig(config)

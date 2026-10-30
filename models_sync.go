@@ -1,6 +1,7 @@
 package main
 
 import (
+	"cline-go-proxy/internal/accounts"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -184,15 +185,15 @@ func syncClineModels() modelSyncResult {
 
 	// 组装远程模型列表（去重，free 数组在前）。
 	// 先取池中旧 remote 条目：管理页锁定过 Context/Output（MetaLocked）的保留原值。
-	p := loadPool()
-	poolMu.Lock()
+	p := accounts.LoadPool()
+	accounts.PoolMu.Lock()
 	oldRemote := make(map[string]Model)
 	for _, m := range p.Models {
 		if m.Source == "remote" {
 			oldRemote[m.ID] = m
 		}
 	}
-	poolMu.Unlock()
+	accounts.PoolMu.Unlock()
 
 	var remote []Model
 	seen := make(map[string]bool)
@@ -242,8 +243,8 @@ func syncClineModels() modelSyncResult {
 	}
 
 	// 与池中现有 remote 模型比较
-	p = loadPool()
-	poolMu.Lock()
+	p = accounts.LoadPool()
+	accounts.PoolMu.Lock()
 	oldIDs := make(map[string]bool)
 	var kept []Model
 	for _, m := range p.Models {
@@ -274,8 +275,8 @@ func syncClineModels() modelSyncResult {
 	p.Models = kept
 	res.Total = len(remote)
 	res.Changed = len(res.Added) > 0 || len(res.Removed) > 0
-	poolMu.Unlock()
-	savePool()
+	accounts.PoolMu.Unlock()
+	accounts.SavePool()
 
 	remoteModelsEnabledMu.Lock()
 	remoteModelsEnabled = true
@@ -317,8 +318,8 @@ func markModelGone(model string) {
 	if model == "" {
 		return
 	}
-	p := loadPool()
-	poolMu.Lock()
+	p := accounts.LoadPool()
+	accounts.PoolMu.Lock()
 	found := false
 	for i, m := range p.Models {
 		if m.ID == model && m.Delisted && !m.Custom {
@@ -330,9 +331,9 @@ func markModelGone(model string) {
 	if found && p.DefaultModel == model {
 		p.DefaultModel = ""
 	}
-	poolMu.Unlock()
+	accounts.PoolMu.Unlock()
 	if found {
-		savePool()
+		accounts.SavePool()
 		log.Printf("model %q removed: upstream reports it no longer exists (was delisted)", model)
 	}
 }

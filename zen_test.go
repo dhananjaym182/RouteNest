@@ -1,6 +1,7 @@
 package main
 
 import (
+	"cline-go-proxy/internal/accounts"
 	"encoding/json"
 	"net/http"
 	"os"
@@ -18,17 +19,17 @@ func TestMain(m *testing.M) {
 	if err != nil {
 		panic(err)
 	}
-	oldPoolPath, oldLogsPath := poolPath, requestLogsPath
-	poolPath = filepath.Join(tmp, ".cline-accounts.json")
+	oldPoolPath, oldLogsPath := accounts.PoolPath, requestLogsPath
+	accounts.PoolPath = filepath.Join(tmp, ".cline-accounts.json")
 	requestLogsPath = filepath.Join(tmp, ".cline-request-logs.json")
 
-	poolMu.Lock()
-	pool = nil // 强制从临时路径重新加载
-	poolMu.Unlock()
+	accounts.PoolMu.Lock()
+	accounts.Pool = nil // 强制从临时路径重新加载
+	accounts.PoolMu.Unlock()
 
 	code := m.Run()
 
-	poolPath, requestLogsPath = oldPoolPath, oldLogsPath
+	accounts.PoolPath, requestLogsPath = oldPoolPath, oldLogsPath
 	os.RemoveAll(tmp)
 	os.Exit(code)
 }
@@ -78,14 +79,14 @@ func resetZenTestState(t *testing.T) {
 func withZenPool(t *testing.T, models []Model) {
 	t.Helper()
 	resetZenTestState(t)
-	p := loadPool()
+	p := accounts.LoadPool()
 	oldModels := p.Models
 	p.Models = models
-	savePool()
+	accounts.SavePool()
 	t.Cleanup(func() {
-		q := loadPool()
+		q := accounts.LoadPool()
 		q.Models = oldModels
-		savePool()
+		accounts.SavePool()
 	})
 }
 

@@ -35,7 +35,7 @@ func providerTransportFor(spec string) (http.RoundTripper, error) {
 }
 
 // isolatedTransport builds a transport that does not consult the Cline egress
-// pool. A direct provider must also ignore HTTPS_PROXY, which the global
+// accounts.Pool. A direct provider must also ignore HTTPS_PROXY, which the global
 // transport's Proxy hook intentionally honors when the pool is empty.
 func isolatedTransport(spec string) *http.Transport {
 	var tr *http.Transport

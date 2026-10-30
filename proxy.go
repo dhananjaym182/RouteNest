@@ -18,6 +18,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"cline-go-proxy/internal/accounts"
 	"cline-go-proxy/internal/buildinfo"
 	"cline-go-proxy/internal/dispatch"
 	"cline-go-proxy/internal/httpapi"
@@ -155,9 +156,9 @@ var builtinModels = []Model{
 //   - 已同步远程模型：Cline 远程（Source=remote）+ opencode 同步（Source=zen）+ 用户自定义
 //   - 未同步 / 离线：内置 fallback（Cline + zen 种子表）+ 用户自定义
 func getAllModels() []Model {
-	p := loadPool()
-	poolMu.Lock()
-	defer poolMu.Unlock()
+	p := accounts.LoadPool()
+	accounts.PoolMu.Lock()
+	defer accounts.PoolMu.Unlock()
 
 	var custom []Model
 	var remote []Model
@@ -194,7 +195,7 @@ func getAllModels() []Model {
 // buildModelsList 组装客户端发现用的模型列表（/v1/models、/models）：
 // 池内模型（已停用的排除，onlyFree 时仅免费）+ 启用中的具名模型组合。
 //
-// 组合不插入 pool.Models（避免污染上游归属 / 同步 / 删除 / Cline-Zen 分流判定），
+// 组合不插入 accounts.Pool.Models（避免污染上游归属 / 同步 / 删除 / Cline-Zen 分流判定），
 // 只在此发现层追加，owned_by="combo" 便于客户端区分。组合可能跨免费/付费源，故
 // 不受 onlyFree 过滤影响（组合是管理员显式选择的集合，不是单一计费模型）。
 func buildModelsList(onlyFree bool) []map[string]any {
@@ -257,9 +258,9 @@ func buildModelsList(onlyFree bool) []map[string]any {
 // getDefaultModel 返回用户设置的默认模型；未设置时优先回退到第一个远程 free 模型，
 // 否则用内置 fallback。
 func getDefaultModel() string {
-	p := loadPool()
-	poolMu.Lock()
-	defer poolMu.Unlock()
+	p := accounts.LoadPool()
+	accounts.PoolMu.Lock()
+	defer accounts.PoolMu.Unlock()
 
 	// 管理员设置的默认模型也会随上游下架而失效：远程同步已启用却查不到时
 	// 视为已下架，落到下方「第一个远程免费模型」，避免每个无模型请求必败。
@@ -426,7 +427,7 @@ func isFreeModelEntry(m Model) bool {
 
 func startProxy(host string, port int) error {
 	log.Printf("Data directory: %s (set %s to override)", currentDataDir(), dataDirEnv)
-	p := loadPool()
+	p := accounts.LoadPool()
 	loadRequestLogs()
 	// 自定义 provider 声明的模型同步进池：模型管理页可见、可启停、参与自动回退
 	syncProviderModels()
@@ -435,7 +436,7 @@ func startProxy(host string, port int) error {
 		if a.Status == "active" {
 			// Try to pre-warm tokens
 			if a.AccessToken == "" || time.Now().UnixMilli() >= a.ExpiresAt {
-				if err := refreshAccountToken(a); err != nil {
+				if err := accounts.RefreshAccountToken(a); err != nil {
 					log.Printf("  Pre-warm failed for %s: %v", a.Email, err)
 					continue
 				}
@@ -472,7 +473,7 @@ func startProxy(host string, port int) error {
 	registerAdminRoutes(mux)
 
 	apiKeyHandler := (&httpapi.APIKeyAuth{
-		Keys: func() []string { return loadPool().Keys },
+		Keys: func() []string { return accounts.LoadPool().Keys },
 		Unauthorized: func(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusUnauthorized, map[string]any{
 				"error": map[string]string{
@@ -715,10 +716,10 @@ func startProxy(host string, port int) error {
 		}
 
 		// cline 池路径才要求账号；zen 免费模型不依赖本地账号池
-		if activeCount == 0 && len(loadPool().Accounts) == 0 {
+		if activeCount == 0 && len(accounts.LoadPool().Accounts) == 0 {
 			writeJSON(w, http.StatusUnauthorized, map[string]any{
 				"error": map[string]string{
-					"message": "No accounts in pool. Run with --add-account or POST /admin/login to add accounts.",
+					"message": "No accounts in accounts.Pool. Run with --add-account or POST /admin/login to add accounts.",
 					"type":    "auth_error",
 				},
 			})
@@ -843,7 +844,7 @@ func startProxy(host string, port int) error {
 	}
 	fmt.Println("  API Key: any value")
 	fmt.Printf("  Model:   %s\n", getDefaultModel())
-	fmt.Printf("  Accounts: %d total, %d active\n", len(loadPool().Accounts), activeCount)
+	fmt.Printf("  Accounts: %d total, %d active\n", len(accounts.LoadPool().Accounts), activeCount)
 	if zc := getZenConfig(); zc.Enabled {
 		fmt.Printf("  OpenCode: enabled (%s free models)\n", strings.TrimRight(zc.BaseURL, "/"))
 	} else {
@@ -913,9 +914,9 @@ func modelMaxOutputLimit(model string) int {
 	if strings.TrimSpace(model) == "" {
 		return 0
 	}
-	p := loadPool()
-	poolMu.Lock()
-	defer poolMu.Unlock()
+	p := accounts.LoadPool()
+	accounts.PoolMu.Lock()
+	defer accounts.PoolMu.Unlock()
 	for _, m := range p.Models {
 		if m.ID == model && !isZenSource(m) && m.Output > 0 {
 			return m.Output
@@ -1168,7 +1169,7 @@ func callClineAPI(params map[string]any, stream bool) (*http.Response, *Account,
 	//  4. 全部失败 → 明确报错
 	// 可用性感知重排：点名模型保持首位，其余按「未冷却优先、用量少优先」
 	// 重排，避免回退流量每次都集中砸在第一个可用模型上直到它也冷却。
-	sorted := sortModelsByAvailability(modelFallbackChain(model))
+	sorted := accounts.SortModelsByAvailability(modelFallbackChain(model))
 	chain := make([]string, 0, len(sorted)+1)
 	chain = append(chain, model)
 	for _, m := range sorted {
@@ -1226,16 +1227,16 @@ func callClineAPI(params map[string]any, stream bool) (*http.Response, *Account,
 
 			// 点名模型保持原有轮询语义；链上的降级模型改用「最久未用优先」，
 			// 避免所有降级流量都压到第一个可用账号/模型的额度上。
-			pickAcc := pickAccountForModelStrict
+			pickAcc := accounts.PickAccountForModelStrict
 			if m != model {
-				pickAcc = pickAccountForModelLeastUsed
+				pickAcc = accounts.PickAccountForModelLeastUsed
 			}
 			attempts := 0
 			for {
 				if credCap > 0 && attempts >= credCap {
 					break // 本轮该模型已试满 maxCredentialsPerRound 个账号
 				}
-				acc, pinned := pickAffinityAccount(affinitySk, m)
+				acc, pinned := accounts.PickAffinityAccount(affinitySk, m)
 				if !pinned {
 					acc = pickAcc(m)
 				}
@@ -1244,7 +1245,7 @@ func callClineAPI(params map[string]any, stream bool) (*http.Response, *Account,
 				}
 				attempts++
 				resp, usedAcc, err := callClineAPIWithAccountCtx(context.Background(), acc, withModel(params, m), stream)
-				observeAffinityOutcome(affinitySk, usedAcc, err)
+				accounts.ObserveAffinityOutcome(affinitySk, usedAcc, err)
 				if err == nil {
 					if m != model {
 						log.Printf("  model fallback: %q cooling on all accounts, serving via %q", model, m)
@@ -1348,7 +1349,7 @@ func isFreeAliasModel(model string) bool {
 // 从未同步成功（离线）时回退内置常量链。
 func defaultFreeChain() []string {
 	remote := remoteModelsActive()
-	p := loadPool()
+	p := accounts.LoadPool()
 	known := make(map[string]bool, len(p.Models))
 	var remoteFree []string
 	for _, m := range p.Models {
@@ -1386,7 +1387,7 @@ func defaultFreeChain() []string {
 // liveModelSet 返回当前仍然「在线」的模型 ID 集合：池内全部模型（远程同步
 // remote / opencode zen 同步 / 管理员自定义，已手动停用的除外）+ 启用中自定义
 // provider 声明的模型。
-// 调用方须持有 poolMu；providers 走独立的 providersMu，仓库内不存在反向持锁路径。
+// 调用方须持有 accounts.PoolMu；providers 走独立的 providersMu，仓库内不存在反向持锁路径。
 func liveModelSet(p *AccountPool) map[string]bool {
 	live := make(map[string]bool, len(p.Models))
 	disabled := make(map[string]bool)
@@ -1421,9 +1422,9 @@ func isModelDisabled(id string) bool {
 	if id == "" {
 		return false
 	}
-	p := loadPool()
-	poolMu.Lock()
-	defer poolMu.Unlock()
+	p := accounts.LoadPool()
+	accounts.PoolMu.Lock()
+	defer accounts.PoolMu.Unlock()
 	for _, m := range p.Models {
 		if m.ID == id && m.Disabled {
 			return true
@@ -1445,10 +1446,10 @@ func filterStaleModels(chain []string) []string {
 	if len(chain) == 0 || !remoteModelsActive() {
 		return chain
 	}
-	p := loadPool()
-	poolMu.Lock()
+	p := accounts.LoadPool()
+	accounts.PoolMu.Lock()
 	live := liveModelSet(p)
-	poolMu.Unlock()
+	accounts.PoolMu.Unlock()
 	out, dropped := dispatch.FilterLive(chain, true, live)
 	if len(dropped) == 0 {
 		return out
@@ -1478,9 +1479,9 @@ func modelFallbackChain(requested string) []string {
 
 // hasActiveAccounts 池中是否存在 active 状态的账号。
 func hasActiveAccounts() bool {
-	p := loadPool()
-	poolMu.Lock()
-	defer poolMu.Unlock()
+	p := accounts.LoadPool()
+	accounts.PoolMu.Lock()
+	defer accounts.PoolMu.Unlock()
 	for _, a := range p.Accounts {
 		if a.Status == "active" {
 			return true
@@ -1499,7 +1500,7 @@ func callFreeClineAPI(params map[string]any, stream bool) (*http.Response, *Acco
 	// 先剔除已下架模型，再按可用性重排：把流量摊到用量最少的可用模型上，
 	// 而不是顺序打满第一个，也不在必败的死模型上浪费一次上游往返。
 	chain = filterStaleModels(chain)
-	chain = sortModelsByAvailability(chain)
+	chain = accounts.SortModelsByAvailability(chain)
 	if getProxyConfig().OnlyFree {
 		eligible := make([]string, 0, len(chain))
 		for _, m := range chain {
@@ -1541,20 +1542,22 @@ func callFreeClineAPI(params map[string]any, stream bool) (*http.Response, *Acco
 		// 连续性最有价值的路径）。
 		var freeAffinity *Account
 		if affinitySk != "" {
-			freeAffinity = accountAffinity.get(affinitySk, model, time.Now())
+			if bound, ok := accounts.PickAffinityAccount(affinitySk, model); ok {
+				freeAffinity = bound
+			}
 		}
 		for {
 			acc := freeAffinity
 			freeAffinity = nil // 绑定账号只试一次，失败后融入常规轮转
 			if acc == nil {
-				acc = pickAccountForModelLeastUsed(model)
+				acc = accounts.PickAccountForModelLeastUsed(model)
 			}
 			if acc == nil {
 				break
 			}
 
 			resp, usedAcc, err := callClineAPIWithAccountCtx(context.Background(), acc, params, stream)
-			observeAffinityOutcome(affinitySk, usedAcc, err)
+			accounts.ObserveAffinityOutcome(affinitySk, usedAcc, err)
 			if err == nil {
 				return resp, usedAcc, nil
 			}
@@ -1609,7 +1612,7 @@ func callClineAPIWithAccount(acc *Account, params map[string]any, stream bool) (
 }
 
 func callClineAPIWithAccountCtx(ctx context.Context, acc *Account, params map[string]any, stream bool) (*http.Response, *Account, error) {
-	token, err := ensureAccountToken(acc)
+	token, err := accounts.EnsureAccountToken(acc)
 	if err != nil {
 		// Try other accounts
 		return nil, acc, &clineAccountUnavailableError{err: fmt.Errorf("account %s token failed: %w", acc.Email, err)}
@@ -1625,7 +1628,7 @@ func callClineAPIWithAccountCtx(ctx context.Context, acc *Account, params map[st
 
 	client := &clineupstream.Client{
 		HTTP:         &http.Client{Transport: httpClient.Transport},
-		BaseURL:      clineAPIBase,
+		BaseURL:      accounts.ClineAPIBase,
 		ExtraHeaders: getProxyConfig().Headers,
 	}
 
@@ -1642,26 +1645,26 @@ func callClineAPIWithAccountCtx(ctx context.Context, acc *Account, params map[st
 	if err != nil {
 		acc.Status = "cooldown"
 		acc.CooldownUntil = time.Now().Add(5 * time.Minute)
-		savePool()
+		accounts.SavePool()
 		return nil, acc, &clineAccountUnavailableError{err: fmt.Errorf("upstream request: %w", err)}
 	}
 
 	if resp.StatusCode == 401 {
 		resp.Body.Close()
 		// Refresh token and retry
-		if err := refreshAccountToken(acc); err == nil {
+		if err := accounts.RefreshAccountToken(acc); err == nil {
 			token = acc.AccessToken
 			resp, err = client.Chat(ctx, token, sessionID, bodyJSON)
 			if err != nil {
 				acc.Status = "cooldown"
 				acc.CooldownUntil = time.Now().Add(5 * time.Minute)
-				savePool()
+				accounts.SavePool()
 				return nil, acc, &clineAccountUnavailableError{err: fmt.Errorf("upstream retry: %w", err)}
 			}
 			if resp.StatusCode == 401 {
 				resp.Body.Close()
 				acc.Status = "expired"
-				savePool()
+				accounts.SavePool()
 				return nil, acc, &clineAccountUnavailableError{err: fmt.Errorf("account %s token expired permanently", acc.Email)}
 			}
 		} else {
@@ -1682,7 +1685,7 @@ func callClineAPIWithAccountCtx(ctx context.Context, acc *Account, params map[st
 			} else {
 				acc.Status = "cooldown"
 				acc.CooldownUntil = until
-				savePool()
+				accounts.SavePool()
 			}
 		}
 		// 上游明确报「模型不存在」时清理下架残留（同步标记 Delisted 保留的模型）
@@ -1694,7 +1697,7 @@ func callClineAPIWithAccountCtx(ctx context.Context, acc *Account, params map[st
 
 	acc.LastUsed = time.Now()
 	acc.UsageCount++
-	savePool()
+	accounts.SavePool()
 	return resp, acc, nil
 }
 
@@ -1735,8 +1738,8 @@ func startCooldownRecovery() {
 		ticker := time.NewTicker(30 * time.Second)
 		defer ticker.Stop()
 		for range ticker.C {
-			p := loadPool()
-			poolMu.Lock()
+			p := accounts.LoadPool()
+			accounts.PoolMu.Lock()
 			var toRecover []*Account
 			for _, acc := range p.Accounts {
 				if acc.Status != "cooldown" {
@@ -1748,7 +1751,7 @@ func startCooldownRecovery() {
 					toRecover = append(toRecover, acc)
 				}
 			}
-			poolMu.Unlock()
+			accounts.PoolMu.Unlock()
 
 			for _, acc := range toRecover {
 				log.Printf("cooldown recovery: testing %s", acc.Email)
@@ -1819,10 +1822,10 @@ func testAccount(acc *Account) accountTestResult {
 	}
 	// If the account was in cooldown/expired but the test succeeded, restore it.
 	if acc.Status != "active" {
-		poolMu.Lock()
+		accounts.PoolMu.Lock()
 		acc.Status = "active"
-		poolMu.Unlock()
-		savePool()
+		accounts.PoolMu.Unlock()
+		accounts.SavePool()
 	}
 	return result
 }
@@ -1841,9 +1844,9 @@ func recordTokenUsage(acc *Account, model string, usage tokenUsage) {
 	if acc == nil || !usage.Valid {
 		return
 	}
-	// 先判断是否免费模型（getAllModels 会拿 poolMu，必须在持有锁之前计算）
+	// 先判断是否免费模型（getAllModels 会拿 accounts.PoolMu，必须在持有锁之前计算）
 	isFree := model != "" && isFreeModelID(model)
-	poolMu.Lock()
+	accounts.PoolMu.Lock()
 	acc.PromptTokens += usage.Prompt
 	acc.CompletionTokens += usage.Completion
 	acc.TotalTokens += usage.Total
@@ -1864,8 +1867,8 @@ func recordTokenUsage(acc *Account, model string, usage tokenUsage) {
 		st.TotalTokens += usage.Total
 		st.CachedTokens += usage.Cached
 	}
-	poolMu.Unlock()
-	savePool()
+	accounts.PoolMu.Unlock()
+	accounts.SavePool()
 }
 
 // isFreeModelID 判断模型是否为 free 计费（用于按模型统计和模型级冷却）。
@@ -1884,15 +1887,15 @@ func modelCooldownActive(acc *Account, model string) bool {
 	if acc == nil || model == "" {
 		return false
 	}
-	poolMu.Lock()
-	defer poolMu.Unlock()
+	accounts.PoolMu.Lock()
+	defer accounts.PoolMu.Unlock()
 	until, ok := acc.ModelCooldowns[model]
 	if !ok {
 		return false
 	}
 	if time.Now().After(until) {
 		delete(acc.ModelCooldowns, model)
-		savePool()
+		accounts.SavePool()
 		return false
 	}
 	return true
@@ -1918,13 +1921,13 @@ func setModelCooldown(acc *Account, model string, until time.Time) {
 	if acc == nil || model == "" {
 		return
 	}
-	poolMu.Lock()
+	accounts.PoolMu.Lock()
 	if acc.ModelCooldowns == nil {
 		acc.ModelCooldowns = make(map[string]time.Time)
 	}
 	acc.ModelCooldowns[model] = until
-	poolMu.Unlock()
-	savePool()
+	accounts.PoolMu.Unlock()
+	accounts.SavePool()
 	log.Printf("model cooldown: account=%s model=%s until=%s", truncateEmail(acc.Email), model, until.Format("15:04:05"))
 }
 
@@ -2435,7 +2438,7 @@ func handleAnthropicMessages(w http.ResponseWriter, r *http.Request) {
 	}
 
 	activeCount := 0
-	p := loadPool()
+	p := accounts.LoadPool()
 	for _, a := range p.Accounts {
 		if a.Status == "active" {
 			activeCount++

@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"cline-go-proxy/internal/accounts"
 	"cline-go-proxy/internal/config"
 	"cline-go-proxy/internal/dispatch"
 	"cline-go-proxy/internal/transport"
@@ -36,7 +37,7 @@ func marshalZenJSON(v any) ([]byte, error) {
 // opencode Zen 免费模型支持
 // 按请求中的 model 自动分流：zen 免费模型 → https://opencode.ai/zen/v1；
 // zen 付费模型 → 400 拒绝；其余 → Cline 账号池。
-// zen 模型与 Cline 远程模型同存于 pool.Models（Source="zen"），
+// zen 模型与 Cline 远程模型同存于 accounts.Pool.Models（Source="zen"），
 // 同步采用全量替换：官方下架的模型自动移除，不会残留僵尸条目。
 // ============================================================================
 
@@ -147,15 +148,15 @@ func isZenSource(m Model) bool {
 // currentZenModels 返回当前生效的 zen 模型（pool 中 zen 来源条目；
 // 从未同步成功时回退到种子表）。
 func currentZenModels() []Model {
-	p := loadPool()
-	poolMu.Lock()
+	p := accounts.LoadPool()
+	accounts.PoolMu.Lock()
 	var zen []Model
 	for _, m := range p.Models {
 		if isZenSource(m) {
 			zen = append(zen, m)
 		}
 	}
-	poolMu.Unlock()
+	accounts.PoolMu.Unlock()
 	if len(zen) > 0 || remoteZenActive() {
 		return zen
 	}
@@ -231,15 +232,15 @@ func routeModel(id string) string {
 		return "reject"
 	}
 	// 极端情况：同名 ID 同时是 cline 模型（自定义冲突）→ 让给 cline
-	p := loadPool()
-	poolMu.Lock()
+	p := accounts.LoadPool()
+	accounts.PoolMu.Lock()
 	for _, pm := range p.Models {
 		if !isZenSource(pm) && pm.ID == strings.TrimPrefix(strings.TrimSpace(id), "opencode/") {
-			poolMu.Unlock()
+			accounts.PoolMu.Unlock()
 			return "cline"
 		}
 	}
-	poolMu.Unlock()
+	accounts.PoolMu.Unlock()
 
 	cfg := getZenConfig()
 	if cfg.Failover && zenFailedNow() {
@@ -919,7 +920,7 @@ func syncZenModels() modelSyncResult {
 	// 补全上下文信息：远程接口不带 context/output。
 	// 用户在管理页锁定过的条目（MetaLocked）保留原值；
 	// 其余按种子表刷新（种子值更新时旧条目自动跟进），新模型回退默认。
-	p := loadPool()
+	p := accounts.LoadPool()
 	oldZen := make(map[string]Model, len(p.Models))
 	for _, m := range p.Models {
 		if m.Source == "zen" {
@@ -958,7 +959,7 @@ func syncZenModels() modelSyncResult {
 		remote[i] = fillMeta(remote[i])
 	}
 
-	poolMu.Lock()
+	accounts.PoolMu.Lock()
 	oldIDs := make(map[string]bool)
 	var kept []Model
 	for _, m := range p.Models {
@@ -990,8 +991,8 @@ func syncZenModels() modelSyncResult {
 	p.Models = kept
 	res.Total = len(remote)
 	res.Changed = len(res.Added) > 0 || len(res.Removed) > 0
-	poolMu.Unlock()
-	savePool()
+	accounts.PoolMu.Unlock()
+	accounts.SavePool()
 
 	remoteZenEnabledMu.Lock()
 	remoteZenEnabled = true

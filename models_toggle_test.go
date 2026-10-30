@@ -1,6 +1,7 @@
 package main
 
 import (
+	"cline-go-proxy/internal/accounts"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -11,10 +12,10 @@ import (
 // newToggleTestPool 建立一个独立数据目录的测试池（不落盘到真实数据目录）。
 func newToggleTestPool(t *testing.T, models []Model, defaultModel string) {
 	t.Helper()
-	oldPool, oldPath := pool, poolPath
-	t.Cleanup(func() { pool, poolPath = oldPool, oldPath })
-	poolPath = filepath.Join(t.TempDir(), ".cline-accounts.json")
-	pool = &AccountPool{Accounts: []*Account{}, Keys: []string{}, Models: models, DefaultModel: defaultModel}
+	oldPool, oldPath := accounts.Pool, accounts.PoolPath
+	t.Cleanup(func() { accounts.Pool, accounts.PoolPath = oldPool, oldPath })
+	accounts.PoolPath = filepath.Join(t.TempDir(), ".cline-accounts.json")
+	accounts.Pool = &AccountPool{Accounts: []*Account{}, Keys: []string{}, Models: models, DefaultModel: defaultModel}
 }
 
 // handleAdminModelToggle：批量启停模型；停用当前默认模型时清空默认；
@@ -37,7 +38,7 @@ func TestHandleAdminModelToggle(t *testing.T) {
 	if rec := post(`{"ids":["prov/default-model"],"disabled":true}`); rec.Code != http.StatusOK {
 		t.Fatalf("toggle default-model: status = %d, body = %s", rec.Code, rec.Body.String())
 	}
-	p := loadPool()
+	p := accounts.LoadPool()
 	if !p.Models[0].Disabled {
 		t.Error("default-model should be marked Disabled")
 	}
@@ -49,7 +50,7 @@ func TestHandleAdminModelToggle(t *testing.T) {
 	if rec := post(`{"ids":["prov/other-model","my-custom"],"disabled":true}`); rec.Code != http.StatusOK {
 		t.Fatalf("batch toggle: status = %d, body = %s", rec.Code, rec.Body.String())
 	}
-	p = loadPool()
+	p = accounts.LoadPool()
 	if !p.Models[1].Disabled || !p.Models[2].Disabled {
 		t.Error("batch toggle should disable both models")
 	}
@@ -58,7 +59,7 @@ func TestHandleAdminModelToggle(t *testing.T) {
 	if rec := post(`{"ids":["prov/default-model"],"disabled":false}`); rec.Code != http.StatusOK {
 		t.Fatalf("re-enable: status = %d", rec.Code)
 	}
-	if p := loadPool(); p.Models[0].Disabled {
+	if p := accounts.LoadPool(); p.Models[0].Disabled {
 		t.Error("default-model should be re-enabled")
 	}
 
@@ -106,10 +107,10 @@ func TestLiveModelSetExcludesDisabled(t *testing.T) {
 		{ID: "prov/disabled", Provider: "prov", Cost: "free", Status: "active", Source: "remote", Disabled: true},
 		{ID: "prov/live", Provider: "prov", Cost: "free", Status: "active", Source: "remote"},
 	}, "")
-	p := loadPool()
-	poolMu.Lock()
+	p := accounts.LoadPool()
+	accounts.PoolMu.Lock()
 	live := liveModelSet(p)
-	poolMu.Unlock()
+	accounts.PoolMu.Unlock()
 	if live["prov/disabled"] {
 		t.Error("disabled model must not be in the live set")
 	}
@@ -143,18 +144,18 @@ func TestGetDefaultModelSkipsDisabled(t *testing.T) {
 // syncClineModels：重建 remote 条目时保留用户停用标记（Disabled），
 // 周期同步不会把停用状态冲掉。
 func TestSyncClineModelsPreservesDisabled(t *testing.T) {
-	oldPool, oldPath, oldURL := pool, poolPath, clineRecommendedModelsURL
+	oldPool, oldPath, oldURL := accounts.Pool, accounts.PoolPath, clineRecommendedModelsURL
 	oldSyncRan := modelSyncRan
 	oldLast := lastModelSync
 	oldBusy := modelSyncBusy
 	t.Cleanup(func() {
-		pool, poolPath, clineRecommendedModelsURL = oldPool, oldPath, oldURL
+		accounts.Pool, accounts.PoolPath, clineRecommendedModelsURL = oldPool, oldPath, oldURL
 		modelSyncMu.Lock()
 		modelSyncRan, lastModelSync, modelSyncBusy = oldSyncRan, oldLast, oldBusy
 		modelSyncMu.Unlock()
 	})
-	poolPath = filepath.Join(t.TempDir(), ".cline-accounts.json")
-	pool = &AccountPool{Accounts: []*Account{}, Keys: []string{}, Models: []Model{
+	accounts.PoolPath = filepath.Join(t.TempDir(), ".cline-accounts.json")
+	accounts.Pool = &AccountPool{Accounts: []*Account{}, Keys: []string{}, Models: []Model{
 		{ID: "prov/disabled-model", Provider: "prov", Cost: "free", Status: "active", Source: "remote", Disabled: true},
 		{ID: "prov/enabled-model", Provider: "prov", Cost: "free", Status: "active", Source: "remote"},
 	}}
@@ -173,7 +174,7 @@ func TestSyncClineModelsPreservesDisabled(t *testing.T) {
 	}
 
 	byID := map[string]Model{}
-	for _, m := range loadPool().Models {
+	for _, m := range accounts.LoadPool().Models {
 		byID[m.ID] = m
 	}
 	if m, ok := byID["prov/disabled-model"]; !ok {

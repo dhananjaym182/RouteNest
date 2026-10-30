@@ -3,6 +3,7 @@ package main
 import (
 	"net/http"
 
+	"cline-go-proxy/internal/accounts"
 	"cline-go-proxy/internal/adminapi"
 	"cline-go-proxy/internal/domain"
 	"cline-go-proxy/internal/i18n"
@@ -17,40 +18,40 @@ func (rootModelStore) List() []domain.Model {
 }
 
 func (rootModelStore) Add(m domain.Model) {
-	p := loadPool()
-	poolMu.Lock()
+	p := accounts.LoadPool()
+	accounts.PoolMu.Lock()
 	p.Models = append(p.Models, m)
-	poolMu.Unlock()
-	savePool()
+	accounts.PoolMu.Unlock()
+	accounts.SavePool()
 }
 
 func (rootModelStore) Delete(id string) adminapi.DeleteModelResult {
-	p := loadPool()
-	poolMu.Lock()
+	p := accounts.LoadPool()
+	accounts.PoolMu.Lock()
 	for i, m := range p.Models {
 		if m.ID != id {
 			continue
 		}
 		// Custom models may be removed; synchronized models only once delisted.
 		if !m.Custom && !m.Delisted {
-			poolMu.Unlock()
+			accounts.PoolMu.Unlock()
 			return adminapi.ModelBuiltin
 		}
 		p.Models = append(p.Models[:i], p.Models[i+1:]...)
 		if p.DefaultModel == id {
 			p.DefaultModel = ""
 		}
-		poolMu.Unlock()
-		savePool()
+		accounts.PoolMu.Unlock()
+		accounts.SavePool()
 		return adminapi.ModelDeleted
 	}
-	poolMu.Unlock()
+	accounts.PoolMu.Unlock()
 	return adminapi.ModelNotFound
 }
 
 func (rootModelStore) UpdateContext(id string, context, output int) bool {
-	p := loadPool()
-	poolMu.Lock()
+	p := accounts.LoadPool()
+	accounts.PoolMu.Lock()
 	for i := range p.Models {
 		if p.Models[i].ID != id {
 			continue
@@ -60,17 +61,17 @@ func (rootModelStore) UpdateContext(id string, context, output int) bool {
 		// Zeroing both returns the limits to unknown; otherwise the user locks them
 		// against sync overwrites.
 		p.Models[i].MetaLocked = !(context == 0 && output == 0)
-		poolMu.Unlock()
-		savePool()
+		accounts.PoolMu.Unlock()
+		accounts.SavePool()
 		return true
 	}
-	poolMu.Unlock()
+	accounts.PoolMu.Unlock()
 	return false
 }
 
 func (rootModelStore) UpdateCapabilities(id string, caps adminapi.ModelCapabilities) bool {
-	p := loadPool()
-	poolMu.Lock()
+	p := accounts.LoadPool()
+	accounts.PoolMu.Lock()
 	for i := range p.Models {
 		if p.Models[i].ID != id {
 			continue
@@ -86,11 +87,11 @@ func (rootModelStore) UpdateCapabilities(id string, caps adminapi.ModelCapabilit
 		if caps.OutputModalities != nil {
 			p.Models[i].OutputModalities = caps.OutputModalities
 		}
-		poolMu.Unlock()
-		savePool()
+		accounts.PoolMu.Unlock()
+		accounts.SavePool()
 		return true
 	}
-	poolMu.Unlock()
+	accounts.PoolMu.Unlock()
 	return false
 }
 
@@ -99,8 +100,8 @@ func (rootModelStore) SetDisabled(ids []string, disabled bool) int {
 	for _, id := range ids {
 		target[id] = true
 	}
-	p := loadPool()
-	poolMu.Lock()
+	p := accounts.LoadPool()
+	accounts.PoolMu.Lock()
 	changed := 0
 	for i := range p.Models {
 		if !target[p.Models[i].ID] {
@@ -112,9 +113,9 @@ func (rootModelStore) SetDisabled(ids []string, disabled bool) int {
 			p.DefaultModel = ""
 		}
 	}
-	poolMu.Unlock()
+	accounts.PoolMu.Unlock()
 	if changed > 0 {
-		savePool()
+		accounts.SavePool()
 	}
 	return changed
 }

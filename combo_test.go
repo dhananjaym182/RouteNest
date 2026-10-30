@@ -6,6 +6,7 @@ package main
 // 流式预提交回退与「有内容后不再重开」。另含并发配置访问的竞态用例（-race）。
 
 import (
+	"cline-go-proxy/internal/accounts"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -24,14 +25,14 @@ func comboTestAccount(id string) *Account {
 	}
 }
 
-func installPool(t *testing.T, models []Model, accounts ...*Account) {
+func installPool(t *testing.T, models []Model, accs ...*Account) {
 	t.Helper()
-	old := pool
-	t.Cleanup(func() { pool = old })
-	if len(accounts) == 0 {
-		accounts = []*Account{comboTestAccount("acc1")}
+	old := accounts.Pool
+	t.Cleanup(func() { accounts.Pool = old })
+	if len(accs) == 0 {
+		accs = []*Account{comboTestAccount("acc1")}
 	}
-	pool = &AccountPool{Accounts: accounts, Models: models}
+	accounts.Pool = &AccountPool{Accounts: accs, Models: models}
 }
 
 func installConfig(t *testing.T, cfg *proxyConfigData) {

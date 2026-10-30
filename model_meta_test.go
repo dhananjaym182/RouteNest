@@ -1,6 +1,10 @@
 package main
 
-import "testing"
+import (
+	"testing"
+
+	"cline-go-proxy/internal/accounts"
+)
 
 // 已知硬限制表按基名匹配：Cline 路由前缀（cline-free/ cline-pass/ google/ cline/）
 // 剥掉后查表；其他 provider 前缀（z-ai/ 等）不属于 Cline 路由，整段保留。
@@ -42,10 +46,10 @@ func TestLookupClineModelMeta(t *testing.T) {
 
 // modelMaxOutputLimit：已知表优先，其次池中模型 Output（zen 估值不算硬上限）。
 func TestModelMaxOutputLimit(t *testing.T) {
-	oldPool := pool
-	t.Cleanup(func() { pool = oldPool })
+	oldPool := accounts.Pool
+	t.Cleanup(func() { accounts.Pool = oldPool })
 
-	pool = &AccountPool{Models: []Model{
+	accounts.Pool = &AccountPool{Models: []Model{
 		{ID: "my-model", Output: 8192},
 		{ID: "deepseek-v4-flash-free", Source: "zen", Output: 128000},
 	}}
@@ -54,7 +58,7 @@ func TestModelMaxOutputLimit(t *testing.T) {
 		t.Errorf("table limit = %d, want 65536", got)
 	}
 	if got := modelMaxOutputLimit("my-model"); got != 8192 {
-		t.Errorf("pool model limit = %d, want 8192", got)
+		t.Errorf("accounts.Pool model limit = %d, want 8192", got)
 	}
 	if got := modelMaxOutputLimit("deepseek-v4-flash-free"); got != 0 {
 		t.Errorf("zen model output is a compaction estimate, must not cap (got %d)", got)
@@ -72,9 +76,9 @@ func TestModelMaxOutputLimit(t *testing.T) {
 // 才能走到封顶分支；ROUTENEST_MAX_TOKENS 是 maxOutputTokens() 的来源。
 func TestBuildUpstreamBodyCapsGeminiMaxTokens(t *testing.T) {
 	t.Setenv("ROUTENEST_MAX_TOKENS", "128000")
-	oldPool := pool
-	t.Cleanup(func() { pool = oldPool })
-	pool = &AccountPool{}
+	oldPool := accounts.Pool
+	t.Cleanup(func() { accounts.Pool = oldPool })
+	accounts.Pool = &AccountPool{}
 
 	cases := []struct {
 		name   string

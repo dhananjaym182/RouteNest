@@ -30,6 +30,7 @@ import (
 	"strings"
 	"time"
 
+	"cline-go-proxy/internal/accounts"
 	"cline-go-proxy/internal/i18n"
 )
 
@@ -336,7 +337,7 @@ func upsertCombo(c ModelCombo) (ModelCombo, error) {
 	c = normalizeCombo(c)
 
 	// 校验在**不持有** proxyConfigMu 的情况下进行：validateCombo 会读取模型目录、
-	// provider 列表并做 zen 路由判定（涉及 poolMu / providersMu / zenConfigMu）。
+	// provider 列表并做 zen 路由判定（涉及 accounts.PoolMu / providersMu / zenConfigMu）。
 	// 在配置锁内做这些外部读取会扩大锁范围并带来锁序风险，故先快照再校验。
 	existing := listCombos()
 	others := make([]ModelCombo, 0, len(existing))
@@ -552,9 +553,9 @@ func comboRouteKind(model string) string {
 // （自定义冲突场景，routeModel 会把同名 zen 模型让给 cline）。
 func clineModelWithIDExists(model string) bool {
 	id := strings.TrimPrefix(strings.TrimSpace(model), "opencode/")
-	p := loadPool()
-	poolMu.Lock()
-	defer poolMu.Unlock()
+	p := accounts.LoadPool()
+	accounts.PoolMu.Lock()
+	defer accounts.PoolMu.Unlock()
 	for _, pm := range p.Models {
 		if !isZenSource(pm) && pm.ID == id {
 			return true
@@ -568,9 +569,9 @@ func clineModelWithIDExists(model string) bool {
 // 走 Cline 会得到 400 "invalid model format"，进而被组合误判为永久失败。
 func clinePoolModelExists(model string) bool {
 	id := strings.TrimPrefix(strings.TrimSpace(model), "opencode/")
-	p := loadPool()
-	poolMu.Lock()
-	defer poolMu.Unlock()
+	p := accounts.LoadPool()
+	accounts.PoolMu.Lock()
+	defer accounts.PoolMu.Unlock()
 	for _, pm := range p.Models {
 		if !isZenSource(pm) && pm.Source != "provider" && pm.ID == id {
 			return true
@@ -709,7 +710,7 @@ func callSingleModel(params map[string]any, entry ComboEntry, stream bool, sessi
 
 	tried := map[string]bool{}
 	for {
-		acc := pickAccountForModelStrict(model)
+		acc := accounts.PickAccountForModelStrict(model)
 		if acc == nil {
 			return nil, nil, upstreamCline, "", &freeModelUnavailableError{message: fmt.Sprintf("model %q has no available account", model)}
 		}

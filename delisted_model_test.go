@@ -1,10 +1,11 @@
 package main
 
 import (
-	"strings"
+	"cline-go-proxy/internal/accounts"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -35,10 +36,10 @@ func TestIsModelGoneError(t *testing.T) {
 // markModelGone：只删同步打上 Delisted 标记的模型；仍在官方列表里的和
 // 自定义模型不动；删除的是默认模型时清空回退。
 func TestMarkModelGoneRemovesOnlyDelisted(t *testing.T) {
-	oldPool, oldPath := pool, poolPath
-	t.Cleanup(func() { pool, poolPath = oldPool, oldPath })
-	poolPath = filepath.Join(t.TempDir(), ".cline-accounts.json")
-	pool = &AccountPool{
+	oldPool, oldPath := accounts.Pool, accounts.PoolPath
+	t.Cleanup(func() { accounts.Pool, accounts.PoolPath = oldPool, oldPath })
+	accounts.PoolPath = filepath.Join(t.TempDir(), ".cline-accounts.json")
+	accounts.Pool = &AccountPool{
 		Accounts:     []*Account{},
 		Keys:         []string{},
 		DefaultModel: "delisted-model",
@@ -56,7 +57,7 @@ func TestMarkModelGoneRemovesOnlyDelisted(t *testing.T) {
 	markModelGone("")
 
 	models := map[string]bool{}
-	for _, m := range loadPool().Models {
+	for _, m := range accounts.LoadPool().Models {
 		models[m.ID] = true
 	}
 	if models["delisted-model"] {
@@ -68,7 +69,7 @@ func TestMarkModelGoneRemovesOnlyDelisted(t *testing.T) {
 	if !models["my-custom"] {
 		t.Error("custom model must be left for manual handling")
 	}
-	if got := loadPool().DefaultModel; got != "" {
+	if got := accounts.LoadPool().DefaultModel; got != "" {
 		t.Errorf("DefaultModel = %q, want empty after its model was removed", got)
 	}
 }
@@ -76,17 +77,17 @@ func TestMarkModelGoneRemovesOnlyDelisted(t *testing.T) {
 // syncClineModels：官方列表里消失的模型不删除，改打 Delisted 标记保留；
 // 重新出现时标记清除。res.Removed 只记录新下架的。
 func TestSyncClineModelsMarksDelisted(t *testing.T) {
-	oldPool, oldPath, oldURL := pool, poolPath, clineRecommendedModelsURL
+	oldPool, oldPath, oldURL := accounts.Pool, accounts.PoolPath, clineRecommendedModelsURL
 	oldSyncRan := modelSyncRan
 	oldLast := lastModelSync
 	t.Cleanup(func() {
-		pool, poolPath, clineRecommendedModelsURL = oldPool, oldPath, oldURL
+		accounts.Pool, accounts.PoolPath, clineRecommendedModelsURL = oldPool, oldPath, oldURL
 		modelSyncMu.Lock()
 		modelSyncRan, lastModelSync = oldSyncRan, oldLast
 		modelSyncMu.Unlock()
 	})
-	poolPath = filepath.Join(t.TempDir(), ".cline-accounts.json")
-	pool = &AccountPool{Accounts: []*Account{}, Keys: []string{}, Models: []Model{
+	accounts.PoolPath = filepath.Join(t.TempDir(), ".cline-accounts.json")
+	accounts.Pool = &AccountPool{Accounts: []*Account{}, Keys: []string{}, Models: []Model{
 		{ID: "old-free/gone-model", Provider: "old-free", Cost: "free", Status: "active", Source: "remote"},
 	}}
 
@@ -104,7 +105,7 @@ func TestSyncClineModelsMarksDelisted(t *testing.T) {
 	}
 
 	byID := map[string]Model{}
-	for _, m := range loadPool().Models {
+	for _, m := range accounts.LoadPool().Models {
 		byID[m.ID] = m
 	}
 	gone, ok := byID["old-free/gone-model"]
@@ -139,7 +140,7 @@ func TestSyncClineModelsMarksDelisted(t *testing.T) {
 	if res2.Error != "" {
 		t.Fatalf("sync2 error: %s", res2.Error)
 	}
-	for _, m := range loadPool().Models {
+	for _, m := range accounts.LoadPool().Models {
 		if m.ID == "old-free/gone-model" && m.Delisted {
 			t.Error("model back in the official list should clear the Delisted flag")
 		}
@@ -152,14 +153,14 @@ func TestSyncClineModelsMarksDelisted(t *testing.T) {
 // 用户显式配置的回退链不做列表过滤：列表外但实测仍可用的模型允许配置；
 // 动态派生的免费链仍按 liveModelSet 过滤下架条目。
 func TestModelFallbackChainKeepsUserConfiguredOutOfList(t *testing.T) {
-	oldPool, oldPath := pool, poolPath
+	oldPool, oldPath := accounts.Pool, accounts.PoolPath
 	oldCfg := getProxyConfig()
 	t.Cleanup(func() {
-		pool, poolPath = oldPool, oldPath
+		accounts.Pool, accounts.PoolPath = oldPool, oldPath
 		setProxyConfig(oldCfg)
 	})
-	poolPath = filepath.Join(t.TempDir(), ".cline-accounts.json")
-	pool = &AccountPool{Accounts: []*Account{}, Keys: []string{}, Models: []Model{
+	accounts.PoolPath = filepath.Join(t.TempDir(), ".cline-accounts.json")
+	accounts.Pool = &AccountPool{Accounts: []*Account{}, Keys: []string{}, Models: []Model{
 		{ID: "cline-free/gemini-3.8-flash", Source: "remote", Cost: "free", Status: "active"},
 	}}
 	setProxyConfig(&proxyConfigData{ModelChain: []string{"out-of-list/still-works", "cline-free/gemini-3.8-flash", "out-of-list/still-works"}})
@@ -177,19 +178,19 @@ func TestModelFallbackChainKeepsUserConfiguredOutOfList(t *testing.T) {
 	}
 }
 
-// addAccount 按邮箱去重：同邮箱原地更新凭据（保留 AccountID/统计），不产生
+// accounts.AddAccount 按邮箱去重：同邮箱原地更新凭据（保留 AccountID/统计），不产生
 // 重复条目；已存在的同邮箱重复条目合并移除。
 func TestAddAccountUpsertsByEmail(t *testing.T) {
-	oldPool, oldPath := pool, poolPath
-	t.Cleanup(func() { pool, poolPath = oldPool, oldPath })
-	poolPath = filepath.Join(t.TempDir(), ".cline-accounts.json")
+	oldPool, oldPath := accounts.Pool, accounts.PoolPath
+	t.Cleanup(func() { accounts.Pool, accounts.PoolPath = oldPool, oldPath })
+	accounts.PoolPath = filepath.Join(t.TempDir(), ".cline-accounts.json")
 	oldAcc := &Account{AccountID: "acc_old", Email: "user@example.com", RefreshToken: "old-rt", Status: "expired", UsageCount: 100, TotalTokens: 5000, CreatedAt: time.Now().Add(-72 * time.Hour)}
-	pool = &AccountPool{Accounts: []*Account{oldAcc}, Keys: []string{}}
+	accounts.Pool = &AccountPool{Accounts: []*Account{oldAcc}, Keys: []string{}}
 
 	// 同邮箱重新授权：原地更新，不新增
-	addAccount(&Account{AccountID: "acc_new", Email: "user@example.com", RefreshToken: "new-rt", Status: "active", UsageCount: 5})
+	accounts.AddAccount(&Account{AccountID: "acc_new", Email: "user@example.com", RefreshToken: "new-rt", Status: "active", UsageCount: 5})
 
-	p := loadPool()
+	p := accounts.LoadPool()
 	if len(p.Accounts) != 1 {
 		t.Fatalf("accounts = %d, want 1 (in-place re-auth, no duplicate)", len(p.Accounts))
 	}
@@ -204,12 +205,12 @@ func TestAddAccountUpsertsByEmail(t *testing.T) {
 		t.Errorf("UsageCount = %d, want original 100 preserved", got.UsageCount)
 	}
 
-	// 已存在的重复条目：addAccount 合并移除
+	// 已存在的重复条目：accounts.AddAccount 合并移除
 	dup := &Account{AccountID: "acc_dup", Email: "USER@example.com", RefreshToken: "dup-rt", Status: "active", UsageCount: 7}
-	pool.Accounts = append(pool.Accounts, dup)
-	addAccount(&Account{AccountID: "acc_x", Email: "user@example.com", RefreshToken: "latest-rt", Status: "active"})
+	accounts.Pool.Accounts = append(accounts.Pool.Accounts, dup)
+	accounts.AddAccount(&Account{AccountID: "acc_x", Email: "user@example.com", RefreshToken: "latest-rt", Status: "active"})
 
-	p = loadPool()
+	p = accounts.LoadPool()
 	if len(p.Accounts) != 1 {
 		t.Fatalf("accounts = %d, want 1 (duplicates merged)", len(p.Accounts))
 	}

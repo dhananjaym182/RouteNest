@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"cline-go-proxy/internal/accounts"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -14,11 +15,11 @@ import (
 // 返回可用的 baseURL，并在清理时恢复池 / 配置 / 传输层。
 func newStreamTestServer(t *testing.T, id string, chain ...string) string {
 	t.Helper()
-	oldPool := pool
+	oldPool := accounts.Pool
 	oldConfig := getProxyConfig()
 	oldTransport := httpClient.Transport
 	t.Cleanup(func() {
-		pool = oldPool
+		accounts.Pool = oldPool
 		setProxyConfig(oldConfig)
 		httpClient.Transport = oldTransport
 	})
@@ -30,7 +31,7 @@ func newStreamTestServer(t *testing.T, id string, chain ...string) string {
 		ExpiresAt:   time.Now().Add(time.Hour).UnixMilli(),
 		Status:      "active",
 	}
-	pool = &AccountPool{Accounts: []*Account{account}}
+	accounts.Pool = &AccountPool{Accounts: []*Account{account}}
 	config := defaultProxyConfig()
 	config.Strategy = "fill"
 	if len(chain) > 0 {
@@ -45,11 +46,11 @@ func newStreamTestServer(t *testing.T, id string, chain ...string) string {
 // 预提交设计下这次失败应被透明重试：客户端在一次 HTTP 响应内拿到完整成功流，
 // 看不到 error 事件，也看不到重复的 message_start。
 func TestAnthropicStreamRetriesTransparentlyBeforeFirstToken(t *testing.T) {
-	oldPool := pool
+	oldPool := accounts.Pool
 	oldConfig := getProxyConfig()
 	oldTransport := httpClient.Transport
 	t.Cleanup(func() {
-		pool = oldPool
+		accounts.Pool = oldPool
 		setProxyConfig(oldConfig)
 		httpClient.Transport = oldTransport
 	})
@@ -61,7 +62,7 @@ func TestAnthropicStreamRetriesTransparentlyBeforeFirstToken(t *testing.T) {
 		ExpiresAt:   time.Now().Add(time.Hour).UnixMilli(),
 		Status:      "active",
 	}
-	pool = &AccountPool{Accounts: []*Account{account}}
+	accounts.Pool = &AccountPool{Accounts: []*Account{account}}
 	config := defaultProxyConfig()
 	config.Strategy = "fill"
 	setProxyConfig(config)
@@ -125,11 +126,11 @@ func TestAnthropicStreamRetriesTransparentlyBeforeFirstToken(t *testing.T) {
 // 在 error 之后又收到伪造的 end_turn message_delta / message_stop（这会让客户端
 // 把断流当成一条「成功的空消息」）。提交后也无法重试，上游只应被调用一次。
 func TestAnthropicStreamMidStreamErrorNotMaskedAsEndTurn(t *testing.T) {
-	oldPool := pool
+	oldPool := accounts.Pool
 	oldConfig := getProxyConfig()
 	oldTransport := httpClient.Transport
 	t.Cleanup(func() {
-		pool = oldPool
+		accounts.Pool = oldPool
 		setProxyConfig(oldConfig)
 		httpClient.Transport = oldTransport
 	})
@@ -141,7 +142,7 @@ func TestAnthropicStreamMidStreamErrorNotMaskedAsEndTurn(t *testing.T) {
 		ExpiresAt:   time.Now().Add(time.Hour).UnixMilli(),
 		Status:      "active",
 	}
-	pool = &AccountPool{Accounts: []*Account{account}}
+	accounts.Pool = &AccountPool{Accounts: []*Account{account}}
 	config := defaultProxyConfig()
 	config.Strategy = "fill"
 	setProxyConfig(config)
@@ -197,11 +198,11 @@ func TestAnthropicStreamMidStreamErrorNotMaskedAsEndTurn(t *testing.T) {
 // 期间若只有注释行 —— 中间层看不到字节会 524，Claude Code 的流空闲看门狗也会把连接
 // 当成卡死（表现为「Combobulating…」很久后 timeout，并退化为必定失败的非流式重试）。
 func TestAnthropicStreamStartsEnvelopeBeforeFirstToken(t *testing.T) {
-	oldPool := pool
+	oldPool := accounts.Pool
 	oldConfig := getProxyConfig()
 	oldTransport := httpClient.Transport
 	t.Cleanup(func() {
-		pool = oldPool
+		accounts.Pool = oldPool
 		setProxyConfig(oldConfig)
 		httpClient.Transport = oldTransport
 	})
@@ -213,7 +214,7 @@ func TestAnthropicStreamStartsEnvelopeBeforeFirstToken(t *testing.T) {
 		ExpiresAt:   time.Now().Add(time.Hour).UnixMilli(),
 		Status:      "active",
 	}
-	pool = &AccountPool{Accounts: []*Account{account}}
+	accounts.Pool = &AccountPool{Accounts: []*Account{account}}
 	config := defaultProxyConfig()
 	config.Strategy = "fill"
 	setProxyConfig(config)
@@ -306,11 +307,11 @@ func TestAnthropicStreamStartsEnvelopeBeforeFirstToken(t *testing.T) {
 // 并在同一次请求内自动换到配置链上的下一个模型，而不是把错误抛给客户端。
 // 这是「glm-5.3-flash 老失败」的直接缓解：坏模型自动让位，用户仍能拿到回答。
 func TestAnthropicStreamFailsOverToNextModelBeforeFirstToken(t *testing.T) {
-	oldPool := pool
+	oldPool := accounts.Pool
 	oldConfig := getProxyConfig()
 	oldTransport := httpClient.Transport
 	t.Cleanup(func() {
-		pool = oldPool
+		accounts.Pool = oldPool
 		setProxyConfig(oldConfig)
 		httpClient.Transport = oldTransport
 	})
@@ -322,7 +323,7 @@ func TestAnthropicStreamFailsOverToNextModelBeforeFirstToken(t *testing.T) {
 		ExpiresAt:   time.Now().Add(time.Hour).UnixMilli(),
 		Status:      "active",
 	}
-	pool = &AccountPool{Accounts: []*Account{account}}
+	accounts.Pool = &AccountPool{Accounts: []*Account{account}}
 	config := defaultProxyConfig()
 	config.Strategy = "fill"
 	config.ModelChain = []string{"backup-model"}
@@ -397,11 +398,11 @@ func TestAnthropicStreamFailsOverToNextModelBeforeFirstToken(t *testing.T) {
 // end_turn 结束）时，代理应视为该模型失败并换链上下一个模型，而不是把一个空回答
 // 交给客户端 —— 空回答对 agent 客户端毫无价值，且用户会以为模型“没反应”。
 func TestAnthropicStreamEmptyCompletionFailsOver(t *testing.T) {
-	oldPool := pool
+	oldPool := accounts.Pool
 	oldConfig := getProxyConfig()
 	oldTransport := httpClient.Transport
 	t.Cleanup(func() {
-		pool = oldPool
+		accounts.Pool = oldPool
 		setProxyConfig(oldConfig)
 		httpClient.Transport = oldTransport
 	})
@@ -413,7 +414,7 @@ func TestAnthropicStreamEmptyCompletionFailsOver(t *testing.T) {
 		ExpiresAt:   time.Now().Add(time.Hour).UnixMilli(),
 		Status:      "active",
 	}
-	pool = &AccountPool{Accounts: []*Account{account}}
+	accounts.Pool = &AccountPool{Accounts: []*Account{account}}
 	config := defaultProxyConfig()
 	config.Strategy = "fill"
 	config.ModelChain = []string{"backup-model"}

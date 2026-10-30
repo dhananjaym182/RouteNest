@@ -23,6 +23,7 @@ import (
 	"sync"
 	"time"
 
+	"cline-go-proxy/internal/accounts"
 	"cline-go-proxy/internal/i18n"
 )
 
@@ -223,7 +224,7 @@ func quickPoolAttempt(model string, params map[string]any, timeout time.Duration
 	tried := map[string]bool{}
 	var lastErr error
 	for i := 0; i < quickTestMaxAccounts; i++ {
-		acc := pickAccountForModelStrict(model)
+		acc := accounts.PickAccountForModelStrict(model)
 		if acc == nil {
 			return nil, fmt.Errorf("model %q has no available account in the pool", model)
 		}

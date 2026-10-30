@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"cline-go-proxy/internal/accounts"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -127,15 +128,15 @@ func TestModelImportPreviewApplyFlow(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	oldPool := pool
-	defer func() { pool = oldPool }()
+	oldPool := accounts.Pool
+	defer func() { accounts.Pool = oldPool }()
 	provider := &CustomProvider{ID: "imp1", Name: "ImpTest", BaseURL: srv.URL, Enabled: true, ModelIDs: []string{"legacy/manual-c", "legacy/remote-d"}}
 	oldProvs, oldLoaded := customProviders, providersLoaded
 	defer func() { customProviders, providersLoaded = oldProvs, oldLoaded }()
 	customProviders = []*CustomProvider{provider}
 	providersLoaded = true
 
-	pool = &AccountPool{Models: []Model{
+	accounts.Pool = &AccountPool{Models: []Model{
 		{ID: "legacy/manual-c", Provider: "ImpTest", Cost: "free", Status: "active", Source: "provider", TierSignal: "manual"},
 		{ID: "legacy/remote-d", Provider: "Cline", Cost: "pass", Status: "active", Source: "remote"},
 	}}
@@ -179,9 +180,9 @@ func TestModelImportPreviewApplyFlow(t *testing.T) {
 		t.Fatalf("apply status %d body %s", rec2.Code, rec2.Body.String())
 	}
 	var curPool *AccountPool
-	poolMu.Lock()
-	curPool = pool
-	poolMu.Unlock()
+	accounts.PoolMu.Lock()
+	curPool = accounts.Pool
+	accounts.PoolMu.Unlock()
 	got := map[string]Model{}
 	for _, m := range curPool.Models {
 		got[m.ID] = m
@@ -221,9 +222,9 @@ func TestModelImportPreviewApplyFlow(t *testing.T) {
 
 // syncProviderModels 不得覆盖分级器批准过的逐模型层级（整源 Free=false 时）。
 func TestSyncProviderModelsPreservesTierSignal(t *testing.T) {
-	oldPool := pool
-	defer func() { pool = oldPool }()
-	pool = &AccountPool{Models: []Model{
+	oldPool := accounts.Pool
+	defer func() { accounts.Pool = oldPool }()
+	accounts.Pool = &AccountPool{Models: []Model{
 		{ID: "mixed/free-one", Provider: "Mix", Cost: "free", Status: "active", Source: "provider", TierSignal: tierSignalPricingZero},
 		{ID: "mixed/legacy", Provider: "Mix", Cost: "pass", Status: "active", Source: "provider"},
 	}}
@@ -237,12 +238,12 @@ func TestSyncProviderModelsPreservesTierSignal(t *testing.T) {
 
 	syncProviderModels()
 
-	poolMu.Lock()
+	accounts.PoolMu.Lock()
 	got := map[string]Model{}
-	for _, m := range pool.Models {
+	for _, m := range accounts.Pool.Models {
 		got[m.ID] = m
 	}
-	poolMu.Unlock()
+	accounts.PoolMu.Unlock()
 	if got["mixed/free-one"].Cost != "free" {
 		t.Errorf("tier-signal model was overridden by provider-level cost: %+v", got["mixed/free-one"])
 	}
@@ -255,9 +256,9 @@ func TestSyncProviderModelsPreservesTierSignal(t *testing.T) {
 // retroactively repairs untiered provider entries; approved/per-model tiers and
 // cross-source entries stay untouched.
 func TestSyncProviderModelsSeedsFreeSignals(t *testing.T) {
-	oldPool := pool
-	defer func() { pool = oldPool }()
-	pool = &AccountPool{Models: []Model{
+	oldPool := accounts.Pool
+	defer func() { accounts.Pool = oldPool }()
+	accounts.Pool = &AccountPool{Models: []Model{
 		{ID: "old/declared-chat:free", Provider: "Seed", Cost: "pass", Status: "active", Source: "provider"},
 		{ID: "approved/by-manual", Provider: "Seed", Cost: "pass", Status: "active", Source: "provider", TierSignal: "manual"},
 		{ID: "cross/remote-free", Provider: "Other", Cost: "free", Status: "active", Source: "remote"},
@@ -272,12 +273,12 @@ func TestSyncProviderModelsSeedsFreeSignals(t *testing.T) {
 
 	syncProviderModels()
 
-	poolMu.Lock()
+	accounts.PoolMu.Lock()
 	got := map[string]Model{}
-	for _, m := range pool.Models {
+	for _, m := range accounts.Pool.Models {
 		got[m.ID] = m
 	}
-	poolMu.Unlock()
+	accounts.PoolMu.Unlock()
 
 	if m := got["old/declared-chat:free"]; m.Cost != "free" || m.TierSignal != tierSignalSuffixFree || m.TierDecidedAt == 0 {
 		t.Errorf("untiered :free entry not repaired: %+v", m)

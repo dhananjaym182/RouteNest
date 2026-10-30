@@ -4,6 +4,7 @@ import (
 	"log"
 	"time"
 
+	"cline-go-proxy/internal/accounts"
 	"cline-go-proxy/internal/adminapi"
 	"cline-go-proxy/internal/domain"
 	"cline-go-proxy/internal/i18n"
@@ -12,27 +13,27 @@ import (
 // rootAccountStore adapts the package-level account pool to adminapi.AccountStore.
 type rootAccountStore struct{}
 
-func (rootAccountStore) List() []*domain.Account { return listAccounts() }
+func (rootAccountStore) List() []*domain.Account { return accounts.ListAccounts() }
 
-func (rootAccountStore) PoolIndex() int { return loadPool().CurrentIdx }
+func (rootAccountStore) PoolIndex() int { return accounts.LoadPool().CurrentIdx }
 
 func (rootAccountStore) FindByRefreshToken(token string) *domain.Account {
-	return findAccountByRefreshToken(token)
+	return accounts.FindAccountByRefreshToken(token)
 }
 
-func (rootAccountStore) Add(acc *domain.Account) { addAccount(acc) }
+func (rootAccountStore) Add(acc *domain.Account) { accounts.AddAccount(acc) }
 
-func (rootAccountStore) Remove(accountID string) bool { return removeAccount(accountID) }
+func (rootAccountStore) Remove(accountID string) bool { return accounts.RemoveAccount(accountID) }
 
 func validateNewAccountRefreshToken(token string) (adminapi.RefreshedAccount, error) {
-	resp, err := refreshClineToken(token)
+	resp, err := accounts.RefreshClineToken(token)
 	if err != nil {
 		return adminapi.RefreshedAccount{}, err
 	}
 	return adminapi.RefreshedAccount{
 		AccessToken:  resp.Data.AccessToken,
 		RefreshToken: resp.Data.RefreshToken,
-		ExpiresAt:    parseExpiry(resp.Data.ExpiresAt),
+		ExpiresAt:    accounts.ParseExpiry(resp.Data.ExpiresAt),
 	}, nil
 }
 

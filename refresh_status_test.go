@@ -1,6 +1,7 @@
 package main
 
 import (
+	"cline-go-proxy/internal/accounts"
 	"errors"
 	"io"
 	"net/http"
@@ -12,11 +13,11 @@ import (
 
 func isolateRefreshState(t *testing.T, transport freeModelRoundTripper) {
 	t.Helper()
-	oldPool, oldPoolPath, oldTransport := pool, poolPath, httpClient.Transport
-	poolPath = filepath.Join(t.TempDir(), ".cline-accounts.json")
+	oldPool, oldPoolPath, oldTransport := accounts.Pool, accounts.PoolPath, httpClient.Transport
+	accounts.PoolPath = filepath.Join(t.TempDir(), ".cline-accounts.json")
 	httpClient.Transport = transport
 	t.Cleanup(func() {
-		pool, poolPath, httpClient.Transport = oldPool, oldPoolPath, oldTransport
+		accounts.Pool, accounts.PoolPath, httpClient.Transport = oldPool, oldPoolPath, oldTransport
 	})
 }
 
@@ -34,10 +35,10 @@ func TestRefreshAccountTokenCoolsDownInsteadOfExpiringOnTransportError(t *testin
 		return nil, errors.New("dial tcp: lookup api.cline.bot: no such host")
 	})
 	acc := &Account{AccountID: "net", Email: "net@example.com", RefreshToken: "rt", Status: "active"}
-	pool = &AccountPool{Accounts: []*Account{acc}}
+	accounts.Pool = &AccountPool{Accounts: []*Account{acc}}
 
-	if err := refreshAccountToken(acc); err == nil {
-		t.Fatal("refreshAccountToken should report the transport error")
+	if err := accounts.RefreshAccountToken(acc); err == nil {
+		t.Fatal("accounts.RefreshAccountToken should report the transport error")
 	}
 	if acc.Status != "cooldown" {
 		t.Fatalf("status = %q, want a short cooldown after a transient network failure", acc.Status)
@@ -49,10 +50,10 @@ func TestRefreshAccountTokenCoolsDownInsteadOfExpiringOnServerError(t *testing.T
 		return refreshStatusResponse(req, http.StatusServiceUnavailable, `{"error":"unavailable"}`), nil
 	})
 	acc := &Account{AccountID: "5xx", Email: "5xx@example.com", RefreshToken: "rt", Status: "active"}
-	pool = &AccountPool{Accounts: []*Account{acc}}
+	accounts.Pool = &AccountPool{Accounts: []*Account{acc}}
 
-	if err := refreshAccountToken(acc); err == nil {
-		t.Fatal("refreshAccountToken should report the server error")
+	if err := accounts.RefreshAccountToken(acc); err == nil {
+		t.Fatal("accounts.RefreshAccountToken should report the server error")
 	}
 	if acc.Status != "cooldown" {
 		t.Fatalf("status = %q, want a short cooldown after an upstream 503", acc.Status)
@@ -65,10 +66,10 @@ func TestRefreshAccountTokenExpiresAccountWhenRefreshIsRejected(t *testing.T) {
 			return refreshStatusResponse(req, status, `{"error":"invalid_grant"}`), nil
 		})
 		acc := &Account{AccountID: "rejected", Email: "rejected@example.com", RefreshToken: "rt", Status: "active"}
-		pool = &AccountPool{Accounts: []*Account{acc}}
+		accounts.Pool = &AccountPool{Accounts: []*Account{acc}}
 
-		if err := refreshAccountToken(acc); err == nil {
-			t.Fatalf("status %d: refreshAccountToken should fail", status)
+		if err := accounts.RefreshAccountToken(acc); err == nil {
+			t.Fatalf("status %d: accounts.RefreshAccountToken should fail", status)
 		}
 		if acc.Status != "expired" {
 			t.Fatalf("status %d: account status = %q, want expired", status, acc.Status)
@@ -91,7 +92,7 @@ func TestCallClineAPIWithAccountDoesNotExpireWhenRefreshAfter401HitsNetworkError
 		ExpiresAt:    time.Now().Add(time.Hour).UnixMilli(),
 		Status:       "active",
 	}
-	pool = &AccountPool{Accounts: []*Account{acc}}
+	accounts.Pool = &AccountPool{Accounts: []*Account{acc}}
 
 	_, _, err := callClineAPIWithAccount(acc, map[string]any{
 		"model":    freeModelFallback,
@@ -106,7 +107,7 @@ func TestCallClineAPIWithAccountDoesNotExpireWhenRefreshAfter401HitsNetworkError
 }
 
 // cline 自家 refresh 400 时，WorkOS 通道兜底：refreshed via workos →
-// registerWithCline 换正式令牌 → 账号复活，无需重新授权。
+// accounts.RegisterWithCline 换正式令牌 → 账号复活，无需重新授权。
 func TestRefreshAccountTokenRecoversViaWorkOSFallback(t *testing.T) {
 	var sawRegister bool
 	isolateRefreshState(t, func(req *http.Request) (*http.Response, error) {
@@ -123,10 +124,10 @@ func TestRefreshAccountTokenRecoversViaWorkOSFallback(t *testing.T) {
 		return nil, nil
 	})
 	acc := &Account{AccountID: "wos", Email: "wos@example.com", RefreshToken: "rt", Status: "active"}
-	pool = &AccountPool{Accounts: []*Account{acc}}
+	accounts.Pool = &AccountPool{Accounts: []*Account{acc}}
 
-	if err := refreshAccountToken(acc); err != nil {
-		t.Fatalf("refreshAccountToken should recover via WorkOS fallback, got: %v", err)
+	if err := accounts.RefreshAccountToken(acc); err != nil {
+		t.Fatalf("accounts.RefreshAccountToken should recover via WorkOS fallback, got: %v", err)
 	}
 	if !sawRegister {
 		t.Error("expected re-registration with Cline after WorkOS refresh")
@@ -148,10 +149,10 @@ func TestRefreshAccountTokenExpiresWhenWorkOSAlsoRejects(t *testing.T) {
 		return refreshStatusResponse(req, http.StatusBadRequest, `{"error":"invalid_grant"}`), nil
 	})
 	acc := &Account{AccountID: "dead", Email: "dead@example.com", RefreshToken: "rt", Status: "active"}
-	pool = &AccountPool{Accounts: []*Account{acc}}
+	accounts.Pool = &AccountPool{Accounts: []*Account{acc}}
 
-	if err := refreshAccountToken(acc); err == nil {
-		t.Fatal("refreshAccountToken should fail when both channels reject")
+	if err := accounts.RefreshAccountToken(acc); err == nil {
+		t.Fatal("accounts.RefreshAccountToken should fail when both channels reject")
 	}
 	if acc.Status != "expired" {
 		t.Fatalf("status = %q, want expired when the token is truly revoked", acc.Status)

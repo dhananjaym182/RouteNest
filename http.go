@@ -5,6 +5,7 @@ import (
 	"os/exec"
 	"time"
 
+	"cline-go-proxy/internal/accounts"
 	"cline-go-proxy/internal/buildinfo"
 )
 
@@ -43,4 +44,7 @@ func runCommand(name string, args ...string) error {
 
 // init 注入更新检查（internal/buildinfo）使用的出站客户端，
 // 与其它出站请求一致地走 cline 后端出口代理池（保持与拆包前相同的行为）。
-func init() { buildinfo.HTTPClient = httpClient }
+func init() {
+	buildinfo.HTTPClient = httpClient
+	accounts.HTTPClient = httpClient
+}

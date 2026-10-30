@@ -1,6 +1,7 @@
 package main
 
 import (
+	"cline-go-proxy/internal/accounts"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -473,15 +474,15 @@ func modelForCompaction(model string) Model {
 	if zm, ok := resolveZenInfo(model); ok {
 		return zm
 	}
-	p := loadPool()
-	poolMu.Lock()
+	p := accounts.LoadPool()
+	accounts.PoolMu.Lock()
 	for _, m := range p.Models {
 		if m.ID == model {
-			poolMu.Unlock()
+			accounts.PoolMu.Unlock()
 			return m
 		}
 	}
-	poolMu.Unlock()
+	accounts.PoolMu.Unlock()
 	if meta, ok := lookupClineModelMeta(model); ok {
 		return Model{ID: model, Context: meta.Context, Output: meta.Output}
 	}

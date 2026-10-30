@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"runtime"
 
+	"cline-go-proxy/internal/accounts"
 	"cline-go-proxy/internal/adminapi"
 	"cline-go-proxy/internal/buildinfo"
 	"cline-go-proxy/internal/i18n"
@@ -18,18 +19,18 @@ var adminConfig = &adminapi.Config{
 	Models:       getAllModels,
 	DefaultModel: getDefaultModel,
 	SetDefaultModel: func(model string) {
-		p := loadPool()
-		poolMu.Lock()
+		p := accounts.LoadPool()
+		accounts.PoolMu.Lock()
 		p.DefaultModel = model
-		poolMu.Unlock()
-		savePool()
+		accounts.PoolMu.Unlock()
+		accounts.SavePool()
 	},
 	SetListenHost: func(host string) {
-		p := loadPool()
-		poolMu.Lock()
+		p := accounts.LoadPool()
+		accounts.PoolMu.Lock()
 		p.ListenHost = host
-		poolMu.Unlock()
-		savePool()
+		accounts.PoolMu.Unlock()
+		accounts.SavePool()
 	},
 	LocalIPs:           detectLocalIPs,
 	ListenHost:         func() string { return listenHost },
@@ -47,8 +48,8 @@ var adminConfig = &adminapi.Config{
 		return m
 	},
 	ZenHeaders:      func() map[string]string { return getZenConfig().ZenHeaders },
-	PoolPath:        poolPath,
-	HasPassword:     func() bool { return loadPool().AdminPasswordHash != "" },
+	PoolPath:        accounts.PoolPath,
+	HasPassword:     func() bool { return accounts.LoadPool().AdminPasswordHash != "" },
 	RestartListener: restartListener,
 	Translate:       func(r *http.Request, key string) string { return i18n.TAPI(r, key) },
 	Logf:            log.Printf,

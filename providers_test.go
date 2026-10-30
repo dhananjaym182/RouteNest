@@ -1,6 +1,7 @@
 package main
 
 import (
+	"cline-go-proxy/internal/accounts"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -11,17 +12,17 @@ import (
 
 // 自定义 provider 命中时优先走 provider 上游。
 func TestCustomProviderServesModel(t *testing.T) {
-	oldPool := pool
+	oldPool := accounts.Pool
 	oldConfig := getProxyConfig()
 	oldTransport := httpClient.Transport
 	t.Cleanup(func() {
-		pool = oldPool
+		accounts.Pool = oldPool
 		setProxyConfig(oldConfig)
 		httpClient.Transport = oldTransport
 		_ = deleteProvider("prov_test1")
 	})
 
-	pool = &AccountPool{Accounts: []*Account{{
+	accounts.Pool = &AccountPool{Accounts: []*Account{{
 		AccountID: "a", Email: "a@x.com", AccessToken: "t",
 		ExpiresAt: time.Now().Add(time.Hour).UnixMilli(), Status: "active",
 	}}}
@@ -82,17 +83,17 @@ func TestCustomProviderServesModel(t *testing.T) {
 
 // provider 失败（冷却）后自动降级到回退链 → cline 池，客户端无感知。
 func TestCustomProviderFailureFallsBackToChain(t *testing.T) {
-	oldPool := pool
+	oldPool := accounts.Pool
 	oldConfig := getProxyConfig()
 	oldTransport := httpClient.Transport
 	t.Cleanup(func() {
-		pool = oldPool
+		accounts.Pool = oldPool
 		setProxyConfig(oldConfig)
 		httpClient.Transport = oldTransport
 		_ = deleteProvider("prov_test2")
 	})
 
-	pool = &AccountPool{Accounts: []*Account{{
+	accounts.Pool = &AccountPool{Accounts: []*Account{{
 		AccountID: "a", Email: "a@x.com", AccessToken: "t",
 		ExpiresAt: time.Now().Add(time.Hour).UnixMilli(), Status: "active",
 	}}}

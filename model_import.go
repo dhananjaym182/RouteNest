@@ -19,6 +19,7 @@ import (
 	"sync"
 	"time"
 
+	"cline-go-proxy/internal/accounts"
 	"cline-go-proxy/internal/modelcatalog"
 	"cline-go-proxy/internal/upstream/qoder"
 )
@@ -139,14 +140,14 @@ func newImportBatchID() string {
 // buildImportBatch 对条目分类并对比当前池，产出仅内存的待批准批次。
 func buildImportBatch(p CustomProvider, entries []upstreamModelEntry) *importBatch {
 	batch := &importBatch{ID: newImportBatchID(), ProviderID: p.ID, ProviderName: p.Name, CreatedAt: time.Now()}
-	pool := loadPool()
-	poolMu.Lock()
-	existing := make(map[string]modelcatalog.Existing, len(pool.Models))
-	for i := range pool.Models {
-		m := &pool.Models[i]
+	accounts.LoadPool() // ensure the pool is loaded before locking
+	accounts.PoolMu.Lock()
+	existing := make(map[string]modelcatalog.Existing, len(accounts.Pool.Models))
+	for i := range accounts.Pool.Models {
+		m := &accounts.Pool.Models[i]
 		existing[m.ID] = modelcatalog.Existing{Source: m.Source, TierSignal: m.TierSignal, Cost: m.Cost}
 	}
-	poolMu.Unlock()
+	accounts.PoolMu.Unlock()
 	batch.Items, batch.Stats = modelcatalog.BuildImportItems(entries, p.Free, existing, freeIDAllowlist)
 	importsMu.Lock()
 	for id, old := range pendingImports {
@@ -266,11 +267,11 @@ func handleModelImportApply(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	added, changed, now := 0, 0, time.Now().Unix()
-	pool := loadPool()
-	poolMu.Lock()
-	existing := make(map[string]*Model, len(pool.Models))
-	for i := range pool.Models {
-		existing[pool.Models[i].ID] = &pool.Models[i]
+	accounts.LoadPool() // ensure the pool is loaded before locking
+	accounts.PoolMu.Lock()
+	existing := make(map[string]*Model, len(accounts.Pool.Models))
+	for i := range accounts.Pool.Models {
+		existing[accounts.Pool.Models[i].ID] = &accounts.Pool.Models[i]
 	}
 	for id := range approved {
 		it, ok := byID[id]
@@ -282,7 +283,7 @@ func handleModelImportApply(w http.ResponseWriter, r *http.Request) {
 			changed++
 			continue
 		}
-		pool.Models = append(pool.Models, Model{
+		accounts.Pool.Models = append(accounts.Pool.Models, Model{
 			ID: id, Provider: prov.Name, Cost: it.Tier, Status: "active",
 			Source: "provider", TierSignal: it.Signal, TierDecidedAt: now,
 		})
@@ -299,7 +300,7 @@ func handleModelImportApply(w http.ResponseWriter, r *http.Request) {
 		}
 		added++
 	}
-	poolMu.Unlock()
+	accounts.PoolMu.Unlock()
 	if added+changed == 0 {
 		writeAPI(w, http.StatusOK, apiResponse{Success: true, Data: map[string]any{"added": 0, "changed": 0}})
 		return
@@ -313,7 +314,7 @@ func handleModelImportApply(w http.ResponseWriter, r *http.Request) {
 	}
 	saveProvidersLocked()
 	providersMu.Unlock()
-	savePool()
+	accounts.SavePool()
 	importsMu.Lock()
 	delete(pendingImports, batch.ID)
 	importsMu.Unlock()
@@ -387,8 +388,8 @@ func handleAdminModelCost(w http.ResponseWriter, r *http.Request) {
 		writeAPI(w, http.StatusBadRequest, apiResponse{Error: "id and cost(free|pass|empty) required"})
 		return
 	}
-	p := loadPool()
-	poolMu.Lock()
+	p := accounts.LoadPool()
+	accounts.PoolMu.Lock()
 	found := false
 	for i, m := range p.Models {
 		if m.ID == req.ID {
@@ -404,11 +405,11 @@ func handleAdminModelCost(w http.ResponseWriter, r *http.Request) {
 			break
 		}
 	}
-	poolMu.Unlock()
+	accounts.PoolMu.Unlock()
 	if !found {
 		writeAPI(w, http.StatusNotFound, apiResponse{Error: "model not found"})
 		return
 	}
-	savePool()
+	accounts.SavePool()
 	writeAPI(w, http.StatusOK, apiResponse{Success: true})
 }

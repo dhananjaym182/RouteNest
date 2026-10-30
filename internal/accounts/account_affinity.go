@@ -1,7 +1,6 @@
-package main
+package accounts
 
 import (
-	"errors"
 	"sync"
 	"time"
 
@@ -27,6 +26,50 @@ type accountAffinityBind struct {
 
 var accountAffinity = &accountAffinityStore{binds: map[string]accountAffinityBind{}}
 
+var (
+	cfgMu        sync.RWMutex
+	cfgProvider  func() *config.Proxy
+	affinityClsf func(err error) (statusCode int, unavailable bool)
+)
+
+// SetProxyConfigProvider injects the live proxy config accessor. The root
+// package owns the config store in this phase; accounts only reads the
+// strategy and session-affinity policy from it.
+func SetProxyConfigProvider(f func() *config.Proxy) {
+	cfgMu.Lock()
+	cfgProvider = f
+	cfgMu.Unlock()
+}
+
+// SetAffinityErrorClassifier injects Cline error classification. The concrete
+// error types still live in the root package, so accounts asks for the two
+// facts it needs instead of importing them.
+func SetAffinityErrorClassifier(f func(err error) (statusCode int, unavailable bool)) {
+	cfgMu.Lock()
+	affinityClsf = f
+	cfgMu.Unlock()
+}
+
+func currentConfig() *config.Proxy {
+	cfgMu.RLock()
+	f := cfgProvider
+	cfgMu.RUnlock()
+	if f == nil {
+		return config.DefaultProxy()
+	}
+	return f()
+}
+
+func classifyAffinityError(err error) (int, bool) {
+	cfgMu.RLock()
+	f := affinityClsf
+	cfgMu.RUnlock()
+	if f == nil {
+		return 0, false
+	}
+	return f(err)
+}
+
 // enabled reports whether affinity applies to this strategy config.
 func (s *accountAffinityStore) enabled(cfg *config.Proxy) bool {
 	return cfg != nil && cfg.SessionAffinity.Enabled
@@ -39,7 +82,7 @@ func (s *accountAffinityStore) get(sk, model string, now time.Time) *Account {
 	if sk == "" {
 		return nil
 	}
-	cfg := getProxyConfig()
+	cfg := currentConfig()
 	if !s.enabled(cfg) {
 		return nil
 	}
@@ -49,7 +92,7 @@ func (s *accountAffinityStore) get(sk, model string, now time.Time) *Account {
 	if !ok || now.After(bind.expires) {
 		return nil
 	}
-	acc := getAccountByID(bind.accountID)
+	acc := GetAccountByID(bind.accountID)
 	if acc == nil || acc.Status != "active" {
 		s.clear(sk)
 		return nil
@@ -67,7 +110,7 @@ func (s *accountAffinityStore) bind(sk string, acc *Account) {
 	if sk == "" || acc == nil || acc.AccountID == "" {
 		return
 	}
-	cfg := getProxyConfig()
+	cfg := currentConfig()
 	if !s.enabled(cfg) {
 		return
 	}
@@ -98,7 +141,7 @@ func accountAffinityRebindStatus(status int) bool {
 
 // pickAffinityAccount returns the session-bound account when eligible.
 // ok=false means affinity does not apply (caller falls back to its pick).
-func pickAffinityAccount(sk, model string) (*Account, bool) {
+func PickAffinityAccount(sk, model string) (*Account, bool) {
 	if acc := accountAffinity.get(sk, model, time.Now()); acc != nil {
 		return acc, true
 	}
@@ -108,7 +151,7 @@ func pickAffinityAccount(sk, model string) (*Account, bool) {
 // observeAffinityOutcome updates the binding after an attempt on acc:
 // success refreshes it, a rebind-class API error or account-unavailable
 // clears it, anything else leaves it untouched.
-func observeAffinityOutcome(sk string, acc *Account, err error) {
+func ObserveAffinityOutcome(sk string, acc *Account, err error) {
 	if sk == "" || acc == nil {
 		return
 	}
@@ -116,15 +159,9 @@ func observeAffinityOutcome(sk string, acc *Account, err error) {
 		accountAffinity.bind(sk, acc)
 		return
 	}
-	var apiErr *clineAPIError
-	if errors.As(err, &apiErr) {
-		if accountAffinityRebindStatus(apiErr.statusCode) {
-			accountAffinity.clear(sk)
-		}
-		return
-	}
-	var accountErr *clineAccountUnavailableError
-	if errors.As(err, &accountErr) {
+	if code, unavailable := classifyAffinityError(err); unavailable {
+		accountAffinity.clear(sk)
+	} else if code != 0 && accountAffinityRebindStatus(code) {
 		accountAffinity.clear(sk)
 	}
 }

@@ -1,4 +1,4 @@
-package main
+package accounts
 
 import (
 	"fmt"
@@ -8,48 +8,51 @@ import (
 	"time"
 
 	"cline-go-proxy/internal/dispatch"
-	"cline-go-proxy/internal/store/accounts"
+	"cline-go-proxy/internal/platform"
+	poolstore "cline-go-proxy/internal/store/accounts"
 )
 
 var (
-	pool     *AccountPool
-	poolMu   sync.Mutex
-	poolPath string
+	// Pool is the in-memory account Pool. Exported for the root package
+	// during the phased extraction (root handlers still lock it directly).
+	Pool     *AccountPool
+	PoolMu   sync.Mutex
+	PoolPath string
 )
 
 func init() {
-	poolPath = resolveDataPath(".routenest-accounts.json")
+	PoolPath = platform.ResolveDataPath(".routenest-accounts.json", nil)
 }
 
-func loadPool() *AccountPool {
-	poolMu.Lock()
-	defer poolMu.Unlock()
+func LoadPool() *AccountPool {
+	PoolMu.Lock()
+	defer PoolMu.Unlock()
 
-	if pool != nil {
-		return pool
+	if Pool != nil {
+		return Pool
 	}
 
-	p, err := accounts.Load(poolPath)
+	p, err := poolstore.Load(PoolPath)
 	if err != nil {
-		backupCorruptFile(poolPath, err)
+		platform.BackupCorruptFile(PoolPath, err)
 	}
-	pool = p
-	return pool
+	Pool = p
+	return Pool
 }
 
-func savePool() {
-	if err := accounts.Save(poolPath, pool); err != nil {
-		log.Printf("Failed to save accounts to %s: %v", poolPath, err)
+func SavePool() {
+	if err := poolstore.Save(PoolPath, Pool); err != nil {
+		log.Printf("Failed to save accounts to %s: %v", PoolPath, err)
 	}
 }
 
-// addAccount 添加账号。同一邮箱（不区分大小写，来自 Cline userInfo，即同一
+// AddAccount 添加账号。同一邮箱（不区分大小写，来自 Cline userInfo，即同一
 // Cline 账号）已存在时**原地更新凭据**：重新授权/重复导入不该产生重复条目 ——
 // 保留原 AccountID、创建时间与用量统计，只更新令牌并置回 active。
 // 已存在的同邮箱重复条目（历史遗留）一并合并进首个条目后移除（用量计数求和）。
-func addAccount(acc *Account) {
-	p := loadPool()
-	poolMu.Lock()
+func AddAccount(acc *Account) {
+	p := LoadPool()
+	PoolMu.Lock()
 	newEmail := strings.TrimSpace(acc.Email)
 	var kept *Account
 	var dups []*Account
@@ -95,20 +98,20 @@ func addAccount(acc *Account) {
 	} else {
 		p.Accounts = append(p.Accounts, acc)
 	}
-	poolMu.Unlock()
-	savePool()
+	PoolMu.Unlock()
+	SavePool()
 }
 
-// findAccountByRefreshToken 按 refreshToken 查找已有账号（不存在返回 nil）。
+// FindAccountByRefreshToken 按 refreshToken 查找已有账号（不存在返回 nil）。
 // 用于导入时的去重：同一个 refreshToken 只应存在一个账号。
-func findAccountByRefreshToken(refreshToken string) *Account {
+func FindAccountByRefreshToken(refreshToken string) *Account {
 	refreshToken = strings.TrimSpace(refreshToken)
 	if refreshToken == "" {
 		return nil
 	}
-	p := loadPool()
-	poolMu.Lock()
-	defer poolMu.Unlock()
+	p := LoadPool()
+	PoolMu.Lock()
+	defer PoolMu.Unlock()
 
 	for _, a := range p.Accounts {
 		if strings.TrimSpace(a.RefreshToken) == refreshToken {
@@ -118,41 +121,41 @@ func findAccountByRefreshToken(refreshToken string) *Account {
 	return nil
 }
 
-// accountExists 判断该 refreshToken 是否已在账号池中。
-func accountExists(refreshToken string) bool {
-	return findAccountByRefreshToken(refreshToken) != nil
+// AccountExists 判断该 refreshToken 是否已在账号池中。
+func AccountExists(refreshToken string) bool {
+	return FindAccountByRefreshToken(refreshToken) != nil
 }
 
-// isDuplicateImportToken 判断待导入的 refreshToken 是否应跳过（导入去重）：
+// IsDuplicateImportToken 判断待导入的 refreshToken 是否应跳过（导入去重）：
 // 账号池中已存在同一 refreshToken，或本批次内已处理过（seen）。
 // seen 由调用方维护、在此更新，用于同一批次内的去重。
-func isDuplicateImportToken(refreshToken string, seen map[string]bool) bool {
-	if seen[refreshToken] || accountExists(refreshToken) {
+func IsDuplicateImportToken(refreshToken string, seen map[string]bool) bool {
+	if seen[refreshToken] || AccountExists(refreshToken) {
 		return true
 	}
 	seen[refreshToken] = true
 	return false
 }
 
-func removeAccount(accountID string) bool {
-	p := loadPool()
-	poolMu.Lock()
-	defer poolMu.Unlock()
+func RemoveAccount(accountID string) bool {
+	p := LoadPool()
+	PoolMu.Lock()
+	defer PoolMu.Unlock()
 
 	for i, a := range p.Accounts {
 		if a.AccountID == accountID {
 			p.Accounts = append(p.Accounts[:i], p.Accounts[i+1:]...)
-			savePool()
+			SavePool()
 			return true
 		}
 	}
 	return false
 }
 
-func getAccountByID(accountID string) *Account {
-	p := loadPool()
-	poolMu.Lock()
-	defer poolMu.Unlock()
+func GetAccountByID(accountID string) *Account {
+	p := LoadPool()
+	PoolMu.Lock()
+	defer PoolMu.Unlock()
 
 	for _, a := range p.Accounts {
 		if a.AccountID == accountID {
@@ -162,25 +165,25 @@ func getAccountByID(accountID string) *Account {
 	return nil
 }
 
-func refreshAccountToken(acc *Account) error {
+func RefreshAccountToken(acc *Account) error {
 	resp, err := refreshClineToken(acc.RefreshToken)
 	if err != nil {
 		if isRefreshRejected(err) {
 			// cline 自家 refresh 端点拒绝 ≠ 账号真失效：refresh token 本质是
 			// WorkOS token，走 WorkOS authenticate 端点仍可能自愈，不必重新授权。
 			if wos := refreshViaWorkOS(acc.RefreshToken); wos != nil {
-				applyWorkOSTokens(acc, wos)
+				ApplyWorkOSTokens(acc, wos)
 				return nil
 			}
 			acc.Status = "expired"
-			savePool()
+			SavePool()
 			// 双通道都拒绝 = WorkOS 会话已被服务端终结（invalid_grant: Session
 			// has already ended / token revoked），刷新救不回，必须重新授权
 			return fmt.Errorf("refresh token rejected by both Cline and WorkOS (session ended or revoked) — account requires re-authorization: 管理页「导入账号」→ OAuth 登录")
 		}
 		acc.Status = "cooldown"
 		acc.CooldownUntil = time.Now().Add(5 * time.Minute)
-		savePool()
+		SavePool()
 		return fmt.Errorf("token refresh failed (transient): %w", err)
 	}
 
@@ -190,14 +193,14 @@ func refreshAccountToken(acc *Account) error {
 	}
 	acc.ExpiresAt = parseExpiry(resp.Data.ExpiresAt) - 60000
 	acc.Status = "active"
-	savePool()
+	SavePool()
 	return nil
 }
 
-// applyWorkOSTokens 用 WorkOS 直接刷新到的令牌续命账号：优先回 cline
+// ApplyWorkOSTokens 用 WorkOS 直接刷新到的令牌续命账号：优先回 cline
 // /auth/register 换正式 cline 令牌；注册也失败时直接用 workos 前缀令牌
 // （Cline 上游接受），轮换出的新 refresh token 一并落盘。
-func applyWorkOSTokens(acc *Account, wos *authenticateResp) {
+func ApplyWorkOSTokens(acc *Account, wos *authenticateResp) {
 	if cline, err := registerWithCline(wos.AccessToken, wos.RefreshToken); err == nil && cline.Data.AccessToken != "" {
 		acc.AccessToken = "workos:" + cline.Data.AccessToken
 		if cline.Data.RefreshToken != "" {
@@ -212,36 +215,36 @@ func applyWorkOSTokens(acc *Account, wos *authenticateResp) {
 		acc.ExpiresAt = time.Now().Add(time.Hour).UnixMilli() - 60000
 	}
 	acc.Status = "active"
-	savePool()
+	SavePool()
 	log.Printf("  account %s: token refreshed via WorkOS fallback (no re-auth needed)", acc.Email)
 }
 
-func pickAccount() *Account {
-	p := loadPool()
-	poolMu.Lock()
-	defer poolMu.Unlock()
+func PickAccount() *Account {
+	p := LoadPool()
+	PoolMu.Lock()
+	defer PoolMu.Unlock()
 	return pickAccountLocked(p)
 }
 
-// pickAccountForModel 按轮询/策略挑选一个「该模型未处于模型级冷却」的账号；
-// 所有 active 账号对该模型都冷却时回退到普通 pickAccount（请求会得到模型级 429 提示）。
-// 空模型名等同于 pickAccount。
-func pickAccountForModel(model string) *Account {
-	return pickAccountForModelWithFallback(model, true)
+// PickAccountForModel 按轮询/策略挑选一个「该模型未处于模型级冷却」的账号；
+// 所有 active 账号对该模型都冷却时回退到普通 PickAccount（请求会得到模型级 429 提示）。
+// 空模型名等同于 PickAccount。
+func PickAccountForModel(model string) *Account {
+	return PickAccountForModelWithFallback(model, true)
 }
 
-func pickAccountForModelStrict(model string) *Account {
-	return pickAccountForModelWithFallback(model, false)
+func PickAccountForModelStrict(model string) *Account {
+	return PickAccountForModelWithFallback(model, false)
 }
 
-func pickAccountForModelWithFallback(model string, fallbackToActive bool) *Account {
+func PickAccountForModelWithFallback(model string, fallbackToActive bool) *Account {
 	if model == "" {
-		return pickAccount()
+		return PickAccount()
 	}
 
-	p := loadPool()
-	poolMu.Lock()
-	defer poolMu.Unlock()
+	p := LoadPool()
+	PoolMu.Lock()
+	defer PoolMu.Unlock()
 
 	active := make([]*Account, 0)
 	for _, a := range p.Accounts {
@@ -272,7 +275,7 @@ func pickAccountForModelWithFallback(model string, fallbackToActive bool) *Accou
 		return nil
 	}
 
-	cfg := getProxyConfig()
+	cfg := currentConfig()
 	var acc *Account
 	switch cfg.Strategy {
 	case "fill":
@@ -287,22 +290,22 @@ func pickAccountForModelWithFallback(model string, fallbackToActive bool) *Accou
 		acc = eligible[p.CurrentIdx]
 		p.CurrentIdx = (p.CurrentIdx + 1) % len(eligible)
 	}
-	savePool()
+	SavePool()
 	return acc
 }
 
-// pickAccountForModelLeastUsed 在所有「模型未冷却」的 active 账号中，选择该模型
+// PickAccountForModelLeastUsed 在所有「模型未冷却」的 active 账号中，选择该模型
 // 历史用量最少的账号（并清掉已过期的冷却记录）。等量时按轮询索引取，保持原有
 // 公平性；全部不可用返回 nil。供回退链上的非首选模型使用：流量应摊到较少
 // 使用的账号上，而不是每次都砸在第一个可用账号。
-func pickAccountForModelLeastUsed(model string) *Account {
+func PickAccountForModelLeastUsed(model string) *Account {
 	if model == "" {
-		return pickAccount()
+		return PickAccount()
 	}
 
-	p := loadPool()
-	poolMu.Lock()
-	defer poolMu.Unlock()
+	p := LoadPool()
+	PoolMu.Lock()
+	defer PoolMu.Unlock()
 
 	var best *Account
 	var bestCount int64
@@ -328,19 +331,19 @@ func pickAccountForModelLeastUsed(model string) *Account {
 	if best == nil {
 		return nil
 	}
-	savePool()
+	SavePool()
 	return best
 }
 
-// sortModelsByAvailability 将回退链按「可用性优先」重排：
+// SortModelsByAvailability 将回退链按「可用性优先」重排：
 //  1. 有未冷却账号的模型在前；
 //  2. 同组内按该模型的账号总用量升序——把流量摊到用得少的模型上，
 //     避免每次都选第一个可用模型、把它的额度打到冷却。
 //  3. 稳定排序：可用性与用量相同时保持管理员配置的优先级顺序。
-func sortModelsByAvailability(chain []string) []string {
-	p := loadPool()
-	poolMu.Lock()
-	defer poolMu.Unlock()
+func SortModelsByAvailability(chain []string) []string {
+	p := LoadPool()
+	PoolMu.Lock()
+	defer PoolMu.Unlock()
 
 	now := time.Now()
 	cands := make([]dispatch.ModelAvailability, 0, len(chain))
@@ -370,11 +373,11 @@ func sortModelsByAvailability(chain []string) []string {
 		cands = append(cands, dispatch.ModelAvailability{Model: m, Available: avail, MinUsage: minUsage})
 	}
 	out := dispatch.OrderByAvailability(cands)
-	savePool()
+	SavePool()
 	return out
 }
 
-// pickAccountLocked 在已持有 poolMu 的前提下执行普通轮询挑选（供 pickAccountForModel 回退用）。
+// pickAccountLocked 在已持有 PoolMu 的前提下执行普通轮询挑选（供 PickAccountForModel 回退用）。
 func pickAccountLocked(p *AccountPool) *Account {
 	active := make([]*Account, 0)
 	for _, a := range p.Accounts {
@@ -385,7 +388,7 @@ func pickAccountLocked(p *AccountPool) *Account {
 	if len(active) == 0 {
 		return nil
 	}
-	cfg := getProxyConfig()
+	cfg := currentConfig()
 	var acc *Account
 	switch cfg.Strategy {
 	case "fill":
@@ -400,26 +403,26 @@ func pickAccountLocked(p *AccountPool) *Account {
 		acc = active[p.CurrentIdx]
 		p.CurrentIdx = (p.CurrentIdx + 1) % len(active)
 	}
-	savePool()
+	SavePool()
 	return acc
 }
 
-func ensureAccountToken(acc *Account) (string, error) {
+func EnsureAccountToken(acc *Account) (string, error) {
 	if acc.AccessToken != "" && time.Now().UnixMilli() < acc.ExpiresAt {
 		return acc.AccessToken, nil
 	}
 
-	if err := refreshAccountToken(acc); err != nil {
+	if err := RefreshAccountToken(acc); err != nil {
 		return "", err
 	}
 
 	return acc.AccessToken, nil
 }
 
-func listAccounts() []*Account {
-	p := loadPool()
-	poolMu.Lock()
-	defer poolMu.Unlock()
+func ListAccounts() []*Account {
+	p := LoadPool()
+	PoolMu.Lock()
+	defer PoolMu.Unlock()
 
 	result := make([]*Account, len(p.Accounts))
 	for i, a := range p.Accounts {
@@ -457,7 +460,7 @@ func listAccounts() []*Account {
 	return result
 }
 
-func addAccountFromDeviceAuth() (*Account, error) {
+func AddAccountFromDeviceAuth() (*Account, error) {
 	fmt.Println()
 	fmt.Println("=== Add New Cline Account (OAuth) ===")
 	fmt.Println()
@@ -521,7 +524,7 @@ func addAccountFromDeviceAuth() (*Account, error) {
 		CreatedAt:    time.Now(),
 	}
 
-	addAccount(acc)
+	AddAccount(acc)
 	fmt.Printf("  Account added! Email: %s\n", email)
 	return acc, nil
 }

@@ -1,7 +1,7 @@
-package main
+package accounts
 
 // Cline 账号会话亲和测试：绑定/命中/过期/冷却回退/失效解绑，以及
-// observeAffinityOutcome 的成功刷新与 401/429 清绑、5xx 保留语义。
+// ObserveAffinityOutcome 的成功刷新与 401/429 清绑、5xx 保留语义。
 
 import (
 	"errors"
@@ -11,13 +11,39 @@ import (
 	"cline-go-proxy/internal/config"
 )
 
+// affinityTestError is the stand-in for the root package's Cline API error;
+// the classifier injected below is what ObserveAffinityOutcome consults.
+type affinityTestError struct {
+	status int
+}
+
+func (e *affinityTestError) Error() string { return "test upstream error" }
+
+type affinityUnavailableError struct{}
+
+func (e *affinityUnavailableError) Error() string { return "account unavailable" }
+
 func installAffinityConfig(t *testing.T, enabled bool, ttl time.Duration) {
 	t.Helper()
-	cfg := defaultProxyConfig()
+	cfg := config.DefaultProxy()
 	cfg.SessionAffinity = config.SessionAffinityPolicy{Enabled: enabled, TTLSeconds: int(ttl.Seconds())}
 	cfg.Normalize()
-	setProxyConfig(cfg)
-	t.Cleanup(func() { setProxyConfig(defaultProxyConfig()) })
+	SetProxyConfigProvider(func() *config.Proxy { return cfg })
+	SetAffinityErrorClassifier(func(err error) (int, bool) {
+		var apiErr *affinityTestError
+		if errors.As(err, &apiErr) {
+			return apiErr.status, false
+		}
+		var accErr *affinityUnavailableError
+		if errors.As(err, &accErr) {
+			return 0, true
+		}
+		return 0, false
+	})
+	t.Cleanup(func() {
+		SetProxyConfigProvider(nil)
+		SetAffinityErrorClassifier(nil)
+	})
 	accountAffinity.mu.Lock()
 	accountAffinity.binds = map[string]accountAffinityBind{}
 	accountAffinity.mu.Unlock()
@@ -27,11 +53,24 @@ func affinityAccount(id, email, status string) *Account {
 	return &Account{AccountID: id, Email: email, Status: status, ModelStats: map[string]*ModelStat{}, ModelCooldowns: map[string]time.Time{}}
 }
 
+func installAffinityPool(t *testing.T, models []Model, accs ...*Account) {
+	t.Helper()
+	PoolMu.Lock()
+	old := Pool
+	Pool = &AccountPool{Accounts: accs, Models: models}
+	PoolMu.Unlock()
+	t.Cleanup(func() {
+		PoolMu.Lock()
+		Pool = old
+		PoolMu.Unlock()
+	})
+}
+
 func TestAccountAffinityBindGetExpiry(t *testing.T) {
 	installAffinityConfig(t, true, time.Hour)
 	acc1 := affinityAccount("a1", "one@x.io", "active")
 	acc2 := affinityAccount("a2", "two@x.io", "active")
-	installPool(t, []Model{{ID: "m1"}}, acc1, acc2)
+	installAffinityPool(t, []Model{{ID: "m1"}}, acc1, acc2)
 
 	accountAffinity.bind("sk-1", acc1)
 	if got := accountAffinity.get("sk-1", "m1", time.Now()); got == nil || got.AccountID != "a1" {
@@ -67,7 +106,7 @@ func TestAccountAffinityBindGetExpiry(t *testing.T) {
 func TestAccountAffinityDisabledNoop(t *testing.T) {
 	installAffinityConfig(t, false, time.Hour)
 	acc := affinityAccount("a1", "one@x.io", "active")
-	installPool(t, []Model{{ID: "m1"}}, acc)
+	installAffinityPool(t, []Model{{ID: "m1"}}, acc)
 
 	accountAffinity.bind("sk-1", acc)
 	if got := accountAffinity.get("sk-1", "m1", time.Now()); got != nil {
@@ -78,35 +117,35 @@ func TestAccountAffinityDisabledNoop(t *testing.T) {
 func TestObserveAffinityOutcome(t *testing.T) {
 	installAffinityConfig(t, true, time.Hour)
 	acc := affinityAccount("a1", "one@x.io", "active")
-	installPool(t, []Model{{ID: "m1"}}, acc)
+	installAffinityPool(t, []Model{{ID: "m1"}}, acc)
 
-	observeAffinityOutcome("sk-1", acc, nil)
-	if _, pinned := pickAffinityAccount("sk-1", "m1"); !pinned {
+	ObserveAffinityOutcome("sk-1", acc, nil)
+	if _, pinned := PickAffinityAccount("sk-1", "m1"); !pinned {
 		t.Fatal("success must bind the session")
 	}
 	// 瞬时 5xx：保留绑定
-	observeAffinityOutcome("sk-1", acc, &clineAPIError{statusCode: 500, message: "boom"})
-	if _, pinned := pickAffinityAccount("sk-1", "m1"); !pinned {
+	ObserveAffinityOutcome("sk-1", acc, &affinityTestError{status: 500})
+	if _, pinned := PickAffinityAccount("sk-1", "m1"); !pinned {
 		t.Fatal("transient error must keep binding")
 	}
 	// 401：解绑
-	observeAffinityOutcome("sk-1", acc, &clineAPIError{statusCode: 401, message: "token dead"})
-	if _, pinned := pickAffinityAccount("sk-1", "m1"); pinned {
+	ObserveAffinityOutcome("sk-1", acc, &affinityTestError{status: 401})
+	if _, pinned := PickAffinityAccount("sk-1", "m1"); pinned {
 		t.Fatal("401 must clear binding")
 	}
 	// 重新绑定后 429：解绑
-	observeAffinityOutcome("sk-1", acc, nil)
-	observeAffinityOutcome("sk-1", acc, &clineAPIError{statusCode: 429, message: "rate limited"})
-	if _, pinned := pickAffinityAccount("sk-1", "m1"); pinned {
+	ObserveAffinityOutcome("sk-1", acc, nil)
+	ObserveAffinityOutcome("sk-1", acc, &affinityTestError{status: 429})
+	if _, pinned := PickAffinityAccount("sk-1", "m1"); pinned {
 		t.Fatal("429 must clear binding")
 	}
 	// account-unavailable：解绑
-	observeAffinityOutcome("sk-1", acc, nil)
-	observeAffinityOutcome("sk-1", acc, &clineAccountUnavailableError{err: errors.New("token fail")})
-	if _, pinned := pickAffinityAccount("sk-1", "m1"); pinned {
+	ObserveAffinityOutcome("sk-1", acc, nil)
+	ObserveAffinityOutcome("sk-1", acc, &affinityUnavailableError{})
+	if _, pinned := PickAffinityAccount("sk-1", "m1"); pinned {
 		t.Fatal("account-unavailable must clear binding")
 	}
 	// 空 session key / nil 账号：安全无操作
-	observeAffinityOutcome("", acc, nil)
-	observeAffinityOutcome("sk-1", nil, nil)
+	ObserveAffinityOutcome("", acc, nil)
+	ObserveAffinityOutcome("sk-1", nil, nil)
 }

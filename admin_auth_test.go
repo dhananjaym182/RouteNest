@@ -6,15 +6,17 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"cline-go-proxy/internal/accounts"
 )
 
 func TestAdminLoginLogoutHandlers(t *testing.T) {
-	oldPool := pool
+	oldPool := accounts.Pool
 	t.Cleanup(func() {
 		adminSessions.Clear()
-		pool = oldPool
+		accounts.Pool = oldPool
 	})
-	pool = &AccountPool{}
+	accounts.Pool = &AccountPool{}
 	setAdminPassword("secret")
 	adminSessions.Clear()
 
@@ -68,12 +70,12 @@ func TestAdminLoginLogoutHandlers(t *testing.T) {
 }
 
 func TestAdminLoginWithoutPassword(t *testing.T) {
-	oldPool := pool
+	oldPool := accounts.Pool
 	t.Cleanup(func() {
-		pool = oldPool
+		accounts.Pool = oldPool
 		adminSessions.Clear()
 	})
-	pool = &AccountPool{}
+	accounts.Pool = &AccountPool{}
 
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest("POST", "/admin/api/login", strings.NewReader(`{"password":"x"}`))

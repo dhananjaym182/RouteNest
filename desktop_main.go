@@ -3,6 +3,7 @@
 package main
 
 import (
+	"cline-go-proxy/internal/accounts"
 	"context"
 	"flag"
 	"fmt"
@@ -60,7 +61,7 @@ func configuredDesktopHost() string {
 	if value := os.Getenv("CLINE_PROXY_HOST"); value != "" {
 		return value
 	}
-	if value := loadPool().ListenHost; value != "" {
+	if value := accounts.LoadPool().ListenHost; value != "" {
 		return value
 	}
 	return "127.0.0.1"
@@ -104,7 +105,7 @@ func runDesktopWindow(port int) error {
 			Handler: desktopRedirectHandler(port),
 		},
 		BackgroundColour: &options.RGBA{R: 248, G: 250, B: 252, A: 255},
-		OnStartup:       func(_ context.Context) {},
+		OnStartup:        func(_ context.Context) {},
 		Windows: &windows.Options{
 			WebviewIsTransparent: false,
 			WindowIsTranslucent:  false,

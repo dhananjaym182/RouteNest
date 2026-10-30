@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"cline-go-proxy/internal/accounts"
 	"cline-go-proxy/internal/dispatch"
 	"cline-go-proxy/internal/domain"
 )
@@ -17,16 +18,16 @@ func modelRouteAccess(id string) dispatch.RouteAccess {
 		return dispatch.RouteAccess{Class: domain.AccessUnknown}
 	}
 	bare := strings.TrimPrefix(id, "opencode/")
-	p := loadPool()
-	poolMu.Lock()
+	p := accounts.LoadPool()
+	accounts.PoolMu.Lock()
 	for _, m := range p.Models {
 		if m.ID == bare {
 			class := dispatch.ModelAccessClass(m.Cost, m.TierSignal, m.Source)
-			poolMu.Unlock()
+			accounts.PoolMu.Unlock()
 			return dispatch.RouteAccess{Class: class}
 		}
 	}
-	poolMu.Unlock()
+	accounts.PoolMu.Unlock()
 	if zm, ok := resolveZenInfo(id); ok {
 		return dispatch.RouteAccess{Class: dispatch.ModelAccessClass(zm.Cost, zm.TierSignal, zm.Source)}
 	}

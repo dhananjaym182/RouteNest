@@ -1,11 +1,13 @@
 package main
 
 import (
+	"errors"
 	"log"
 	"net/http"
 	"sync"
 	"time"
 
+	"cline-go-proxy/internal/accounts"
 	"cline-go-proxy/internal/adminapi"
 	"cline-go-proxy/internal/buildinfo"
 	"cline-go-proxy/internal/config"
@@ -27,7 +29,7 @@ const adminSessionCookie = adminapi.SessionCookieName
 // adminAuth 连接根接线与 adminapi：密码状态来自账号池，错误文案走 i18n。
 var adminAuth = &adminapi.Auth{
 	Sessions:    adminSessions,
-	PasswordSet: func() bool { return loadPool().AdminPasswordHash != "" },
+	PasswordSet: func() bool { return accounts.LoadPool().AdminPasswordHash != "" },
 	Unauthorized: func(w http.ResponseWriter, r *http.Request, reason string) {
 		writeAPI(w, http.StatusUnauthorized, apiResponse{Error: i18n.TAPI(r, reason)})
 	},
@@ -37,7 +39,7 @@ var adminAuth = &adminapi.Auth{
 // password store while adminapi owns the wire behavior.
 var adminAuthHandlers = &adminapi.AuthHandlers{
 	Sessions:       adminSessions,
-	PasswordSet:    func() bool { return loadPool().AdminPasswordHash != "" },
+	PasswordSet:    func() bool { return accounts.LoadPool().AdminPasswordHash != "" },
 	VerifyPassword: verifyAdminPassword,
 	SetPassword:    setAdminPassword,
 	Translate:      func(r *http.Request, key string) string { return i18n.TAPI(r, key) },
@@ -46,31 +48,31 @@ var adminAuthHandlers = &adminapi.AuthHandlers{
 // adminKeys/adminMonitoring connect the root composition to adminapi handlers
 // without moving pool locking or persistence into the package.
 var adminKeys = &adminapi.KeyManager{
-	ListKeys: func() []string { return loadPool().Keys },
+	ListKeys: func() []string { return accounts.LoadPool().Keys },
 	AddKey: func(key string) {
-		p := loadPool()
-		poolMu.Lock()
+		p := accounts.LoadPool()
+		accounts.PoolMu.Lock()
 		p.Keys = append(p.Keys, key)
-		poolMu.Unlock()
-		savePool()
+		accounts.PoolMu.Unlock()
+		accounts.SavePool()
 	},
 	DeleteKey: func(key string) {
-		p := loadPool()
-		poolMu.Lock()
+		p := accounts.LoadPool()
+		accounts.PoolMu.Lock()
 		for i, k := range p.Keys {
 			if k == key {
 				p.Keys = append(p.Keys[:i], p.Keys[i+1:]...)
 				break
 			}
 		}
-		poolMu.Unlock()
-		savePool()
+		accounts.PoolMu.Unlock()
+		accounts.SavePool()
 	},
 	Translate: func(r *http.Request, key string) string { return i18n.TAPI(r, key) },
 }
 
 var adminMonitoring = &adminapi.Monitoring{
-	Accounts:      func() []*Account { return loadPool().Accounts },
+	Accounts:      func() []*Account { return accounts.LoadPool().Accounts },
 	Strategy:      func() string { return getProxyConfig().Strategy },
 	ModelChain:    func() []string { return getProxyConfig().ModelChain },
 	Version:       func() string { return buildinfo.AppVersion },
@@ -193,8 +195,8 @@ func hashAdminPassword(saltHex, password string) string {
 
 // setAdminPassword 设置/修改/清除后台密码（空 = 清除），并清空所有会话强制重新登录。
 func setAdminPassword(password string) {
-	p := loadPool()
-	poolMu.Lock()
+	p := accounts.LoadPool()
+	accounts.PoolMu.Lock()
 	if password == "" {
 		p.AdminPasswordHash = ""
 		p.AdminPasswordSalt = ""
@@ -206,16 +208,16 @@ func setAdminPassword(password string) {
 		p.AdminPasswordSalt = salt
 		p.AdminPasswordHash = hashAdminPassword(p.AdminPasswordSalt, password)
 	}
-	poolMu.Unlock()
-	savePool()
+	accounts.PoolMu.Unlock()
+	accounts.SavePool()
 	adminSessions.Clear()
 }
 
 // verifyAdminPassword 校验后台密码（未设置密码时返回 false）。
 func verifyAdminPassword(password string) bool {
-	p := loadPool()
-	poolMu.Lock()
-	defer poolMu.Unlock()
+	p := accounts.LoadPool()
+	accounts.PoolMu.Lock()
+	defer accounts.PoolMu.Unlock()
 	return adminapi.VerifyPassword(p.AdminPasswordSalt, p.AdminPasswordHash, password)
 }
 
@@ -332,6 +334,30 @@ var (
 )
 
 type proxyConfigData = config.Proxy
+
+// init 注入 accounts 包需要的根状态：代理配置读取器与 Cline 错误分类器
+// （具体错误类型仍定义在 package main，accounts 只消费分类结果）。
+func init() {
+	accounts.SetProxyConfigProvider(getProxyConfig)
+	accounts.SetAffinityErrorClassifier(classifyAffinityError)
+}
+
+// classifyAffinityError 把根包的上游错误翻译成 accounts 亲和层需要的两个事实：
+// HTTP 状态码（401/429 需解绑）与「账号不可用」标记（直接解绑）。
+func classifyAffinityError(err error) (int, bool) {
+	if err == nil {
+		return 0, false
+	}
+	var apiErr *clineAPIError
+	if errors.As(err, &apiErr) {
+		return apiErr.statusCode, false
+	}
+	var accountErr *clineAccountUnavailableError
+	if errors.As(err, &accountErr) {
+		return 0, true
+	}
+	return 0, false
+}
 
 func defaultProxyConfig() *proxyConfigData {
 	return config.DefaultProxy()

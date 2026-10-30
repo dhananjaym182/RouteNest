@@ -5,14 +5,15 @@ import (
 	"strings"
 	"testing"
 
+	"cline-go-proxy/internal/accounts"
 	"cline-go-proxy/internal/config"
 	"cline-go-proxy/internal/domain"
 )
 
 func policyTestPool(models ...Model) func() {
-	oldPool := pool
-	pool = &AccountPool{Models: models}
-	return func() { pool = oldPool }
+	oldPool := accounts.Pool
+	accounts.Pool = &AccountPool{Models: models}
+	return func() { accounts.Pool = oldPool }
 }
 
 func TestResolveClientModelAlias(t *testing.T) {

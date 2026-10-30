@@ -4,46 +4,47 @@ import (
 	"log"
 	"time"
 
+	"cline-go-proxy/internal/accounts"
 	"cline-go-proxy/internal/adminapi"
 	"cline-go-proxy/internal/domain"
 	"cline-go-proxy/internal/i18n"
 )
 
 func snapshotAccounts() []*domain.Account {
-	p := loadPool()
-	poolMu.Lock()
+	p := accounts.LoadPool()
+	accounts.PoolMu.Lock()
 	out := make([]*domain.Account, len(p.Accounts))
 	copy(out, p.Accounts)
-	poolMu.Unlock()
+	accounts.PoolMu.Unlock()
 	return out
 }
 
 func refreshAllAccounts() {
-	p := loadPool()
-	poolMu.Lock()
+	p := accounts.LoadPool()
+	accounts.PoolMu.Lock()
 	for _, a := range p.Accounts {
-		if err := refreshAccountToken(a); err != nil {
+		if err := accounts.RefreshAccountToken(a); err != nil {
 			log.Printf("Refresh failed for %s: %v", a.Email, err)
 		}
 	}
-	poolMu.Unlock()
+	accounts.PoolMu.Unlock()
 }
 
 func clearAccountPool() {
-	poolMu.Lock()
-	pool = &AccountPool{Accounts: []*Account{}, Keys: []string{}}
-	poolMu.Unlock()
-	savePool()
+	accounts.PoolMu.Lock()
+	accounts.Pool = &AccountPool{Accounts: []*Account{}, Keys: []string{}}
+	accounts.PoolMu.Unlock()
+	accounts.SavePool()
 }
 
 var adminAccountOps = &adminapi.AccountOps{
 	All:          snapshotAccounts,
-	Get:          getAccountByID,
+	Get:          accounts.GetAccountByID,
 	DoRefreshAll: refreshAllAccounts,
-	Refresh:      refreshAccountToken,
+	Refresh:      accounts.RefreshAccountToken,
 	ClearAll:     clearAccountPool,
 	Probe:        func(acc *domain.Account) any { return testAccount(acc) },
-	OpenBrowser:  openBrowser,
+	OpenBrowser:  accounts.OpenBrowser,
 	Now:          time.Now,
 	Translate:    i18n.TAPI,
 }

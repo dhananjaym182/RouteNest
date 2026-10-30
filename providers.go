@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"cline-go-proxy/internal/accounts"
 	"cline-go-proxy/internal/dispatch"
 	"cline-go-proxy/internal/i18n"
 	"cline-go-proxy/internal/providerreg"
@@ -1091,7 +1092,7 @@ var providerPresets = map[string]providerPreset{
 //   - provider 删除 / 停用 / 移除模型后，对应池内条目自动清理；指向已清理
 //     模型的默认模型一并清空
 func syncProviderModels() {
-	provs := listProviders() // providersMu 自持自放；之后再拿 poolMu，无反向持锁路径
+	provs := listProviders() // providersMu 自持自放；之后再拿 accounts.PoolMu，无反向持锁路径
 	type claim struct {
 		name   string
 		cost   string
@@ -1125,8 +1126,8 @@ func syncProviderModels() {
 	}
 	sort.Strings(ids) // 稳定顺序，避免 map 遍历乱序导致池内顺序抖动
 
-	p := loadPool()
-	poolMu.Lock()
+	p := accounts.LoadPool()
+	accounts.PoolMu.Lock()
 	changed := false
 	inPool := make(map[string]bool, len(p.Models))
 	for _, m := range p.Models {
@@ -1180,7 +1181,7 @@ func syncProviderModels() {
 		changed = true
 	}
 	if !changed {
-		poolMu.Unlock()
+		accounts.PoolMu.Unlock()
 		return
 	}
 	if p.DefaultModel != "" {
@@ -1196,8 +1197,8 @@ func syncProviderModels() {
 		}
 	}
 	p.Models = kept
-	poolMu.Unlock()
-	savePool()
+	accounts.PoolMu.Unlock()
+	accounts.SavePool()
 	log.Printf("provider models synced: %d model(s) from %d enabled provider(s)", len(claimed), len(provs))
 }
 

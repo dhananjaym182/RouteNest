@@ -1,6 +1,7 @@
 package main
 
 import (
+	"cline-go-proxy/internal/accounts"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -65,12 +66,12 @@ func TestMaybeCompactFallsBackToClineSummary(t *testing.T) {
 	t.Setenv(dataDirEnv, t.TempDir())
 	resetZenTestState(t)
 
-	oldPool := pool
+	oldPool := accounts.Pool
 	oldConfig := getProxyConfig()
 	oldTransport := httpClient.Transport
 	oldZenClient := zenHTTPClient
 	t.Cleanup(func() {
-		pool = oldPool
+		accounts.Pool = oldPool
 		setProxyConfig(oldConfig)
 		httpClient.Transport = oldTransport
 		zenTransportMu.Lock()
@@ -83,7 +84,7 @@ func TestMaybeCompactFallsBackToClineSummary(t *testing.T) {
 	cfg.OnlyFree = false
 	setProxyConfig(cfg)
 
-	pool = &AccountPool{Accounts: []*Account{{
+	accounts.Pool = &AccountPool{Accounts: []*Account{{
 		AccountID:   "summary-account",
 		Email:       "summary@example.com",
 		AccessToken: "summary-token",
@@ -167,9 +168,9 @@ func TestMaybeCompactFallsBackToClineSummary(t *testing.T) {
 // TestComboCompactionModelUsesNarrowestWindow ensures a combo budgets its
 // compaction for the smallest candidate context, not the first entry.
 func TestComboCompactionModelUsesNarrowestWindow(t *testing.T) {
-	oldPool := pool
-	t.Cleanup(func() { pool = oldPool })
-	pool = &AccountPool{Models: []Model{
+	oldPool := accounts.Pool
+	t.Cleanup(func() { accounts.Pool = oldPool })
+	accounts.Pool = &AccountPool{Models: []Model{
 		{ID: "wide", Context: 128000, Output: 32000, MetaLocked: true},
 		{ID: "narrow", Context: 32000, Output: 8000, MetaLocked: true},
 	}}

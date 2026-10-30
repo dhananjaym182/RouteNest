@@ -20,6 +20,7 @@ import (
 	"sync"
 	"time"
 
+	"cline-go-proxy/internal/accounts"
 	"cline-go-proxy/internal/modelcatalog"
 	"cline-go-proxy/internal/store/syncstate"
 )
@@ -146,10 +147,10 @@ func recheckProviderModels(p CustomProvider) providerRecheckState {
 
 	// 2) 写池：打/撤 Delisted（只动 Source=provider 且在本 provider 声明内的条目）
 	marked := 0
-	pool := loadPool()
-	poolMu.Lock()
-	for i := range pool.Models {
-		m := &pool.Models[i]
+	accounts.LoadPool() // ensure the pool is loaded before locking
+	accounts.PoolMu.Lock()
+	for i := range accounts.Pool.Models {
+		m := &accounts.Pool.Models[i]
 		if m.Source != "provider" || !declared[m.ID] {
 			continue
 		}
@@ -163,23 +164,23 @@ func recheckProviderModels(p CustomProvider) providerRecheckState {
 		}
 	}
 	alreadyMarked := 0
-	for _, m := range pool.Models {
+	for _, m := range accounts.Pool.Models {
 		if m.Source == "provider" && m.Delisted && declared[m.ID] {
 			alreadyMarked++
 		}
 	}
-	poolMu.Unlock()
+	accounts.PoolMu.Unlock()
 	if marked > 0 {
-		savePool()
+		accounts.SavePool()
 	}
 
 	// 3) 新上游模型 → Auto 预览批次（不在声明里也不在池里；每 provider 至多一个待审批次）
 	poolHas := map[string]bool{}
-	poolMu.Lock()
-	for _, m := range pool.Models {
+	accounts.PoolMu.Lock()
+	for _, m := range accounts.Pool.Models {
 		poolHas[m.ID] = true
 	}
-	poolMu.Unlock()
+	accounts.PoolMu.Unlock()
 	fresh := modelcatalog.FilterNew(entries, declared, poolHas)
 	batchID, queued := "", 0
 	if len(fresh) > 0 {

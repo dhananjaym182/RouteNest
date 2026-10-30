@@ -1,6 +1,7 @@
 package main
 
 import (
+	"cline-go-proxy/internal/accounts"
 	"context"
 	"encoding/json"
 	"io"
@@ -17,11 +18,11 @@ import (
 // still serve the (truncated) request.
 func TestStreamAnthropicComboContinuesWhenEntryHitsContextLimit(t *testing.T) {
 	t.Setenv(dataDirEnv, t.TempDir())
-	oldPool := pool
+	oldPool := accounts.Pool
 	oldConfig := getProxyConfig()
 	oldTransport := httpClient.Transport
 	t.Cleanup(func() {
-		pool = oldPool
+		accounts.Pool = oldPool
 		setProxyConfig(oldConfig)
 		httpClient.Transport = oldTransport
 		resetRoutingState()
@@ -34,7 +35,7 @@ func TestStreamAnthropicComboContinuesWhenEntryHitsContextLimit(t *testing.T) {
 		ExpiresAt:   time.Now().Add(time.Hour).UnixMilli(),
 		Status:      "active",
 	}
-	pool = &AccountPool{Accounts: []*Account{acc}}
+	accounts.Pool = &AccountPool{Accounts: []*Account{acc}}
 	cfg := defaultProxyConfig()
 	cfg.OnlyFree = false
 	setProxyConfig(cfg)
