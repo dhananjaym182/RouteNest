@@ -25,6 +25,7 @@ import (
 
 	"cline-go-proxy/internal/accounts"
 	"cline-go-proxy/internal/connections"
+	"cline-go-proxy/internal/egress"
 	"cline-go-proxy/internal/i18n"
 	"cline-go-proxy/internal/providers"
 )
@@ -246,8 +247,8 @@ func quickPoolAttempt(model string, params map[string]any, timeout time.Duration
 		if isDeterministicRequestError(err) {
 			return nil, err // 换账号不会自愈的 payload 400
 		}
-		if apiErr, ok := err.(*clineAPIError); ok {
-			switch apiErr.statusCode {
+		if apiErr, ok := err.(*egress.APIError); ok {
+			switch apiErr.StatusCode {
 			case http.StatusPaymentRequired: // 402：冷却该账号该模型后换号
 				if usedAcc != nil {
 					setModelCooldown(usedAcc, model, time.Now().Add(30*time.Minute))
@@ -424,7 +425,7 @@ func handleComboTest(w http.ResponseWriter, r *http.Request) {
 // {baseURL}/v1/models），返回去重排序的模型 ID；失败时返回可解析错误串
 // （HTTP 状态 + 截断 body ≤300 字符，或请求异常原因）。
 func discoverOpenAIModels(baseURL, apiKey string, headers map[string]string) ([]string, string) {
-	client := &http.Client{Transport: httpClient.Transport, Timeout: quickTestModelsTimeout}
+	client := &http.Client{Transport: egress.Client.Transport, Timeout: quickTestModelsTimeout}
 	tryURLs := []string{strings.TrimRight(baseURL, "/") + "/models"}
 
 	fetch := func(rawURL string) (int, []byte, string) {

@@ -12,6 +12,7 @@ import (
 	"cline-go-proxy/internal/buildinfo"
 	"cline-go-proxy/internal/config"
 	"cline-go-proxy/internal/connections"
+	"cline-go-proxy/internal/egress"
 	"cline-go-proxy/internal/httpx"
 	"cline-go-proxy/internal/i18n"
 	"cline-go-proxy/internal/providers"
@@ -99,9 +100,9 @@ var adminOpencode = &adminapi.Opencode{
 }
 
 var adminClineEgress = &adminapi.ClineEgress{
-	Get:           getClineProxyConfig,
-	Set:           setClineProxyConfig,
-	PersistErr:    getClineProxyPersistErr,
+	Get:           egress.GetClineProxyConfig,
+	Set:           egress.SetClineProxyConfig,
+	PersistErr:    egress.GetClineProxyPersistErr,
 	ValidateProxy: validateProxyList,
 	MaskProxy:     maskProxyURL,
 	Translate:     func(r *http.Request, key string) string { return i18n.TAPI(r, key) },
@@ -338,21 +339,21 @@ var (
 type proxyConfigData = config.Proxy
 
 // init 注入 accounts 包需要的根状态：代理配置读取器与 Cline 错误分类器
-// （具体错误类型仍定义在 package main，accounts 只消费分类结果）。
+// （具体错误类型仍定义在 egress，accounts 只消费分类结果）。
 func init() {
 	accounts.SetProxyConfigProvider(getProxyConfig)
 	accounts.SetAffinityErrorClassifier(classifyAffinityError)
 }
 
-// classifyAffinityError 把根包的上游错误翻译成 accounts 亲和层需要的两个事实：
+// classifyAffinityError 把 egress 的上游错误翻译成 accounts 亲和层需要的两个事实：
 // HTTP 状态码（401/429 需解绑）与「账号不可用」标记（直接解绑）。
 func classifyAffinityError(err error) (int, bool) {
 	if err == nil {
 		return 0, false
 	}
-	var apiErr *clineAPIError
+	var apiErr *egress.APIError
 	if errors.As(err, &apiErr) {
-		return apiErr.statusCode, false
+		return apiErr.StatusCode, false
 	}
 	var accountErr *clineAccountUnavailableError
 	if errors.As(err, &accountErr) {

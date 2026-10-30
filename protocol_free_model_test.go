@@ -2,6 +2,7 @@ package main
 
 import (
 	"cline-go-proxy/internal/accounts"
+	"cline-go-proxy/internal/egress"
 	"context"
 	"encoding/json"
 	"io"
@@ -92,11 +93,11 @@ func protocolTestServer(t *testing.T) string {
 func TestOpenAIChatCompletionsFreeFallsBackToDS(t *testing.T) {
 	oldPool := accounts.Pool
 	oldConfig := getProxyConfig()
-	oldTransport := httpClient.Transport
+	oldTransport := egress.Client.Transport
 	t.Cleanup(func() {
 		accounts.Pool = oldPool
 		setProxyConfig(oldConfig)
-		httpClient.Transport = oldTransport
+		egress.Client.Transport = oldTransport
 	})
 
 	first := &Account{
@@ -120,7 +121,7 @@ func TestOpenAIChatCompletionsFreeFallsBackToDS(t *testing.T) {
 
 	var attempts []string
 	var models []string
-	httpClient.Transport = freeModelRoundTripper(func(req *http.Request) (*http.Response, error) {
+	egress.Client.Transport = freeModelRoundTripper(func(req *http.Request) (*http.Response, error) {
 		token := strings.TrimPrefix(req.Header.Get("Authorization"), "Bearer ")
 		attempts = append(attempts, token)
 		body, err := io.ReadAll(req.Body)
@@ -191,7 +192,7 @@ func TestOpenAIChatCompletionsFreeFallsBackToDS(t *testing.T) {
 func TestOpenAIResponsesFreeFallsBackToDSAndPreservesResponseFormat(t *testing.T) {
 	oldPool := accounts.Pool
 	oldConfig := getProxyConfig()
-	oldTransport := httpClient.Transport
+	oldTransport := egress.Client.Transport
 	oldLogData, oldLogErr := os.ReadFile(requestLogsPath)
 	requestLogsMu.Lock()
 	oldLogs := requestLogs
@@ -201,7 +202,7 @@ func TestOpenAIResponsesFreeFallsBackToDSAndPreservesResponseFormat(t *testing.T
 	t.Cleanup(func() {
 		accounts.Pool = oldPool
 		setProxyConfig(oldConfig)
-		httpClient.Transport = oldTransport
+		egress.Client.Transport = oldTransport
 		requestLogsMu.Lock()
 		requestLogs = oldLogs
 		requestLogsMu.Unlock()
@@ -233,7 +234,7 @@ func TestOpenAIResponsesFreeFallsBackToDSAndPreservesResponseFormat(t *testing.T
 
 	var attempts []string
 	var models []string
-	httpClient.Transport = freeModelRoundTripper(func(req *http.Request) (*http.Response, error) {
+	egress.Client.Transport = freeModelRoundTripper(func(req *http.Request) (*http.Response, error) {
 		token := strings.TrimPrefix(req.Header.Get("Authorization"), "Bearer ")
 		attempts = append(attempts, token)
 		body, err := io.ReadAll(req.Body)
@@ -316,11 +317,11 @@ func TestOpenAIResponsesFreeFallsBackToDSAndPreservesResponseFormat(t *testing.T
 func TestAnthropicMessagesFreeFallsBackToDSAndPreservesResponseFormat(t *testing.T) {
 	oldPool := accounts.Pool
 	oldConfig := getProxyConfig()
-	oldTransport := httpClient.Transport
+	oldTransport := egress.Client.Transport
 	t.Cleanup(func() {
 		accounts.Pool = oldPool
 		setProxyConfig(oldConfig)
-		httpClient.Transport = oldTransport
+		egress.Client.Transport = oldTransport
 	})
 
 	first := &Account{
@@ -344,7 +345,7 @@ func TestAnthropicMessagesFreeFallsBackToDSAndPreservesResponseFormat(t *testing
 
 	var attempts []string
 	var models []string
-	httpClient.Transport = freeModelRoundTripper(func(req *http.Request) (*http.Response, error) {
+	egress.Client.Transport = freeModelRoundTripper(func(req *http.Request) (*http.Response, error) {
 		token := strings.TrimPrefix(req.Header.Get("Authorization"), "Bearer ")
 		attempts = append(attempts, token)
 		body, err := io.ReadAll(req.Body)
@@ -427,11 +428,11 @@ func TestAnthropicMessagesFreeFallsBackToDSAndPreservesResponseFormat(t *testing
 func TestOpenAIChatCompletionsFreeStreamFallsBackBeforeResponseHeaders(t *testing.T) {
 	oldPool := accounts.Pool
 	oldConfig := getProxyConfig()
-	oldTransport := httpClient.Transport
+	oldTransport := egress.Client.Transport
 	t.Cleanup(func() {
 		accounts.Pool = oldPool
 		setProxyConfig(oldConfig)
-		httpClient.Transport = oldTransport
+		egress.Client.Transport = oldTransport
 	})
 
 	first := &Account{
@@ -455,7 +456,7 @@ func TestOpenAIChatCompletionsFreeStreamFallsBackBeforeResponseHeaders(t *testin
 
 	var attempts []string
 	var models []string
-	httpClient.Transport = freeModelRoundTripper(func(req *http.Request) (*http.Response, error) {
+	egress.Client.Transport = freeModelRoundTripper(func(req *http.Request) (*http.Response, error) {
 		token := strings.TrimPrefix(req.Header.Get("Authorization"), "Bearer ")
 		attempts = append(attempts, token)
 		body, err := io.ReadAll(req.Body)
@@ -519,11 +520,11 @@ func TestOpenAIChatCompletionsFreeStreamFallsBackBeforeResponseHeaders(t *testin
 func TestOpenAIChatCompletionsFreeStreamDoesNotRetryAfterResponseStarts(t *testing.T) {
 	oldPool := accounts.Pool
 	oldConfig := getProxyConfig()
-	oldTransport := httpClient.Transport
+	oldTransport := egress.Client.Transport
 	t.Cleanup(func() {
 		accounts.Pool = oldPool
 		setProxyConfig(oldConfig)
-		httpClient.Transport = oldTransport
+		egress.Client.Transport = oldTransport
 	})
 
 	first := &Account{
@@ -547,7 +548,7 @@ func TestOpenAIChatCompletionsFreeStreamDoesNotRetryAfterResponseStarts(t *testi
 
 	var attempts []string
 	var models []string
-	httpClient.Transport = freeModelRoundTripper(func(req *http.Request) (*http.Response, error) {
+	egress.Client.Transport = freeModelRoundTripper(func(req *http.Request) (*http.Response, error) {
 		token := strings.TrimPrefix(req.Header.Get("Authorization"), "Bearer ")
 		attempts = append(attempts, token)
 		body, err := io.ReadAll(req.Body)

@@ -2,6 +2,7 @@ package main
 
 import (
 	"cline-go-proxy/internal/accounts"
+	"cline-go-proxy/internal/egress"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -68,12 +69,12 @@ func TestMaybeCompactFallsBackToClineSummary(t *testing.T) {
 
 	oldPool := accounts.Pool
 	oldConfig := getProxyConfig()
-	oldTransport := httpClient.Transport
+	oldTransport := egress.Client.Transport
 	oldZenClient := zenHTTPClient
 	t.Cleanup(func() {
 		accounts.Pool = oldPool
 		setProxyConfig(oldConfig)
-		httpClient.Transport = oldTransport
+		egress.Client.Transport = oldTransport
 		zenTransportMu.Lock()
 		zenHTTPClient = oldZenClient
 		zenTransportMu.Unlock()
@@ -113,7 +114,7 @@ func TestMaybeCompactFallsBackToClineSummary(t *testing.T) {
 	zenTransportMu.Unlock()
 
 	var clineCalls int
-	httpClient.Transport = freeModelRoundTripper(func(req *http.Request) (*http.Response, error) {
+	egress.Client.Transport = freeModelRoundTripper(func(req *http.Request) (*http.Response, error) {
 		clineCalls++
 		return &http.Response{
 			StatusCode: http.StatusOK,

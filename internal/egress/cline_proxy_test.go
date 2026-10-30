@@ -1,4 +1,4 @@
-package main
+package egress
 
 import (
 	"context"
@@ -29,12 +29,12 @@ func setClineProxyTestConfig(t *testing.T, proxies []string, strategy string) {
 	t.Helper()
 	resetClineProxyTestState(t)
 	clineProxyCfgMu.Lock()
-	clineProxyCfg = &clineProxyConfigData{Proxies: proxies, ProxyStrategy: strategy}
+	clineProxyCfg = &ClineProxyConfig{Proxies: proxies, ProxyStrategy: strategy}
 	clineProxyCfgMu.Unlock()
 }
 
 func TestClineProxyConfigNormalize(t *testing.T) {
-	cfg := &clineProxyConfigData{
+	cfg := &ClineProxyConfig{
 		Proxies:       []string{" socks5://a:1080 ", "", "http://b:8080"},
 		ProxyStrategy: "bogus",
 	}

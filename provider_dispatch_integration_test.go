@@ -2,6 +2,7 @@ package main
 
 import (
 	"cline-go-proxy/internal/accounts"
+	"cline-go-proxy/internal/egress"
 	"cline-go-proxy/internal/providers"
 	"encoding/json"
 	"io"
@@ -12,11 +13,11 @@ import (
 )
 
 func TestProviderTransportFollowsHTTPClientReplacement(t *testing.T) {
-	oldClient := httpClient
-	t.Cleanup(func() { httpClient = oldClient })
+	oldClient := egress.Client
+	t.Cleanup(func() { egress.Client = oldClient })
 
 	called := false
-	httpClient = &http.Client{Transport: freeModelRoundTripper(func(req *http.Request) (*http.Response, error) {
+	egress.Client = &http.Client{Transport: freeModelRoundTripper(func(req *http.Request) (*http.Response, error) {
 		called = true
 		return &http.Response{
 			StatusCode: http.StatusOK,
@@ -33,7 +34,7 @@ func TestProviderTransportFollowsHTTPClientReplacement(t *testing.T) {
 	}
 	resp.Body.Close()
 	if !called {
-		t.Fatal("provider transport did not follow replacement root httpClient")
+		t.Fatal("provider transport did not follow replacement egress.Client")
 	}
 }
 
@@ -41,11 +42,11 @@ func TestProviderTransportFollowsHTTPClientReplacement(t *testing.T) {
 func TestCustomProviderServesModel(t *testing.T) {
 	oldPool := accounts.Pool
 	oldConfig := getProxyConfig()
-	oldTransport := httpClient.Transport
+	oldTransport := egress.Client.Transport
 	t.Cleanup(func() {
 		accounts.Pool = oldPool
 		setProxyConfig(oldConfig)
-		httpClient.Transport = oldTransport
+		egress.Client.Transport = oldTransport
 		_ = providers.Delete("prov_test1")
 	})
 
@@ -58,7 +59,7 @@ func TestCustomProviderServesModel(t *testing.T) {
 	upstreamModel := ""
 	providerCalls := 0
 	clineCalls := 0
-	httpClient.Transport = freeModelRoundTripper(func(req *http.Request) (*http.Response, error) {
+	egress.Client.Transport = freeModelRoundTripper(func(req *http.Request) (*http.Response, error) {
 		if req.URL.Host == "provider.test" {
 			providerCalls++
 			body, _ := io.ReadAll(req.Body)
@@ -112,11 +113,11 @@ func TestCustomProviderServesModel(t *testing.T) {
 func TestCustomProviderFailureFallsBackToChain(t *testing.T) {
 	oldPool := accounts.Pool
 	oldConfig := getProxyConfig()
-	oldTransport := httpClient.Transport
+	oldTransport := egress.Client.Transport
 	t.Cleanup(func() {
 		accounts.Pool = oldPool
 		setProxyConfig(oldConfig)
-		httpClient.Transport = oldTransport
+		egress.Client.Transport = oldTransport
 		_ = providers.Delete("prov_test2")
 	})
 
@@ -126,7 +127,7 @@ func TestCustomProviderFailureFallsBackToChain(t *testing.T) {
 	}}}
 	setProxyConfig(defaultProxyConfig())
 
-	httpClient.Transport = freeModelRoundTripper(func(req *http.Request) (*http.Response, error) {
+	egress.Client.Transport = freeModelRoundTripper(func(req *http.Request) (*http.Response, error) {
 		if req.URL.Host == "provider.test" {
 			return &http.Response{
 				StatusCode: http.StatusInternalServerError,

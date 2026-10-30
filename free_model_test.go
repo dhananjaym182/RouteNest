@@ -2,6 +2,7 @@ package main
 
 import (
 	"cline-go-proxy/internal/accounts"
+	"cline-go-proxy/internal/egress"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -40,10 +41,10 @@ func (r *flushSignalRecorder) Flush() {
 
 func TestCallClineAPIRefreshRetryReplaysRequestBody(t *testing.T) {
 	oldConfig := getProxyConfig()
-	oldTransport := httpClient.Transport
+	oldTransport := egress.Client.Transport
 	t.Cleanup(func() {
 		setProxyConfig(oldConfig)
-		httpClient.Transport = oldTransport
+		egress.Client.Transport = oldTransport
 	})
 
 	account := &Account{
@@ -58,7 +59,7 @@ func TestCallClineAPIRefreshRetryReplaysRequestBody(t *testing.T) {
 
 	var requestBodies []map[string]any
 	refreshCalls := 0
-	httpClient.Transport = freeModelRoundTripper(func(req *http.Request) (*http.Response, error) {
+	egress.Client.Transport = freeModelRoundTripper(func(req *http.Request) (*http.Response, error) {
 		switch req.URL.Path {
 		case "/api/v1/auth/refresh":
 			refreshCalls++
@@ -126,11 +127,11 @@ func TestCallClineAPIRefreshRetryReplaysRequestBody(t *testing.T) {
 func TestCallClineAPIFreeRetriesNextGLMAccountAfterTokenRefreshFailure(t *testing.T) {
 	oldPool := accounts.Pool
 	oldConfig := getProxyConfig()
-	oldTransport := httpClient.Transport
+	oldTransport := egress.Client.Transport
 	t.Cleanup(func() {
 		accounts.Pool = oldPool
 		setProxyConfig(oldConfig)
-		httpClient.Transport = oldTransport
+		egress.Client.Transport = oldTransport
 	})
 
 	first := &Account{
@@ -153,7 +154,7 @@ func TestCallClineAPIFreeRetriesNextGLMAccountAfterTokenRefreshFailure(t *testin
 	var paths []string
 	var attempts []string
 	var models []string
-	httpClient.Transport = freeModelRoundTripper(func(req *http.Request) (*http.Response, error) {
+	egress.Client.Transport = freeModelRoundTripper(func(req *http.Request) (*http.Response, error) {
 		paths = append(paths, req.URL.Path)
 		switch req.URL.Path {
 		case "/api/v1/auth/refresh":
@@ -216,11 +217,11 @@ func TestCallClineAPIFreeRetriesNextGLMAccountAfterTokenRefreshFailure(t *testin
 func TestCallClineAPIFreeRetriesNextGLMAccountAfterTransportFailure(t *testing.T) {
 	oldPool := accounts.Pool
 	oldConfig := getProxyConfig()
-	oldTransport := httpClient.Transport
+	oldTransport := egress.Client.Transport
 	t.Cleanup(func() {
 		accounts.Pool = oldPool
 		setProxyConfig(oldConfig)
-		httpClient.Transport = oldTransport
+		egress.Client.Transport = oldTransport
 	})
 
 	first := &Account{
@@ -242,7 +243,7 @@ func TestCallClineAPIFreeRetriesNextGLMAccountAfterTransportFailure(t *testing.T
 
 	var attempts []string
 	var models []string
-	httpClient.Transport = freeModelRoundTripper(func(req *http.Request) (*http.Response, error) {
+	egress.Client.Transport = freeModelRoundTripper(func(req *http.Request) (*http.Response, error) {
 		token := strings.TrimPrefix(req.Header.Get("Authorization"), "Bearer ")
 		attempts = append(attempts, token)
 		if token == "token-one" {
@@ -292,11 +293,11 @@ func TestCallClineAPIFreeRetriesNextGLMAccountAfterTransportFailure(t *testing.T
 func TestCallClineAPIFreeRetriesNextGLMAccountAfterQuota429(t *testing.T) {
 	oldPool := accounts.Pool
 	oldConfig := getProxyConfig()
-	oldTransport := httpClient.Transport
+	oldTransport := egress.Client.Transport
 	t.Cleanup(func() {
 		accounts.Pool = oldPool
 		setProxyConfig(oldConfig)
-		httpClient.Transport = oldTransport
+		egress.Client.Transport = oldTransport
 	})
 
 	first := &Account{
@@ -318,7 +319,7 @@ func TestCallClineAPIFreeRetriesNextGLMAccountAfterQuota429(t *testing.T) {
 
 	var attempts []string
 	var models []string
-	httpClient.Transport = freeModelRoundTripper(func(req *http.Request) (*http.Response, error) {
+	egress.Client.Transport = freeModelRoundTripper(func(req *http.Request) (*http.Response, error) {
 		token := strings.TrimPrefix(req.Header.Get("Authorization"), "Bearer ")
 		attempts = append(attempts, token)
 		body, err := io.ReadAll(req.Body)
@@ -379,11 +380,11 @@ func TestCallClineAPIFreeRetriesNextGLMAccountAfterQuota429(t *testing.T) {
 func TestCallClineAPIFreeFallsBackToDSAfterAllGLMAccountsUnavailable(t *testing.T) {
 	oldPool := accounts.Pool
 	oldConfig := getProxyConfig()
-	oldTransport := httpClient.Transport
+	oldTransport := egress.Client.Transport
 	t.Cleanup(func() {
 		accounts.Pool = oldPool
 		setProxyConfig(oldConfig)
-		httpClient.Transport = oldTransport
+		egress.Client.Transport = oldTransport
 	})
 
 	first := &Account{
@@ -405,7 +406,7 @@ func TestCallClineAPIFreeFallsBackToDSAfterAllGLMAccountsUnavailable(t *testing.
 
 	var attempts []string
 	var models []string
-	httpClient.Transport = freeModelRoundTripper(func(req *http.Request) (*http.Response, error) {
+	egress.Client.Transport = freeModelRoundTripper(func(req *http.Request) (*http.Response, error) {
 		token := strings.TrimPrefix(req.Header.Get("Authorization"), "Bearer ")
 		attempts = append(attempts, token)
 		body, err := io.ReadAll(req.Body)
@@ -464,11 +465,11 @@ func TestCallClineAPIFreeFallsBackToDSAfterAllGLMAccountsUnavailable(t *testing.
 func TestCallClineAPIFreeRetriesNextDSAccountAfterQuota429(t *testing.T) {
 	oldPool := accounts.Pool
 	oldConfig := getProxyConfig()
-	oldTransport := httpClient.Transport
+	oldTransport := egress.Client.Transport
 	t.Cleanup(func() {
 		accounts.Pool = oldPool
 		setProxyConfig(oldConfig)
-		httpClient.Transport = oldTransport
+		egress.Client.Transport = oldTransport
 	})
 
 	first := &Account{
@@ -496,7 +497,7 @@ func TestCallClineAPIFreeRetriesNextDSAccountAfterQuota429(t *testing.T) {
 
 	var attempts []string
 	var models []string
-	httpClient.Transport = freeModelRoundTripper(func(req *http.Request) (*http.Response, error) {
+	egress.Client.Transport = freeModelRoundTripper(func(req *http.Request) (*http.Response, error) {
 		token := strings.TrimPrefix(req.Header.Get("Authorization"), "Bearer ")
 		attempts = append(attempts, token)
 		body, err := io.ReadAll(req.Body)
@@ -561,11 +562,11 @@ func TestCallClineAPIFreeRetriesNextDSAccountAfterQuota429(t *testing.T) {
 func TestCallClineAPIFreeReturnsToGLMAfterCooldownExpires(t *testing.T) {
 	oldPool := accounts.Pool
 	oldConfig := getProxyConfig()
-	oldTransport := httpClient.Transport
+	oldTransport := egress.Client.Transport
 	t.Cleanup(func() {
 		accounts.Pool = oldPool
 		setProxyConfig(oldConfig)
-		httpClient.Transport = oldTransport
+		egress.Client.Transport = oldTransport
 	})
 
 	account := &Account{
@@ -582,7 +583,7 @@ func TestCallClineAPIFreeReturnsToGLMAfterCooldownExpires(t *testing.T) {
 	setProxyConfig(defaultProxyConfig())
 
 	var models []string
-	httpClient.Transport = freeModelRoundTripper(func(req *http.Request) (*http.Response, error) {
+	egress.Client.Transport = freeModelRoundTripper(func(req *http.Request) (*http.Response, error) {
 		body, err := io.ReadAll(req.Body)
 		if err != nil {
 			return nil, err
@@ -624,11 +625,11 @@ func TestCallClineAPIFreeReturnsToGLMAfterCooldownExpires(t *testing.T) {
 func TestCallClineAPIFreeKeepsModelCooldownsIndependent(t *testing.T) {
 	oldPool := accounts.Pool
 	oldConfig := getProxyConfig()
-	oldTransport := httpClient.Transport
+	oldTransport := egress.Client.Transport
 	t.Cleanup(func() {
 		accounts.Pool = oldPool
 		setProxyConfig(oldConfig)
-		httpClient.Transport = oldTransport
+		egress.Client.Transport = oldTransport
 	})
 
 	for _, test := range []struct {
@@ -654,7 +655,7 @@ func TestCallClineAPIFreeKeepsModelCooldownsIndependent(t *testing.T) {
 			setProxyConfig(defaultProxyConfig())
 
 			var upstreamModel string
-			httpClient.Transport = freeModelRoundTripper(func(req *http.Request) (*http.Response, error) {
+			egress.Client.Transport = freeModelRoundTripper(func(req *http.Request) (*http.Response, error) {
 				body, err := io.ReadAll(req.Body)
 				if err != nil {
 					return nil, err
@@ -693,7 +694,7 @@ func TestCallClineAPIFreeKeepsModelCooldownsIndependent(t *testing.T) {
 func TestCallClineAPIFreeDoesNotPickCoolingAccount(t *testing.T) {
 	oldPool := accounts.Pool
 	oldConfig := getProxyConfig()
-	oldTransport := httpClient.Transport
+	oldTransport := egress.Client.Transport
 	// 本用例只验证 Cline 账号挑选：zen 故障转移如今能真正应答，必须关掉才能
 	// 让"全部冷却"如预期地失败。
 	zenConfigMu.Lock()
@@ -703,7 +704,7 @@ func TestCallClineAPIFreeDoesNotPickCoolingAccount(t *testing.T) {
 	t.Cleanup(func() {
 		accounts.Pool = oldPool
 		setProxyConfig(oldConfig)
-		httpClient.Transport = oldTransport
+		egress.Client.Transport = oldTransport
 		zenConfigMu.Lock()
 		zenConfig = oldZen
 		zenConfigMu.Unlock()
@@ -724,7 +725,7 @@ func TestCallClineAPIFreeDoesNotPickCoolingAccount(t *testing.T) {
 	setProxyConfig(defaultProxyConfig())
 
 	calls := 0
-	httpClient.Transport = freeModelRoundTripper(func(req *http.Request) (*http.Response, error) {
+	egress.Client.Transport = freeModelRoundTripper(func(req *http.Request) (*http.Response, error) {
 		calls++
 		return &http.Response{
 			StatusCode: http.StatusOK,
@@ -783,11 +784,11 @@ func TestPickAccountForModelStrictPreservesStrategy(t *testing.T) {
 func TestCallClineAPIDirectModelsFallBackOnModelCooldown(t *testing.T) {
 	oldPool := accounts.Pool
 	oldConfig := getProxyConfig()
-	oldTransport := httpClient.Transport
+	oldTransport := egress.Client.Transport
 	t.Cleanup(func() {
 		accounts.Pool = oldPool
 		setProxyConfig(oldConfig)
-		httpClient.Transport = oldTransport
+		egress.Client.Transport = oldTransport
 	})
 
 	for _, model := range []string{"z-ai/glm-5.3-flash", "deepseek/deepseek-v4-flash"} {
@@ -803,7 +804,7 @@ func TestCallClineAPIDirectModelsFallBackOnModelCooldown(t *testing.T) {
 			setProxyConfig(defaultProxyConfig())
 
 			var attempted []string
-			httpClient.Transport = freeModelRoundTripper(func(req *http.Request) (*http.Response, error) {
+			egress.Client.Transport = freeModelRoundTripper(func(req *http.Request) (*http.Response, error) {
 				body, err := io.ReadAll(req.Body)
 				if err != nil {
 					return nil, err
@@ -860,11 +861,11 @@ func TestCallClineAPIDirectModelsFallBackOnModelCooldown(t *testing.T) {
 func TestCallClineAPIDirectModelsNoFallbackOnServerError(t *testing.T) {
 	oldPool := accounts.Pool
 	oldConfig := getProxyConfig()
-	oldTransport := httpClient.Transport
+	oldTransport := egress.Client.Transport
 	t.Cleanup(func() {
 		accounts.Pool = oldPool
 		setProxyConfig(oldConfig)
-		httpClient.Transport = oldTransport
+		egress.Client.Transport = oldTransport
 	})
 
 	model := "z-ai/glm-5.3-flash"
@@ -880,7 +881,7 @@ func TestCallClineAPIDirectModelsNoFallbackOnServerError(t *testing.T) {
 
 	calls := 0
 	var upstreamModel string
-	httpClient.Transport = freeModelRoundTripper(func(req *http.Request) (*http.Response, error) {
+	egress.Client.Transport = freeModelRoundTripper(func(req *http.Request) (*http.Response, error) {
 		calls++
 		body, err := io.ReadAll(req.Body)
 		if err != nil {
@@ -914,7 +915,7 @@ func TestCallClineAPIDirectModelsNoFallbackOnServerError(t *testing.T) {
 func TestHandleResponsesFreeReturnsTooManyRequestsWhenBothPoolsUnavailable(t *testing.T) {
 	oldPool := accounts.Pool
 	oldConfig := getProxyConfig()
-	oldTransport := httpClient.Transport
+	oldTransport := egress.Client.Transport
 	oldZenCfg := getZenConfig()
 	requestLogsMu.Lock()
 	oldLogs := requestLogs
@@ -923,7 +924,7 @@ func TestHandleResponsesFreeReturnsTooManyRequestsWhenBothPoolsUnavailable(t *te
 	t.Cleanup(func() {
 		accounts.Pool = oldPool
 		setProxyConfig(oldConfig)
-		httpClient.Transport = oldTransport
+		egress.Client.Transport = oldTransport
 		zenConfigMu.Lock()
 		zenConfig = oldZenCfg
 		zenConfigMu.Unlock()
@@ -932,7 +933,7 @@ func TestHandleResponsesFreeReturnsTooManyRequestsWhenBothPoolsUnavailable(t *te
 		requestLogsMu.Unlock()
 	})
 	// zen 池指向死端口：本测试只验证「双池不可用 → 429」，
-	// zen 走独立 uTLS 客户端不受 httpClient.Transport mock 拦截，
+	// zen 走独立 uTLS 客户端不受 egress.Client.Transport mock 拦截，
 	// 不隔离会真实打到 opencode（免费层补齐核心工具后请求会成功）
 	deadZen := *oldZenCfg
 	deadZen.BaseURL = "http://127.0.0.1:1"
@@ -951,7 +952,7 @@ func TestHandleResponsesFreeReturnsTooManyRequestsWhenBothPoolsUnavailable(t *te
 	setProxyConfig(defaultProxyConfig())
 
 	calls := 0
-	httpClient.Transport = freeModelRoundTripper(func(req *http.Request) (*http.Response, error) {
+	egress.Client.Transport = freeModelRoundTripper(func(req *http.Request) (*http.Response, error) {
 		calls++
 		return &http.Response{
 			StatusCode: http.StatusTooManyRequests,
@@ -1043,11 +1044,11 @@ func TestIsFreeModelEntry(t *testing.T) {
 func TestCallClineAPIFreePicksLeastUsedAccount(t *testing.T) {
 	oldPool := accounts.Pool
 	oldConfig := getProxyConfig()
-	oldTransport := httpClient.Transport
+	oldTransport := egress.Client.Transport
 	t.Cleanup(func() {
 		accounts.Pool = oldPool
 		setProxyConfig(oldConfig)
-		httpClient.Transport = oldTransport
+		egress.Client.Transport = oldTransport
 	})
 
 	first := &Account{
@@ -1071,7 +1072,7 @@ func TestCallClineAPIFreePicksLeastUsedAccount(t *testing.T) {
 	setProxyConfig(defaultProxyConfig())
 
 	var chosen []string
-	httpClient.Transport = freeModelRoundTripper(func(req *http.Request) (*http.Response, error) {
+	egress.Client.Transport = freeModelRoundTripper(func(req *http.Request) (*http.Response, error) {
 		token := strings.TrimPrefix(req.Header.Get("Authorization"), "Bearer ")
 		chosen = append(chosen, token)
 		return &http.Response{

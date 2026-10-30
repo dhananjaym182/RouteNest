@@ -1,4 +1,4 @@
-package main
+package egress
 
 import (
 	"net/http"
@@ -22,7 +22,7 @@ func TestHTTPTransportUsesHTTPSProxyFromEnvironment(t *testing.T) {
 			t.Fatalf("create request: %v", err)
 		}
 
-		proxyURL, err := httpTransport.Proxy(req)
+		proxyURL, err := Transport.Proxy(req)
 		if err != nil {
 			t.Fatalf("resolve proxy: %v", err)
 		}

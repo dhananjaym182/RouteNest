@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"cline-go-proxy/internal/accounts"
+	"cline-go-proxy/internal/egress"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -17,11 +18,11 @@ func newStreamTestServer(t *testing.T, id string, chain ...string) string {
 	t.Helper()
 	oldPool := accounts.Pool
 	oldConfig := getProxyConfig()
-	oldTransport := httpClient.Transport
+	oldTransport := egress.Client.Transport
 	t.Cleanup(func() {
 		accounts.Pool = oldPool
 		setProxyConfig(oldConfig)
-		httpClient.Transport = oldTransport
+		egress.Client.Transport = oldTransport
 	})
 
 	account := &Account{
@@ -48,11 +49,11 @@ func newStreamTestServer(t *testing.T, id string, chain ...string) string {
 func TestAnthropicStreamRetriesTransparentlyBeforeFirstToken(t *testing.T) {
 	oldPool := accounts.Pool
 	oldConfig := getProxyConfig()
-	oldTransport := httpClient.Transport
+	oldTransport := egress.Client.Transport
 	t.Cleanup(func() {
 		accounts.Pool = oldPool
 		setProxyConfig(oldConfig)
-		httpClient.Transport = oldTransport
+		egress.Client.Transport = oldTransport
 	})
 
 	account := &Account{
@@ -68,7 +69,7 @@ func TestAnthropicStreamRetriesTransparentlyBeforeFirstToken(t *testing.T) {
 	setProxyConfig(config)
 
 	var upstreamCalls int
-	httpClient.Transport = freeModelRoundTripper(func(req *http.Request) (*http.Response, error) {
+	egress.Client.Transport = freeModelRoundTripper(func(req *http.Request) (*http.Response, error) {
 		upstreamCalls++
 		if upstreamCalls == 1 {
 			// 排队阶段被网关掐断的真实形态：200 + SSE 带内 504 错误
@@ -128,11 +129,11 @@ func TestAnthropicStreamRetriesTransparentlyBeforeFirstToken(t *testing.T) {
 func TestAnthropicStreamMidStreamErrorNotMaskedAsEndTurn(t *testing.T) {
 	oldPool := accounts.Pool
 	oldConfig := getProxyConfig()
-	oldTransport := httpClient.Transport
+	oldTransport := egress.Client.Transport
 	t.Cleanup(func() {
 		accounts.Pool = oldPool
 		setProxyConfig(oldConfig)
-		httpClient.Transport = oldTransport
+		egress.Client.Transport = oldTransport
 	})
 
 	account := &Account{
@@ -148,7 +149,7 @@ func TestAnthropicStreamMidStreamErrorNotMaskedAsEndTurn(t *testing.T) {
 	setProxyConfig(config)
 
 	var upstreamCalls int
-	httpClient.Transport = freeModelRoundTripper(func(req *http.Request) (*http.Response, error) {
+	egress.Client.Transport = freeModelRoundTripper(func(req *http.Request) (*http.Response, error) {
 		upstreamCalls++
 		return &http.Response{
 			StatusCode: http.StatusOK,
@@ -200,11 +201,11 @@ func TestAnthropicStreamMidStreamErrorNotMaskedAsEndTurn(t *testing.T) {
 func TestAnthropicStreamStartsEnvelopeBeforeFirstToken(t *testing.T) {
 	oldPool := accounts.Pool
 	oldConfig := getProxyConfig()
-	oldTransport := httpClient.Transport
+	oldTransport := egress.Client.Transport
 	t.Cleanup(func() {
 		accounts.Pool = oldPool
 		setProxyConfig(oldConfig)
-		httpClient.Transport = oldTransport
+		egress.Client.Transport = oldTransport
 	})
 
 	account := &Account{
@@ -220,7 +221,7 @@ func TestAnthropicStreamStartsEnvelopeBeforeFirstToken(t *testing.T) {
 	setProxyConfig(config)
 
 	// 上游在首 token 之前保持静默：这段窗口里客户端只应看到 `: ping` 注释行。
-	httpClient.Transport = freeModelRoundTripper(func(req *http.Request) (*http.Response, error) {
+	egress.Client.Transport = freeModelRoundTripper(func(req *http.Request) (*http.Response, error) {
 		pr, pw := io.Pipe()
 		go func() {
 			time.Sleep(200 * time.Millisecond)
@@ -309,11 +310,11 @@ func TestAnthropicStreamStartsEnvelopeBeforeFirstToken(t *testing.T) {
 func TestAnthropicStreamFailsOverToNextModelBeforeFirstToken(t *testing.T) {
 	oldPool := accounts.Pool
 	oldConfig := getProxyConfig()
-	oldTransport := httpClient.Transport
+	oldTransport := egress.Client.Transport
 	t.Cleanup(func() {
 		accounts.Pool = oldPool
 		setProxyConfig(oldConfig)
-		httpClient.Transport = oldTransport
+		egress.Client.Transport = oldTransport
 	})
 
 	account := &Account{
@@ -330,7 +331,7 @@ func TestAnthropicStreamFailsOverToNextModelBeforeFirstToken(t *testing.T) {
 	setProxyConfig(config)
 
 	var attempted []string
-	httpClient.Transport = freeModelRoundTripper(func(req *http.Request) (*http.Response, error) {
+	egress.Client.Transport = freeModelRoundTripper(func(req *http.Request) (*http.Response, error) {
 		var body struct {
 			Model string `json:"model"`
 		}
@@ -400,11 +401,11 @@ func TestAnthropicStreamFailsOverToNextModelBeforeFirstToken(t *testing.T) {
 func TestAnthropicStreamEmptyCompletionFailsOver(t *testing.T) {
 	oldPool := accounts.Pool
 	oldConfig := getProxyConfig()
-	oldTransport := httpClient.Transport
+	oldTransport := egress.Client.Transport
 	t.Cleanup(func() {
 		accounts.Pool = oldPool
 		setProxyConfig(oldConfig)
-		httpClient.Transport = oldTransport
+		egress.Client.Transport = oldTransport
 	})
 
 	account := &Account{
@@ -421,7 +422,7 @@ func TestAnthropicStreamEmptyCompletionFailsOver(t *testing.T) {
 	setProxyConfig(config)
 
 	var attempted []string
-	httpClient.Transport = freeModelRoundTripper(func(req *http.Request) (*http.Response, error) {
+	egress.Client.Transport = freeModelRoundTripper(func(req *http.Request) (*http.Response, error) {
 		var body struct {
 			Model string `json:"model"`
 		}
@@ -509,7 +510,7 @@ func TestAnthropicStreamStallsWithoutContentFailsOver(t *testing.T) {
 	baseURL := newStreamTestServer(t, "stream-stall", "backup-model")
 
 	var attempted []string
-	httpClient.Transport = freeModelRoundTripper(func(req *http.Request) (*http.Response, error) {
+	egress.Client.Transport = freeModelRoundTripper(func(req *http.Request) (*http.Response, error) {
 		var body struct {
 			Model string `json:"model"`
 		}
@@ -571,7 +572,7 @@ func TestAnthropicStreamBreakBeforeContentFailsOver(t *testing.T) {
 	baseURL := newStreamTestServer(t, "stream-early-break", "backup-model")
 
 	var attempted []string
-	httpClient.Transport = freeModelRoundTripper(func(req *http.Request) (*http.Response, error) {
+	egress.Client.Transport = freeModelRoundTripper(func(req *http.Request) (*http.Response, error) {
 		var body struct {
 			Model string `json:"model"`
 		}

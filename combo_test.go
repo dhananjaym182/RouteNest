@@ -7,6 +7,7 @@ package main
 
 import (
 	"cline-go-proxy/internal/accounts"
+	"cline-go-proxy/internal/egress"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -45,9 +46,9 @@ func installConfig(t *testing.T, cfg *proxyConfigData) {
 
 func installTransport(t *testing.T, fn func(req *http.Request) *http.Response) {
 	t.Helper()
-	old := httpClient.Transport
-	t.Cleanup(func() { httpClient.Transport = old })
-	httpClient.Transport = freeModelRoundTripper(func(req *http.Request) (*http.Response, error) {
+	old := egress.Client.Transport
+	t.Cleanup(func() { egress.Client.Transport = old })
+	egress.Client.Transport = freeModelRoundTripper(func(req *http.Request) (*http.Response, error) {
 		return fn(req), nil
 	})
 }
@@ -687,23 +688,23 @@ func TestCallFreeClineAPIDeterministic400FailsFast(t *testing.T) {
 }
 
 func TestIsDeterministicRequestErrorClassification(t *testing.T) {
-	det := &clineAPIError{statusCode: http.StatusBadRequest,
-		message: `{"error":"Invalid input: expected string, received null","param":"tools.0.function.description"}`}
+	det := egress.NewAPIError(http.StatusBadRequest,
+		`{"error":"Invalid input: expected string, received null","param":"tools.0.function.description"}`)
 	if !isDeterministicRequestError(det) {
 		t.Error("invalid-input 400 must be classified deterministic")
 	}
-	ir := &clineAPIError{statusCode: http.StatusBadRequest,
-		message: `{"error":{"type":"invalid_request_error","message":"bad tool schema"}}`}
+	ir := egress.NewAPIError(http.StatusBadRequest,
+		`{"error":{"type":"invalid_request_error","message":"bad tool schema"}}`)
 	if !isDeterministicRequestError(ir) {
 		t.Error("invalid_request_error 400 must be classified deterministic")
 	}
-	not400 := &clineAPIError{statusCode: http.StatusInternalServerError, message: "Invalid input"}
+	not400 := egress.NewAPIError(http.StatusInternalServerError, "Invalid input")
 	if isDeterministicRequestError(not400) {
 		t.Error("only status-400 errors count as deterministic")
 	}
 	// 上下文超限 400 显式排除：必须保留 truncate+retry/continue 行为
-	cts := &clineAPIError{statusCode: http.StatusBadRequest,
-		message: `prompt is too long: maximum context length exceeded`}
+	cts := egress.NewAPIError(http.StatusBadRequest,
+		`prompt is too long: maximum context length exceeded`)
 	if isDeterministicRequestError(cts) {
 		t.Error("context-length 400 must NOT be deterministic (truncate/retry must stay available)")
 	}

@@ -7,6 +7,7 @@ package main
 // 绝不重开」。
 
 import (
+	"cline-go-proxy/internal/egress"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -21,9 +22,9 @@ const comboOkCompletion = `{"id":"ok","object":"chat.completion","choices":[{"in
 func comboHTTPTransport(t *testing.T, fn func(req *http.Request, model string) *http.Response) *[]string {
 	t.Helper()
 	seen := &[]string{}
-	old := httpClient.Transport
-	t.Cleanup(func() { httpClient.Transport = old })
-	httpClient.Transport = freeModelRoundTripper(func(req *http.Request) (*http.Response, error) {
+	old := egress.Client.Transport
+	t.Cleanup(func() { egress.Client.Transport = old })
+	egress.Client.Transport = freeModelRoundTripper(func(req *http.Request) (*http.Response, error) {
 		m := readReqModel(req)
 		*seen = append(*seen, m)
 		return fn(req, m), nil
@@ -188,9 +189,9 @@ func TestComboAnthropicStreamFallbackBeforeContent(t *testing.T) {
 	installConfig(t, cfg)
 
 	calls := 0
-	old := httpClient.Transport
-	t.Cleanup(func() { httpClient.Transport = old })
-	httpClient.Transport = freeModelRoundTripper(func(req *http.Request) (*http.Response, error) {
+	old := egress.Client.Transport
+	t.Cleanup(func() { egress.Client.Transport = old })
+	egress.Client.Transport = freeModelRoundTripper(func(req *http.Request) (*http.Response, error) {
 		calls++
 		m := readReqModel(req)
 		if m == "combo-a" {
@@ -229,9 +230,9 @@ func TestComboAnthropicStreamNoRestartAfterContent(t *testing.T) {
 	installConfig(t, cfg)
 
 	var seen []string
-	old := httpClient.Transport
-	t.Cleanup(func() { httpClient.Transport = old })
-	httpClient.Transport = freeModelRoundTripper(func(req *http.Request) (*http.Response, error) {
+	old := egress.Client.Transport
+	t.Cleanup(func() { egress.Client.Transport = old })
+	egress.Client.Transport = freeModelRoundTripper(func(req *http.Request) (*http.Response, error) {
 		seen = append(seen, readReqModel(req))
 		return stubSSE(req, "data: {\"id\":\"ok1\",\"model\":\"combo-a\",\"choices\":[{\"delta\":{\"content\":\"hello\"}}]}\n\ndata: [DONE]\n\n"), nil
 	})

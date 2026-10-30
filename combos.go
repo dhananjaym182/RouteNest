@@ -31,6 +31,7 @@ import (
 	"time"
 
 	"cline-go-proxy/internal/accounts"
+	"cline-go-proxy/internal/egress"
 	"cline-go-proxy/internal/i18n"
 	"cline-go-proxy/internal/providers"
 )
@@ -498,9 +499,9 @@ func comboRetryable(err error) bool {
 	if errors.As(err, &acct) {
 		return true // 账号不可用：可能换号/换条目即可恢复
 	}
-	var apiErr *clineAPIError
+	var apiErr *egress.APIError
 	if errors.As(err, &apiErr) {
-		switch apiErr.statusCode {
+		switch apiErr.StatusCode {
 		case 400, 401, 403:
 			return false
 		case 402, 408, 409, 421, 425, 429:
@@ -508,7 +509,7 @@ func comboRetryable(err error) bool {
 		case 404:
 			return true
 		default:
-			return apiErr.statusCode >= 500
+			return apiErr.StatusCode >= 500
 		}
 	}
 	// 其余（zen 网络/上游错误、未知错误）按瞬态处理，交给下一个条目。
@@ -517,9 +518,9 @@ func comboRetryable(err error) bool {
 
 // attemptStatus 从错误里尽量提取上游 HTTP 状态码（供尝试轨迹展示）。
 func attemptStatus(err error) int {
-	var apiErr *clineAPIError
+	var apiErr *egress.APIError
 	if errors.As(err, &apiErr) {
-		return apiErr.statusCode
+		return apiErr.StatusCode
 	}
 	return 0
 }
@@ -735,8 +736,8 @@ func callSingleModel(params map[string]any, entry ComboEntry, stream bool, sessi
 		if isDeterministicRequestError(err) {
 			return nil, usedAcc, upstreamCline, "", err
 		}
-		if apiErr, ok := err.(*clineAPIError); ok {
-			switch apiErr.statusCode {
+		if apiErr, ok := err.(*egress.APIError); ok {
+			switch apiErr.StatusCode {
 			case 402:
 				// 余额不足是账号级问题：冷却该账号该模型后换号，仍试同一模型。
 				setModelCooldown(usedAcc, model, time.Now().Add(30*time.Minute))

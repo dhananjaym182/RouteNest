@@ -21,6 +21,7 @@ import (
 	"cline-go-proxy/internal/accounts"
 	"cline-go-proxy/internal/buildinfo"
 	"cline-go-proxy/internal/dispatch"
+	"cline-go-proxy/internal/egress"
 	"cline-go-proxy/internal/httpapi"
 	"cline-go-proxy/internal/httpx"
 	"cline-go-proxy/internal/protocol"
@@ -1021,15 +1022,6 @@ func clineHeaders(token, sessionID string) http.Header {
 	return h
 }
 
-type clineAPIError struct {
-	statusCode int
-	message    string
-}
-
-func (e *clineAPIError) Error() string {
-	return fmt.Sprintf("API %d: %s", e.statusCode, e.message)
-}
-
 type clineAccountUnavailableError struct {
 	err error
 }
@@ -1066,11 +1058,11 @@ func isDeterministicRequestError(err error) bool {
 	if err == nil || isContextLengthError(err) {
 		return false
 	}
-	var apiErr *clineAPIError
-	if !errors.As(err, &apiErr) || apiErr.statusCode != http.StatusBadRequest {
+	var apiErr *egress.APIError
+	if !errors.As(err, &apiErr) || apiErr.StatusCode != http.StatusBadRequest {
 		return false
 	}
-	msg := strings.ToLower(apiErr.message)
+	msg := strings.ToLower(apiErr.Message)
 	return strings.Contains(msg, "invalid_request_error") ||
 		strings.Contains(msg, "invalid_request") ||
 		strings.Contains(msg, "invalid input")
@@ -1196,7 +1188,7 @@ func callClineAPI(params map[string]any, stream bool) (*http.Response, *Account,
 	// credCap=0（不限），与旧行为完全一致。rounds>1 时每轮之间等待一个有界
 	// 窗口，给短冷却账号恢复的机会；确定性错误/stop 规则走 return 直接终止，
 	// 不会被后续轮次空转重跑。
-	rounds, credCap, roundInterval := retryRoundSettings()
+	rounds, credCap, roundInterval := egress.RetryRoundSettings()
 	for round := 0; round < rounds; round++ {
 		if round > 0 && roundInterval > 0 {
 			log.Printf("  retry round %d/%d for %q after %s cooldown window", round+1, rounds, model, roundInterval)
@@ -1215,9 +1207,8 @@ func callClineAPI(params map[string]any, stream bool) (*http.Response, *Account,
 					return pResp, nil, nil
 				}
 				// providers.CallAPI 已逐个记录 provider 失败原因，链上不重复打日志
-				var st *requestErrorStop
-				if errors.As(pErr, &st) {
-					return nil, nil, st.err // 错误规则声明终止：不再走账号池/链
+				if cause, stopped := egress.StopCause(pErr); stopped {
+					return nil, nil, cause // 错误规则声明终止：不再走账号池/链
 				}
 			}
 
@@ -1255,18 +1246,18 @@ func callClineAPI(params map[string]any, stream bool) (*http.Response, *Account,
 				}
 				// 管理员错误规则先于内置 402/429 分类：stop 立即中止整条链，
 				// continue 落到下面照常轮转（仅可能附加冷却），二者都不改变成功路径。
-				if stop, cooldown, matched := ruleDecision(err); matched {
+				if stop, cooldown, matched := egress.RuleDecision(err); matched {
 					if cooldown && usedAcc != nil {
-						setModelCooldown(usedAcc, m, ruleCooldownUntil(clineErrorStatus(err)))
+						setModelCooldown(usedAcc, m, egress.RuleCooldownUntil(egress.ErrorStatus(err)))
 					}
 					if stop {
-						logRuleHit("stop", clineErrorStatus(err), "pool model "+m)
+						egress.LogRuleHit("stop", egress.ErrorStatus(err), "pool model "+m)
 						return nil, usedAcc, err
 					}
-					logRuleHit("continue", clineErrorStatus(err), "pool model "+m)
+					egress.LogRuleHit("continue", egress.ErrorStatus(err), "pool model "+m)
 				}
-				apiErr, ok := err.(*clineAPIError)
-				if ok && apiErr.statusCode == http.StatusPaymentRequired {
+				apiErr, ok := err.(*egress.APIError)
+				if ok && apiErr.StatusCode == http.StatusPaymentRequired {
 					// 402 余额不足是账号级问题（该账号扣费额度耗尽），不是模型级：
 					// 冷却该账号上的这个模型（30min），换下一个账号继续试当前模型。
 					// 不换账号会导致轮询反复选中同一破产账号，每个请求先烧一次 402 往返；
@@ -1275,7 +1266,7 @@ func callClineAPI(params map[string]any, stream bool) (*http.Response, *Account,
 					log.Printf("  model %q on %s: insufficient credits (402), cooling for 30m, trying next account", m, usedAcc.Email)
 					continue
 				}
-				if !ok || apiErr.statusCode != http.StatusTooManyRequests {
+				if !ok || apiErr.StatusCode != http.StatusTooManyRequests {
 					// 非 429/402 错误：若后面还有候选（provider / 链）则继续降级，否则透传
 					if !hasAnyFallbackLeft(model, m) {
 						return nil, usedAcc, err
@@ -1528,9 +1519,8 @@ func callFreeClineAPI(params map[string]any, stream bool) (*http.Response, *Acco
 				return pResp, nil, nil
 			}
 			// providers.CallAPI 已逐个记录 provider 失败原因，链上不重复打日志
-			var st *requestErrorStop
-			if errors.As(pErr, &st) {
-				return nil, nil, st.err // 错误规则声明终止 free 链
+			if cause, stopped := egress.StopCause(pErr); stopped {
+				return nil, nil, cause // 错误规则声明终止 free 链
 			}
 		}
 		// "free" 链是纯降级路径：全部用「最久未用优先」挑账号，摊平用量。
@@ -1562,22 +1552,22 @@ func callFreeClineAPI(params map[string]any, stream bool) (*http.Response, *Acco
 				continue
 			}
 			// 管理员错误规则先于内置分类：stop 中止整条 free 链。
-			if stop, cooldown, matched := ruleDecision(err); matched {
+			if stop, cooldown, matched := egress.RuleDecision(err); matched {
 				if cooldown && usedAcc != nil {
-					setModelCooldown(usedAcc, model, ruleCooldownUntil(clineErrorStatus(err)))
+					setModelCooldown(usedAcc, model, egress.RuleCooldownUntil(egress.ErrorStatus(err)))
 				}
 				if stop {
-					logRuleHit("stop", clineErrorStatus(err), "free-chain model "+model)
+					egress.LogRuleHit("stop", egress.ErrorStatus(err), "free-chain model "+model)
 					return nil, usedAcc, err
 				}
-				logRuleHit("continue", clineErrorStatus(err), "free-chain model "+model)
+				egress.LogRuleHit("continue", egress.ErrorStatus(err), "free-chain model "+model)
 			}
 			lastErr = err
 			lastWas429 = false
-			if apiErr, ok := err.(*clineAPIError); ok && (apiErr.statusCode == http.StatusTooManyRequests || apiErr.statusCode == http.StatusPaymentRequired) {
+			if apiErr, ok := err.(*egress.APIError); ok && (apiErr.StatusCode == http.StatusTooManyRequests || apiErr.StatusCode == http.StatusPaymentRequired) {
 				// 429 限流 / 402 余额不足：都是账号级问题 —— 402 冷却该账号上的
 				// 这个模型后换下一个账号继续试，不能换模型（其他账号可能还有额度）
-				if apiErr.statusCode == http.StatusPaymentRequired {
+				if apiErr.StatusCode == http.StatusPaymentRequired {
 					setModelCooldown(acc, model, time.Now().Add(30*time.Minute))
 					log.Printf("  model %q on %s: insufficient credits (402), cooling for 30m, trying next account", model, acc.Email)
 				}
@@ -1623,7 +1613,7 @@ func callClineAPIWithAccountCtx(ctx context.Context, acc *Account, params map[st
 	}
 
 	client := &clineupstream.Client{
-		HTTP:         &http.Client{Transport: httpClient.Transport},
+		HTTP:         &http.Client{Transport: egress.Client.Transport},
 		BaseURL:      accounts.ClineAPIBase,
 		ExtraHeaders: getProxyConfig().Headers,
 	}
@@ -1688,7 +1678,7 @@ func callClineAPIWithAccountCtx(ctx context.Context, acc *Account, params map[st
 		if model, _ := body["model"].(string); model != "" && isModelGoneError(resp.StatusCode, bodyStr) {
 			markModelGone(model)
 		}
-		return nil, acc, &clineAPIError{statusCode: resp.StatusCode, message: truncate(bodyStr, 500)}
+		return nil, acc, egress.NewAPIError(resp.StatusCode, truncate(bodyStr, 500))
 	}
 
 	acc.LastUsed = time.Now()
@@ -2104,7 +2094,7 @@ func clineFailoverToZen(params map[string]any, stream bool) (*http.Response, boo
 			continue
 		}
 		attempts++
-		if attempts > failoverModelCap() {
+		if attempts > egress.FailoverModelCap() {
 			break
 		}
 		log.Printf("  cline failover: %q exhausted, trying zen free model %q", orig, m.ID)

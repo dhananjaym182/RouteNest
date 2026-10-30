@@ -1,7 +1,8 @@
-package main
+package egress
 
 import (
 	"context"
+	"crypto/rand"
 	"log"
 	"net"
 	"net/http"
@@ -14,39 +15,41 @@ import (
 	"golang.org/x/net/http/httpproxy"
 
 	"cline-go-proxy/internal/config"
+	"cline-go-proxy/internal/platform"
+	"cline-go-proxy/internal/transport"
 )
 
-// ============================================================================
-// Cline 出口代理池
-// 国内直连 api.cline.bot / api.workos.com 会命中跨区限制；配置 http/https/socks5(h)
-// 代理后，所有发往 Cline 上游的请求（对话、登录/令牌刷新、模型同步，以及复用全局
-// transport 的自定义 Provider）经代理池轮询出去。
-// 未配置时保持原行为：环境变量代理（HTTPS_PROXY / HTTP_PROXY）→ 直连。
-// 拨号复用 zen_proxy.go 的 dialViaProxy；配置与冷却状态与 zen 代理池相互独立。
-// ============================================================================
+// ClineProxyConfig is the persisted Cline egress proxy pool configuration.
+type ClineProxyConfig = config.ClineEgress
 
-type clineProxyConfigData = config.ClineEgress
+// DataPathResolver resolves the Cline egress configuration path. The root
+// composition replaces this before first use so legacy data-directory probing
+// remains part of application startup, while leaf-package users get the
+// platform default.
+var DataPathResolver = func(name string) string {
+	return platform.ResolveDataPath(name, nil)
+}
 
 var (
-	clineProxyCfg   *clineProxyConfigData
+	clineProxyCfg   *ClineProxyConfig
 	clineProxyCfgMu sync.Mutex
 	clineProxyCount atomic.Uint64
 )
 
-func defaultClineProxyConfig() *clineProxyConfigData {
+func defaultClineProxyConfig() *ClineProxyConfig {
 	cfg := config.DefaultClineEgress()
 	return &cfg
 }
 
-// getClineProxyConfig 惰性加载配置（避免依赖包初始化顺序）。
-func getClineProxyConfig() *clineProxyConfigData {
+// GetClineProxyConfig 惰性加载配置（避免依赖包初始化顺序）。
+func GetClineProxyConfig() *ClineProxyConfig {
 	clineProxyCfgMu.Lock()
 	defer clineProxyCfgMu.Unlock()
 	if clineProxyCfg == nil {
-		path := resolveDataPath(config.ClineEgressPath)
+		path := DataPathResolver(config.ClineEgressPath)
 		cfg, err := config.LoadClineEgress(path)
 		if err != nil {
-			backupCorruptFile(path, err)
+			platform.BackupCorruptFile(path, err)
 		}
 		clineProxyCfg = &cfg
 	}
@@ -65,20 +68,20 @@ func setClineProxyPersistErr(err error) {
 	clineProxyPersistErr = err
 }
 
-func getClineProxyPersistErr() error {
+func GetClineProxyPersistErr() error {
 	clineProxyPersistErrMu.Lock()
 	defer clineProxyPersistErrMu.Unlock()
 	return clineProxyPersistErr
 }
 
-// setClineProxyConfig 原子替换配置并持久化。传输层按请求读取配置，无需重建。
-func setClineProxyConfig(c *clineProxyConfigData) {
+// SetClineProxyConfig 原子替换配置并持久化。传输层按请求读取配置，无需重建。
+func SetClineProxyConfig(c *ClineProxyConfig) {
 	c.Normalize()
 	clineProxyCfgMu.Lock()
 	clineProxyCfg = c
 	clineProxyCfgMu.Unlock()
 
-	if err := config.SaveClineEgress(resolveDataPath(config.ClineEgressPath), c); err != nil {
+	if err := config.SaveClineEgress(DataPathResolver(config.ClineEgressPath), c); err != nil {
 		log.Printf("cline proxy config save failed: %v", err)
 		setClineProxyPersistErr(err)
 		return
@@ -86,7 +89,7 @@ func setClineProxyConfig(c *clineProxyConfigData) {
 	setClineProxyPersistErr(nil)
 }
 
-func normalizeClineProxyConfig(c *clineProxyConfigData) {
+func normalizeClineProxyConfig(c *ClineProxyConfig) {
 	c.Normalize()
 }
 
@@ -94,14 +97,14 @@ func normalizeClineProxyConfig(c *clineProxyConfigData) {
 // 传输层钩子按「一次请求一次快照」读取，避免同一请求内 active→dial 两次 get
 // 之间并发更新导致的判定不一致。
 func snapshotClineProxyConfig() (proxies []string, strategy string) {
-	cfg := getClineProxyConfig()
+	cfg := GetClineProxyConfig()
 	clineProxyCfgMu.Lock()
 	defer clineProxyCfgMu.Unlock()
 	return cfg.Snapshot()
 }
 
 func clineProxiesActive() bool {
-	cfg := getClineProxyConfig()
+	cfg := GetClineProxyConfig()
 	clineProxyCfgMu.Lock()
 	defer clineProxyCfgMu.Unlock()
 	return len(cfg.Proxies) > 0
@@ -123,11 +126,24 @@ func pickFromClineProxies(proxies []string, strategy string) string {
 	idx := int(clineProxyCount.Add(1)-1) % n
 	switch strategy {
 	case "random":
-		idx = randIntn(n)
+		idx = randomIntn(n)
 	case "fill":
 		idx = 0
 	}
 	return proxies[idx]
+}
+
+func randomIntn(n int) int {
+	if n <= 0 {
+		return 0
+	}
+	b := make([]byte, 4)
+	rand.Read(b)
+	v := int(b[0])<<24 | int(b[1])<<16 | int(b[2])<<8 | int(b[3])
+	if v < 0 {
+		v = -v
+	}
+	return v % n
 }
 
 // clineEnvProxy 环境变量代理回退（可注入接缝，测试用替身）。
@@ -156,7 +172,7 @@ func clineOutboundProxy(req *http.Request) (*url.URL, error) {
 func clineDialContext(ctx context.Context, network, addr string) (net.Conn, error) {
 	if proxies, strategy := snapshotClineProxyConfig(); len(proxies) > 0 && !clineDirectDialHost(addr) {
 		if p := pickFromClineProxies(proxies, strategy); p != "" {
-			return dialViaProxy(ctx, p, network, addr)
+			return transport.DialViaProxy(ctx, p, network, addr)
 		}
 	}
 	d := &net.Dialer{Timeout: 12 * time.Second, KeepAlive: 30 * time.Second}

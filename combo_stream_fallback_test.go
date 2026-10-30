@@ -2,6 +2,7 @@ package main
 
 import (
 	"cline-go-proxy/internal/accounts"
+	"cline-go-proxy/internal/egress"
 	"context"
 	"encoding/json"
 	"io"
@@ -20,11 +21,11 @@ func TestStreamAnthropicComboContinuesWhenEntryHitsContextLimit(t *testing.T) {
 	t.Setenv(dataDirEnv, t.TempDir())
 	oldPool := accounts.Pool
 	oldConfig := getProxyConfig()
-	oldTransport := httpClient.Transport
+	oldTransport := egress.Client.Transport
 	t.Cleanup(func() {
 		accounts.Pool = oldPool
 		setProxyConfig(oldConfig)
-		httpClient.Transport = oldTransport
+		egress.Client.Transport = oldTransport
 		resetRoutingState()
 	})
 
@@ -43,7 +44,7 @@ func TestStreamAnthropicComboContinuesWhenEntryHitsContextLimit(t *testing.T) {
 	const longModel = "combo-entry-long-context"
 	const shortModel = "combo-entry-short-context"
 	var requested []string
-	httpClient.Transport = freeModelRoundTripper(func(req *http.Request) (*http.Response, error) {
+	egress.Client.Transport = freeModelRoundTripper(func(req *http.Request) (*http.Response, error) {
 		body, err := io.ReadAll(req.Body)
 		if err != nil {
 			return nil, err

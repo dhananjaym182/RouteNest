@@ -1,11 +1,9 @@
 package providers
 
 import (
-	"fmt"
 	"net/http"
 	"strings"
 	"sync/atomic"
-	"time"
 
 	"cline-go-proxy/internal/config"
 	"cline-go-proxy/internal/domain"
@@ -35,19 +33,6 @@ var (
 		return openaicompat.BodyOptions{}
 	}
 	ConfigProvider = config.DefaultProxy
-
-	APIErrorFactory = func(status int, message string) error {
-		return fmt.Errorf("API %d: %s", status, message)
-	}
-	ErrorRuleDecision = func(error) (stop, cooldown, matched bool) {
-		return false, false, false
-	}
-	ErrorStatus       = func(error) int { return 0 }
-	RuleCooldownUntil = func(int) time.Time {
-		return time.Now().Add(2 * time.Minute)
-	}
-	StopError  = func(err error) error { return err }
-	LogRuleHit = func(string, int, string) {}
 
 	RequestLogsSnapshot = func() []RequestLog { return nil }
 )

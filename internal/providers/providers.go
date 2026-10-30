@@ -17,6 +17,7 @@ import (
 	"cline-go-proxy/internal/accounts"
 	"cline-go-proxy/internal/connections"
 	"cline-go-proxy/internal/dispatch"
+	"cline-go-proxy/internal/egress"
 	"cline-go-proxy/internal/httpx"
 	"cline-go-proxy/internal/i18n"
 	"cline-go-proxy/internal/platform"
@@ -460,10 +461,10 @@ func Call(p *CustomProvider, params map[string]any, stream bool) (*http.Response
 		if conn != nil && (resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden) {
 			connections.MarkConnectionReauth(conn.ID)
 		}
-		if until := CooldownUntil(resp.StatusCode, resp.Header.Get("Retry-After"), bodyStr); !until.IsZero() {
+		if until := egress.CooldownUntil(resp.StatusCode, resp.Header.Get("Retry-After"), bodyStr); !until.IsZero() {
 			SetCooldown(p.ID, modelKey, until)
 		}
-		return nil, APIErrorFactory(resp.StatusCode, platform.Truncate(bodyStr, 500))
+		return nil, egress.NewAPIError(resp.StatusCode, platform.Truncate(bodyStr, 500))
 	}
 	return nil, fmt.Errorf("provider %s: no connection attempts made", p.Name)
 }
@@ -471,26 +472,6 @@ func Call(p *CustomProvider, params map[string]any, stream bool) (*http.Response
 // providerRateLimitedKeys reports explicit quota/rate-limit keywords.
 func providerRateLimitedKeys(body string) bool {
 	return dispatch.RateLimitedByBody(body)
-}
-
-// CooldownUntil classifies an upstream failure into a cooldown window.
-// Returning the zero time means no cooldown. Transient failures (408/5xx)
-// honor Retry.TransientCooldownSeconds: >0 overrides the built-in window,
-// -1 disables the cooldown, 0 keeps dispatch's default classification.
-func CooldownUntil(status int, retryAfterHeader, body string) time.Time {
-	until := dispatch.ProviderCooldownUntil(status, retryAfterHeader, body)
-	t := ConfigProvider().Retry.TransientCooldownSeconds
-	if t == 0 || !isTransientUpstreamStatus(status) {
-		return until
-	}
-	if t < 0 {
-		return time.Time{}
-	}
-	return time.Now().Add(time.Duration(t) * time.Second)
-}
-
-func isTransientUpstreamStatus(status int) bool {
-	return status == http.StatusRequestTimeout || (status >= 500 && status < 600)
 }
 
 // ============================================================================
@@ -1318,15 +1299,15 @@ func CallAPI(params map[string]any, stream bool) (*http.Response, error, bool, s
 					return resp, nil, true, p.Name
 				}
 				log.Printf("  provider attempt failed name=%s model=%q (pinned): %v", p.Name, model, err)
-				if stop, cooldown, matched := ErrorRuleDecision(err); matched {
+				if stop, cooldown, matched := egress.RuleDecision(err); matched {
 					if cooldown {
-						SetCooldown(p.ID, model, RuleCooldownUntil(ErrorStatus(err)))
+						SetCooldown(p.ID, model, egress.RuleCooldownUntil(egress.ErrorStatus(err)))
 					}
 					if stop {
 						stickyClear(sk)
 						params[ProviderIDParam] = pin.providerID
-						LogRuleHit("stop", ErrorStatus(err), "provider "+p.Name+" (sticky)")
-						return nil, StopError(err), true, p.Name
+						egress.LogRuleHit("stop", egress.ErrorStatus(err), "provider "+p.Name+" (sticky)")
+						return nil, egress.WrapStop(err), true, p.Name
 					}
 				}
 			}
@@ -1353,16 +1334,16 @@ func CallAPI(params map[string]any, stream bool) (*http.Response, error, bool, s
 		lastErr = err
 		lastName = p.Name
 		lastID = p.ID
-		if stop, cooldown, matched := ErrorRuleDecision(err); matched {
+		if stop, cooldown, matched := egress.RuleDecision(err); matched {
 			if cooldown {
-				SetCooldown(p.ID, model, RuleCooldownUntil(ErrorStatus(err)))
+				SetCooldown(p.ID, model, egress.RuleCooldownUntil(egress.ErrorStatus(err)))
 			}
 			if stop {
 				params[ProviderIDParam] = p.ID
-				LogRuleHit("stop", ErrorStatus(err), "provider "+p.Name)
-				return nil, StopError(err), true, p.Name
+				egress.LogRuleHit("stop", egress.ErrorStatus(err), "provider "+p.Name)
+				return nil, egress.WrapStop(err), true, p.Name
 			}
-			LogRuleHit("continue", ErrorStatus(err), "provider "+p.Name)
+			egress.LogRuleHit("continue", egress.ErrorStatus(err), "provider "+p.Name)
 		}
 	}
 	params[ProviderIDParam] = lastID
@@ -1474,9 +1455,9 @@ func CallAPINamed(params map[string]any, stream bool, name string) (*http.Respon
 		lastID = p.ID
 		// A pinned-provider failure is already fatal to the caller; rules can
 		// only add the cooldown side effect here, not change the flow.
-		if _, cooldown, matched := ErrorRuleDecision(err); matched && cooldown {
-			SetCooldown(p.ID, model, RuleCooldownUntil(ErrorStatus(err)))
-			LogRuleHit("cooldown", ErrorStatus(err), "provider "+p.Name+" (pinned)")
+		if _, cooldown, matched := egress.RuleDecision(err); matched && cooldown {
+			SetCooldown(p.ID, model, egress.RuleCooldownUntil(egress.ErrorStatus(err)))
+			egress.LogRuleHit("cooldown", egress.ErrorStatus(err), "provider "+p.Name+" (pinned)")
 		}
 	}
 	params[ProviderIDParam] = lastID

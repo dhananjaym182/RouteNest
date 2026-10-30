@@ -2,6 +2,7 @@ package main
 
 import (
 	"cline-go-proxy/internal/accounts"
+	"cline-go-proxy/internal/egress"
 	"errors"
 	"io"
 	"net/http"
@@ -13,11 +14,11 @@ import (
 
 func isolateRefreshState(t *testing.T, transport freeModelRoundTripper) {
 	t.Helper()
-	oldPool, oldPoolPath, oldTransport := accounts.Pool, accounts.PoolPath, httpClient.Transport
+	oldPool, oldPoolPath, oldTransport := accounts.Pool, accounts.PoolPath, egress.Client.Transport
 	accounts.PoolPath = filepath.Join(t.TempDir(), ".cline-accounts.json")
-	httpClient.Transport = transport
+	egress.Client.Transport = transport
 	t.Cleanup(func() {
-		accounts.Pool, accounts.PoolPath, httpClient.Transport = oldPool, oldPoolPath, oldTransport
+		accounts.Pool, accounts.PoolPath, egress.Client.Transport = oldPool, oldPoolPath, oldTransport
 	})
 }
 

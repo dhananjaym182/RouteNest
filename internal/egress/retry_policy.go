@@ -1,4 +1,4 @@
-package main
+package egress
 
 import "time"
 
@@ -6,18 +6,18 @@ import "time"
 // Zero values always mean "historic built-in behavior", so an unconfigured
 // instance routes exactly like before this feature.
 
-// failoverModelCap bounds model attempts in the cline→zen failover loop.
-func failoverModelCap() int {
-	if n := getProxyConfig().Retry.MaxFailoverModels; n > 0 {
+// FailoverModelCap bounds model attempts in the cline→zen failover loop.
+func FailoverModelCap() int {
+	if n := ConfigProvider().Retry.MaxFailoverModels; n > 0 {
 		return n
 	}
 	return 3
 }
 
-// retryRoundSettings returns the fallback-chain pass count (>=1), the account
+// RetryRoundSettings returns the fallback-chain pass count (>=1), the account
 // attempt cap per model per pass (0 = unlimited), and the wait between passes.
-func retryRoundSettings() (rounds, credCap int, interval time.Duration) {
-	r := getProxyConfig().Retry
+func RetryRoundSettings() (rounds, credCap int, interval time.Duration) {
+	r := ConfigProvider().Retry
 	rounds = r.MaxRounds
 	if rounds < 1 {
 		rounds = 1

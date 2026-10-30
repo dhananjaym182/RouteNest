@@ -2,6 +2,7 @@ package main
 
 import (
 	"cline-go-proxy/internal/accounts"
+	"cline-go-proxy/internal/egress"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -29,14 +30,14 @@ func cmMockUpstream(t *testing.T, jsonBody, sseBody string) func() {
 			Request:    req,
 		}, nil
 	})
-	oldTransport := httpClient.Transport
-	httpClient.Transport = rt
+	oldTransport := egress.Client.Transport
+	egress.Client.Transport = rt
 	zenTransportMu.Lock()
 	oldZenClient := zenHTTPClient
 	zenHTTPClient = &http.Client{Transport: rt}
 	zenTransportMu.Unlock()
 	return func() {
-		httpClient.Transport = oldTransport
+		egress.Client.Transport = oldTransport
 		zenTransportMu.Lock()
 		zenHTTPClient = oldZenClient
 		zenTransportMu.Unlock()
