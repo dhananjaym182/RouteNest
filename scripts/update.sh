@@ -67,7 +67,7 @@ say "Building"
 VERSION=${VERSION:-$(git describe --tags --always 2>/dev/null || echo dev)}
 GIT_COMMIT=${GIT_COMMIT:-$(git rev-parse --short HEAD 2>/dev/null || echo "")}
 BUILD_DATE=${BUILD_DATE:-$(date -u +%Y-%m-%dT%H:%M:%SZ)}
-go build -trimpath -ldflags "-s -w -X main.appVersion=$VERSION -X main.appGitCommit=$GIT_COMMIT -X main.appBuildDate=$BUILD_DATE" -o "$BIN" .
+go build -trimpath -ldflags "-s -w -X cline-go-proxy/internal/buildinfo.AppVersion=$VERSION -X cline-go-proxy/internal/buildinfo.AppGitCommit=$GIT_COMMIT -X cline-go-proxy/internal/buildinfo.AppBuildDate=$BUILD_DATE" -o "$BIN" .
 printf 'Built: %s (version %s)\n' "$BIN" "$VERSION"
 
 say "Restarting service"

@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"cline-go-proxy/internal/i18n"
 	"cline-go-proxy/internal/store/requestlog"
 )
 
@@ -74,7 +75,7 @@ func saveRequestLogsLocked() {
 // POST /admin/api/request-logs/clear — drop all persisted request logs.
 func handleAdminRequestLogsClear(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		writeAPI(w, http.StatusMethodNotAllowed, apiResponse{Error: tAPI(r, "method_not_allowed")})
+		writeAPI(w, http.StatusMethodNotAllowed, apiResponse{Error: i18n.TAPI(r, "method_not_allowed")})
 		return
 	}
 	requestLogsMu.Lock()

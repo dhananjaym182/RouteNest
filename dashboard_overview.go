@@ -5,6 +5,9 @@ import (
 	"sort"
 	"strconv"
 	"time"
+
+	"cline-go-proxy/internal/buildinfo"
+	"cline-go-proxy/internal/i18n"
 )
 
 // Dashboard overview aggregation. The admin UI's dashboard tab calls
@@ -246,7 +249,7 @@ func dashboardOverview(hours int) map[string]any {
 		"models":  modelRows,
 		"runtime": map[string]any{
 			"strategy":     strategy,
-			"version":      appVersion,
+			"version":      buildinfo.AppVersion,
 			"defaultModel": getDefaultModel(),
 			"onlyFree":     onlyFree,
 		},
@@ -256,7 +259,7 @@ func dashboardOverview(hours int) map[string]any {
 // GET /admin/api/dashboard/overview?hours=24
 func handleDashboardOverview(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		writeAPI(w, http.StatusMethodNotAllowed, apiResponse{Error: tAPI(r, "method_not_allowed")})
+		writeAPI(w, http.StatusMethodNotAllowed, apiResponse{Error: i18n.TAPI(r, "method_not_allowed")})
 		return
 	}
 	hours := dashboardDefaultHours

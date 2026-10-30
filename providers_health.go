@@ -8,6 +8,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"cline-go-proxy/internal/i18n"
 )
 
 // Provider 健康快照：配额用量 / 冷却恢复 / 近期成败热度。数据全部在内存
@@ -221,7 +223,7 @@ func accountRecentOutcomes() map[string][]int {
 // GET /admin/api/account-health — 账号最近成败热度（请求日志派生，纯内存）。
 func handleAccountHealth(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		writeAPI(w, http.StatusMethodNotAllowed, apiResponse{Error: tAPI(r, "method_not_allowed")})
+		writeAPI(w, http.StatusMethodNotAllowed, apiResponse{Error: i18n.TAPI(r, "method_not_allowed")})
 		return
 	}
 	writeAPI(w, http.StatusOK, apiResponse{Success: true, Data: map[string]any{"accounts": accountRecentOutcomes()}})
@@ -230,7 +232,7 @@ func handleAccountHealth(w http.ResponseWriter, r *http.Request) {
 // POST /admin/api/providers/cooldown-reset  body: {id, model?}
 func handleProviderCooldownReset(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		writeAPI(w, http.StatusMethodNotAllowed, apiResponse{Error: tAPI(r, "method_not_allowed")})
+		writeAPI(w, http.StatusMethodNotAllowed, apiResponse{Error: i18n.TAPI(r, "method_not_allowed")})
 		return
 	}
 	body, err := io.ReadAll(r.Body)

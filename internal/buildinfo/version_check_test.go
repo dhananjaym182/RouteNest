@@ -1,4 +1,4 @@
-package main
+package buildinfo
 
 import (
 	"encoding/json"
@@ -10,14 +10,14 @@ import (
 
 func resetVersionState(t *testing.T, url string) func() {
 	t.Helper()
-	oldURL, oldState, oldApp := versionCheckURL, versionState, appVersion
+	oldURL, oldState, oldApp := versionCheckURL, versionState, AppVersion
 	versionState = &versionCheckCache{}
 	versionCheckURL = url
-	appVersion = "v1.0.0"
+	AppVersion = "v1.0.0"
 	return func() {
 		versionCheckURL = oldURL
 		versionState = oldState
-		appVersion = oldApp
+		AppVersion = oldApp
 	}
 }
 
@@ -102,7 +102,7 @@ func TestVersionCheckHandlerPayload(t *testing.T) {
 	defer resetVersionState(t, srv.URL)()
 
 	rec := httptest.NewRecorder()
-	handleAdminVersionCheck(rec, httptest.NewRequest("GET", "/admin/api/version-check", nil))
+	HandleAdminVersionCheck(rec, httptest.NewRequest("GET", "/admin/api/version-check", nil))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status %d body %s", rec.Code, rec.Body.String())
 	}

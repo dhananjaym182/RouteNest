@@ -3,6 +3,8 @@ package main
 import (
 	"testing"
 	"time"
+
+	"cline-go-proxy/internal/buildinfo"
 )
 
 func TestDashboardOverviewAggregatesWindow(t *testing.T) {
@@ -78,7 +80,7 @@ func TestDashboardOverviewAggregatesWindow(t *testing.T) {
 	}
 
 	rt := got["runtime"].(map[string]any)
-	if rt["version"] != appVersion || rt["defaultModel"] != getDefaultModel() {
+	if rt["version"] != buildinfo.AppVersion || rt["defaultModel"] != getDefaultModel() {
 		t.Fatalf("runtime = %+v", rt)
 	}
 }

@@ -1,4 +1,4 @@
-package main
+package buildinfo
 
 import (
 	"context"
@@ -8,6 +8,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"cline-go-proxy/internal/httpx"
 )
 
 // GitHub Release 更新检查：结果缓存 6 小时，?force=1 强制刷新。
@@ -16,6 +18,17 @@ import (
 var versionCheckURL = "https://api.github.com/repos/dhananjaym182/RouteNest/releases/latest"
 
 const versionCheckTTL = 6 * time.Hour
+
+// HTTPClient 是更新检查使用的出站客户端。main 侧在 http.go 的 init 中注入共享的
+// 代理感知 httpClient（与其它出站请求一致，走 cline 出口代理池）；未注入时回退到 http.DefaultClient。
+var HTTPClient *http.Client
+
+func outbound() *http.Client {
+	if HTTPClient != nil {
+		return HTTPClient
+	}
+	return http.DefaultClient
+}
 
 type versionCheckCache struct {
 	mu        sync.Mutex
@@ -50,7 +63,7 @@ func (v *versionCheckCache) refresh(force bool) {
 		return
 	}
 	req.Header.Set("Accept", "application/vnd.github+json")
-	resp, err := httpClient.Do(req)
+	resp, err := outbound().Do(req)
 	if err != nil {
 		v.recordFetchError(err)
 		return
@@ -124,20 +137,20 @@ func versionNewer(current, latest string) bool {
 	return false
 }
 
-func handleAdminVersionCheck(w http.ResponseWriter, r *http.Request) {
+func HandleAdminVersionCheck(w http.ResponseWriter, r *http.Request) {
 	versionState.refresh(r.URL.Query().Get("force") == "1")
 	versionState.mu.Lock()
 	defer versionState.mu.Unlock()
 	data := map[string]any{
-		"current":         appVersion,
+		"current":         AppVersion,
 		"latest":          versionState.latest,
 		"releaseURL":      versionState.htmlURL,
 		"publishedAt":     versionState.published,
 		"checkedAt":       versionState.checkedAt.UnixMilli(),
-		"updateAvailable": versionState.latest != "" && versionNewer(appVersion, versionState.latest),
+		"updateAvailable": versionState.latest != "" && versionNewer(AppVersion, versionState.latest),
 	}
 	if versionState.err != "" {
 		data["error"] = versionState.err
 	}
-	writeAPI(w, http.StatusOK, apiResponse{Success: true, Data: data})
+	httpx.WriteAPI(w, http.StatusOK, httpx.Response{Success: true, Data: data})
 }

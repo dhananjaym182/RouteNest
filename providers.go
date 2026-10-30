@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"cline-go-proxy/internal/dispatch"
+	"cline-go-proxy/internal/i18n"
 	"cline-go-proxy/internal/providerreg"
 	"cline-go-proxy/internal/store/providers"
 	"cline-go-proxy/internal/transport"
@@ -1405,7 +1406,7 @@ func handleProvidersList(w http.ResponseWriter, r *http.Request) {
 
 func handleProviderSave(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "POST" {
-		writeAPI(w, http.StatusMethodNotAllowed, apiResponse{Error: tAPI(r, "method_not_allowed")})
+		writeAPI(w, http.StatusMethodNotAllowed, apiResponse{Error: i18n.TAPI(r, "method_not_allowed")})
 		return
 	}
 	body, err := io.ReadAll(r.Body)
@@ -1504,7 +1505,7 @@ func handleProviderSave(w http.ResponseWriter, r *http.Request) {
 
 func handleProviderDelete(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "POST" {
-		writeAPI(w, http.StatusMethodNotAllowed, apiResponse{Error: tAPI(r, "method_not_allowed")})
+		writeAPI(w, http.StatusMethodNotAllowed, apiResponse{Error: i18n.TAPI(r, "method_not_allowed")})
 		return
 	}
 	var req struct {
@@ -1533,7 +1534,7 @@ func handleProviderDelete(w http.ResponseWriter, r *http.Request) {
 // 上游失败 ≠ API 失败：一律 200 包裹 {success:true, data:{ok:false, error:...}}。
 func handleProviderTest(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "POST" {
-		writeAPI(w, http.StatusMethodNotAllowed, apiResponse{Error: tAPI(r, "method_not_allowed")})
+		writeAPI(w, http.StatusMethodNotAllowed, apiResponse{Error: i18n.TAPI(r, "method_not_allowed")})
 		return
 	}
 	var req struct {

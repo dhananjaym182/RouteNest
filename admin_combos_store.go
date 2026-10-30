@@ -5,6 +5,7 @@ import (
 
 	"cline-go-proxy/internal/adminapi"
 	"cline-go-proxy/internal/domain"
+	"cline-go-proxy/internal/i18n"
 )
 
 // rootComboStore adapts the combo registry to adminapi.ComboStore.
@@ -31,5 +32,5 @@ func (rootComboStore) Clone(id string) (domain.ModelCombo, error) { return clone
 var adminCombos = &adminapi.Combos{
 	Store:         rootComboStore{},
 	LocalizeError: localizeComboError,
-	Translate:     func(r *http.Request, key string) string { return tAPI(r, key) },
+	Translate:     func(r *http.Request, key string) string { return i18n.TAPI(r, key) },
 }

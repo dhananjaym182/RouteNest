@@ -1,4 +1,4 @@
-package main
+package i18n
 
 import (
 	"net/http"
@@ -49,16 +49,16 @@ func TestTAPI(t *testing.T) {
 	en := httptest.NewRequest(http.MethodGet, "/", nil)
 	en.AddCookie(&http.Cookie{Name: adminLangCookie, Value: "en"})
 
-	if got := tAPI(zh, "login_required"); got != "需要登录" {
+	if got := TAPI(zh, "login_required"); got != "需要登录" {
 		t.Fatalf("zh login_required = %q", got)
 	}
-	if got := tAPI(en, "login_required"); got != "Login required" {
+	if got := TAPI(en, "login_required"); got != "Login required" {
 		t.Fatalf("en login_required = %q", got)
 	}
-	if got := tAPI(en, "imported_accounts", 3, 1, 2); got != "Imported 3 accounts, 1 failed, 2 duplicates skipped" {
+	if got := TAPI(en, "imported_accounts", 3, 1, 2); got != "Imported 3 accounts, 1 failed, 2 duplicates skipped" {
 		t.Fatalf("en imported_accounts = %q", got)
 	}
-	if got := tAPI(zh, "imported_accounts", 3, 1, 2); got != "已导入 3 个账号，失败 1 个，跳过重复 2 个" {
+	if got := TAPI(zh, "imported_accounts", 3, 1, 2); got != "已导入 3 个账号，失败 1 个，跳过重复 2 个" {
 		t.Fatalf("zh imported_accounts = %q", got)
 	}
 }

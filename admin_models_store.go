@@ -5,6 +5,7 @@ import (
 
 	"cline-go-proxy/internal/adminapi"
 	"cline-go-proxy/internal/domain"
+	"cline-go-proxy/internal/i18n"
 )
 
 // rootModelStore adapts the account pool's model catalog to adminapi.ModelStore.
@@ -133,5 +134,5 @@ var adminModels = &adminapi.Models{
 	Store:     rootModelStore{},
 	LastSync:  func() any { return getModelSyncResult() },
 	Normalize: normalizeAdminModels,
-	Translate: func(r *http.Request, key string) string { return tAPI(r, key) },
+	Translate: func(r *http.Request, key string) string { return i18n.TAPI(r, key) },
 }

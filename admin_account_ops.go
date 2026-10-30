@@ -6,6 +6,7 @@ import (
 
 	"cline-go-proxy/internal/adminapi"
 	"cline-go-proxy/internal/domain"
+	"cline-go-proxy/internal/i18n"
 )
 
 func snapshotAccounts() []*domain.Account {
@@ -44,5 +45,5 @@ var adminAccountOps = &adminapi.AccountOps{
 	Probe:        func(acc *domain.Account) any { return testAccount(acc) },
 	OpenBrowser:  openBrowser,
 	Now:          time.Now,
-	Translate:    tAPI,
+	Translate:    i18n.TAPI,
 }

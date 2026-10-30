@@ -7,8 +7,10 @@ import (
 	"time"
 
 	"cline-go-proxy/internal/adminapi"
+	"cline-go-proxy/internal/buildinfo"
 	"cline-go-proxy/internal/config"
 	"cline-go-proxy/internal/httpx"
+	"cline-go-proxy/internal/i18n"
 )
 
 type apiResponse = httpx.Response
@@ -27,7 +29,7 @@ var adminAuth = &adminapi.Auth{
 	Sessions:    adminSessions,
 	PasswordSet: func() bool { return loadPool().AdminPasswordHash != "" },
 	Unauthorized: func(w http.ResponseWriter, r *http.Request, reason string) {
-		writeAPI(w, http.StatusUnauthorized, apiResponse{Error: tAPI(r, reason)})
+		writeAPI(w, http.StatusUnauthorized, apiResponse{Error: i18n.TAPI(r, reason)})
 	},
 }
 
@@ -38,7 +40,7 @@ var adminAuthHandlers = &adminapi.AuthHandlers{
 	PasswordSet:    func() bool { return loadPool().AdminPasswordHash != "" },
 	VerifyPassword: verifyAdminPassword,
 	SetPassword:    setAdminPassword,
-	Translate:      func(r *http.Request, key string) string { return tAPI(r, key) },
+	Translate:      func(r *http.Request, key string) string { return i18n.TAPI(r, key) },
 }
 
 // adminKeys/adminMonitoring connect the root composition to adminapi handlers
@@ -64,20 +66,20 @@ var adminKeys = &adminapi.KeyManager{
 		poolMu.Unlock()
 		savePool()
 	},
-	Translate: func(r *http.Request, key string) string { return tAPI(r, key) },
+	Translate: func(r *http.Request, key string) string { return i18n.TAPI(r, key) },
 }
 
 var adminMonitoring = &adminapi.Monitoring{
 	Accounts:      func() []*Account { return loadPool().Accounts },
 	Strategy:      func() string { return getProxyConfig().Strategy },
 	ModelChain:    func() []string { return getProxyConfig().ModelChain },
-	Version:       func() string { return appVersion },
-	StartedAt:     func() time.Time { return serverStartedAt },
+	Version:       func() string { return buildinfo.AppVersion },
+	StartedAt:     func() time.Time { return buildinfo.ServerStartedAt },
 	OpencodeToday: func() any { return opencodeUsageToday() },
 	ListRequestLogs: func(limit int, cursor string) (any, error) {
 		return listRequestLogs(limit, cursor)
 	},
-	Translate: func(r *http.Request, key string) string { return tAPI(r, key) },
+	Translate: func(r *http.Request, key string) string { return i18n.TAPI(r, key) },
 }
 
 var adminOpencode = &adminapi.Opencode{
@@ -89,7 +91,7 @@ var adminOpencode = &adminapi.Opencode{
 	FailedNow:      zenFailedNow,
 	SyncedModels:   func() int { return len(currentZenModels()) },
 	LastSync:       func() any { return lastZenModelSync() },
-	Translate:      func(r *http.Request, key string) string { return tAPI(r, key) },
+	Translate:      func(r *http.Request, key string) string { return i18n.TAPI(r, key) },
 }
 
 var adminClineEgress = &adminapi.ClineEgress{
@@ -98,7 +100,7 @@ var adminClineEgress = &adminapi.ClineEgress{
 	PersistErr:    getClineProxyPersistErr,
 	ValidateProxy: validateProxyList,
 	MaskProxy:     maskProxyURL,
-	Translate:     func(r *http.Request, key string) string { return tAPI(r, key) },
+	Translate:     func(r *http.Request, key string) string { return i18n.TAPI(r, key) },
 }
 
 func registerAdminRoutes(mux *http.ServeMux) {
@@ -175,7 +177,7 @@ func registerAdminRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/admin/api/request-logs/clear", auth(handleAdminRequestLogsClear))
 	mux.HandleFunc("/admin/api/providers/cooldown-reset", auth(handleProviderCooldownReset))
 	mux.HandleFunc("/admin/api/account-health", auth(handleAccountHealth))
-	mux.HandleFunc("/admin/api/version-check", auth(handleAdminVersionCheck))
+	mux.HandleFunc("/admin/api/version-check", auth(buildinfo.HandleAdminVersionCheck))
 	mux.HandleFunc("/admin/api/open-external", auth(handleOpenExternal))
 }
 
@@ -231,7 +233,7 @@ func handleAdminLogout(w http.ResponseWriter, r *http.Request) {
 // 用于共享机器上强制所有人重新登录。
 func handleAdminSessionsClear(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		writeAPI(w, http.StatusMethodNotAllowed, apiResponse{Error: tAPI(r, "method_not_allowed")})
+		writeAPI(w, http.StatusMethodNotAllowed, apiResponse{Error: i18n.TAPI(r, "method_not_allowed")})
 		return
 	}
 	adminSessions.Clear()

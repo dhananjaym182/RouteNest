@@ -1,4 +1,7 @@
-package main
+// Package i18n owns the admin API message catalog and per-request locale
+// detection (cookie override, Accept-Language parsing). Messages are inline
+// data — no external locale files are loaded.
+package i18n
 
 import (
 	"fmt"
@@ -341,7 +344,9 @@ func parseAcceptLanguage(header string) locale {
 	}
 }
 
-func tAPI(r *http.Request, key string, args ...any) string {
+// TAPI 按 request 的 locale 返回 apiMessages[key] 的翻译；未知 key 原样返回。
+// 根路径的 writeAPI 调用点改走 i18n.TAPI，语义与旧 tAPI 完全一致。
+func TAPI(r *http.Request, key string, args ...any) string {
 	loc := requestLocale(r)
 	entry, ok := apiMessages[key]
 	if !ok {

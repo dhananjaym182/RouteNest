@@ -6,6 +6,7 @@ import (
 
 	"cline-go-proxy/internal/adminapi"
 	"cline-go-proxy/internal/domain"
+	"cline-go-proxy/internal/i18n"
 )
 
 // rootAccountStore adapts the package-level account pool to adminapi.AccountStore.
@@ -39,6 +40,6 @@ var adminAccounts = &adminapi.Accounts{
 	Store:     rootAccountStore{},
 	Refresh:   validateNewAccountRefreshToken,
 	Now:       time.Now,
-	Translate: tAPI,
+	Translate: i18n.TAPI,
 	Logf:      log.Printf,
 }

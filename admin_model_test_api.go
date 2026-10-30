@@ -22,6 +22,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"cline-go-proxy/internal/i18n"
 )
 
 const (
@@ -284,19 +286,19 @@ func readMiniTestUsage(resp *http.Response) (prompt, completion int64, valid boo
 // inputTokens? / outputTokens?）。上游失败仍是 200 + ok:false。
 func handleAdminModelTest(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "POST" {
-		writeAPI(w, http.StatusMethodNotAllowed, apiResponse{Error: tAPI(r, "method_not_allowed")})
+		writeAPI(w, http.StatusMethodNotAllowed, apiResponse{Error: i18n.TAPI(r, "method_not_allowed")})
 		return
 	}
 	var req struct {
 		Model string `json:"model"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeAPI(w, http.StatusBadRequest, apiResponse{Error: tAPI(r, "invalid_json")})
+		writeAPI(w, http.StatusBadRequest, apiResponse{Error: i18n.TAPI(r, "invalid_json")})
 		return
 	}
 	model := strings.TrimSpace(req.Model)
 	if model == "" {
-		writeAPI(w, http.StatusBadRequest, apiResponse{Error: tAPI(r, "model_id_required")})
+		writeAPI(w, http.StatusBadRequest, apiResponse{Error: i18n.TAPI(r, "model_id_required")})
 		return
 	}
 	writeAPI(w, http.StatusOK, apiResponse{Success: true, Data: quickModelTest(model, nil)})
@@ -363,7 +365,7 @@ func comboTestResult(entry ComboEntry) map[string]any {
 // 匹配该模型的第一条可用条目。测试不改动组合（纯读）。
 func handleComboTest(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "POST" {
-		writeAPI(w, http.StatusMethodNotAllowed, apiResponse{Error: tAPI(r, "method_not_allowed")})
+		writeAPI(w, http.StatusMethodNotAllowed, apiResponse{Error: i18n.TAPI(r, "method_not_allowed")})
 		return
 	}
 	var req struct {
@@ -371,12 +373,12 @@ func handleComboTest(w http.ResponseWriter, r *http.Request) {
 		Model string `json:"model"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeAPI(w, http.StatusBadRequest, apiResponse{Error: tAPI(r, "invalid_json")})
+		writeAPI(w, http.StatusBadRequest, apiResponse{Error: i18n.TAPI(r, "invalid_json")})
 		return
 	}
 	combo, ok := findCombo(req.ID)
 	if !ok {
-		writeAPI(w, http.StatusNotFound, apiResponse{Error: tAPI(r, "combo_not_found")})
+		writeAPI(w, http.StatusNotFound, apiResponse{Error: i18n.TAPI(r, "combo_not_found")})
 		return
 	}
 	filter := strings.TrimSpace(req.Model)
@@ -517,7 +519,7 @@ func discoverOpenAIModels(baseURL, apiKey string, headers map[string]string) ([]
 // 纯探测，不写任何状态。
 func handleProviderModels(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "POST" {
-		writeAPI(w, http.StatusMethodNotAllowed, apiResponse{Error: tAPI(r, "method_not_allowed")})
+		writeAPI(w, http.StatusMethodNotAllowed, apiResponse{Error: i18n.TAPI(r, "method_not_allowed")})
 		return
 	}
 	var req struct {
@@ -527,7 +529,7 @@ func handleProviderModels(w http.ResponseWriter, r *http.Request) {
 		Headers map[string]string `json:"headers"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeAPI(w, http.StatusBadRequest, apiResponse{Error: tAPI(r, "invalid_json")})
+		writeAPI(w, http.StatusBadRequest, apiResponse{Error: i18n.TAPI(r, "invalid_json")})
 		return
 	}
 

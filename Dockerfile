@@ -7,7 +7,7 @@ COPY . .
 ARG APP_VERSION=dev
 ARG GIT_COMMIT=
 ARG BUILD_DATE=
-RUN CGO_ENABLED=0 go build -ldflags="-s -w -X main.appVersion=${APP_VERSION} -X main.appGitCommit=${GIT_COMMIT} -X main.appBuildDate=${BUILD_DATE}" -o routenest .
+RUN CGO_ENABLED=0 go build -ldflags="-s -w -X cline-go-proxy/internal/buildinfo.AppVersion=${APP_VERSION} -X cline-go-proxy/internal/buildinfo.AppGitCommit=${GIT_COMMIT} -X cline-go-proxy/internal/buildinfo.AppBuildDate=${BUILD_DATE}" -o routenest .
 
 FROM alpine:3.21
 

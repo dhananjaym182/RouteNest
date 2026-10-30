@@ -6,6 +6,8 @@ import (
 	"runtime"
 
 	"cline-go-proxy/internal/adminapi"
+	"cline-go-proxy/internal/buildinfo"
+	"cline-go-proxy/internal/i18n"
 )
 
 var adminConfig = &adminapi.Config{
@@ -33,14 +35,14 @@ var adminConfig = &adminapi.Config{
 	ListenHost:         func() string { return listenHost },
 	ListenPort:         func() int { return listenPort },
 	EffectiveAdminHost: effectiveAdminHost,
-	Version:            appVersion,
+	Version:            buildinfo.AppVersion,
 	Build: func() map[string]any {
 		m := map[string]any{"goVersion": runtime.Version()}
-		if appGitCommit != "" {
-			m["commit"] = appGitCommit
+		if buildinfo.AppGitCommit != "" {
+			m["commit"] = buildinfo.AppGitCommit
 		}
-		if appBuildDate != "" {
-			m["date"] = appBuildDate
+		if buildinfo.AppBuildDate != "" {
+			m["date"] = buildinfo.AppBuildDate
 		}
 		return m
 	},
@@ -48,6 +50,6 @@ var adminConfig = &adminapi.Config{
 	PoolPath:        poolPath,
 	HasPassword:     func() bool { return loadPool().AdminPasswordHash != "" },
 	RestartListener: restartListener,
-	Translate:       func(r *http.Request, key string) string { return tAPI(r, key) },
+	Translate:       func(r *http.Request, key string) string { return i18n.TAPI(r, key) },
 	Logf:            log.Printf,
 }

@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"cline-go-proxy/internal/adminapi"
+	"cline-go-proxy/internal/i18n"
 )
 
 func providerSyncStatusSnapshot() map[string]any {
@@ -44,5 +45,5 @@ var adminSync = &adminapi.Sync{
 		return recheckOneProvider(id)
 	},
 	SyncStatus: providerSyncStatusSnapshot,
-	Translate:  func(r *http.Request, key string) string { return tAPI(r, key) },
+	Translate:  func(r *http.Request, key string) string { return i18n.TAPI(r, key) },
 }

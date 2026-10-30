@@ -18,6 +18,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"cline-go-proxy/internal/buildinfo"
 	"cline-go-proxy/internal/dispatch"
 	"cline-go-proxy/internal/httpapi"
 	"cline-go-proxy/internal/httpx"
@@ -461,7 +462,7 @@ func startProxy(host string, port int) error {
 	mux := http.NewServeMux()
 
 	health := httpapi.Health{
-		Version:        func() string { return appVersion },
+		Version:        func() string { return buildinfo.AppVersion },
 		ActiveAccounts: func() int { return activeCount },
 	}
 	mux.HandleFunc("/v1/health", corsHandler(health.Handler))
@@ -830,7 +831,7 @@ func startProxy(host string, port int) error {
 
 	fmt.Println("")
 	fmt.Println(strings.Repeat("=", 58))
-	fmt.Printf("  RouteNest %s - No CLI Required\n", appVersion)
+	fmt.Printf("  RouteNest %s - No CLI Required\n", buildinfo.AppVersion)
 	fmt.Println(strings.Repeat("=", 58))
 	fmt.Printf("  http://%s\n", addr)
 	fmt.Printf("  http://%s/v1\n", addr)

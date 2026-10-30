@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"cline-go-proxy/internal/adminapi"
+	"cline-go-proxy/internal/i18n"
 )
 
 var adminOAuth = &adminapi.OAuth{
@@ -48,6 +49,6 @@ var adminOAuth = &adminapi.OAuth{
 		}, nil
 	},
 	Now:       time.Now,
-	Translate: func(r *http.Request, key string) string { return tAPI(r, key) },
+	Translate: func(r *http.Request, key string) string { return i18n.TAPI(r, key) },
 	Logf:      log.Printf,
 }

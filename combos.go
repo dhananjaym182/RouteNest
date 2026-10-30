@@ -29,6 +29,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"cline-go-proxy/internal/i18n"
 )
 
 // comboEntryKey 组合条目去重键：同一模型但不同上游固定（Source/Provider）不算重复，
@@ -248,7 +250,7 @@ func localizeComboError(r *http.Request, err error) string {
 	}
 	var pe *comboPinError
 	if errors.As(err, &pe) && pe.key != "" {
-		return tAPI(r, pe.key, pe.args...)
+		return i18n.TAPI(r, pe.key, pe.args...)
 	}
 	return err.Error()
 }
