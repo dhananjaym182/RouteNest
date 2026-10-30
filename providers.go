@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -18,6 +19,7 @@ import (
 	"cline-go-proxy/internal/store/providers"
 	"cline-go-proxy/internal/transport"
 	"cline-go-proxy/internal/upstream/openaicompat"
+	"cline-go-proxy/internal/upstream/qoder"
 )
 
 // ============================================================================
@@ -218,16 +220,59 @@ func setProviderCooldown(providerID, model string, until time.Time) {
 }
 
 // callProvider 调用自定义 provider 的 /chat/completions。
+// providerProtocolForBaseURL maps a provider baseURL to its preset protocol.
+// CustomProvider carries no protocol field: the preset it was created from
+// decides how the upstream is spoken to, and the preset maps are compile-time
+// data, so the lookup table is built once.
+var providerProtocolForBaseURL = sync.OnceValue(func() map[string]string {
+	out := map[string]string{}
+	for _, presets := range []map[string]providerPreset{providerPresets, providerPresetsImported} {
+		for _, p := range presets {
+			if p.Protocol == "" {
+				continue
+			}
+			if k := normalizePresetBaseURL(p.BaseURL); k != "" {
+				out[k] = p.Protocol
+			}
+		}
+	}
+	return out
+})
+
+// normalizePresetBaseURL canonicalizes a baseURL for preset matching.
+func normalizePresetBaseURL(u string) string {
+	u = strings.ToLower(strings.TrimSpace(u))
+	u = strings.TrimRight(u, "/")
+	return strings.TrimSuffix(u, "/chat/completions")
+}
+
+// providerProtocol returns the transport protocol for a provider, or "" for
+// plain OpenAI-compatible chat.
+func providerProtocol(p *CustomProvider) string {
+	if p == nil {
+		return ""
+	}
+	return providerProtocolForBaseURL()[normalizePresetBaseURL(p.BaseURL)]
+}
+
 func callProvider(p *CustomProvider, params map[string]any, stream bool) (*http.Response, error) {
-	bodyJSON, err := openaicompat.PrepareBody(params, stream, openaicompat.BodyOptions{
-		PassThroughKeys:     passThroughKeys,
-		MinMaxTokens:        minUpstreamMaxTokens,
-		DefaultMaxTokens:    defaultMaxTokens,
-		ModelMaxOutputLimit: modelMaxOutputLimit,
-		Logf:                log.Printf,
-	})
-	if err != nil {
-		return nil, err
+	protocol := providerProtocol(p)
+
+	// The qoder protocol builds its own signed body, so the OpenAI body
+	// preparation is skipped entirely for it.
+	var bodyJSON []byte
+	var err error
+	if protocol != "qoder" {
+		bodyJSON, err = openaicompat.PrepareBody(params, stream, openaicompat.BodyOptions{
+			PassThroughKeys:     passThroughKeys,
+			MinMaxTokens:        minUpstreamMaxTokens,
+			DefaultMaxTokens:    defaultMaxTokens,
+			ModelMaxOutputLimit: modelMaxOutputLimit,
+			Logf:                log.Printf,
+		})
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	timeout := time.Duration(p.TimeoutSec) * time.Second
@@ -263,6 +308,11 @@ func callProvider(p *CustomProvider, params map[string]any, stream bool) (*http.
 	if len(conns) == 0 {
 		conns = []*Connection{nil}
 	}
+	// qoder signs every request with per-account credentials (user id + machine
+	// id), so it cannot run on a bare API key.
+	if protocol == "qoder" && conns[0] == nil {
+		return nil, fmt.Errorf("provider %s: qoder requires a logged-in connection", p.Name)
+	}
 	for i, conn := range conns {
 		token := ""
 		extra := map[string]string{}
@@ -281,14 +331,26 @@ func callProvider(p *CustomProvider, params map[string]any, stream bool) (*http.
 				}
 			}
 		}
-		req, err := pc.BuildRequest(bodyJSON, openaicompat.RequestOptions{Token: token, Headers: extra})
-		if err != nil {
-			return nil, fmt.Errorf("create provider request: %w", err)
-		}
-		started := time.Now()
 		// Count at dispatch: RPM/daily budget measures requests actually sent upstream.
 		recordProviderDispatch(p.ID, modelKey)
-		resp, err := httpCli.Do(req)
+		started := time.Now()
+		var resp *http.Response
+		if protocol == "qoder" {
+			resp, err = qoder.Chat(context.Background(), httpCli, qoder.Creds{
+				UserID:    conn.ProviderSpecificData["userId"],
+				AuthToken: token,
+				Email:     conn.Email,
+				MachineID: conn.ProviderSpecificData["machineId"],
+				BaseURL:   p.BaseURL,
+			}, params, stream)
+		} else {
+			var req *http.Request
+			req, err = pc.BuildRequest(bodyJSON, openaicompat.RequestOptions{Token: token, Headers: extra})
+			if err != nil {
+				return nil, fmt.Errorf("create provider request: %w", err)
+			}
+			resp, err = httpCli.Do(req)
+		}
 		latency := time.Since(started).Milliseconds()
 		if err != nil {
 			recordProviderOutcome(p.ID, modelKey, false, latency)
@@ -902,6 +964,16 @@ var providerPresets = map[string]providerPreset{
 		Notes:     "设备码登录（无需 API Key）；登录后在编辑器「账号连接」选连接，组织头自动注入",
 		FreeTier:  true,
 		LoginFlow: true,
+		ModelIDs: []string{
+			"anthropic/claude-sonnet-4-20250514",
+			"anthropic/claude-opus-4-20250514",
+			"google/gemini-2.5-pro",
+			"google/gemini-2.5-flash",
+			"openai/gpt-4.1",
+			"openai/o3",
+			"deepseek/deepseek-chat",
+			"deepseek/deepseek-reasoner",
+		},
 	},
 	"github-copilot": {
 		Name:          "GitHub Copilot (Free plan)",
@@ -917,6 +989,7 @@ var providerPresets = map[string]providerPreset{
 		Notes:     "设备码登录 Qwen Chat（PKCE，无需 API Key）；OpenAI 兼容端点",
 		FreeTier:  true,
 		LoginFlow: true,
+		ModelIDs:  []string{"qwen3-coder-plus", "qwen3-coder-flash", "vision-model", "coder-model"},
 	},
 	"kimi-coding": {
 		Name:          "Kimi for Coding (Free)",
@@ -950,6 +1023,59 @@ var providerPresets = map[string]providerPreset{
 		FreeTier:  true,
 		LoginFlow: true,
 		ModelIDs:  []string{"hy3", "hy4-preview", "glm-5.3", "glm-5.3-flash", "minimax-m3"},
+	},
+	// Qoder：COSY 签名协议（非 OpenAI 兼容），推理与模型目录均走 /algo 接口
+	"qoder": {
+		Name:     "Qoder",
+		BaseURL:  "https://api3.qoder.sh",
+		Protocol: "qoder",
+		Notes:    "浏览器设备码登录（COSY 签名，非 OpenAI 兼容）；推理走 /algo/api/v2/service/pro/sse/agent_chat_generation，模型目录来自 /algo/api/v2/model/list",
+		FreeTier: true,
+		ModelIDs: []string{
+			"qoder/auto",
+			"qoder/performance",
+			"qoder/efficient",
+			"qoder/lite",
+			"qoder/qmodel_38max",
+			"qoder/qmodel_latest",
+			"qoder/qmodel",
+			"qoder/qfmodel",
+			"qoder/kmodel_latest",
+			"qoder/kmodel",
+			"qoder/gmodel",
+			"qoder/gfmodel",
+			"qoder/dmodel",
+			"qoder/dfmodel",
+			"qoder/mmodel",
+		},
+		ModelsFetcher: &modelsFetcher{URL: "https://api3.qoder.sh/algo/api/v2/model/list", Type: "qoder"},
+		LoginFlow:     true,
+	},
+	"qoder-cn": {
+		Name:     "Qoder CN",
+		BaseURL:  "https://api3.qoder.com.cn",
+		Protocol: "qoder",
+		Notes:    "浏览器设备码登录（COSY 签名，非 OpenAI 兼容）；Qoder 国内站推理走 /algo/api/v2/service/pro/sse/agent_chat_generation，模型目录来自 /algo/api/v2/model/list",
+		FreeTier: true,
+		ModelIDs: []string{
+			"qoder/auto",
+			"qoder/performance",
+			"qoder/efficient",
+			"qoder/lite",
+			"qoder/qmodel_38max",
+			"qoder/qmodel_latest",
+			"qoder/qmodel",
+			"qoder/qfmodel",
+			"qoder/kmodel_latest",
+			"qoder/kmodel",
+			"qoder/gmodel",
+			"qoder/gfmodel",
+			"qoder/dmodel",
+			"qoder/dfmodel",
+			"qoder/mmodel",
+		},
+		ModelsFetcher: &modelsFetcher{URL: "https://api3.qoder.com.cn/algo/api/v2/model/list", Type: "qoder"},
+		LoginFlow:     true,
 	},
 }
 

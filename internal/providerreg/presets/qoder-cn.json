@@ -1,0 +1,30 @@
+{
+  "id": "qoder-cn",
+  "name": "Qoder CN",
+  "baseURL": "https://api3.qoder.com.cn",
+  "protocol": "qoder",
+  "notes": "浏览器设备码登录（COSY 签名，非 OpenAI 兼容）；Qoder 国内站推理走 /algo/api/v2/service/pro/sse/agent_chat_generation，模型目录来自 /algo/api/v2/model/list",
+  "freeTier": true,
+  "modelIds": [
+    "qoder/auto",
+    "qoder/performance",
+    "qoder/efficient",
+    "qoder/lite",
+    "qoder/qmodel_38max",
+    "qoder/qmodel_latest",
+    "qoder/qmodel",
+    "qoder/qfmodel",
+    "qoder/kmodel_latest",
+    "qoder/kmodel",
+    "qoder/gmodel",
+    "qoder/gfmodel",
+    "qoder/dmodel",
+    "qoder/dfmodel",
+    "qoder/mmodel"
+  ],
+  "modelsFetcher": {
+    "url": "https://api3.qoder.com.cn/algo/api/v2/model/list",
+    "type": "qoder"
+  },
+  "loginFlow": true
+}

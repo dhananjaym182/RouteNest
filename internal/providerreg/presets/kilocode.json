@@ -4,5 +4,15 @@
   "baseURL": "https://api.kilo.ai/api/openrouter",
   "notes": "设备码登录（无需 API Key）；登录后在编辑器「账号连接」选连接，组织头自动注入",
   "freeTier": true,
+  "modelIds": [
+    "anthropic/claude-sonnet-4-20250514",
+    "anthropic/claude-opus-4-20250514",
+    "google/gemini-2.5-pro",
+    "google/gemini-2.5-flash",
+    "openai/gpt-4.1",
+    "openai/o3",
+    "deepseek/deepseek-chat",
+    "deepseek/deepseek-reasoner"
+  ],
   "loginFlow": true
 }

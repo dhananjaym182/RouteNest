@@ -492,14 +492,16 @@ func discoverOpenAIModels(baseURL, apiKey string, headers map[string]string) ([]
 	var ids []string
 	collect := func(list []struct {
 		ID string `json:"id"`
-	}) { for _, it := range list {
-		id := strings.TrimSpace(it.ID)
-		if id == "" || seen[id] {
-			continue
+	}) {
+		for _, it := range list {
+			id := strings.TrimSpace(it.ID)
+			if id == "" || seen[id] {
+				continue
+			}
+			seen[id] = true
+			ids = append(ids, id)
 		}
-		seen[id] = true
-		ids = append(ids, id)
-	} }
+	}
 	collect(payload.Data)
 	collect(payload.Models)
 	if len(ids) == 0 {
@@ -535,6 +537,29 @@ func handleProviderModels(w http.ResponseWriter, r *http.Request) {
 		providersMu.Lock()
 		for _, p := range customProviders {
 			if p.ID == req.ID {
+				// The qoder catalog is COSY-signed with the bound account's
+				// identity — a bearer/GET {baseURL}/models probe is meaningless.
+				// Route the qoder branch through its own discovery and return.
+				if providerProtocol(p) == "qoder" {
+					providersMu.Unlock()
+					entries, discErr := discoverQoderModels(p)
+					if discErr != nil {
+						writeAPI(w, http.StatusOK, apiResponse{Success: true, Data: map[string]any{
+							"error":  discErr.Error(),
+							"models": []any{},
+						}})
+						return
+					}
+					out := make([]map[string]string, 0, len(entries))
+					for _, e := range entries {
+						out = append(out, map[string]string{"id": e.ID})
+					}
+					writeAPI(w, http.StatusOK, apiResponse{Success: true, Data: map[string]any{
+						"models": out,
+						"count":  len(out),
+					}})
+					return
+				}
 				if baseURL == "" {
 					baseURL = strings.TrimRight(p.BaseURL, "/")
 				}

@@ -43,6 +43,9 @@ func TestEmbeddedPresetsMatchRootPresetMaps(t *testing.T) {
 		if got.LoginFlow != want.LoginFlow {
 			t.Errorf("preset %q: loginFlow = %v, want %v", id, got.LoginFlow, want.LoginFlow)
 		}
+		if got.Protocol != want.Protocol {
+			t.Errorf("preset %q: protocol = %q, want %q", id, got.Protocol, want.Protocol)
+		}
 		if !reflect.DeepEqual(got.Headers, want.Headers) {
 			t.Errorf("preset %q: headers differ: %v vs %v", id, got.Headers, want.Headers)
 		}

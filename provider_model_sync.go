@@ -116,7 +116,7 @@ func recheckProviderModels(p CustomProvider) providerRecheckState {
 		setProviderRecheckState(p.ID, st)
 		return st
 	}
-	entries, err := discoverModelEntries(p.BaseURL, apiKey, headers)
+	entries, err := discoverProviderModelEntries(&p, apiKey, headers)
 	if err != nil {
 		st.LastError = err.Error()
 		setProviderRecheckState(p.ID, st)

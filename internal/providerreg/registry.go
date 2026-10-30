@@ -31,7 +31,8 @@ type Preset struct {
 	ID      string `json:"id"`
 	Name    string `json:"name"`
 	BaseURL string `json:"baseURL"`
-	// Protocol is the transport protocol. Empty means OpenAI-compatible chat.
+	// Protocol is the transport protocol. Empty means OpenAI-compatible chat;
+	// "qoder" selects the signed, non-OpenAI Qoder protocol.
 	Protocol string            `json:"protocol,omitempty"`
 	Headers  map[string]string `json:"headers,omitempty"`
 	Notes    string            `json:"notes,omitempty"`
@@ -97,7 +98,8 @@ var builtinKinds = map[string]bool{"": true, "free": true, "freeTier": true, "ha
 
 // knownFetcherTypes lists catalog fetcher implementations that exist in the
 // codebase. Providers with a specialized fetcher still speak OpenAI-compatible
-// chat; only their catalog format differs.
+// chat; only their catalog format differs. The exception is "qoder", whose
+// fetcher reads /algo/api/v2/model/list for the signed Qoder protocol.
 var knownFetcherTypes = map[string]bool{
 	"":              true,
 	"openai":        true,
@@ -107,6 +109,8 @@ var knownFetcherTypes = map[string]bool{
 	"inxora":        true,
 	"mimo-free":     true,
 	"opencode-free": true,
+	// qoder reads its catalog from /algo/api/v2/model/list.
+	"qoder": true,
 }
 
 // Validate checks every preset. The map key must equal the preset ID.
@@ -136,7 +140,9 @@ func Validate(presets map[string]Preset) error {
 		if p.Kind == "free" && !p.FreeTier {
 			return fmt.Errorf("preset %q: kind free requires freeTier", key)
 		}
-		if p.Protocol != "" && p.Protocol != "openai-chat" {
+		// "qoder" is a signed, non-OpenAI protocol implemented in
+		// internal/upstream/qoder.
+		if p.Protocol != "" && p.Protocol != "openai-chat" && p.Protocol != "qoder" {
 			return fmt.Errorf("preset %q: unsupported protocol %q", key, p.Protocol)
 		}
 		if p.ModelsFetcher != nil {
