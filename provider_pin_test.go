@@ -30,7 +30,6 @@ func TestSplitProviderPin(t *testing.T) {
 // named provider, stamp attribution, and never touch the sibling; pinned
 // failures must not fall back; an unknown pin must fail without upstream calls.
 func TestCallClineAPIPinnedProvider(t *testing.T) {
-	isolateConnections(t)
 	var hitsA, hitsB int32
 	srvA := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		atomic.AddInt32(&hitsA, 1)

@@ -7,6 +7,7 @@ import (
 
 	"cline-go-proxy/internal/accounts"
 	"cline-go-proxy/internal/buildinfo"
+	"cline-go-proxy/internal/connections"
 )
 
 var execCommand = exec.Command
@@ -47,4 +48,7 @@ func runCommand(name string, args ...string) error {
 func init() {
 	buildinfo.HTTPClient = httpClient
 	accounts.HTTPClient = httpClient
+	connections.HTTPClient = httpClient
+	connections.PruneProviderRefs = pruneProviderConnectionRefs
+	connections.IsFreeModel = isFreeModelID
 }

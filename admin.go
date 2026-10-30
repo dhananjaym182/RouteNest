@@ -11,6 +11,7 @@ import (
 	"cline-go-proxy/internal/adminapi"
 	"cline-go-proxy/internal/buildinfo"
 	"cline-go-proxy/internal/config"
+	"cline-go-proxy/internal/connections"
 	"cline-go-proxy/internal/httpx"
 	"cline-go-proxy/internal/i18n"
 )
@@ -161,13 +162,13 @@ func registerAdminRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/admin/api/models/import/batch", auth(handleModelImportBatch))
 	mux.HandleFunc("/admin/api/models/import/discard", auth(handleModelImportDiscard))
 	mux.HandleFunc("/admin/api/models/cost", auth(handleAdminModelCost))
-	mux.HandleFunc("/admin/api/connections", auth(handleConnectionsList))
-	mux.HandleFunc("/admin/api/connections/login/start", auth(handleConnectionLoginStart))
-	mux.HandleFunc("/admin/api/connections/login/status", auth(handleConnectionLoginStatus))
-	mux.HandleFunc("/admin/api/connections/import", auth(handleConnectionImport))
-	mux.HandleFunc("/admin/api/connections/import-batch", auth(handleConnectionImportBatch))
-	mux.HandleFunc("/admin/api/connections/delete", auth(handleConnectionDelete))
-	mux.HandleFunc("/admin/api/connections/test", auth(handleConnectionTest))
+	mux.HandleFunc("/admin/api/connections", auth(connections.HandleConnectionsList))
+	mux.HandleFunc("/admin/api/connections/login/start", auth(connections.HandleConnectionLoginStart))
+	mux.HandleFunc("/admin/api/connections/login/status", auth(connections.HandleConnectionLoginStatus))
+	mux.HandleFunc("/admin/api/connections/import", auth(connections.HandleConnectionImport))
+	mux.HandleFunc("/admin/api/connections/import-batch", auth(connections.HandleConnectionImportBatch))
+	mux.HandleFunc("/admin/api/connections/delete", auth(connections.HandleConnectionDelete))
+	mux.HandleFunc("/admin/api/connections/test", auth(connections.HandleConnectionTest))
 	mux.HandleFunc("/admin/api/combos", auth(handleCombosList))
 	mux.HandleFunc("/admin/api/combos/save", auth(handleComboSave))
 	mux.HandleFunc("/admin/api/combos/delete", auth(handleComboDelete))

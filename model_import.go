@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"cline-go-proxy/internal/accounts"
+	"cline-go-proxy/internal/connections"
 	"cline-go-proxy/internal/modelcatalog"
 	"cline-go-proxy/internal/upstream/qoder"
 )
@@ -65,7 +66,7 @@ func classifyUpstreamModel(e upstreamModelEntry, providerFree bool) (tier, signa
 // ModelsFetcher 目录端点），解析 id + 定价 + 标签。
 func discoverModelEntries(baseURL, apiKey string, headers map[string]string) ([]upstreamModelEntry, error) {
 	return modelcatalog.Discover(
-		oauthHTTPClient(15*time.Second),
+		connections.OAuthHTTPClient(15*time.Second),
 		baseURL, apiKey, headers,
 		fetcherBaseForBase(baseURL),
 	)
@@ -91,15 +92,15 @@ func discoverProviderModelEntries(p *CustomProvider, apiKey string, headers map[
 // and every request has to be COSY-signed with the bound account's user id, so
 // it needs the connection rather than a bearer key.
 func discoverQoderModels(p *CustomProvider) ([]upstreamModelEntry, error) {
-	conn := pickConnectionForProvider(p)
+	conn := connections.PickConnectionForProvider(p)
 	if conn == nil {
 		return nil, fmt.Errorf("connection unavailable (expired or reauth required)")
 	}
 	token := conn.AccessToken
-	if spec, hasSpec := providerDeviceFlows[conn.Provider]; hasSpec {
-		token = connectionBearer(conn, spec)
+	if spec, hasSpec := connections.ProviderDeviceFlows[conn.Provider]; hasSpec {
+		token = connections.ConnectionBearer(conn, spec)
 	}
-	ids, err := qoder.Models(context.Background(), oauthHTTPClient(15*time.Second), qoder.Creds{
+	ids, err := qoder.Models(context.Background(), connections.OAuthHTTPClient(15*time.Second), qoder.Creds{
 		UserID:    conn.ProviderSpecificData["userId"],
 		AuthToken: token,
 		Email:     conn.Email,

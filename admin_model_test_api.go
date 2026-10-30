@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"cline-go-proxy/internal/accounts"
+	"cline-go-proxy/internal/connections"
 	"cline-go-proxy/internal/i18n"
 )
 
@@ -573,9 +574,9 @@ func handleProviderModels(w http.ResponseWriter, r *http.Request) {
 					req.Headers = p.Headers
 				}
 				// Providers bound to connections also use a connection ticket for discovery.
-				if conn := pickConnectionForProvider(p); conn != nil {
-					if spec, ok := providerDeviceFlows[conn.Provider]; ok {
-						req.APIKey = connectionBearer(conn, spec)
+				if conn := connections.PickConnectionForProvider(p); conn != nil {
+					if spec, ok := connections.ProviderDeviceFlows[conn.Provider]; ok {
+						req.APIKey = connections.ConnectionBearer(conn, spec)
 					}
 				}
 				break

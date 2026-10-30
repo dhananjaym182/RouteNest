@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"cline-go-proxy/internal/accounts"
+	"cline-go-proxy/internal/connections"
 	"cline-go-proxy/internal/modelcatalog"
 	"cline-go-proxy/internal/store/syncstate"
 )
@@ -85,16 +86,16 @@ func recheckCreds(p *CustomProvider) (apiKey string, headers map[string]string, 
 		}
 	}
 	apiKey = p.APIKey
-	if ids := providerConnIDs(p); len(ids) == 0 {
+	if ids := connections.ProviderConnIDs(p); len(ids) == 0 {
 		return apiKey, headers, true
 	}
 	// Any pooled connection works for catalog reads; the picker rotates.
-	conn := pickConnectionForProvider(p)
+	conn := connections.PickConnectionForProvider(p)
 	if conn == nil {
 		return "", nil, false
 	}
-	if spec, hasSpec := providerDeviceFlows[conn.Provider]; hasSpec {
-		apiKey = connectionBearer(conn, spec)
+	if spec, hasSpec := connections.ProviderDeviceFlows[conn.Provider]; hasSpec {
+		apiKey = connections.ConnectionBearer(conn, spec)
 		if spec.OrgHeader != "" {
 			if oid := conn.ProviderSpecificData["orgId"]; oid != "" {
 				headers[spec.OrgHeader] = oid

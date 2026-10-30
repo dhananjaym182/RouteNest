@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"cline-go-proxy/internal/accounts"
+	"cline-go-proxy/internal/connections"
 	"cline-go-proxy/internal/dispatch"
 	"cline-go-proxy/internal/i18n"
 	"cline-go-proxy/internal/providerreg"
@@ -66,6 +67,40 @@ func saveProvidersLocked() {
 	if err := providers.Save(providersFilePath, customProviders); err != nil {
 		log.Printf("providers save failed: %v", err)
 	}
+}
+
+// pruneProviderConnectionRefs drops a deleted connection ID from every
+// provider's binding list (both pool and legacy single field). Injected into
+// internal/connections as connections.PruneProviderRefs because the provider
+// registry still lives in package main until the provider extraction.
+func pruneProviderConnectionRefs(connID string) {
+	loadProviders()
+	providersMu.Lock()
+	defer providersMu.Unlock()
+	changed := false
+	for _, p := range customProviders {
+		if p.ConnectionID == connID {
+			p.ConnectionID = ""
+			changed = true
+		}
+		if len(p.ConnectionIDs) > 0 {
+			kept := p.ConnectionIDs[:0]
+			for _, id := range p.ConnectionIDs {
+				if id != connID {
+					kept = append(kept, id)
+				}
+			}
+			if len(kept) != len(p.ConnectionIDs) {
+				p.ConnectionIDs = kept
+				changed = true
+			}
+		}
+	}
+	if changed {
+		saveProvidersLocked()
+	}
+	// A vanished connection must not keep a cursor pointing out of range;
+	// modulo arithmetic already tolerates that, so nothing else to reset.
 }
 
 // listProviders 返回副本列表（按 Priority, CreatedAt 排序）。
@@ -180,7 +215,7 @@ func resolveProvidersForModel(model string) []*CustomProvider {
 			}
 			// Bound connections: provider stays out of candidates only when EVERY
 			// pooled connection is missing/expired/pending reauth (fallback chain takes over).
-			if len(providerConnIDs(p)) > 0 && !hasUsableConnection(p) {
+			if len(connections.ProviderConnIDs(p)) > 0 && !connections.HasUsableConnection(p) {
 				break
 			}
 			cs = append(cs, providerCand{p: *p})
@@ -302,8 +337,8 @@ func callProvider(p *CustomProvider, params map[string]any, stream bool) (*http.
 	// A connection-authenticated 401/403/429 parks that connection and retries
 	// in place with the next one BEFORE the outer next-provider loop ever sees
 	// a failure. API-key-only providers make exactly one attempt, as before.
-	connIDs := providerConnIDs(p)
-	conns := usableConnectionsForProvider(p)
+	connIDs := connections.ProviderConnIDs(p)
+	conns := connections.UsableConnectionsForProvider(p)
 	if len(connIDs) > 0 && len(conns) == 0 {
 		return nil, fmt.Errorf("provider %s: connection unavailable (expired or reauth required)", p.Name)
 	}
@@ -321,9 +356,9 @@ func callProvider(p *CustomProvider, params map[string]any, stream bool) (*http.
 		// Bound connection: authenticate with the connection token and inject
 		// connection-level dynamic headers (e.g. the Kilo org header).
 		if conn != nil {
-			spec, hasSpec := providerDeviceFlows[conn.Provider]
+			spec, hasSpec := connections.ProviderDeviceFlows[conn.Provider]
 			if hasSpec {
-				token = connectionBearer(conn, spec)
+				token = connections.ConnectionBearer(conn, spec)
 			} else {
 				token = conn.AccessToken
 			}
@@ -362,9 +397,9 @@ func callProvider(p *CustomProvider, params map[string]any, stream bool) (*http.
 			recordProviderOutcome(p.ID, modelKey, true, latency)
 			if conn != nil {
 				// Consumed a real dispatch: move rotation past this connection.
-				advanceConnCursor(p, conn.ID)
+				connections.AdvanceConnCursor(p, conn.ID)
 			}
-			tagResponseConn(resp, conn)
+			connections.TagResponseConn(resp, conn)
 			return resp, nil
 		}
 		recordProviderOutcome(p.ID, modelKey, false, latency)
@@ -378,16 +413,16 @@ func callProvider(p *CustomProvider, params map[string]any, stream bool) (*http.
 			resp.StatusCode == http.StatusForbidden || resp.StatusCode == http.StatusTooManyRequests)
 		if connRetryable && i < len(conns)-1 {
 			if resp.StatusCode == http.StatusTooManyRequests {
-				setConnectionCooldown(conn.ID, time.Now().Add(connectionRateLimitCooldown))
+				connections.SetConnectionCooldown(conn.ID, time.Now().Add(connections.ConnectionRateLimitCooldown))
 			} else {
-				markConnectionReauth(conn.ID)
+				connections.MarkConnectionReauth(conn.ID)
 			}
 			log.Printf("  provider conn failover: name=%s conn=%s status=%d -> next connection", p.Name, conn.ID, resp.StatusCode)
 			continue
 		}
 		// Final failure: original marking semantics.
 		if conn != nil && (resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden) {
-			markConnectionReauth(conn.ID)
+			connections.MarkConnectionReauth(conn.ID)
 		}
 		if until := providerCooldownUntil(resp.StatusCode, resp.Header.Get("Retry-After"), bodyStr); !until.IsZero() {
 			setProviderCooldown(p.ID, modelKey, until)
@@ -1488,14 +1523,14 @@ func handleProviderSave(w http.ResponseWriter, r *http.Request) {
 	var cids []string
 	for _, id := range p.ConnectionIDs {
 		id = strings.TrimSpace(id)
-		if id == "" || seenConn[id] || !connectionExists(id) {
+		if id == "" || seenConn[id] || !connections.ConnectionExists(id) {
 			continue
 		}
 		seenConn[id] = true
 		cids = append(cids, id)
 	}
 	p.ConnectionIDs = cids
-	if p.ConnectionID != "" && !connectionExists(p.ConnectionID) {
+	if p.ConnectionID != "" && !connections.ConnectionExists(p.ConnectionID) {
 		p.ConnectionID = ""
 	}
 	saved := upsertProvider(&p)

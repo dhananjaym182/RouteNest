@@ -1,4 +1,4 @@
-package main
+package connections
 
 import (
 	"encoding/json"
@@ -24,13 +24,13 @@ func withTestConnections(t *testing.T, fn func()) {
 }
 
 func setTestFlow(provider string, spec deviceFlowSpec) func() {
-	old, had := providerDeviceFlows[provider]
-	providerDeviceFlows[provider] = spec
+	old, had := ProviderDeviceFlows[provider]
+	ProviderDeviceFlows[provider] = spec
 	return func() {
 		if had {
-			providerDeviceFlows[provider] = old
+			ProviderDeviceFlows[provider] = old
 		} else {
-			delete(providerDeviceFlows, provider)
+			delete(ProviderDeviceFlows, provider)
 		}
 	}
 }
@@ -92,14 +92,14 @@ func TestProviderDeviceLoginApproved(t *testing.T) {
 		if !ok {
 			t.Fatalf("login failed: %s", serr)
 		}
-		loadConnections()
-		connectionsMu.Lock()
+		LoadConnections()
+		ConnectionsMu.Lock()
 		n := len(connections)
 		var c Connection
 		if n > 0 {
 			c = *connections[0]
 		}
-		connectionsMu.Unlock()
+		ConnectionsMu.Unlock()
 		if n != 1 {
 			t.Fatalf("want 1 connection got %d", n)
 		}
@@ -158,87 +158,17 @@ func TestProviderDeviceLoginDeniedAndExpired(t *testing.T) {
 // provider+email 去重：同邮箱重登替换而不是叠加。
 func TestConnectionDedupByEmail(t *testing.T) {
 	withTestConnections(t, func() {
-		c1 := upsertConnection(&Connection{Provider: "kilocode", Email: "a@b.c", AccessToken: "t1", Status: "active"})
-		c2 := upsertConnection(&Connection{Provider: "kilocode", Email: "a@b.c", AccessToken: "t2", Status: "active"})
+		c1 := UpsertConnection(&Connection{Provider: "kilocode", Email: "a@b.c", AccessToken: "t1", Status: "active"})
+		c2 := UpsertConnection(&Connection{Provider: "kilocode", Email: "a@b.c", AccessToken: "t2", Status: "active"})
 		if c1.ID != c2.ID {
 			t.Errorf("dedup by email failed: %s vs %s", c1.ID, c2.ID)
 		}
-		connectionsMu.Lock()
+		ConnectionsMu.Lock()
 		n := len(connections)
 		tok := connections[0].AccessToken
-		connectionsMu.Unlock()
+		ConnectionsMu.Unlock()
 		if n != 1 || tok != "t2" {
 			t.Errorf("want single rotated connection, got n=%d tok=%s", n, tok)
-		}
-	})
-}
-
-// 派发集成：绑定连接的 provider 用连接 token + 动态组织头；401 → 标重登并落选。
-func TestCallProviderUsesConnectionAndMarksReauth(t *testing.T) {
-	var gotAuth, gotOrg string
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotAuth = r.Header.Get("Authorization")
-		gotOrg = r.Header.Get("X-Test-Org")
-		if gotAuth == "Bearer expired" {
-			w.WriteHeader(http.StatusUnauthorized)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		w.Write([]byte(`{"choices":[{"message":{"content":"ok"}}]}`))
-	}))
-	defer upstream.Close()
-
-	withTestConnections(t, func() {
-		conn := upsertConnection(&Connection{Provider: "t-hdr", Email: "u@x.y", AccessToken: "good", Status: "active",
-			ProviderSpecificData: map[string]string{"orgId": "org-7"}})
-		restore := setTestFlow("t-hdr", deviceFlowSpec{OrgHeader: "X-Test-Org", IntervalSec: 1})
-		defer restore()
-		p := &CustomProvider{ID: "p1", Name: "ConnProv", BaseURL: upstream.URL, Enabled: true, ConnectionID: conn.ID, ModelIDs: []string{"t/model"}}
-		oldProvs, oldLoaded := customProviders, providersLoaded
-		defer func() { customProviders, providersLoaded = oldProvs, oldLoaded }()
-		customProviders = []*CustomProvider{p}
-		providersLoaded = true
-
-		resp, err := callProvider(p, map[string]any{"model": "t/model", "messages": []any{}}, false)
-		if err != nil {
-			t.Fatalf("callProvider: %v", err)
-		}
-		resp.Body.Close()
-		if gotAuth != "Bearer good" || gotOrg != "org-7" {
-			t.Errorf("connection creds not injected: auth=%q org=%q", gotAuth, gotOrg)
-		}
-
-		// 过期连接 → 该 provider 不入候选
-		connectionsMu.Lock()
-		conn.ExpiresAt = time.Now().Add(-time.Hour).UnixMilli()
-		connectionsMu.Unlock()
-		if got := resolveProvidersForModel("t/model"); len(got) != 0 {
-			t.Errorf("expired connection provider must be filtered from selection, got %d", len(got))
-		}
-		connectionsMu.Lock()
-		st := connections[0].Status
-		connectionsMu.Unlock()
-		if st != "reauth_required" {
-			t.Errorf("expired no-refresh connection should be reauth_required, got %s", st)
-		}
-
-		// 401 → markConnectionReauth：还原可用 token 但上游故意拒绝
-		conn2 := upsertConnection(&Connection{Provider: "t-hdr", Email: "u@x.y", AccessToken: "expired", Status: "active"})
-		p.ConnectionID = conn2.ID
-		_, err = callProvider(p, map[string]any{"model": "t/model", "messages": []any{}}, false)
-		if err == nil {
-			t.Fatal("401 should surface as error")
-		}
-		connectionsMu.Lock()
-		var st2 string
-		for _, c := range connections {
-			if c.ID == conn2.ID {
-				st2 = c.Status
-			}
-		}
-		connectionsMu.Unlock()
-		if st2 != "reauth_required" {
-			t.Errorf("401 from upstream should mark connection reauth_required, got %s", st2)
 		}
 	})
 }
@@ -264,13 +194,13 @@ func TestConnectionAdminHandlers(t *testing.T) {
 		rec := httptest.NewRecorder()
 		req := httptest.NewRequest("POST", "/admin/api/connections/import",
 			strings.NewReader(`{"provider":"kilocode","accessToken":"sekret-token","email":"h@x.io","orgId":"org-5"}`))
-		handleConnectionImport(rec, req)
+		HandleConnectionImport(rec, req)
 		if rec.Code != http.StatusOK {
 			t.Fatalf("import code %d body %s", rec.Code, rec.Body.String())
 		}
 
 		rec = httptest.NewRecorder()
-		handleConnectionsList(rec, httptest.NewRequest("GET", "/admin/api/connections", nil))
+		HandleConnectionsList(rec, httptest.NewRequest("GET", "/admin/api/connections", nil))
 		var lr struct {
 			Data struct {
 				Connections []map[string]any `json:"connections"`
@@ -299,14 +229,14 @@ func TestConnectionAdminHandlers(t *testing.T) {
 
 		id, _ := c["id"].(string)
 		rec = httptest.NewRecorder()
-		handleConnectionDelete(rec, httptest.NewRequest("POST", "/admin/api/connections/delete",
+		HandleConnectionDelete(rec, httptest.NewRequest("POST", "/admin/api/connections/delete",
 			strings.NewReader(`{"id":"`+id+`"}`)))
 		if rec.Code != http.StatusOK {
 			t.Fatalf("delete code %d", rec.Code)
 		}
-		connectionsMu.Lock()
+		ConnectionsMu.Lock()
 		n := len(connections)
-		connectionsMu.Unlock()
+		ConnectionsMu.Unlock()
 		if n != 0 {
 			t.Errorf("connection not removed, n=%d", n)
 		}
@@ -388,9 +318,9 @@ func TestRFC8628DeviceLogin(t *testing.T) {
 		if !strings.Contains(pb, "code_verifier=") || !strings.Contains(pb, "grant_type=urn") {
 			t.Errorf("poll form wrong: %q", pb)
 		}
-		connectionsMu.Lock()
+		ConnectionsMu.Lock()
 		c := *connections[0]
-		connectionsMu.Unlock()
+		ConnectionsMu.Unlock()
 		if c.AccessToken != "at-1" || c.RefreshToken != "rt-1" || c.Email != "octo" || c.ExpiresAt <= time.Now().UnixMilli() {
 			t.Errorf("connection wrong: %+v", c)
 		}
@@ -436,7 +366,7 @@ func TestRFC8628Denied(t *testing.T) {
 	})
 }
 
-// 二段兑换（Copilot 作业票）：connectionBearer 首次兑换并缓存，临期自动重换。
+// 二段兑换（Copilot 作业票）：ConnectionBearer 首次兑换并缓存，临期自动重换。
 func TestConnectionBearerExchangeCachesAndRenews(t *testing.T) {
 	var hits int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -450,11 +380,11 @@ func TestConnectionBearerExchangeCachesAndRenews(t *testing.T) {
 	defer srv.Close()
 	spec := deviceFlowSpec{ExchangeURL: srv.URL, ExchangeTokenPath: "token", ExchangeExpPath: "expires_at"}
 	withTestConnections(t, func() {
-		conn := upsertConnection(&Connection{Provider: "t-ex", AccessToken: "oauth-master", Status: "active"})
-		if got := connectionBearer(conn, spec); got != "job-1" {
+		conn := UpsertConnection(&Connection{Provider: "t-ex", AccessToken: "oauth-master", Status: "active"})
+		if got := ConnectionBearer(conn, spec); got != "job-1" {
 			t.Fatalf("want job-1 got %s", got)
 		}
-		if got := connectionBearer(conn, spec); got != "job-1" {
+		if got := ConnectionBearer(conn, spec); got != "job-1" {
 			t.Fatalf("cached bearer should be reused, got %s", got)
 		}
 		if atomic.LoadInt32(&hits) != 1 {
@@ -462,10 +392,10 @@ func TestConnectionBearerExchangeCachesAndRenews(t *testing.T) {
 		}
 		// 强制临期 → 重新兑换
 		updateConnectionPSD(conn.ID, map[string]string{"exchangedExp": "1"})
-		if got := connectionBearer(conn, spec); got != "job-2" {
+		if got := ConnectionBearer(conn, spec); got != "job-2" {
 			t.Fatalf("expired job token should renew, got %s", got)
 		}
-		connectionsMu.Lock()
+		ConnectionsMu.Lock()
 		var persisted *Connection
 		for _, c := range connections {
 			if c.ID == conn.ID {
@@ -473,7 +403,7 @@ func TestConnectionBearerExchangeCachesAndRenews(t *testing.T) {
 			}
 		}
 		psd := persisted.ProviderSpecificData["exchangedToken"]
-		connectionsMu.Unlock()
+		ConnectionsMu.Unlock()
 		if psd != "job-2" {
 			t.Errorf("renewed token not persisted: %s", psd)
 		}
@@ -562,9 +492,9 @@ func TestQoderDeviceLogin(t *testing.T) {
 		if ua != "Go-http-client/2.0" {
 			t.Errorf("poll UA = %q", ua)
 		}
-		connectionsMu.Lock()
+		ConnectionsMu.Lock()
 		c := *connections[0]
-		connectionsMu.Unlock()
+		ConnectionsMu.Unlock()
 		if c.AccessToken != "dt-abc" || c.RefreshToken != "rt-q" || c.Email != "q@example.test" {
 			t.Errorf("connection wrong: %+v", c)
 		}
@@ -600,7 +530,7 @@ type batchImportResponse struct {
 func postImportBatch(t *testing.T, body string) (*httptest.ResponseRecorder, batchImportResponse) {
 	t.Helper()
 	rec := httptest.NewRecorder()
-	handleConnectionImportBatch(rec, httptest.NewRequest("POST", "/admin/api/connections/import-batch", strings.NewReader(body)))
+	HandleConnectionImportBatch(rec, httptest.NewRequest("POST", "/admin/api/connections/import-batch", strings.NewReader(body)))
 	var out batchImportResponse
 	if rec.Code == http.StatusOK {
 		if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil {
@@ -654,9 +584,9 @@ func TestConnectionImportBatchMixed(t *testing.T) {
 	if r := out.Data.Results[3]; r.OK || r.ID != "" || r.Provider != "" || r.Error != "provider and accessToken required" {
 		t.Errorf("missing provider result wrong: %+v", r)
 	}
-	connectionsMu.Lock()
+	ConnectionsMu.Lock()
 	n := len(connections)
-	connectionsMu.Unlock()
+	ConnectionsMu.Unlock()
 	if n != 2 {
 		t.Errorf("want 2 persisted connections, got %d", n)
 	}
@@ -682,13 +612,13 @@ func TestConnectionImportBatchDedup(t *testing.T) {
 		t.Errorf("dedup should return same connection id: %q vs %q",
 			out.Data.Results[0].ID, out.Data.Results[1].ID)
 	}
-	connectionsMu.Lock()
+	ConnectionsMu.Lock()
 	n := len(connections)
 	tok := ""
 	if n > 0 {
 		tok = connections[0].AccessToken
 	}
-	connectionsMu.Unlock()
+	ConnectionsMu.Unlock()
 	if n != 1 {
 		t.Errorf("dedup should add exactly 1 connection, got %d", n)
 	}
@@ -708,7 +638,7 @@ func TestConnectionImportBatchPersistsOrgID(t *testing.T) {
 		t.Fatalf("item should be imported: %+v", out.Data)
 	}
 	id := out.Data.Results[0].ID
-	connectionsMu.Lock()
+	ConnectionsMu.Lock()
 	var c *Connection
 	for _, cur := range connections {
 		if cur.ID == id {
@@ -717,7 +647,7 @@ func TestConnectionImportBatchPersistsOrgID(t *testing.T) {
 			break
 		}
 	}
-	connectionsMu.Unlock()
+	ConnectionsMu.Unlock()
 	if c == nil {
 		t.Fatalf("connection %s not persisted", id)
 	}
@@ -788,14 +718,14 @@ func TestConnectionImportBatchRedactsTokens(t *testing.T) {
 			t.Errorf("response leaks %q: %s", bad, body)
 		}
 	}
-	connectionsMu.Lock()
+	ConnectionsMu.Lock()
 	fp := ""
 	for _, c := range connections {
 		if c.ProviderSpecificData["tokenFp"] != "" {
 			fp = c.ProviderSpecificData["tokenFp"]
 		}
 	}
-	connectionsMu.Unlock()
+	ConnectionsMu.Unlock()
 	if fp == "" {
 		t.Fatal("expected a token fingerprint for the email-less item")
 	}

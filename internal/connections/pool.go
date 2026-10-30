@@ -1,4 +1,4 @@
-package main
+package connections
 
 // ============================================================================
 // Wave-4 §A: per-provider connection pooling + connection-scoped usage stats.
@@ -13,18 +13,21 @@ package main
 //     connection killed by 401/403 (reauth) or 429 (timed cooldown) is skipped
 //     while its siblings keep serving. Providers with the legacy single
 //     ConnectionID keep working through the read-path alias in
-//     providerConnIDs — no data migration.
+//     ProviderConnIDs — no data migration.
 // ============================================================================
 
 import (
 	"io"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
+
+	"cline-go-proxy/internal/protocol/openaichat"
 )
 
 // connPoolMu guards the round-robin cursors and the in-memory cooldown table.
-// Kept separate from connectionsMu (the store lock) to avoid lock-ordering
+// Kept separate from ConnectionsMu (the store lock) to avoid lock-ordering
 // entanglement with pickers that also touch the store.
 var connPoolMu sync.Mutex
 
@@ -35,12 +38,24 @@ var connCursor = map[string]int{}
 // re-probes connections, mirroring provRecheckMiss policy for transient state.
 var connCooling = map[string]time.Time{}
 
-const connectionRateLimitCooldown = 2 * time.Minute
+const ConnectionRateLimitCooldown = 2 * time.Minute
 
-// providerConnIDs returns the connection IDs bound to a provider:
+// IsFreeModel classifies a model as free for connection-scoped stats. The root
+// package injects its catalog-aware implementation (isFreeModelID) at init; the
+// default keeps package-local tests working without the model catalog.
+var IsFreeModel = func(model string) bool {
+	return strings.HasSuffix(model, ":free") || strings.Contains(model, "/free/")
+}
+
+// PruneProviderRefs is injected by the root package (the provider registry still
+// lives in package main) to drop a deleted connection ID from every provider's
+// binding list.
+var PruneProviderRefs func(connID string)
+
+// ProviderConnIDs returns the connection IDs bound to a provider:
 // ConnectionIDs when present, else the legacy single ConnectionID.
 // Unknown/duplicate IDs are tolerated here (handleProviderSave prunes them).
-func providerConnIDs(p *CustomProvider) []string {
+func ProviderConnIDs(p *CustomProvider) []string {
 	var out []string
 	seen := map[string]bool{}
 	add := func(id string) {
@@ -57,10 +72,10 @@ func providerConnIDs(p *CustomProvider) []string {
 }
 
 // connectionUsableLocked checks one stored connection; caller holds
-// connectionsMu. Mirrors the historical activeConnectionForProvider semantics:
+// ConnectionsMu. Mirrors the historical activeConnectionForProvider semantics:
 // expired without a refresh token -> marked reauth_required (persisted) and
 // skipped; expired WITH a refresh token -> still returned (refresh is handled
-// by connectionBearer/token exchange on the call path).
+// by ConnectionBearer/token exchange on the call path).
 func connectionUsableLocked(c *Connection, now time.Time) bool {
 	if c == nil || c.Status != "active" {
 		return false
@@ -78,18 +93,18 @@ func connectionUsableLocked(c *Connection, now time.Time) bool {
 	return true
 }
 
-// usableConnectionsForProvider snapshots all currently usable connections of
+// UsableConnectionsForProvider snapshots all currently usable connections of
 // a provider in rotation order (starting at the provider's cursor). Copies
 // are returned; callers never mutate the store through them.
-func usableConnectionsForProvider(p *CustomProvider) []*Connection {
-	ids := providerConnIDs(p)
+func UsableConnectionsForProvider(p *CustomProvider) []*Connection {
+	ids := ProviderConnIDs(p)
 	if len(ids) == 0 {
 		return nil
 	}
-	loadConnections()
+	LoadConnections()
 	now := time.Now()
-	connectionsMu.Lock()
-	defer connectionsMu.Unlock()
+	ConnectionsMu.Lock()
+	defer ConnectionsMu.Unlock()
 	connPoolMu.Lock()
 	start := connCursor[p.ID] % len(ids)
 	connPoolMu.Unlock()
@@ -111,17 +126,17 @@ func usableConnectionsForProvider(p *CustomProvider) []*Connection {
 	return out
 }
 
-// hasUsableConnection reports whether at least one bound connection is
+// HasUsableConnection reports whether at least one bound connection is
 // currently usable WITHOUT advancing the rotation cursor. Use for pure
 // availability gates; only real dispatch may consume a cursor slot.
-func hasUsableConnection(p *CustomProvider) bool {
-	return len(usableConnectionsForProvider(p)) > 0
+func HasUsableConnection(p *CustomProvider) bool {
+	return len(UsableConnectionsForProvider(p)) > 0
 }
 
-// advanceConnCursor moves the provider cursor past connID in the full id list,
+// AdvanceConnCursor moves the provider cursor past connID in the full id list,
 // so a cooled-down entry does not stall rotation for its siblings.
-func advanceConnCursor(p *CustomProvider, connID string) {
-	ids := providerConnIDs(p)
+func AdvanceConnCursor(p *CustomProvider, connID string) {
+	ids := ProviderConnIDs(p)
 	if len(ids) == 0 {
 		return
 	}
@@ -135,13 +150,13 @@ func advanceConnCursor(p *CustomProvider, connID string) {
 	}
 }
 
-// pickConnectionForProvider returns the next usable connection (advancing the
+// PickConnectionForProvider returns the next usable connection (advancing the
 // round-robin cursor), or nil when the provider binds connections but none is
 // usable. Replaces activeConnectionForProvider on the call path.
-func pickConnectionForProvider(p *CustomProvider) *Connection {
-	conns := usableConnectionsForProvider(p)
+func PickConnectionForProvider(p *CustomProvider) *Connection {
+	conns := UsableConnectionsForProvider(p)
 	if len(conns) == 0 {
-		if len(providerConnIDs(p)) > 0 {
+		if len(ProviderConnIDs(p)) > 0 {
 			// All bound connections are dead: remember nothing (do not advance
 			// a cursor over an empty set) but leave cooldowns intact.
 			return nil
@@ -149,13 +164,13 @@ func pickConnectionForProvider(p *CustomProvider) *Connection {
 		return nil
 	}
 	chosen := conns[0]
-	advanceConnCursor(p, chosen.ID)
+	AdvanceConnCursor(p, chosen.ID)
 	return chosen
 }
 
-// setConnectionCooldown parks one connection for rate-limit recovery (429).
-// Auth failures (401/403) use markConnectionReauth instead — they need a human.
-func setConnectionCooldown(connID string, until time.Time) {
+// SetConnectionCooldown parks one connection for rate-limit recovery (429).
+// Auth failures (401/403) use MarkConnectionReauth instead — they need a human.
+func SetConnectionCooldown(connID string, until time.Time) {
 	connPoolMu.Lock()
 	connCooling[connID] = until
 	connPoolMu.Unlock()
@@ -176,11 +191,11 @@ func connectionCooldownActive(connID string) bool {
 	return true
 }
 
-// connectionExists helper for save-time validation of bound connection IDs.
-func connectionExists(id string) bool {
-	loadConnections()
-	connectionsMu.Lock()
-	defer connectionsMu.Unlock()
+// ConnectionExists helper for save-time validation of bound connection IDs.
+func ConnectionExists(id string) bool {
+	LoadConnections()
+	ConnectionsMu.Lock()
+	defer ConnectionsMu.Unlock()
 	for _, c := range connections {
 		if c.ID == id {
 			return true
@@ -189,51 +204,29 @@ func connectionExists(id string) bool {
 	return false
 }
 
-// pruneConnectionRefs drops a deleted connection ID from every provider's
-// binding list (both pool and legacy single field). Called by removeConnection.
-func pruneConnectionRefs(connID string) {
-	loadProviders()
-	providersMu.Lock()
-	defer providersMu.Unlock()
-	changed := false
-	for _, p := range customProviders {
-		if p.ConnectionID == connID {
-			p.ConnectionID = ""
-			changed = true
-		}
-		if len(p.ConnectionIDs) > 0 {
-			kept := p.ConnectionIDs[:0]
-			for _, id := range p.ConnectionIDs {
-				if id != connID {
-					kept = append(kept, id)
-				}
-			}
-			if len(kept) != len(p.ConnectionIDs) {
-				p.ConnectionIDs = kept
-				changed = true
-			}
-		}
+// PruneConnectionRefs drops a deleted connection ID from every provider's
+// binding list (both pool and legacy single field). Called by RemoveConnection.
+// The provider-side implementation is injected by the root package until the
+// provider registry moves out of package main.
+func PruneConnectionRefs(connID string) {
+	if PruneProviderRefs != nil {
+		PruneProviderRefs(connID)
 	}
-	if changed {
-		saveProvidersLocked()
-	}
-	// A vanished connection must not keep a cursor pointing out of range;
-	// modulo arithmetic already tolerates that, so nothing else to reset.
 }
 
 // ---------- connection-scoped usage recording ----------
 
-// recordConnectionUsage adds request/token counters to a connection, keyed per
+// RecordConnectionUsage adds request/token counters to a connection, keyed per
 // model. Unlike Account.ModelStats (free models only, a Cline quota concern),
 // connection stats cover EVERY model: the whole point is showing which models
 // each logged-in upstream account actually served.
-func recordConnectionUsage(connID, model string, usage tokenUsage) {
+func RecordConnectionUsage(connID, model string, usage openaichat.Usage) {
 	if connID == "" {
 		return
 	}
-	loadConnections()
-	connectionsMu.Lock()
-	defer connectionsMu.Unlock()
+	LoadConnections()
+	ConnectionsMu.Lock()
+	defer ConnectionsMu.Unlock()
 	for _, c := range connections {
 		if c.ID != connID {
 			continue
@@ -250,7 +243,7 @@ func recordConnectionUsage(connID, model string, usage tokenUsage) {
 			st := c.ModelStats[model]
 			if st == nil {
 				cost := "paid"
-				if isFreeModelID(model) {
+				if IsFreeModel(model) {
 					cost = "free"
 				}
 				st = &ModelStat{ModelID: model, Cost: cost}
@@ -275,13 +268,13 @@ type connTaggedBody struct {
 	conn *Connection
 }
 
-func tagResponseConn(resp *http.Response, conn *Connection) {
+func TagResponseConn(resp *http.Response, conn *Connection) {
 	if resp != nil && conn != nil {
 		resp.Body = &connTaggedBody{ReadCloser: resp.Body, conn: conn}
 	}
 }
 
-func responseConnection(resp *http.Response) *Connection {
+func ResponseConnection(resp *http.Response) *Connection {
 	if resp == nil {
 		return nil
 	}
@@ -289,26 +282,4 @@ func responseConnection(resp *http.Response) *Connection {
 		return tb.conn
 	}
 	return nil
-}
-
-// recordUsage is the single attribution choke point for every finalize site.
-// Cline-path responses carry an account; provider-path responses carry a
-// tagged connection (acc == nil); zen traffic has neither and stays log-only,
-// exactly as before wave-4.
-func recordUsage(acc *Account, upstream *http.Response, reqLog *RequestLog, model string, usage tokenUsage) {
-	if acc != nil {
-		recordTokenUsage(acc, model, usage)
-		return
-	}
-	conn := responseConnection(upstream)
-	if conn == nil {
-		return
-	}
-	if reqLog != nil {
-		reqLog.ConnectionID = conn.ID
-		reqLog.ConnectionEmail = conn.Email
-	}
-	if usage.Valid {
-		recordConnectionUsage(conn.ID, model, usage)
-	}
 }

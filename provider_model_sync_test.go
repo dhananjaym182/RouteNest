@@ -2,6 +2,7 @@ package main
 
 import (
 	"cline-go-proxy/internal/accounts"
+	"cline-go-proxy/internal/connections"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -199,9 +200,7 @@ func TestProviderRecheckNewModelPaidDefault(t *testing.T) {
 // 连接不可用：记录错误、不动缺失计数、不改池。
 func TestProviderRecheckConnectionUnavailable(t *testing.T) {
 	isolateProviderRecheck(t)
-	oldConns, oldConnsLoaded := connections, connectionsLoaded
-	connections, connectionsLoaded = nil, true
-	t.Cleanup(func() { connections, connectionsLoaded = oldConns, oldConnsLoaded })
+	connections.LoadConnections()
 
 	accounts.Pool = &AccountPool{Accounts: []*Account{}, Models: []Model{
 		{ID: "a", Provider: "ConnProv", Status: "active", Source: "provider"},

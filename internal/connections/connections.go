@@ -1,9 +1,9 @@
-package main
+package connections
 
 // ============================================================================
 // §8.3 Provider Connections：provider 作用域的登录凭据（与 Cline 账号池并存）。
 // 引擎按 flowSpec 数据驱动（对齐 ExtremeRouter 的五种 flowType 中最常用的
-// device_code），新增一个 provider 登录 = 往 providerDeviceFlows 加一条数据，
+// device_code），新增一个 provider 登录 = 往 ProviderDeviceFlows 加一条数据，
 // 不新增控制流。Kilo Code 为首个具体移植（§8.3.2，步骤 4）。
 // ============================================================================
 
@@ -23,38 +23,58 @@ import (
 	"time"
 
 	"cline-go-proxy/internal/deviceflow"
+	"cline-go-proxy/internal/domain"
+	"cline-go-proxy/internal/httpx"
+	"cline-go-proxy/internal/platform"
 	connectionstore "cline-go-proxy/internal/store/connections"
 )
 
+// Domain aliases keep the moved connection code terse; they are the same types
+// the root package aliases through types.go, so values cross unchanged.
+type Connection = domain.Connection
+type CustomProvider = domain.CustomProvider
+type ModelStat = domain.ModelStat
+
+// HTTPClient is the shared outbound client, injected by the root package
+// (http.go) so device-flow auth traffic keeps using the egress proxy pool.
+var HTTPClient *http.Client
+
+func httpClientOrDefault() *http.Client {
+	if HTTPClient != nil {
+		return HTTPClient
+	}
+	return http.DefaultClient
+}
+
 var (
-	connectionsMu       sync.Mutex
-	connections         []*Connection
-	connectionsLoaded   bool
-	connectionsFilePath string
+	ConnectionsMu     sync.Mutex
+	connections       []*Connection
+	connectionsLoaded bool
+	FilePath          string
 )
 
 func init() {
-	connectionsFilePath = resolveDataPath(".routenest-connections.json")
+	FilePath = platform.ResolveDataPath(connectionstore.FileName, nil)
 }
 
-func loadConnections() {
-	connectionsMu.Lock()
-	defer connectionsMu.Unlock()
+func LoadConnections() {
+	ConnectionsMu.Lock()
+	defer ConnectionsMu.Unlock()
 	if connectionsLoaded {
 		return
 	}
 	connectionsLoaded = true
-	list, err := connectionstore.Load(connectionsFilePath)
+	list, err := connectionstore.Load(FilePath)
 	if err != nil {
-		backupCorruptFile(connectionsFilePath, err)
+		platform.BackupCorruptFile(FilePath, err)
 		return
 	}
 	connections = list
 }
 
-// saveConnectionsLocked 调用方持 connectionsMu。
+// saveConnectionsLocked 调用方持 ConnectionsMu。
 func saveConnectionsLocked() {
-	if err := connectionstore.Save(connectionsFilePath, connections); err != nil {
+	if err := connectionstore.Save(FilePath, connections); err != nil {
 		log.Printf("connections save failed: %v", err)
 	}
 }
@@ -67,11 +87,11 @@ func newConnectionID() string {
 	return "conn_" + hex.EncodeToString(b)
 }
 
-// upsertConnection 按 provider+email 去重（无 email 时按 token 指纹）；替换时保留原 ID/CreatedAt。
-func upsertConnection(c *Connection) *Connection {
-	loadConnections()
-	connectionsMu.Lock()
-	defer connectionsMu.Unlock()
+// UpsertConnection 按 provider+email 去重（无 email 时按 token 指纹）；替换时保留原 ID/CreatedAt。
+func UpsertConnection(c *Connection) *Connection {
+	LoadConnections()
+	ConnectionsMu.Lock()
+	defer ConnectionsMu.Unlock()
 	fingerprint := ""
 	if c.Email == "" && c.AccessToken != "" {
 		sum := sha256.Sum256([]byte(c.AccessToken))
@@ -109,9 +129,9 @@ func upsertConnection(c *Connection) *Connection {
 	return c
 }
 
-func removeConnection(id string) bool {
-	loadConnections()
-	connectionsMu.Lock()
+func RemoveConnection(id string) bool {
+	LoadConnections()
+	ConnectionsMu.Lock()
 	removed := false
 	for i, c := range connections {
 		if c.ID == id {
@@ -121,22 +141,22 @@ func removeConnection(id string) bool {
 			break
 		}
 	}
-	connectionsMu.Unlock()
+	ConnectionsMu.Unlock()
 	if removed {
 		// Wave-4: dropped connections must not linger in provider pools.
-		// Prune outside connectionsMu — pruneConnectionRefs takes
-		// providersMu, and candidate resolution holds providersMu while
-		// taking connectionsMu (reverse order would deadlock).
-		pruneConnectionRefs(id)
+		// Prune outside ConnectionsMu — PruneConnectionRefs takes the provider
+		// lock, and candidate resolution holds that lock while taking
+		// ConnectionsMu (reverse order would deadlock).
+		PruneConnectionRefs(id)
 	}
 	return removed
 }
 
-// markConnectionReauth 上游 401/403 且无刷新能力时调用（不锁死，用户重登即恢复）。
-func markConnectionReauth(id string) {
-	loadConnections()
-	connectionsMu.Lock()
-	defer connectionsMu.Unlock()
+// MarkConnectionReauth 上游 401/403 且无刷新能力时调用（不锁死，用户重登即恢复）。
+func MarkConnectionReauth(id string) {
+	LoadConnections()
+	ConnectionsMu.Lock()
+	defer ConnectionsMu.Unlock()
 	for _, c := range connections {
 		if c.ID == id && c.Status == "active" {
 			c.Status = "reauth_required"
@@ -152,9 +172,9 @@ func markConnectionReauth(id string) {
 // tests can keep using the local name while the engine lives in its own package.
 type deviceFlowSpec = deviceflow.Spec
 
-// providerDeviceFlows is the mutable flow registry. Built-in specs come from
+// ProviderDeviceFlows is the mutable flow registry. Built-in specs come from
 // the deviceflow package; tests may register additional entries.
-var providerDeviceFlows = deviceflow.Specs()
+var ProviderDeviceFlows = deviceflow.Specs()
 
 // 登录会话：start 建会话并后台轮询；status 读取（对齐 Cline WorkOS 会话 UX）。
 type providerLoginSession struct {
@@ -198,14 +218,14 @@ func statePollHeaders(spec deviceFlowSpec, isPoll bool) map[string]string {
 
 // exchangeJobToken performs the optional second exchange (GitHub Copilot).
 func exchangeJobToken(spec deviceFlowSpec, accessToken string) (token string, expMs int64, err error) {
-	return deviceflow.ExchangeJobToken(context.Background(), oauthHTTPClient(15*time.Second), spec, accessToken)
+	return deviceflow.ExchangeJobToken(context.Background(), OAuthHTTPClient(15*time.Second), spec, accessToken)
 }
 
-// oauthHTTPClient routes auth traffic through the shared outbound transport
+// OAuthHTTPClient routes auth traffic through the shared outbound transport
 // (SOCKS5 egress proxy pool + custom dialer) like proxied chat traffic; a bare
 // &http.Client{} would bypass the configured egress proxy entirely.
-func oauthHTTPClient(timeout time.Duration) *http.Client {
-	return &http.Client{Timeout: timeout, Transport: httpClient.Transport}
+func OAuthHTTPClient(timeout time.Duration) *http.Client {
+	return &http.Client{Timeout: timeout, Transport: httpClientOrDefault().Transport}
 }
 
 func qoderExpiryMs(data map[string]any) int64 { return deviceflow.QoderExpiryMs(data) }
@@ -216,11 +236,11 @@ func epochToMs(n int64) int64 { return deviceflow.EpochToMs(n) }
 // the background. Persistence stays here; the deviceflow package only performs
 // the upstream authentication exchange.
 func startProviderDeviceLogin(provider string) (*providerLoginSession, error) {
-	spec, ok := providerDeviceFlows[provider]
+	spec, ok := ProviderDeviceFlows[provider]
 	if !ok {
 		return nil, fmt.Errorf("no device_code flow registered for provider %q", provider)
 	}
-	init, err := deviceflow.Initiate(context.Background(), oauthHTTPClient(15*time.Second), spec)
+	init, err := deviceflow.Initiate(context.Background(), OAuthHTTPClient(15*time.Second), spec)
 	if err != nil {
 		return nil, err
 	}
@@ -244,7 +264,7 @@ func startProviderDeviceLogin(provider string) (*providerLoginSession, error) {
 		res, pollErr := pollProviderDeviceToken(spec, init.Code, init.ExpiresIn, init.Verifier)
 		var conn *Connection
 		if pollErr == nil {
-			conn = upsertConnection(&Connection{
+			conn = UpsertConnection(&Connection{
 				Provider: provider, AuthType: "device_code", Email: res.email,
 				AccessToken: res.token, RefreshToken: res.refreshToken,
 				ExpiresAt: res.expiresAtMs, Status: "active",
@@ -267,12 +287,12 @@ func startProviderDeviceLogin(provider string) (*providerLoginSession, error) {
 				psd["exchangedExp"] = fmt.Sprintf("%d", res.exchangedExpMs)
 			}
 			if len(psd) > 0 {
-				connectionsMu.Lock()
+				ConnectionsMu.Lock()
 				for k, v := range psd {
 					conn.ProviderSpecificData[k] = v
 				}
 				saveConnectionsLocked()
-				connectionsMu.Unlock()
+				ConnectionsMu.Unlock()
 			}
 		}
 		providerLoginMu.Lock()
@@ -289,7 +309,7 @@ func startProviderDeviceLogin(provider string) (*providerLoginSession, error) {
 // pollProviderDeviceToken polls until a token arrives and maps the deviceflow
 // package result onto the in-package result shape.
 func pollProviderDeviceToken(spec deviceFlowSpec, code string, expiresIn int, verifier string) (*deviceLoginResult, error) {
-	res, err := deviceflow.Poll(context.Background(), oauthHTTPClient(15*time.Second), spec, &deviceflow.Initiation{
+	res, err := deviceflow.Poll(context.Background(), OAuthHTTPClient(15*time.Second), spec, &deviceflow.Initiation{
 		Code: code, ExpiresIn: expiresIn, Verifier: verifier,
 	})
 	if err != nil {
@@ -304,9 +324,9 @@ func pollProviderDeviceToken(spec deviceFlowSpec, code string, expiresIn int, ve
 
 // updateConnectionPSD 按 id 合并写 ProviderSpecificData（调用方无需持锁）。
 func updateConnectionPSD(id string, kv map[string]string) {
-	loadConnections()
-	connectionsMu.Lock()
-	defer connectionsMu.Unlock()
+	LoadConnections()
+	ConnectionsMu.Lock()
+	defer ConnectionsMu.Unlock()
 	for _, c := range connections {
 		if c.ID == id {
 			for k, v := range kv {
@@ -324,11 +344,11 @@ func updateConnectionPSD(id string, kv map[string]string) {
 // persists the new tokens. Returns false when the upstream cannot refresh.
 func refreshRFC8628Connection(conn *Connection, spec deviceFlowSpec) bool {
 	at, rt, expMs, ok := deviceflow.RefreshRFC8628(
-		context.Background(), oauthHTTPClient(15*time.Second), spec, conn.RefreshToken, conn.ExpiresAt)
+		context.Background(), OAuthHTTPClient(15*time.Second), spec, conn.RefreshToken, conn.ExpiresAt)
 	if !ok {
 		return false
 	}
-	connectionsMu.Lock()
+	ConnectionsMu.Lock()
 	for _, c := range connections {
 		if c.ID == conn.ID {
 			c.AccessToken, c.RefreshToken, c.ExpiresAt, c.Status = at, rt, expMs, "active"
@@ -336,15 +356,15 @@ func refreshRFC8628Connection(conn *Connection, spec deviceFlowSpec) bool {
 		}
 	}
 	saveConnectionsLocked()
-	connectionsMu.Unlock()
+	ConnectionsMu.Unlock()
 	return true
 }
 
-func connectionBearer(conn *Connection, spec deviceFlowSpec) string {
+func ConnectionBearer(conn *Connection, spec deviceFlowSpec) string {
 	if spec.Mode == "rfc8628" && conn.RefreshToken != "" &&
 		conn.ExpiresAt > 0 && time.Now().UnixMilli() >= conn.ExpiresAt-60_000 {
 		if refreshRFC8628Connection(conn, spec) {
-			connectionsMu.Lock()
+			ConnectionsMu.Lock()
 			var fresh string
 			for _, c := range connections {
 				if c.ID == conn.ID {
@@ -352,7 +372,7 @@ func connectionBearer(conn *Connection, spec deviceFlowSpec) string {
 					break
 				}
 			}
-			connectionsMu.Unlock()
+			ConnectionsMu.Unlock()
 			if fresh != "" {
 				return fresh
 			}
@@ -374,44 +394,44 @@ func connectionBearer(conn *Connection, spec deviceFlowSpec) string {
 
 // ---------- admin handlers ----------
 
-func handleConnectionsList(w http.ResponseWriter, r *http.Request) {
-	loadConnections()
-	connectionsMu.Lock()
+func HandleConnectionsList(w http.ResponseWriter, r *http.Request) {
+	LoadConnections()
+	ConnectionsMu.Lock()
 	out := make([]Connection, 0, len(connections))
 	for _, c := range connections {
 		cp := *c
 		cp.AccessToken = "" // 列表不外泄 token
 		out = append(out, cp)
 	}
-	connectionsMu.Unlock()
-	flows := make([]string, 0, len(providerDeviceFlows))
-	for p := range providerDeviceFlows {
+	ConnectionsMu.Unlock()
+	flows := make([]string, 0, len(ProviderDeviceFlows))
+	for p := range ProviderDeviceFlows {
 		flows = append(flows, p)
 	}
-	writeAPI(w, http.StatusOK, apiResponse{Success: true, Data: map[string]any{"connections": out, "flows": flows}})
+	httpx.WriteAPI(w, http.StatusOK, httpx.Response{Success: true, Data: map[string]any{"connections": out, "flows": flows}})
 }
 
 // POST /admin/api/connections/login/start  body: {provider}
-func handleConnectionLoginStart(w http.ResponseWriter, r *http.Request) {
+func HandleConnectionLoginStart(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Provider string `json:"provider"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeAPI(w, http.StatusBadRequest, apiResponse{Error: "invalid_json"})
+		httpx.WriteAPI(w, http.StatusBadRequest, httpx.Response{Error: "invalid_json"})
 		return
 	}
 	sess, err := startProviderDeviceLogin(strings.TrimSpace(req.Provider))
 	if err != nil {
-		writeAPI(w, http.StatusOK, apiResponse{Success: true, Data: map[string]any{"error": err.Error()}})
+		httpx.WriteAPI(w, http.StatusOK, httpx.Response{Success: true, Data: map[string]any{"error": err.Error()}})
 		return
 	}
-	writeAPI(w, http.StatusOK, apiResponse{Success: true, Data: map[string]any{
+	httpx.WriteAPI(w, http.StatusOK, httpx.Response{Success: true, Data: map[string]any{
 		"sessionId": sess.ID, "userCode": sess.UserCode, "authUrl": sess.AuthURL,
 	}})
 }
 
 // GET /admin/api/connections/login/status?sessionId=x
-func handleConnectionLoginStatus(w http.ResponseWriter, r *http.Request) {
+func HandleConnectionLoginStatus(w http.ResponseWriter, r *http.Request) {
 	id := r.URL.Query().Get("sessionId")
 	providerLoginMu.Lock()
 	sess, ok := providerLoginSessions[id]
@@ -426,15 +446,15 @@ func handleConnectionLoginStatus(w http.ResponseWriter, r *http.Request) {
 	}
 	providerLoginMu.Unlock()
 	if !ok {
-		writeAPI(w, http.StatusNotFound, apiResponse{Error: "session not found"})
+		httpx.WriteAPI(w, http.StatusNotFound, httpx.Response{Error: "session not found"})
 		return
 	}
-	writeAPI(w, http.StatusOK, apiResponse{Success: true, Data: out})
+	httpx.WriteAPI(w, http.StatusOK, httpx.Response{Success: true, Data: out})
 }
 
-// importConnectionToken 单条粘贴 token 的共享语义（单条导入与批量导入共用）：
+// ImportConnectionToken 单条粘贴 token 的共享语义（单条导入与批量导入共用）：
 // trim 后校验，走 provider+email（无 email 时 token 指纹）去重，落 orgId。
-func importConnectionToken(provider, accessToken, email, orgID string) (*Connection, error) {
+func ImportConnectionToken(provider, accessToken, email, orgID string) (*Connection, error) {
 	provider = strings.TrimSpace(provider)
 	accessToken = strings.TrimSpace(accessToken)
 	email = strings.TrimSpace(email)
@@ -442,22 +462,22 @@ func importConnectionToken(provider, accessToken, email, orgID string) (*Connect
 	if provider == "" || accessToken == "" {
 		return nil, fmt.Errorf("provider and accessToken required")
 	}
-	conn := upsertConnection(&Connection{
+	conn := UpsertConnection(&Connection{
 		Provider: provider, AuthType: "import_token", Email: email,
 		AccessToken: accessToken, Status: "active",
 	})
 	if orgID != "" {
-		connectionsMu.Lock()
+		ConnectionsMu.Lock()
 		conn.ProviderSpecificData["orgId"] = orgID
 		saveConnectionsLocked()
-		connectionsMu.Unlock()
+		ConnectionsMu.Unlock()
 	}
 	return conn, nil
 }
 
 // POST /admin/api/connections/import  body: {provider, accessToken, email?, orgId?}
 // 粘贴 token 路径（Kilo 这类无 refresh 的上游同样适用），复用去重与状态语义。
-func handleConnectionImport(w http.ResponseWriter, r *http.Request) {
+func HandleConnectionImport(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Provider    string `json:"provider"`
 		AccessToken string `json:"accessToken"`
@@ -465,17 +485,17 @@ func handleConnectionImport(w http.ResponseWriter, r *http.Request) {
 		OrgID       string `json:"orgId"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeAPI(w, http.StatusBadRequest, apiResponse{Error: "provider and accessToken required"})
+		httpx.WriteAPI(w, http.StatusBadRequest, httpx.Response{Error: "provider and accessToken required"})
 		return
 	}
-	conn, err := importConnectionToken(req.Provider, req.AccessToken, req.Email, req.OrgID)
+	conn, err := ImportConnectionToken(req.Provider, req.AccessToken, req.Email, req.OrgID)
 	if err != nil {
-		writeAPI(w, http.StatusBadRequest, apiResponse{Error: err.Error()})
+		httpx.WriteAPI(w, http.StatusBadRequest, httpx.Response{Error: err.Error()})
 		return
 	}
 	cp := *conn
 	cp.AccessToken = ""
-	writeAPI(w, http.StatusOK, apiResponse{Success: true, Data: map[string]any{"connection": cp}})
+	httpx.WriteAPI(w, http.StatusOK, httpx.Response{Success: true, Data: map[string]any{"connection": cp}})
 }
 
 // connectionImportBatchItem 批量导入的单项输入（token 只在请求内出现，绝不出现在响应）。
@@ -497,24 +517,24 @@ type connectionImportBatchResult struct {
 }
 
 // POST /admin/api/connections/import-batch  body: {items:[{provider, accessToken, email?, orgId?}]}
-// 管理端「导入 Token」弹窗的批量 tab：逐项复用 importConnectionToken，返回逐项结果。
-func handleConnectionImportBatch(w http.ResponseWriter, r *http.Request) {
+// 管理端「导入 Token」弹窗的批量 tab：逐项复用 ImportConnectionToken，返回逐项结果。
+func HandleConnectionImportBatch(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Items []connectionImportBatchItem `json:"items"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || len(req.Items) == 0 {
-		writeAPI(w, http.StatusBadRequest, apiResponse{Error: "items required"})
+		httpx.WriteAPI(w, http.StatusBadRequest, httpx.Response{Error: "items required"})
 		return
 	}
 	if len(req.Items) > 500 {
-		writeAPI(w, http.StatusBadRequest, apiResponse{Error: "too many items (max 500)"})
+		httpx.WriteAPI(w, http.StatusBadRequest, httpx.Response{Error: "too many items (max 500)"})
 		return
 	}
 	results := make([]connectionImportBatchResult, 0, len(req.Items))
 	imported, failed := 0, 0
 	for i, item := range req.Items {
 		res := connectionImportBatchResult{Index: i, Provider: strings.TrimSpace(item.Provider)}
-		conn, err := importConnectionToken(item.Provider, item.AccessToken, item.Email, item.OrgID)
+		conn, err := ImportConnectionToken(item.Provider, item.AccessToken, item.Email, item.OrgID)
 		if err != nil {
 			res.Error = err.Error()
 			failed++
@@ -524,39 +544,39 @@ func handleConnectionImportBatch(w http.ResponseWriter, r *http.Request) {
 		}
 		results = append(results, res)
 	}
-	writeAPI(w, http.StatusOK, apiResponse{Success: true, Data: map[string]any{
+	httpx.WriteAPI(w, http.StatusOK, httpx.Response{Success: true, Data: map[string]any{
 		"total": len(req.Items), "imported": imported, "failed": failed, "results": results,
 	}})
 }
 
 // POST /admin/api/connections/delete  body: {id}
-func handleConnectionDelete(w http.ResponseWriter, r *http.Request) {
+func HandleConnectionDelete(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		ID string `json:"id"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeAPI(w, http.StatusBadRequest, apiResponse{Error: "invalid_json"})
+		httpx.WriteAPI(w, http.StatusBadRequest, httpx.Response{Error: "invalid_json"})
 		return
 	}
-	if !removeConnection(req.ID) {
-		writeAPI(w, http.StatusNotFound, apiResponse{Error: "connection not found"})
+	if !RemoveConnection(req.ID) {
+		httpx.WriteAPI(w, http.StatusNotFound, httpx.Response{Error: "connection not found"})
 		return
 	}
-	writeAPI(w, http.StatusOK, apiResponse{Success: true})
+	httpx.WriteAPI(w, http.StatusOK, httpx.Response{Success: true})
 }
 
 // POST /admin/api/connections/test  body: {id}
 // bearer + 动态头探测 ModelsTestURL；同时把 401/403 反馈到 reauth 标记。
-func handleConnectionTest(w http.ResponseWriter, r *http.Request) {
+func HandleConnectionTest(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		ID string `json:"id"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeAPI(w, http.StatusBadRequest, apiResponse{Error: "invalid_json"})
+		httpx.WriteAPI(w, http.StatusBadRequest, httpx.Response{Error: "invalid_json"})
 		return
 	}
-	loadConnections()
-	connectionsMu.Lock()
+	LoadConnections()
+	ConnectionsMu.Lock()
 	var conn *Connection
 	for _, c := range connections {
 		if c.ID == req.ID {
@@ -565,41 +585,41 @@ func handleConnectionTest(w http.ResponseWriter, r *http.Request) {
 			break
 		}
 	}
-	connectionsMu.Unlock()
+	ConnectionsMu.Unlock()
 	if conn == nil {
-		writeAPI(w, http.StatusNotFound, apiResponse{Error: "connection not found"})
+		httpx.WriteAPI(w, http.StatusNotFound, httpx.Response{Error: "connection not found"})
 		return
 	}
-	spec, ok := providerDeviceFlows[conn.Provider]
+	spec, ok := ProviderDeviceFlows[conn.Provider]
 	if !ok || spec.ModelsTestURL == "" {
-		writeAPI(w, http.StatusOK, apiResponse{Success: true, Data: map[string]any{"ok": false, "error": "no test endpoint for provider " + conn.Provider}})
+		httpx.WriteAPI(w, http.StatusOK, httpx.Response{Success: true, Data: map[string]any{"ok": false, "error": "no test endpoint for provider " + conn.Provider}})
 		return
 	}
 	if conn.ExpiresAt > 0 && time.Now().UnixMilli() >= conn.ExpiresAt && conn.RefreshToken == "" {
-		markConnectionReauth(conn.ID)
-		writeAPI(w, http.StatusOK, apiResponse{Success: true, Data: map[string]any{"ok": false, "error": "token expired; please re-login"}})
+		MarkConnectionReauth(conn.ID)
+		httpx.WriteAPI(w, http.StatusOK, httpx.Response{Success: true, Data: map[string]any{"ok": false, "error": "token expired; please re-login"}})
 		return
 	}
 	hreq, _ := http.NewRequest(http.MethodGet, spec.ModelsTestURL, nil)
-	hreq.Header.Set("Authorization", "Bearer "+connectionBearer(conn, spec))
+	hreq.Header.Set("Authorization", "Bearer "+ConnectionBearer(conn, spec))
 	if spec.UserAgent != "" {
 		hreq.Header.Set("User-Agent", spec.UserAgent)
 	}
 	if spec.OrgHeader != "" && conn.ProviderSpecificData["orgId"] != "" {
 		hreq.Header.Set(spec.OrgHeader, conn.ProviderSpecificData["orgId"])
 	}
-	resp, err := oauthHTTPClient(20 * time.Second).Do(hreq)
+	resp, err := OAuthHTTPClient(20 * time.Second).Do(hreq)
 	if err != nil {
-		writeAPI(w, http.StatusOK, apiResponse{Success: true, Data: map[string]any{"ok": false, "error": err.Error()}})
+		httpx.WriteAPI(w, http.StatusOK, httpx.Response{Success: true, Data: map[string]any{"ok": false, "error": err.Error()}})
 		return
 	}
 	defer resp.Body.Close()
 	body, _ := io.ReadAll(io.LimitReader(resp.Body, 64<<10))
 	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
-		markConnectionReauth(conn.ID)
+		MarkConnectionReauth(conn.ID)
 	}
-	writeAPI(w, http.StatusOK, apiResponse{Success: true, Data: map[string]any{
+	httpx.WriteAPI(w, http.StatusOK, httpx.Response{Success: true, Data: map[string]any{
 		"ok": resp.StatusCode == http.StatusOK, "status": resp.StatusCode,
-		"body": truncate(strings.TrimSpace(string(body)), 240),
+		"body": platform.Truncate(strings.TrimSpace(string(body)), 240),
 	}})
 }

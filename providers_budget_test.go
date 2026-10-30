@@ -2,6 +2,7 @@ package main
 
 import (
 	"cline-go-proxy/internal/accounts"
+	"cline-go-proxy/internal/connections"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -259,14 +260,14 @@ func TestProviderHealthSnapshotTokenFields(t *testing.T) {
 // 其余值 400 拒绝。
 func TestHandleProviderSaveTokenWindowNormalization(t *testing.T) {
 	// 落盘路径全部隔离到临时目录（save 会写 provider 文件并同步模型池）。
-	oldProvPath, oldPoolPath, oldConnPath := providersFilePath, accounts.PoolPath, connectionsFilePath
+	oldProvPath, oldPoolPath, oldConnPath := providersFilePath, accounts.PoolPath, connections.FilePath
 	providersFilePath = filepath.Join(t.TempDir(), ".routenest-providers.json")
 	accounts.PoolPath = filepath.Join(t.TempDir(), ".routenest-accounts.json")
-	connectionsFilePath = filepath.Join(t.TempDir(), ".routenest-connections.json")
+	connections.FilePath = filepath.Join(t.TempDir(), ".routenest-connections.json")
 	oldProvs, oldLoaded := customProviders, providersLoaded
 	oldPool := accounts.Pool
 	t.Cleanup(func() {
-		providersFilePath, accounts.PoolPath, connectionsFilePath = oldProvPath, oldPoolPath, oldConnPath
+		providersFilePath, accounts.PoolPath, connections.FilePath = oldProvPath, oldPoolPath, oldConnPath
 		customProviders, providersLoaded, accounts.Pool = oldProvs, oldLoaded, oldPool
 	})
 
