@@ -1,4 +1,4 @@
-package main
+package providers
 
 import (
 	"bytes"
@@ -18,6 +18,16 @@ func importJSONBody(v any) io.Reader {
 func f64(v float64) *float64 { return &v }
 
 func TestClassifyUpstreamModel(t *testing.T) {
+	oldAllowlist := freeModelIDAllowlist()
+	SetFreeModelIDs([]string{"deepseek-v4-flash"})
+	t.Cleanup(func() {
+		ids := make([]string, 0, len(oldAllowlist))
+		for id := range oldAllowlist {
+			ids = append(ids, id)
+		}
+		SetFreeModelIDs(ids)
+	})
+
 	cases := []struct {
 		name         string
 		entry        upstreamModelEntry
@@ -131,10 +141,10 @@ func TestModelImportPreviewApplyFlow(t *testing.T) {
 	oldPool := accounts.Pool
 	defer func() { accounts.Pool = oldPool }()
 	provider := &CustomProvider{ID: "imp1", Name: "ImpTest", BaseURL: srv.URL, Enabled: true, ModelIDs: []string{"legacy/manual-c", "legacy/remote-d"}}
-	oldProvs, oldLoaded := customProviders, providersLoaded
-	defer func() { customProviders, providersLoaded = oldProvs, oldLoaded }()
-	customProviders = []*CustomProvider{provider}
-	providersLoaded = true
+	oldProvs, oldLoaded := CustomProviders, Loaded
+	defer func() { CustomProviders, Loaded = oldProvs, oldLoaded }()
+	CustomProviders = []*CustomProvider{provider}
+	Loaded = true
 
 	accounts.Pool = &AccountPool{Models: []Model{
 		{ID: "legacy/manual-c", Provider: "ImpTest", Cost: "free", Status: "active", Source: "provider", TierSignal: "manual"},
@@ -143,7 +153,7 @@ func TestModelImportPreviewApplyFlow(t *testing.T) {
 
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/admin/api/models/import/preview", importJSONBody(map[string]any{"id": "imp1"}))
-	handleModelImportPreview(rec, req)
+	HandleImportPreview(rec, req)
 	var prev struct {
 		Data struct {
 			Batch importBatch `json:"batch"`
@@ -175,7 +185,7 @@ func TestModelImportPreviewApplyFlow(t *testing.T) {
 		"batchId": batch.ID,
 		"approve": []string{"free/model-a:free", "paid/model-b", "legacy/manual-c", "legacy/remote-d"},
 	}))
-	handleModelImportApply(rec2, req2)
+	HandleImportApply(rec2, req2)
 	if rec2.Code != 200 {
 		t.Fatalf("apply status %d body %s", rec2.Code, rec2.Body.String())
 	}
@@ -211,7 +221,7 @@ func TestModelImportPreviewApplyFlow(t *testing.T) {
 
 	// 幂等：第二次 preview 不应再出现 add/tier_change
 	rec3 := httptest.NewRecorder()
-	handleModelImportPreview(rec3, httptest.NewRequest(http.MethodPost, "/p", importJSONBody(map[string]any{"id": "imp1"})))
+	HandleImportPreview(rec3, httptest.NewRequest(http.MethodPost, "/p", importJSONBody(map[string]any{"id": "imp1"})))
 	json.Unmarshal(rec3.Body.Bytes(), &prev)
 	for _, it := range prev.Data.Batch.Items {
 		if it.Action == "add" || it.Action == "tier_change" {
@@ -220,7 +230,7 @@ func TestModelImportPreviewApplyFlow(t *testing.T) {
 	}
 }
 
-// syncProviderModels 不得覆盖分级器批准过的逐模型层级（整源 Free=false 时）。
+// SyncModels 不得覆盖分级器批准过的逐模型层级（整源 Free=false 时）。
 func TestSyncProviderModelsPreservesTierSignal(t *testing.T) {
 	oldPool := accounts.Pool
 	defer func() { accounts.Pool = oldPool }()
@@ -231,12 +241,12 @@ func TestSyncProviderModelsPreservesTierSignal(t *testing.T) {
 	provider := &CustomProvider{ID: "mix1", Name: "Mix", Enabled: true, ModelIDs: []string{"mixed/free-one", "mixed/legacy"}}
 	// Free=false → claimed cost=pass；tiered 条目应保持 free
 	provider.Free = false
-	oldProvs, oldLoaded := customProviders, providersLoaded
-	defer func() { customProviders, providersLoaded = oldProvs, oldLoaded }()
-	customProviders = []*CustomProvider{provider}
-	providersLoaded = true
+	oldProvs, oldLoaded := CustomProviders, Loaded
+	defer func() { CustomProviders, Loaded = oldProvs, oldLoaded }()
+	CustomProviders = []*CustomProvider{provider}
+	Loaded = true
 
-	syncProviderModels()
+	SyncModels()
 
 	accounts.PoolMu.Lock()
 	got := map[string]Model{}
@@ -252,7 +262,7 @@ func TestSyncProviderModelsPreservesTierSignal(t *testing.T) {
 	}
 }
 
-// syncProviderModels seeds id-only free signals without the import wizard, and
+// SyncModels seeds id-only free signals without the import wizard, and
 // retroactively repairs untiered provider entries; approved/per-model tiers and
 // cross-source entries stay untouched.
 func TestSyncProviderModelsSeedsFreeSignals(t *testing.T) {
@@ -266,12 +276,12 @@ func TestSyncProviderModelsSeedsFreeSignals(t *testing.T) {
 	provider := &CustomProvider{ID: "seed1", Name: "Seed", Enabled: true, Free: false, ModelIDs: []string{
 		"old/declared-chat:free", "approved/by-manual", "new/free-token-model", "new/plain-paid",
 	}}
-	oldProvs, oldLoaded := customProviders, providersLoaded
-	defer func() { customProviders, providersLoaded = oldProvs, oldLoaded }()
-	customProviders = []*CustomProvider{provider}
-	providersLoaded = true
+	oldProvs, oldLoaded := CustomProviders, Loaded
+	defer func() { CustomProviders, Loaded = oldProvs, oldLoaded }()
+	CustomProviders = []*CustomProvider{provider}
+	Loaded = true
 
-	syncProviderModels()
+	SyncModels()
 
 	accounts.PoolMu.Lock()
 	got := map[string]Model{}

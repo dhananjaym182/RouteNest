@@ -20,6 +20,9 @@ There are two different provider paths:
 - **Embedded presets** live in `internal/providerreg/presets/*.json` and are
   compiled into the binary with `//go:embed`. Changing a preset requires a
   rebuild.
+- **Imported preset catalog** lives in `internal/providerreg/imported.json`.
+  It is the single-file replacement for the former generated Go map and is
+  also embedded and validated at build time.
 - **Runtime custom providers** are stored in `.cline-providers.json` under the
   data directory and take effect without a rebuild (see the admin UI).
 
@@ -33,7 +36,9 @@ not a per-model access entitlement.
 2. Fill the schema in `internal/providerreg/registry.go` (`id`, `name`,
    `baseURL`, `kind`, `freeTier`, protocol/auth/fetcher fields, notes).
 3. Regenerate or adjust the preset data. The tracked generator is
-   `tools/gen-provider-presets.mjs`; hand-written presets are kept as data.
+   `tools/gen-provider-presets.mjs`; it writes both `presets/*.json` and
+   `imported.json` so the two generated views stay synchronized. Hand-written
+   presets are kept as data.
 4. Run `go test ./internal/providerreg/` (IDs must be unique, filenames must
    match IDs, required fields and enum values are validated).
 5. Rebuild. Embedded preset edits do not apply to an existing binary.

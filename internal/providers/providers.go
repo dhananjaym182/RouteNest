@@ -1,4 +1,4 @@
-package main
+package providers
 
 import (
 	"context"
@@ -17,9 +17,12 @@ import (
 	"cline-go-proxy/internal/accounts"
 	"cline-go-proxy/internal/connections"
 	"cline-go-proxy/internal/dispatch"
+	"cline-go-proxy/internal/httpx"
 	"cline-go-proxy/internal/i18n"
+	"cline-go-proxy/internal/platform"
+	"cline-go-proxy/internal/protocol/openaichat"
 	"cline-go-proxy/internal/providerreg"
-	"cline-go-proxy/internal/store/providers"
+	providerstore "cline-go-proxy/internal/store/providers"
 	"cline-go-proxy/internal/transport"
 	"cline-go-proxy/internal/upstream/openaicompat"
 	"cline-go-proxy/internal/upstream/qoder"
@@ -32,59 +35,74 @@ import (
 // 模型列表；请求按模型归属路由，失败后按 回退链 → 自动兜底 降级。
 // providerRegistry 内存态 + 落盘（.routenest-providers.json）。
 var (
-	providersMu            sync.Mutex
-	customProviders        []*CustomProvider
-	providersLoaded        bool
-	providersFilePath      string
-	providersCooldownsPath string
+	Mu              sync.Mutex
+	CustomProviders []*CustomProvider
+	Loaded          bool
+	FilePath        string
+	CooldownsPath   string
 	// modelCooldownsPerProvider providerID:model → 冷却截止
-	providerCooldowns = map[string]time.Time{}
+	Cooldowns = map[string]time.Time{}
 )
 
-func init() {
-	providersFilePath = resolveDataPath(".routenest-providers.json")
-	providersCooldownsPath = resolveDataPath(".routenest-providers-cooldowns.json")
+func cloneProvider(p *CustomProvider) *CustomProvider {
+	if p == nil {
+		return nil
+	}
+	cp := *p
+	cp.ModelIDs = append([]string(nil), p.ModelIDs...)
+	cp.ConnectionIDs = append([]string(nil), p.ConnectionIDs...)
+	if p.Headers != nil {
+		cp.Headers = make(map[string]string, len(p.Headers))
+		for key, value := range p.Headers {
+			cp.Headers[key] = value
+		}
+	}
+	return &cp
 }
 
-func loadProviders() {
-	providersMu.Lock()
-	defer providersMu.Unlock()
-	if providersLoaded {
+func init() {
+	FilePath = platform.ResolveDataPath(providerstore.FileName, nil)
+	CooldownsPath = platform.ResolveDataPath(providerstore.CooldownsFileName, nil)
+	connections.RegisterProviderRefPruner(PruneConnectionRefs)
+}
+
+func Load() {
+	Mu.Lock()
+	defer Mu.Unlock()
+	if Loaded {
 		return
 	}
-	providersLoaded = true
+	Loaded = true
 	// 冷却表在 registry 前加载：无论 provider 文件是否存在都要重启冷却记忆
 	loadProviderCooldownsLocked()
-	list, err := providers.Load(providersFilePath)
+	list, err := providerstore.Load(FilePath)
 	if err != nil {
-		backupCorruptFile(providersFilePath, err)
+		platform.BackupCorruptFile(FilePath, err)
 		return
 	}
-	customProviders = list
+	CustomProviders = list
 }
 
-func saveProvidersLocked() {
-	if err := providers.Save(providersFilePath, customProviders); err != nil {
+func SaveLocked() {
+	if err := providerstore.Save(FilePath, CustomProviders); err != nil {
 		log.Printf("providers save failed: %v", err)
 	}
 }
 
-// pruneProviderConnectionRefs drops a deleted connection ID from every
-// provider's binding list (both pool and legacy single field). Injected into
-// internal/connections as connections.PruneProviderRefs because the provider
-// registry still lives in package main until the provider extraction.
-func pruneProviderConnectionRefs(connID string) {
-	loadProviders()
-	providersMu.Lock()
-	defer providersMu.Unlock()
+// PruneConnectionRefs drops a deleted connection ID from every
+// provider's binding list (both pool and legacy single field).
+func PruneConnectionRefs(connID string) {
+	Load()
+	Mu.Lock()
+	defer Mu.Unlock()
 	changed := false
-	for _, p := range customProviders {
+	for _, p := range CustomProviders {
 		if p.ConnectionID == connID {
 			p.ConnectionID = ""
 			changed = true
 		}
 		if len(p.ConnectionIDs) > 0 {
-			kept := p.ConnectionIDs[:0]
+			kept := make([]string, 0, len(p.ConnectionIDs))
 			for _, id := range p.ConnectionIDs {
 				if id != connID {
 					kept = append(kept, id)
@@ -97,20 +115,20 @@ func pruneProviderConnectionRefs(connID string) {
 		}
 	}
 	if changed {
-		saveProvidersLocked()
+		SaveLocked()
 	}
 	// A vanished connection must not keep a cursor pointing out of range;
 	// modulo arithmetic already tolerates that, so nothing else to reset.
 }
 
-// listProviders 返回副本列表（按 Priority, CreatedAt 排序）。
-func listProviders() []CustomProvider {
-	loadProviders()
-	providersMu.Lock()
-	defer providersMu.Unlock()
-	out := make([]CustomProvider, 0, len(customProviders))
-	for _, p := range customProviders {
-		out = append(out, *p)
+// List 返回副本列表（按 Priority, CreatedAt 排序）。
+func List() []CustomProvider {
+	Load()
+	Mu.Lock()
+	defer Mu.Unlock()
+	out := make([]CustomProvider, 0, len(CustomProviders))
+	for _, p := range CustomProviders {
+		out = append(out, *cloneProvider(p))
 	}
 	sort.Slice(out, func(i, j int) bool {
 		if out[i].Priority != out[j].Priority {
@@ -121,61 +139,74 @@ func listProviders() []CustomProvider {
 	return out
 }
 
-func genProviderID() string {
+// Find returns a copy of one provider, or nil when it does not exist.
+func Find(id string) *CustomProvider {
+	Load()
+	Mu.Lock()
+	defer Mu.Unlock()
+	for _, p := range CustomProviders {
+		if p.ID == id {
+			return cloneProvider(p)
+		}
+	}
+	return nil
+}
+
+func GenID() string {
 	return "prov_" + fmt.Sprintf("%x", time.Now().UnixNano())
 }
 
-// upsertProvider 新增或更新（按 ID）。返回最终 provider。
-func upsertProvider(p *CustomProvider) CustomProvider {
-	loadProviders()
-	providersMu.Lock()
-	defer providersMu.Unlock()
+// Upsert 新增或更新（按 ID）。返回最终 provider。
+func Upsert(p *CustomProvider) CustomProvider {
+	Load()
+	Mu.Lock()
+	defer Mu.Unlock()
 	if p.ID == "" {
-		p.ID = genProviderID()
+		p.ID = GenID()
 		p.CreatedAt = time.Now()
 		found := false
-		for _, e := range customProviders {
+		for _, e := range CustomProviders {
 			if e.ID == p.ID {
-				*e = *p
+				*e = *cloneProvider(p)
 				found = true
 				break
 			}
 		}
 		if !found {
-			customProviders = append(customProviders, p)
+			CustomProviders = append(CustomProviders, cloneProvider(p))
 		}
 	} else {
 		found := false
-		for _, e := range customProviders {
+		for _, e := range CustomProviders {
 			if e.ID == p.ID {
-				*e = *p
+				*e = *cloneProvider(p)
 				found = true
 				break
 			}
 		}
 		if !found {
 			p.CreatedAt = time.Now()
-			customProviders = append(customProviders, p)
+			CustomProviders = append(CustomProviders, cloneProvider(p))
 		}
 	}
-	saveProvidersLocked()
-	return *p
+	SaveLocked()
+	return *cloneProvider(p)
 }
 
-func deleteProvider(id string) bool {
-	loadProviders()
-	providersMu.Lock()
-	defer providersMu.Unlock()
-	for i, p := range customProviders {
+func Delete(id string) bool {
+	Load()
+	Mu.Lock()
+	defer Mu.Unlock()
+	for i, p := range CustomProviders {
 		if p.ID == id {
-			customProviders = append(customProviders[:i], customProviders[i+1:]...)
-			saveProvidersLocked()
+			CustomProviders = append(CustomProviders[:i], CustomProviders[i+1:]...)
+			SaveLocked()
 			// 冷却键是 "<providerID>:<model>"，删除 provider 时要连同全部
 			// 模型冷却一起清掉；同时保留裸 id 删除以兼容历史残留键。
-			delete(providerCooldowns, id)
-			for k := range providerCooldowns {
+			delete(Cooldowns, id)
+			for k := range Cooldowns {
 				if strings.HasPrefix(k, id+":") {
-					delete(providerCooldowns, k)
+					delete(Cooldowns, k)
 				}
 			}
 			// 领到的粘贴会话不要再粘到已删除的 provider 上
@@ -187,18 +218,18 @@ func deleteProvider(id string) bool {
 	return false
 }
 
-// resolveProvidersForModel 找到该模型所有可用 provider（启用中、未冷却），按
+// ResolveForModel 找到该模型所有可用 provider（启用中、未冷却），按
 // Priority 升序（quality 轮询策略下改为实测成绩优先）返回**指针副本**，调用
 // 方在锁外使用。同一个模型配置了多个 provider 时形成冗余组：首选失败可立即
 // 换组内下一家重试，全部失败才降级到回退链上的其他模型。冷却中与预算超限的
 // provider 不入候选，路由在派发前就避开配额墙。
-func resolveProvidersForModel(model string) []*CustomProvider {
-	loadProviders()
-	providersMu.Lock()
-	defer providersMu.Unlock()
+func ResolveForModel(model string) []*CustomProvider {
+	Load()
+	Mu.Lock()
+	defer Mu.Unlock()
 	var cs []providerCand
 	now := time.Now()
-	for _, p := range customProviders {
+	for _, p := range CustomProviders {
 		if !p.Enabled {
 			continue
 		}
@@ -206,7 +237,7 @@ func resolveProvidersForModel(model string) []*CustomProvider {
 			if m != model {
 				continue
 			}
-			if until, cool := providerCooldowns[p.ID+":"+model]; cool && now.Before(until) {
+			if until, cool := Cooldowns[p.ID+":"+model]; cool && now.Before(until) {
 				break // 该 provider 的该模型冷却中
 			}
 			// 预算上限：超限的 provider 不入候选，路由在派发前就避开配额墙
@@ -218,7 +249,7 @@ func resolveProvidersForModel(model string) []*CustomProvider {
 			if len(connections.ProviderConnIDs(p)) > 0 && !connections.HasUsableConnection(p) {
 				break
 			}
-			cs = append(cs, providerCand{p: *p})
+			cs = append(cs, providerCand{p: *cloneProvider(p)})
 			break
 		}
 	}
@@ -230,9 +261,9 @@ func resolveProvidersForModel(model string) []*CustomProvider {
 	return out
 }
 
-// resolveProviderForModel 找到该模型的首选 provider（启用中、未冷却、优先级最小）。
-func resolveProviderForModel(model string) *CustomProvider {
-	cs := resolveProvidersForModel(model)
+// ResolveOne 找到该模型的首选 provider（启用中、未冷却、优先级最小）。
+func ResolveOne(model string) *CustomProvider {
+	cs := ResolveForModel(model)
 	if len(cs) == 0 {
 		return nil
 	}
@@ -241,22 +272,22 @@ func resolveProviderForModel(model string) *CustomProvider {
 
 // providerFallbackModels 该模型的所有 provider 候选按优先级排序的模型链：
 // 原模型优先，然后是 modelChain（配置链）中启用了 provider 的模型。
-func customProviderServes(model string) bool {
-	return resolveProviderForModel(model) != nil
+func Serves(model string) bool {
+	return ResolveOne(model) != nil
 }
 
-// setProviderCooldown 记录 provider 模型冷却（限流/5xx/配置错误时调用）。
+// SetCooldown 记录 provider 模型冷却（限流/5xx/配置错误时调用）。
 // 同步落盘：重启后不再把刚冷却的 provider 当健康源重新探一遍 —— 对 429 这类
 // 长冷却（幂重置 EP 违 30m 封顶）尤其必要。
-func setProviderCooldown(providerID, model string, until time.Time) {
-	providersMu.Lock()
-	providerCooldowns[providerID+":"+model] = until
+func SetCooldown(providerID, model string, until time.Time) {
+	Mu.Lock()
+	Cooldowns[providerID+":"+model] = until
 	saveProviderCooldownsLocked()
-	providersMu.Unlock()
+	Mu.Unlock()
 	stickyClearForProvider(providerID) // 粘贴会话不要粘在冷却中的 provider 上
 }
 
-// callProvider 调用自定义 provider 的 /chat/completions。
+// Call 调用自定义 provider 的 /chat/completions。
 // providerProtocolForBaseURL maps a provider baseURL to its preset protocol.
 // CustomProvider carries no protocol field: the preset it was created from
 // decides how the upstream is spoken to, and the preset maps are compile-time
@@ -283,30 +314,35 @@ func normalizePresetBaseURL(u string) string {
 	return strings.TrimSuffix(u, "/chat/completions")
 }
 
-// providerProtocol returns the transport protocol for a provider, or "" for
+// Protocol returns the transport protocol for a provider, or "" for
 // plain OpenAI-compatible chat.
-func providerProtocol(p *CustomProvider) string {
+func Protocol(p *CustomProvider) string {
 	if p == nil {
 		return ""
 	}
 	return providerProtocolForBaseURL()[normalizePresetBaseURL(p.BaseURL)]
 }
 
-func callProvider(p *CustomProvider, params map[string]any, stream bool) (*http.Response, error) {
-	protocol := providerProtocol(p)
+func messageCount(params map[string]any) int {
+	if msgs, ok := params["messages"].([]any); ok {
+		return len(msgs)
+	}
+	return 0
+}
+
+func Call(p *CustomProvider, params map[string]any, stream bool) (*http.Response, error) {
+	protocol := Protocol(p)
 
 	// The qoder protocol builds its own signed body, so the OpenAI body
 	// preparation is skipped entirely for it.
 	var bodyJSON []byte
 	var err error
 	if protocol != "qoder" {
-		bodyJSON, err = openaicompat.PrepareBody(params, stream, openaicompat.BodyOptions{
-			PassThroughKeys:     passThroughKeys,
-			MinMaxTokens:        minUpstreamMaxTokens,
-			DefaultMaxTokens:    defaultMaxTokens,
-			ModelMaxOutputLimit: modelMaxOutputLimit,
-			Logf:                log.Printf,
-		})
+		opts := BodyOptionsProvider()
+		if opts.Logf == nil {
+			opts.Logf = log.Printf
+		}
+		bodyJSON, err = openaicompat.PrepareBody(params, stream, opts)
 		if err != nil {
 			return nil, err
 		}
@@ -331,7 +367,7 @@ func callProvider(p *CustomProvider, params map[string]any, stream bool) (*http.
 	}
 
 	modelKey := fmt.Sprintf("%v", params["model"])
-	log.Printf("  provider upstream: name=%s model=%v stream=%v msgs=%d", p.Name, modelKey, stream, getMsgCount(params))
+	log.Printf("  provider upstream: name=%s model=%v stream=%v msgs=%d", p.Name, modelKey, stream, messageCount(params))
 
 	// Wave-4 connection pool: walk the usable connections in rotation order.
 	// A connection-authenticated 401/403/429 parks that connection and retries
@@ -424,10 +460,10 @@ func callProvider(p *CustomProvider, params map[string]any, stream bool) (*http.
 		if conn != nil && (resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden) {
 			connections.MarkConnectionReauth(conn.ID)
 		}
-		if until := providerCooldownUntil(resp.StatusCode, resp.Header.Get("Retry-After"), bodyStr); !until.IsZero() {
-			setProviderCooldown(p.ID, modelKey, until)
+		if until := CooldownUntil(resp.StatusCode, resp.Header.Get("Retry-After"), bodyStr); !until.IsZero() {
+			SetCooldown(p.ID, modelKey, until)
 		}
-		return nil, &clineAPIError{statusCode: resp.StatusCode, message: truncate(bodyStr, 500)}
+		return nil, APIErrorFactory(resp.StatusCode, platform.Truncate(bodyStr, 500))
 	}
 	return nil, fmt.Errorf("provider %s: no connection attempts made", p.Name)
 }
@@ -437,13 +473,13 @@ func providerRateLimitedKeys(body string) bool {
 	return dispatch.RateLimitedByBody(body)
 }
 
-// providerCooldownUntil classifies an upstream failure into a cooldown window.
+// CooldownUntil classifies an upstream failure into a cooldown window.
 // Returning the zero time means no cooldown. Transient failures (408/5xx)
 // honor Retry.TransientCooldownSeconds: >0 overrides the built-in window,
 // -1 disables the cooldown, 0 keeps dispatch's default classification.
-func providerCooldownUntil(status int, retryAfterHeader, body string) time.Time {
+func CooldownUntil(status int, retryAfterHeader, body string) time.Time {
 	until := dispatch.ProviderCooldownUntil(status, retryAfterHeader, body)
-	t := getProxyConfig().Retry.TransientCooldownSeconds
+	t := ConfigProvider().Retry.TransientCooldownSeconds
 	if t == 0 || !isTransientUpstreamStatus(status) {
 		return until
 	}
@@ -465,22 +501,22 @@ func isTransientUpstreamStatus(status int) bool {
 
 // loadProviderCooldownsLocked 读取冷却文件（与 provider registry 同锁调用），
 // 过期条目直接丢弃。文件缺失/损坏只记日志，不阻塞 provider 初始化。
-// 调方必须已持有 providersMu。
+// 调方必须已持有 Mu。
 func loadProviderCooldownsLocked() {
-	loaded, err := providers.LoadCooldowns(providersCooldownsPath)
+	loaded, err := providerstore.LoadCooldowns(CooldownsPath)
 	if err != nil {
-		backupCorruptFile(providersCooldownsPath, err)
+		platform.BackupCorruptFile(CooldownsPath, err)
 		return
 	}
 	for k, until := range loaded {
-		providerCooldowns[k] = until
+		Cooldowns[k] = until
 	}
 }
 
 // saveProviderCooldownsLocked 把未过期的冷却条目原子写盘。调方必须已持有
-// providersMu。写失败只记日志：冷却丢失的最坏后果是重启后多探测一次。
+// Mu。写失败只记日志：冷却丢失的最坏后果是重启后多探测一次。
 func saveProviderCooldownsLocked() {
-	if err := providers.SaveCooldowns(providersCooldownsPath, providerCooldowns); err != nil {
+	if err := providerstore.SaveCooldowns(CooldownsPath, Cooldowns); err != nil {
 		log.Printf("provider cooldowns save failed: %v", err)
 	}
 }
@@ -502,10 +538,10 @@ var (
 	stickySessions = map[string]stickyPin{} // 会话键 → 钉住的 provider:model
 )
 
-// sessionKeyFromParams 从请求消息里派生会话键：取第一条 user 消息内容的
+// SessionKeyFromParams 从请求消息里派生会话键：取第一条 user 消息内容的
 // 稳定哈希（sha256 前 16 hex）。agent 会话中首条 user 消息在整个对话过程中
 // 不变，可稳定标识一次会话；无 user 消息或取不到内容时返回空串（不钉）。
-func sessionKeyFromParams(params map[string]any) string {
+func SessionKeyFromParams(params map[string]any) string {
 	msgs, ok := params["messages"].([]any)
 	if !ok {
 		return ""
@@ -573,14 +609,29 @@ func stickyClearForProvider(providerID string) {
 	stickyMu.Unlock()
 }
 
+// ResetRoutingState clears ephemeral sticky-session and provider cooldown
+// state. It is used by integration tests and is also safe for administrative
+// reset flows because no persistent provider definitions are changed.
+func ResetRoutingState() {
+	stickyMu.Lock()
+	stickySessions = map[string]stickyPin{}
+	stickyMu.Unlock()
+
+	Mu.Lock()
+	for key := range Cooldowns {
+		delete(Cooldowns, key)
+	}
+	Mu.Unlock()
+}
+
 // pinProviderPresent 粘贴会话命中后校验钉住的 provider 仍然可用：启用、
 // 服务该模型、未冷却、未超预算。任何一条不满足都返回 nil（随后解钉转入
 // 组内故障转移）。
 func pinProviderPresent(providerID, model string) *CustomProvider {
-	loadProviders()
-	providersMu.Lock()
-	defer providersMu.Unlock()
-	for _, p := range customProviders {
+	Load()
+	Mu.Lock()
+	defer Mu.Unlock()
+	for _, p := range CustomProviders {
 		if p.ID != providerID {
 			continue
 		}
@@ -597,13 +648,13 @@ func pinProviderPresent(providerID, model string) *CustomProvider {
 		if !serves {
 			return nil
 		}
-		if until, cool := providerCooldowns[providerID+":"+model]; cool && time.Now().Before(until) {
+		if until, cool := Cooldowns[providerID+":"+model]; cool && time.Now().Before(until) {
 			return nil
 		}
 		if providerBudgetExceeded(providerID, model, p.RpmLimit, p.DailyLimit, p.TokenLimit, p.TokenWindow) {
 			return nil
 		}
-		cp := *p
+		cp := *cloneProvider(p)
 		return &cp
 	}
 	return nil
@@ -762,13 +813,13 @@ func recordProviderDispatch(providerID, model string) {
 	providerDaily[providerID][day]++
 }
 
-// providerTokenWindow 查询 provider 的 token 配额窗口；未找到或空值视同
+// TokenWindow 查询 provider 的 token 配额窗口；未找到或空值视同
 // "monthly"。请求日志落盘归集用量时用它取窗口，避免调用方透传窗口。
-func providerTokenWindow(providerID string) string {
-	loadProviders()
-	providersMu.Lock()
-	defer providersMu.Unlock()
-	for _, p := range customProviders {
+func TokenWindow(providerID string) string {
+	Load()
+	Mu.Lock()
+	defer Mu.Unlock()
+	for _, p := range CustomProviders {
 		if p.ID == providerID {
 			if p.TokenWindow == "daily" {
 				return "daily"
@@ -779,10 +830,10 @@ func providerTokenWindow(providerID string) string {
 	return "monthly"
 }
 
-// recordProviderTokenUsage 落盘请求日志时归集 token 用量（发出即消耗，不论
+// RecordTokenUsage 落盘请求日志时归集 token 用量（发出即消耗，不论
 // 成败都按上游回报的计量累加）。tokens<0 的异常回报直接忽略。tokenWindow
 // 决定时间键粒度（"daily" 用日键，其余用月键）。
-func recordProviderTokenUsage(providerID string, tokens int64, tokenWindow string) {
+func RecordTokenUsage(providerID string, tokens int64, tokenWindow string) {
 	if providerID == "" || tokens < 0 {
 		return
 	}
@@ -805,7 +856,7 @@ type providerCand struct {
 // quality 策略按实测成绩优先 —— 窗口内成功率高者在前，等同程按平均时延升序，
 // 仍平按配置优先级。无样本的候选拿中性值，不因无数据而插队压过实测优秀者。
 func sortProviderCands(cs []providerCand, model string) {
-	if getProxyConfig().Strategy == "quality" {
+	if ConfigProvider().Strategy == "quality" {
 		sort.SliceStable(cs, func(i, j int) bool {
 			ri, li := providerScoreStats(cs[i].p.ID, model)
 			rj, lj := providerScoreStats(cs[j].p.ID, model)
@@ -901,7 +952,7 @@ func orderProviderCandsWeighted(cs []providerCand, model string) []providerCand 
 // orderProviderCands 按当前路由策略产出候选顺序；weighted_round_robin 会重排
 // 并可能剔除负权候选，其余策略沿用 sortProviderCands 的排序语义。
 func orderProviderCands(cs []providerCand, model string) []providerCand {
-	if getProxyConfig().Strategy == "weighted_round_robin" {
+	if ConfigProvider().Strategy == "weighted_round_robin" {
 		return orderProviderCandsWeighted(cs, model)
 	}
 	sortProviderCands(cs, model)
@@ -1116,18 +1167,22 @@ var providerPresets = map[string]providerPreset{
 	},
 }
 
-// syncProviderModels 把启用中 provider 声明的模型同步进账号池（Source="provider"）：
+// providerPresetsImported 由 internal/providerreg 的 imported.json 提供
+// （ExtremeRouter registry 导入，§7.3）。
+var providerPresetsImported = providerreg.MustImported().All()
+
+// SyncModels 把启用中 provider 声明的模型同步进账号池（Source="provider"）：
 // 模型管理页 / /v1/models / 默认模型下拉 / 回退链均以池为唯一数据源，同步后
 // provider 模型与 Cline / zen 模型享有同样的列表展示、启停与自动回退语义。
 // 规则：
 //   - 仅同步 Enabled provider 的 modelIds；同 ID 已有其他来源条目（remote/zen/
-//     用户自定义）时不重复添加，路由仍由 resolveProviderForModel 按 ID 命中
+//     用户自定义）时不重复添加，路由仍由 ResolveOne 按 ID 命中
 //   - 池内已有 provider 条目时只刷新归属与计费，保留 Disabled / Context /
 //     Output / MetaLocked（用户手动改过的值不被覆盖）
 //   - provider 删除 / 停用 / 移除模型后，对应池内条目自动清理；指向已清理
 //     模型的默认模型一并清空
-func syncProviderModels() {
-	provs := listProviders() // providersMu 自持自放；之后再拿 accounts.PoolMu，无反向持锁路径
+func SyncModels() {
+	provs := List() // Mu 自持自放；之后再拿 accounts.PoolMu，无反向持锁路径
 	type claim struct {
 		name   string
 		cost   string
@@ -1241,44 +1296,44 @@ func syncProviderModels() {
 // Fallback 集成：自定义 provider 参与 modelFallbackChain
 // ============================================================================
 
-// callCustomProviderAPI 先看粘贴会话是否已把该会话钉在本模型某个健康
+// CallAPI 先看粘贴会话是否已把该会话钉在本模型某个健康
 // provider 上（钉住的不换模型、不随机切换）；未钉住时按冗余组逐家尝试，
 // 任一成功即把该会话钉到它身上。全部失败返回最后一个 error，调用方决定
 // 是否降级到回退链。模型没有可用 provider 时 attempted=false。
 // 第 4 个返回值是实际服务本次尝试的 provider 显示名（成功=命中那家；
 // attempted 失败=最后尝试那家；attempted=false 为空），供请求日志归因。
-func callCustomProviderAPI(params map[string]any, stream bool) (*http.Response, error, bool, string) {
+func CallAPI(params map[string]any, stream bool) (*http.Response, error, bool, string) {
 	model, _ := params["model"].(string)
 	// P3 粘贴会话：同一会话（首个 user 消息哈希）在 TTL 内钉到同一家 provider，
 	// 中途不因组内竞争或优先级重算而换源；钉住的 provider 冷却/超限/停用后
 	// 立即解钉融入组内故障转移。
-	sk := sessionKeyFromParams(params)
+	sk := SessionKeyFromParams(params)
 	if sk != "" {
 		if pin := stickyGet(sk); pin != nil && pin.model == model {
 			if p := pinProviderPresent(pin.providerID, model); p != nil {
-				resp, err := callProvider(p, params, stream)
+				resp, err := Call(p, params, stream)
 				if err == nil {
 					stickySet(sk, pin.providerID, model)
-					params[providerIDParam] = pin.providerID
+					params[ProviderIDParam] = pin.providerID
 					return resp, nil, true, p.Name
 				}
 				log.Printf("  provider attempt failed name=%s model=%q (pinned): %v", p.Name, model, err)
-				if stop, cooldown, matched := ruleDecision(err); matched {
+				if stop, cooldown, matched := ErrorRuleDecision(err); matched {
 					if cooldown {
-						setProviderCooldown(p.ID, model, ruleCooldownUntil(clineErrorStatus(err)))
+						SetCooldown(p.ID, model, RuleCooldownUntil(ErrorStatus(err)))
 					}
 					if stop {
 						stickyClear(sk)
-						params[providerIDParam] = pin.providerID
-						logRuleHit("stop", clineErrorStatus(err), "provider "+p.Name+" (sticky)")
-						return nil, &requestErrorStop{err: err}, true, p.Name
+						params[ProviderIDParam] = pin.providerID
+						LogRuleHit("stop", ErrorStatus(err), "provider "+p.Name+" (sticky)")
+						return nil, StopError(err), true, p.Name
 					}
 				}
 			}
 			stickyClear(sk) // 解钉：失败/不满足条件时融入正常组内转移
 		}
 	}
-	provs := resolveProvidersForModel(model)
+	provs := ResolveForModel(model)
 	if len(provs) == 0 {
 		return nil, nil, false, ""
 	}
@@ -1286,42 +1341,42 @@ func callCustomProviderAPI(params map[string]any, stream bool) (*http.Response, 
 	var lastName string
 	var lastID string
 	for _, p := range provs {
-		resp, err := callProvider(p, params, stream)
+		resp, err := Call(p, params, stream)
 		if err == nil {
 			if sk != "" {
 				stickySet(sk, p.ID, model)
 			}
-			params[providerIDParam] = p.ID
+			params[ProviderIDParam] = p.ID
 			return resp, nil, true, p.Name
 		}
 		log.Printf("  provider attempt failed name=%s model=%q: %v", p.Name, model, err)
 		lastErr = err
 		lastName = p.Name
 		lastID = p.ID
-		if stop, cooldown, matched := ruleDecision(err); matched {
+		if stop, cooldown, matched := ErrorRuleDecision(err); matched {
 			if cooldown {
-				setProviderCooldown(p.ID, model, ruleCooldownUntil(clineErrorStatus(err)))
+				SetCooldown(p.ID, model, RuleCooldownUntil(ErrorStatus(err)))
 			}
 			if stop {
-				params[providerIDParam] = p.ID
-				logRuleHit("stop", clineErrorStatus(err), "provider "+p.Name)
-				return nil, &requestErrorStop{err: err}, true, p.Name
+				params[ProviderIDParam] = p.ID
+				LogRuleHit("stop", ErrorStatus(err), "provider "+p.Name)
+				return nil, StopError(err), true, p.Name
 			}
-			logRuleHit("continue", clineErrorStatus(err), "provider "+p.Name)
+			LogRuleHit("continue", ErrorStatus(err), "provider "+p.Name)
 		}
 	}
-	params[providerIDParam] = lastID
+	params[ProviderIDParam] = lastID
 	return nil, lastErr, true, lastName
 }
 
-// providerNameServesModel 判断是否存在**启用中**的 provider，其 Name 匹配（去空白、
+// NameServesModel 判断是否存在**启用中**的 provider，其 Name 匹配（去空白、
 // 大小写不敏感）且模型列表包含该模型。校验用：不关心冷却/预算（那是运行时的事）。
-func providerNameServesModel(name, model string) bool {
+func NameServesModel(name, model string) bool {
 	name = strings.TrimSpace(name)
 	if name == "" {
 		return false
 	}
-	for _, p := range listProviders() {
+	for _, p := range List() {
 		if !p.Enabled || !strings.EqualFold(strings.TrimSpace(p.Name), name) {
 			continue
 		}
@@ -1334,11 +1389,11 @@ func providerNameServesModel(name, model string) bool {
 	return false
 }
 
-// splitProviderPin parses the request-level qualified name "model@ProviderName"
+// SplitPin parses the request-level qualified name "model@ProviderName"
 // used to deliberately pick which provider serves a model id that multiple
 // providers expose. LastIndexOf so ids containing '@' keep working; the pin is
 // only honored when non-empty.
-func splitProviderPin(model string) (bare, pin string) {
+func SplitPin(model string) (bare, pin string) {
 	i := strings.LastIndex(model, "@")
 	if i <= 0 {
 		return model, ""
@@ -1350,20 +1405,20 @@ func splitProviderPin(model string) (bare, pin string) {
 	return bare, pin
 }
 
-// resolveProvidersNamedForModel 与 resolveProvidersForModel 同规则（启用、未冷却、
+// ResolveNamedForModel 与 ResolveForModel 同规则（启用、未冷却、
 // 未超预算、服务该模型），但只保留 Name 匹配给定名称（去空白、大小写不敏感）的
 // provider。用于组合条目把模型钉到某一家上游。
-func resolveProvidersNamedForModel(model, name string) []*CustomProvider {
-	loadProviders()
-	providersMu.Lock()
-	defer providersMu.Unlock()
+func ResolveNamedForModel(model, name string) []*CustomProvider {
+	Load()
+	Mu.Lock()
+	defer Mu.Unlock()
 	name = strings.TrimSpace(name)
 	if name == "" {
 		return nil
 	}
 	var cs []providerCand
 	now := time.Now()
-	for _, p := range customProviders {
+	for _, p := range CustomProviders {
 		if !p.Enabled || !strings.EqualFold(strings.TrimSpace(p.Name), name) {
 			continue
 		}
@@ -1371,13 +1426,13 @@ func resolveProvidersNamedForModel(model, name string) []*CustomProvider {
 			if m != model {
 				continue
 			}
-			if until, cool := providerCooldowns[p.ID+":"+model]; cool && now.Before(until) {
+			if until, cool := Cooldowns[p.ID+":"+model]; cool && now.Before(until) {
 				break // 该 provider 的该模型冷却中
 			}
 			if providerBudgetExceeded(p.ID, model, p.RpmLimit, p.DailyLimit, p.TokenLimit, p.TokenWindow) {
 				break
 			}
-			cs = append(cs, providerCand{p: *p})
+			cs = append(cs, providerCand{p: *cloneProvider(p)})
 			break
 		}
 	}
@@ -1389,18 +1444,18 @@ func resolveProvidersNamedForModel(model, name string) []*CustomProvider {
 	return out
 }
 
-// callCustomProviderAPINamed 与 callCustomProviderAPI 类似，但只考虑 Name 匹配的
+// CallAPINamed 与 CallAPI 类似，但只考虑 Name 匹配的
 // provider（模型固定到某一家上游）：失败时**不**回退到组内其他 provider。
 // 故意不读取/写入粘性会话——显式固定应当压过自动粘贴，且固定到 A 家的调用不应
 // 污染另一家的粘贴状态。无匹配候选时 attempted=false（调用方决定是否兜底）。
 // 供请求日志归因。
-func callCustomProviderAPINamed(params map[string]any, stream bool, name string) (*http.Response, error, bool, string) {
+func CallAPINamed(params map[string]any, stream bool, name string) (*http.Response, error, bool, string) {
 	name = strings.TrimSpace(name)
 	if name == "" {
 		return nil, nil, false, ""
 	}
 	model, _ := params["model"].(string)
-	provs := resolveProvidersNamedForModel(model, name)
+	provs := ResolveNamedForModel(model, name)
 	if len(provs) == 0 {
 		return nil, nil, false, ""
 	}
@@ -1408,9 +1463,9 @@ func callCustomProviderAPINamed(params map[string]any, stream bool, name string)
 	var lastName string
 	var lastID string
 	for _, p := range provs {
-		resp, err := callProvider(p, params, stream)
+		resp, err := Call(p, params, stream)
 		if err == nil {
-			params[providerIDParam] = p.ID
+			params[ProviderIDParam] = p.ID
 			return resp, nil, true, p.Name
 		}
 		log.Printf("  provider attempt failed name=%s model=%q (pinned): %v", p.Name, model, err)
@@ -1419,12 +1474,12 @@ func callCustomProviderAPINamed(params map[string]any, stream bool, name string)
 		lastID = p.ID
 		// A pinned-provider failure is already fatal to the caller; rules can
 		// only add the cooldown side effect here, not change the flow.
-		if _, cooldown, matched := ruleDecision(err); matched && cooldown {
-			setProviderCooldown(p.ID, model, ruleCooldownUntil(clineErrorStatus(err)))
-			logRuleHit("cooldown", clineErrorStatus(err), "provider "+p.Name+" (pinned)")
+		if _, cooldown, matched := ErrorRuleDecision(err); matched && cooldown {
+			SetCooldown(p.ID, model, RuleCooldownUntil(ErrorStatus(err)))
+			LogRuleHit("cooldown", ErrorStatus(err), "provider "+p.Name+" (pinned)")
 		}
 	}
-	params[providerIDParam] = lastID
+	params[ProviderIDParam] = lastID
 	return nil, lastErr, true, lastName
 }
 
@@ -1432,39 +1487,39 @@ func callCustomProviderAPINamed(params map[string]any, stream bool, name string)
 // Admin API handlers
 // ============================================================================
 
-func handleProvidersList(w http.ResponseWriter, r *http.Request) {
-	writeAPI(w, http.StatusOK, apiResponse{Success: true, Data: map[string]any{
-		"providers":     listProviders(),
+func HandleList(w http.ResponseWriter, r *http.Request) {
+	httpx.WriteAPI(w, http.StatusOK, httpx.Response{Success: true, Data: map[string]any{
+		"providers":     List(),
 		"health":        providerHealthSnapshot(),
 		"accountHealth": accountRecentOutcomes(),
 	}})
 }
 
-func handleProviderSave(w http.ResponseWriter, r *http.Request) {
+func HandleSave(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "POST" {
-		writeAPI(w, http.StatusMethodNotAllowed, apiResponse{Error: i18n.TAPI(r, "method_not_allowed")})
+		httpx.WriteAPI(w, http.StatusMethodNotAllowed, httpx.Response{Error: i18n.TAPI(r, "method_not_allowed")})
 		return
 	}
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
-		writeAPI(w, http.StatusBadRequest, apiResponse{Error: err.Error()})
+		httpx.WriteAPI(w, http.StatusBadRequest, httpx.Response{Error: err.Error()})
 		return
 	}
 	defer r.Body.Close()
 	var p CustomProvider
 	if err := json.Unmarshal(body, &p); err != nil {
-		writeAPI(w, http.StatusBadRequest, apiResponse{Error: "invalid_json"})
+		httpx.WriteAPI(w, http.StatusBadRequest, httpx.Response{Error: "invalid_json"})
 		return
 	}
 	p.Name = strings.TrimSpace(p.Name)
 	p.BaseURL = strings.TrimSpace(strings.TrimRight(p.BaseURL, "/"))
 	p.APIKey = strings.TrimSpace(p.APIKey)
 	if p.Name == "" || p.BaseURL == "" {
-		writeAPI(w, http.StatusBadRequest, apiResponse{Error: "name and baseURL are required"})
+		httpx.WriteAPI(w, http.StatusBadRequest, httpx.Response{Error: "name and baseURL are required"})
 		return
 	}
 	if !strings.HasPrefix(p.BaseURL, "http://") && !strings.HasPrefix(p.BaseURL, "https://") {
-		writeAPI(w, http.StatusBadRequest, apiResponse{Error: "baseURL must start with http:// or https://"})
+		httpx.WriteAPI(w, http.StatusBadRequest, httpx.Response{Error: "baseURL must start with http:// or https://"})
 		return
 	}
 	// 清洗模型 ID 与请求头
@@ -1491,7 +1546,7 @@ func handleProviderSave(w http.ResponseWriter, r *http.Request) {
 	}
 	normalizedProxy, proxyErr := transport.NormalizeProxySpec(p.ProxyURL)
 	if proxyErr != nil {
-		writeAPI(w, http.StatusBadRequest, apiResponse{Error: proxyErr.Error()})
+		httpx.WriteAPI(w, http.StatusBadRequest, httpx.Response{Error: proxyErr.Error()})
 		return
 	}
 	p.ProxyURL = normalizedProxy
@@ -1515,7 +1570,7 @@ func handleProviderSave(w http.ResponseWriter, r *http.Request) {
 	if p.TokenWindow == "" {
 		p.TokenWindow = "monthly"
 	} else if p.TokenWindow != "monthly" && p.TokenWindow != "daily" {
-		writeAPI(w, http.StatusBadRequest, apiResponse{Error: `tokenWindow must be "monthly" or "daily"`})
+		httpx.WriteAPI(w, http.StatusBadRequest, httpx.Response{Error: `tokenWindow must be "monthly" or "daily"`})
 		return
 	}
 	// Wave-4 pool hygiene: keep only connection IDs that still exist.
@@ -1533,44 +1588,44 @@ func handleProviderSave(w http.ResponseWriter, r *http.Request) {
 	if p.ConnectionID != "" && !connections.ConnectionExists(p.ConnectionID) {
 		p.ConnectionID = ""
 	}
-	saved := upsertProvider(&p)
-	syncProviderModels() // 模型列表 / 回退链立即反映变更
+	saved := Upsert(&p)
+	SyncModels() // 模型列表 / 回退链立即反映变更
 	log.Printf("admin: provider saved name=%s models=%d enabled=%v", saved.Name, len(saved.ModelIDs), saved.Enabled)
-	writeAPI(w, http.StatusOK, apiResponse{Success: true, Data: map[string]any{"provider": saved}})
+	httpx.WriteAPI(w, http.StatusOK, httpx.Response{Success: true, Data: map[string]any{"provider": saved}})
 }
 
-func handleProviderDelete(w http.ResponseWriter, r *http.Request) {
+func HandleDelete(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "POST" {
-		writeAPI(w, http.StatusMethodNotAllowed, apiResponse{Error: i18n.TAPI(r, "method_not_allowed")})
+		httpx.WriteAPI(w, http.StatusMethodNotAllowed, httpx.Response{Error: i18n.TAPI(r, "method_not_allowed")})
 		return
 	}
 	var req struct {
 		ID string `json:"id"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeAPI(w, http.StatusBadRequest, apiResponse{Error: "invalid_json"})
+		httpx.WriteAPI(w, http.StatusBadRequest, httpx.Response{Error: "invalid_json"})
 		return
 	}
-	if !deleteProvider(req.ID) {
-		writeAPI(w, http.StatusNotFound, apiResponse{Error: "provider not found"})
+	if !Delete(req.ID) {
+		httpx.WriteAPI(w, http.StatusNotFound, httpx.Response{Error: "provider not found"})
 		return
 	}
-	syncProviderModels() // 清理该 provider 声明的池内模型条目
+	SyncModels() // 清理该 provider 声明的池内模型条目
 	clearProviderRecheck(req.ID)
 	log.Printf("admin: provider deleted id=%s", req.ID)
-	writeAPI(w, http.StatusOK, apiResponse{Success: true})
+	httpx.WriteAPI(w, http.StatusOK, httpx.Response{Success: true})
 }
 
-// handleProviderTest 发一条 min-token 请求验证 provider 可用性。
+// HandleTest 发一条 min-token 请求验证 provider 可用性。
 // 两侧重载：
 //   - {id, model?}            → 已保存的 provider（model 非空时覆盖默认 ModelIDs[0]）
 //   - {baseURL, apiKey?, headers?, model?} → 未保存配置的临时测试：构造临时
-//     CustomProvider 走同一 callProvider 路径，不落盘、不产生新状态。
+//     CustomProvider 走同一 Call 路径，不落盘、不产生新状态。
 //
 // 上游失败 ≠ API 失败：一律 200 包裹 {success:true, data:{ok:false, error:...}}。
-func handleProviderTest(w http.ResponseWriter, r *http.Request) {
+func HandleTest(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "POST" {
-		writeAPI(w, http.StatusMethodNotAllowed, apiResponse{Error: i18n.TAPI(r, "method_not_allowed")})
+		httpx.WriteAPI(w, http.StatusMethodNotAllowed, httpx.Response{Error: i18n.TAPI(r, "method_not_allowed")})
 		return
 	}
 	var req struct {
@@ -1581,7 +1636,7 @@ func handleProviderTest(w http.ResponseWriter, r *http.Request) {
 		Model   string            `json:"model"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeAPI(w, http.StatusBadRequest, apiResponse{Error: "invalid_json"})
+		httpx.WriteAPI(w, http.StatusBadRequest, httpx.Response{Error: "invalid_json"})
 		return
 	}
 	model := strings.TrimSpace(req.Model)
@@ -1590,12 +1645,12 @@ func handleProviderTest(w http.ResponseWriter, r *http.Request) {
 		// 未保存配置路径：一次性 provider（不进 registry，不落盘）。
 		baseURL := strings.TrimSpace(strings.TrimRight(req.BaseURL, "/"))
 		if !strings.HasPrefix(baseURL, "http://") && !strings.HasPrefix(baseURL, "https://") {
-			writeAPI(w, http.StatusBadRequest, apiResponse{Error: "baseURL must start with http:// or https://"})
+			httpx.WriteAPI(w, http.StatusBadRequest, httpx.Response{Error: "baseURL must start with http:// or https://"})
 			return
 		}
 		if model == "" {
 			// 临时 provider 未声明模型列表，空 model 无从发起补全，需给出明确说明。
-			writeAPI(w, http.StatusOK, apiResponse{Success: true, Data: map[string]any{
+			httpx.WriteAPI(w, http.StatusOK, httpx.Response{Success: true, Data: map[string]any{
 				"ok": false, "model": "", "durationMs": 0,
 				"error": "model is required when testing an unsaved provider",
 			}})
@@ -1605,34 +1660,34 @@ func handleProviderTest(w http.ResponseWriter, r *http.Request) {
 			BaseURL:    baseURL,
 			APIKey:     strings.TrimSpace(req.APIKey),
 			Headers:    req.Headers,
-			TimeoutSec: quickTestProviderTimeoutSec, // 探测用短超时
+			TimeoutSec: 20, // 探测用短超时
 		}
-		writeAPI(w, http.StatusOK, apiResponse{Success: true, Data: runProviderMiniTest(target, model)})
+		httpx.WriteAPI(w, http.StatusOK, httpx.Response{Success: true, Data: runProviderMiniTest(target, model)})
 		return
 	}
 
-	loadProviders()
-	providersMu.Lock()
+	Load()
+	Mu.Lock()
 	var target *CustomProvider
-	for _, p := range customProviders {
+	for _, p := range CustomProviders {
 		if p.ID == req.ID {
-			cp := *p
+			cp := *cloneProvider(p)
 			target = &cp
 			break
 		}
 	}
-	providersMu.Unlock()
+	Mu.Unlock()
 	if target == nil {
-		writeAPI(w, http.StatusNotFound, apiResponse{Error: "provider not found"})
+		httpx.WriteAPI(w, http.StatusNotFound, httpx.Response{Error: "provider not found"})
 		return
 	}
 	if model == "" && len(target.ModelIDs) > 0 {
 		model = target.ModelIDs[0]
 	}
-	writeAPI(w, http.StatusOK, apiResponse{Success: true, Data: runProviderMiniTest(target, model)})
+	httpx.WriteAPI(w, http.StatusOK, httpx.Response{Success: true, Data: runProviderMiniTest(target, model)})
 }
 
-// runProviderMiniTest 用 callProvider 发一条安全预算（1024 tokens / 单条 "hi"）
+// runProviderMiniTest 用 Call 发一条安全预算（1024 tokens / 单条 "hi"）
 // 非流式补全，返回测试结果 map：durationMs/model/ok,error?/inputTokens?/outputTokens?。
 // 预算不能用 16：推理模型会整份耗在 reasoning 上导致上游空正文假失败（issue #32）。
 func runProviderMiniTest(p *CustomProvider, model string) map[string]any {
@@ -1642,11 +1697,11 @@ func runProviderMiniTest(p *CustomProvider, model string) map[string]any {
 		"messages":   []any{map[string]any{"role": "user", "content": "hi"}},
 	}
 	started := time.Now()
-	resp, err := callProvider(p, params, false)
+	resp, err := Call(p, params, false)
 	result := map[string]any{"durationMs": time.Since(started).Milliseconds(), "model": model}
 	if err != nil {
 		result["ok"] = false
-		result["error"] = truncate(err.Error(), 300)
+		result["error"] = platform.Truncate(err.Error(), 300)
 		return result
 	}
 	defer resp.Body.Close()
@@ -1656,17 +1711,17 @@ func runProviderMiniTest(p *CustomProvider, model string) map[string]any {
 		if data, ok := obj["data"].(map[string]any); ok {
 			obj = data
 		}
-		obj = normalizeOpenAIResponse(obj)
+		obj = openaichat.NormalizeResponse(obj)
 	}
 	result["ok"] = true
-	if u := parseTokenUsage(obj["usage"]); u.Valid {
+	if u := openaichat.ParseUsage(obj["usage"]); u.Valid {
 		result["inputTokens"] = u.Prompt
 		result["outputTokens"] = u.Completion
 	}
 	return result
 }
 
-func handleProviderPresets(w http.ResponseWriter, r *http.Request) {
+func HandlePresets(w http.ResponseWriter, r *http.Request) {
 	type presetOut struct {
 		Key           string            `json:"key"`
 		Name          string            `json:"name"`
@@ -1698,5 +1753,5 @@ func handleProviderPresets(w http.ResponseWriter, r *http.Request) {
 		}
 		out = append(out, presetOut{Key: k, Name: p.Name, BaseURL: p.BaseURL, Headers: p.Headers, Notes: p.Notes, FreeTier: p.FreeTier, ModelIDs: p.ModelIDs, ModelsFetcher: p.ModelsFetcher, Kind: kind, LoginFlow: p.LoginFlow})
 	}
-	writeAPI(w, http.StatusOK, apiResponse{Success: true, Data: map[string]any{"presets": out}})
+	httpx.WriteAPI(w, http.StatusOK, httpx.Response{Success: true, Data: map[string]any{"presets": out}})
 }

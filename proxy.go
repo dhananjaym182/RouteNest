@@ -26,6 +26,7 @@ import (
 	"cline-go-proxy/internal/protocol"
 	anthropicconv "cline-go-proxy/internal/protocol/anthropic"
 	"cline-go-proxy/internal/protocol/openaichat"
+	"cline-go-proxy/internal/providers"
 	clineupstream "cline-go-proxy/internal/upstream/cline"
 )
 
@@ -430,7 +431,7 @@ func startProxy(host string, port int) error {
 	p := accounts.LoadPool()
 	loadRequestLogs()
 	// 自定义 provider 声明的模型同步进池：模型管理页可见、可启停、参与自动回退
-	syncProviderModels()
+	providers.SyncModels()
 	activeCount := 0
 	for _, a := range p.Accounts {
 		if a.Status == "active" {
@@ -450,7 +451,7 @@ func startProxy(host string, port int) error {
 	startModelSync()
 
 	// §W3-C：已启用 provider 的上游模型清单后台自动检测（下架标记 + 新模型入队待审）
-	startProviderModelRecheck()
+	providers.StartModelRecheck()
 
 	// opencode zen：定时同步免费模型列表 + 压缩会话状态清理
 	if getZenConfig().Enabled {
@@ -1077,17 +1078,12 @@ func isDeterministicRequestError(err error) bool {
 
 // servedByParam 是 callClineAPI 族回写在 params 上的「实际服务方」标记：
 // 自定义 provider 成功服务时写入 upstreamProvider。仅用于请求日志归因——
-// buildUpstreamBody / callProvider / callZenAPI 只拷贝白名单键，不会外发。
+// buildUpstreamBody / providers.Call / callZenAPI 只拷贝白名单键，不会外发。
 const servedByParam = "__served_by"
 
 // providerNameParam 与 servedByParam 配套：自定义 provider 成功服务时回写实际
 // 命中之家的显示名，供 stampUpstream 归因到请求日志的 providerName 字段。
 const providerNameParam = "__served_by_name"
-
-// providerIDParam 与 providerNameParam 配套：同一家 provider 的 ID，供请求日志
-// providerId 字段归集月度 token 用量。仅内存参数（残余键不外发——
-// buildUpstreamBody / callProvider / callZenAPI 只拷贝白名单键，不会外发）。
-const providerIDParam = "__served_by_id"
 
 // stampUpstream 按实际服务结果写入请求日志的上游归因：
 // provider 标记 > 生效模型是 zen 模型（反向故障转移）> Cline 账号池。
@@ -1095,7 +1091,7 @@ func stampUpstream(reqLog *RequestLog, params map[string]any) {
 	if v, _ := params[servedByParam].(string); v == upstreamProvider {
 		reqLog.Upstream = upstreamProvider
 		reqLog.ProviderName, _ = params[providerNameParam].(string)
-		reqLog.ProviderID, _ = params[providerIDParam].(string)
+		reqLog.ProviderID, _ = params[providers.ProviderIDParam].(string)
 		return
 	}
 	if m, _ := params["model"].(string); m != "" {
@@ -1113,18 +1109,18 @@ func stampUpstream(reqLog *RequestLog, params map[string]any) {
 
 func callClineAPI(params map[string]any, stream bool) (*http.Response, *Account, error) {
 	model, _ := params["model"].(string)
-	delete(params, servedByParam)     // 归因标记按次重算，避免流重试沿用上一次结果
-	delete(params, providerNameParam) // 同步清掉上次归因的 provider 名
-	delete(params, providerIDParam)   // 同步清掉上次归因的 provider ID
+	delete(params, servedByParam)             // 归因标记按次重算，避免流重试沿用上一次结果
+	delete(params, providerNameParam)         // 同步清掉上次归因的 provider 名
+	delete(params, providers.ProviderIDParam) // 同步清掉上次归因的 provider ID
 	// Request-level pin "model@ProviderName": only the named provider may
 	// serve. An explicit pin must fail loudly rather than silently fall back
 	// to a redundancy sibling, the Cline pool, or the fallback chain.
-	if bare, pin := splitProviderPin(model); pin != "" {
+	if bare, pin := providers.SplitPin(model); pin != "" {
 		params["model"] = bare // upstream body and log attribution carry the bare id
 		if getProxyConfig().OnlyFree && !modelFreeOnlyEligible(bare) {
 			return nil, nil, fmt.Errorf("model %q is not eligible while onlyFree is enabled (access class: %s)", bare, modelRouteAccess(bare).Class)
 		}
-		resp, perr, attempted, provName := callCustomProviderAPINamed(params, stream, pin)
+		resp, perr, attempted, provName := providers.CallAPINamed(params, stream, pin)
 		switch {
 		case attempted && perr == nil:
 			params[servedByParam] = upstreamProvider
@@ -1194,7 +1190,7 @@ func callClineAPI(params map[string]any, stream bool) (*http.Response, *Account,
 	// 会话亲和（管理员开关，默认关闭）：同一会话在 TTL 内钉到同一 Cline 账号。
 	var affinitySk string
 	if getProxyConfig().SessionAffinity.Enabled {
-		affinitySk = sessionKeyFromParams(params)
+		affinitySk = providers.SessionKeyFromParams(params)
 	}
 	// 回退轮数/每轮凭证上限由管理员 RetryPolicy 决定；默认 rounds=1、
 	// credCap=0（不限），与旧行为完全一致。rounds>1 时每轮之间等待一个有界
@@ -1208,7 +1204,7 @@ func callClineAPI(params map[string]any, stream bool) (*http.Response, *Account,
 		}
 		for _, m := range chain {
 			// 先试自定义 provider
-			if pResp, pErr, attempted, provName := callCustomProviderAPI(withModel(params, m), stream); attempted {
+			if pResp, pErr, attempted, provName := providers.CallAPI(withModel(params, m), stream); attempted {
 				if pErr == nil {
 					if m != model {
 						log.Printf("  model fallback: %q unavailable, serving via provider %q", model, m)
@@ -1218,7 +1214,7 @@ func callClineAPI(params map[string]any, stream bool) (*http.Response, *Account,
 					params[providerNameParam] = provName
 					return pResp, nil, nil
 				}
-				// callCustomProviderAPI 已逐个记录 provider 失败原因，链上不重复打日志
+				// providers.CallAPI 已逐个记录 provider 失败原因，链上不重复打日志
 				var st *requestErrorStop
 				if errors.As(pErr, &st) {
 					return nil, nil, st.err // 错误规则声明终止：不再走账号池/链
@@ -1307,7 +1303,7 @@ func callClineAPI(params map[string]any, stream bool) (*http.Response, *Account,
 				params[providerNameParam] = v // 同步实际服务的 provider 名
 			} else {
 				delete(params, providerNameParam)
-				delete(params, providerIDParam)
+				delete(params, providers.ProviderIDParam)
 			}
 			return resp, acc, nil
 		}
@@ -1358,7 +1354,7 @@ func defaultFreeChain() []string {
 			remoteFree = append(remoteFree, m.ID)
 		}
 		// 启用中自定义 provider 的免费模型参与自动回退（provider 失败时也会被
-		// callFreeClineAPI 内的 callCustomProviderAPI 尝试，其次才是账号池）
+		// callFreeClineAPI 内的 providers.CallAPI 尝试，其次才是账号池）
 		if m.Source == "provider" && m.Cost == "free" && m.Status == "active" && !m.Disabled {
 			remoteFree = append(remoteFree, m.ID)
 		}
@@ -1399,7 +1395,7 @@ func liveModelSet(p *AccountPool) map[string]bool {
 		live[m.ID] = true
 	}
 	// provider 声明的模型（已同步进池的直接生效；池内被停用的一致排除）
-	for _, sp := range listProviders() {
+	for _, sp := range providers.List() {
 		if !sp.Enabled {
 			continue
 		}
@@ -1512,12 +1508,12 @@ func callFreeClineAPI(params map[string]any, stream bool) (*http.Response, *Acco
 		}
 		chain = eligible
 	}
-	delete(params, servedByParam)     // 本次调用重新归因
-	delete(params, providerNameParam) // 同步清掉上次归因的 provider 名
-	delete(params, providerIDParam)   // 同步清掉上次归因的 provider ID
+	delete(params, servedByParam)             // 本次调用重新归因
+	delete(params, providerNameParam)         // 同步清掉上次归因的 provider 名
+	delete(params, providers.ProviderIDParam) // 同步清掉上次归因的 provider ID
 	var affinitySk string
 	if getProxyConfig().SessionAffinity.Enabled {
-		affinitySk = sessionKeyFromParams(params)
+		affinitySk = providers.SessionKeyFromParams(params)
 	}
 	var lastErr error
 	lastWas429 := false
@@ -1525,13 +1521,13 @@ func callFreeClineAPI(params map[string]any, stream bool) (*http.Response, *Acco
 		params["model"] = model
 		// 与显式模型链一致：链内模型命中自定义 provider 时先走 provider，
 		// 失败（记冷却）后继续用账号池兜底——free 别名不再绕过 provider。
-		if pResp, pErr, attempted, provName := callCustomProviderAPI(params, stream); attempted {
+		if pResp, pErr, attempted, provName := providers.CallAPI(params, stream); attempted {
 			if pErr == nil {
 				params[servedByParam] = upstreamProvider
 				params[providerNameParam] = provName
 				return pResp, nil, nil
 			}
-			// callCustomProviderAPI 已逐个记录 provider 失败原因，链上不重复打日志
+			// providers.CallAPI 已逐个记录 provider 失败原因，链上不重复打日志
 			var st *requestErrorStop
 			if errors.As(pErr, &st) {
 				return nil, nil, st.err // 错误规则声明终止 free 链
@@ -2704,7 +2700,7 @@ func streamAnthropicCombo(ctx context.Context, w http.ResponseWriter, params map
 		} else {
 			delete(params, servedByParam)
 			delete(params, providerNameParam)
-			delete(params, providerIDParam)
+			delete(params, providers.ProviderIDParam)
 		}
 		// 每次成功建流后按实际服务方重算归因（流式组合此前只在循环外 stamp 过一次，
 		// 会把 provider/zen 条目错记为 cline）。

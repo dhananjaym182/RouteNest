@@ -5,6 +5,7 @@ package main
 // 同一模型不同固定不被去重、validateCombo 拒绝非法固定，以及空固定行为不变。
 
 import (
+	"cline-go-proxy/internal/providers"
 	"net/http"
 	"path/filepath"
 	"testing"
@@ -14,23 +15,23 @@ import (
 // installProviders 把 provider registry 隔离到临时目录并安装给定 provider。
 func installProviders(t *testing.T, provs ...*CustomProvider) {
 	t.Helper()
-	oldPath := providersFilePath
-	oldCool := providersCooldownsPath
-	providersFilePath = filepath.Join(t.TempDir(), ".cline-providers.json")
-	providersCooldownsPath = filepath.Join(t.TempDir(), ".cline-providers-cooldowns.json")
-	oldProvs := customProviders
-	oldLoaded := providersLoaded
-	customProviders = nil
-	providersLoaded = true
+	oldPath := providers.FilePath
+	oldCool := providers.CooldownsPath
+	providers.FilePath = filepath.Join(t.TempDir(), ".cline-providers.json")
+	providers.CooldownsPath = filepath.Join(t.TempDir(), ".cline-providers-cooldowns.json")
+	oldProvs := providers.CustomProviders
+	oldLoaded := providers.Loaded
+	providers.CustomProviders = nil
+	providers.Loaded = true
 	t.Cleanup(func() {
-		providersFilePath = oldPath
-		providersCooldownsPath = oldCool
-		customProviders = oldProvs
-		providersLoaded = oldLoaded
+		providers.FilePath = oldPath
+		providers.CooldownsPath = oldCool
+		providers.CustomProviders = oldProvs
+		providers.Loaded = oldLoaded
 		resetRoutingState()
 	})
 	for _, p := range provs {
-		upsertProvider(p)
+		providers.Upsert(p)
 	}
 }
 

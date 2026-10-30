@@ -1,6 +1,7 @@
 package main
 
 import (
+	"cline-go-proxy/internal/providers"
 	"log"
 	"strings"
 	"time"
@@ -26,7 +27,7 @@ func resolveClientModel(raw string) (resolved string, reject string) {
 	if _, isCombo := findCombo(id); !isCombo && id != "free" {
 		if alias, ok := cfg.AliasFor(id); ok && (alias.Force || !catalogHasModel(id)) {
 			target := alias.Target
-			bare, pin := splitProviderPin(target)
+			bare, pin := providers.SplitPin(target)
 			if pin == "" && alias.Provider != "" {
 				target = bare + "@" + alias.Provider
 			}
@@ -44,7 +45,7 @@ func resolveClientModel(raw string) (resolved string, reject string) {
 // alias only shadows unknown ids).
 func catalogHasModel(id string) bool {
 	id = strings.TrimPrefix(strings.TrimSpace(id), "opencode/")
-	bare, _ := splitProviderPin(id)
+	bare, _ := providers.SplitPin(id)
 	for _, m := range getAllModels() {
 		if m.ID == bare || m.ID == id {
 			return true
@@ -56,7 +57,7 @@ func catalogHasModel(id string) bool {
 // modelEntryMeta returns the capability metadata stored for a model id.
 func modelEntryMeta(id string) (Model, bool) {
 	id = strings.TrimPrefix(strings.TrimSpace(id), "opencode/")
-	bare, _ := splitProviderPin(id)
+	bare, _ := providers.SplitPin(id)
 	for _, m := range getAllModels() {
 		if m.ID == bare || m.ID == id {
 			return m, true

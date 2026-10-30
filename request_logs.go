@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"cline-go-proxy/internal/i18n"
+	"cline-go-proxy/internal/providers"
 	"cline-go-proxy/internal/store/requestlog"
 )
 
@@ -195,7 +196,7 @@ func finalizeRequestLog(entry *RequestLog, usage tokenUsage, firstOutputAt time.
 	// 配额窗口（monthly/daily）累加（失败但带着 usage 的请求同样计入：token
 	// 已经消耗）。
 	if entry.ProviderID != "" && entry.TotalTokens > 0 {
-		recordProviderTokenUsage(entry.ProviderID, entry.TotalTokens, providerTokenWindow(entry.ProviderID))
+		providers.RecordTokenUsage(entry.ProviderID, entry.TotalTokens, providers.TokenWindow(entry.ProviderID))
 	}
 
 	appendRequestLog(*entry)

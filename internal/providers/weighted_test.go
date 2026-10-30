@@ -1,16 +1,19 @@
-package main
+package providers
 
 import (
 	"testing"
+
+	"cline-go-proxy/internal/config"
 )
 
 func weightedFixture(t *testing.T) {
 	t.Helper()
-	cfg := defaultProxyConfig()
+	cfg := config.DefaultProxy()
 	cfg.Strategy = "weighted_round_robin"
-	setProxyConfig(cfg)
+	oldProvider := ConfigProvider
+	ConfigProvider = func() *config.Proxy { return cfg }
 	t.Cleanup(func() {
-		setProxyConfig(defaultProxyConfig())
+		ConfigProvider = oldProvider
 		providerWRRMu.Lock()
 		providerWRRState = map[string]float64{}
 		providerWRRMu.Unlock()

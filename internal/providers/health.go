@@ -1,4 +1,4 @@
-package main
+package providers
 
 import (
 	"encoding/json"
@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"cline-go-proxy/internal/httpx"
 	"cline-go-proxy/internal/i18n"
 )
 
@@ -35,19 +36,19 @@ type providerHealth struct {
 
 const providerRecentWindow = 16
 
-// providerHealthSnapshot 按 providerID 汇总健康数据。锁序：providersMu 之外
+// providerHealthSnapshot 按 providerID 汇总健康数据。锁序：Mu 之外
 // 只短暂取 budgetMu/scoreMu，避免与派发路径形成嵌套。
 func providerHealthSnapshot() map[string]*providerHealth {
-	loadProviders()
-	providersMu.Lock()
-	ids := make([]string, 0, len(customProviders))
+	Load()
+	Mu.Lock()
+	ids := make([]string, 0, len(CustomProviders))
 	limits := map[string]map[string]any{}
 	windows := map[string]string{} // providerID → token 配额窗口（"monthly"/"daily"）
 	cooldowns := map[string]time.Time{}
-	for k, v := range providerCooldowns {
+	for k, v := range Cooldowns {
 		cooldowns[k] = v
 	}
-	for _, p := range customProviders {
+	for _, p := range CustomProviders {
 		ids = append(ids, p.ID)
 		window := p.TokenWindow
 		if window != "daily" {
@@ -56,7 +57,7 @@ func providerHealthSnapshot() map[string]*providerHealth {
 		windows[p.ID] = window
 		limits[p.ID] = map[string]any{"rpm": p.RpmLimit, "daily": p.DailyLimit, "tokens": p.TokenLimit, "tokenWindow": window}
 	}
-	providersMu.Unlock()
+	Mu.Unlock()
 
 	out := map[string]*providerHealth{}
 	for _, id := range ids {
@@ -190,8 +191,7 @@ func accountRecentOutcomes() map[string][]int {
 		items []int
 	}
 	counts := map[string]*acc{}
-	requestLogsMu.Lock()
-	for _, e := range requestLogs { // 新→旧
+	for _, e := range RequestLogsSnapshot() { // 新→旧
 		if e.AccountID == "" {
 			continue
 		}
@@ -209,7 +209,6 @@ func accountRecentOutcomes() map[string][]int {
 		}
 		a.items = append(a.items, v)
 	}
-	requestLogsMu.Unlock()
 	for id, a := range counts {
 		out := make([]int, 0, len(a.items))
 		for i := len(a.items) - 1; i >= 0; i-- {
@@ -221,23 +220,23 @@ func accountRecentOutcomes() map[string][]int {
 }
 
 // GET /admin/api/account-health — 账号最近成败热度（请求日志派生，纯内存）。
-func handleAccountHealth(w http.ResponseWriter, r *http.Request) {
+func HandleAccountHealth(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		writeAPI(w, http.StatusMethodNotAllowed, apiResponse{Error: i18n.TAPI(r, "method_not_allowed")})
+		httpx.WriteAPI(w, http.StatusMethodNotAllowed, httpx.Response{Error: i18n.TAPI(r, "method_not_allowed")})
 		return
 	}
-	writeAPI(w, http.StatusOK, apiResponse{Success: true, Data: map[string]any{"accounts": accountRecentOutcomes()}})
+	httpx.WriteAPI(w, http.StatusOK, httpx.Response{Success: true, Data: map[string]any{"accounts": accountRecentOutcomes()}})
 }
 
 // POST /admin/api/providers/cooldown-reset  body: {id, model?}
-func handleProviderCooldownReset(w http.ResponseWriter, r *http.Request) {
+func HandleCooldownReset(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		writeAPI(w, http.StatusMethodNotAllowed, apiResponse{Error: i18n.TAPI(r, "method_not_allowed")})
+		httpx.WriteAPI(w, http.StatusMethodNotAllowed, httpx.Response{Error: i18n.TAPI(r, "method_not_allowed")})
 		return
 	}
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
-		writeAPI(w, http.StatusBadRequest, apiResponse{Error: err.Error()})
+		httpx.WriteAPI(w, http.StatusBadRequest, httpx.Response{Error: err.Error()})
 		return
 	}
 	defer r.Body.Close()
@@ -246,18 +245,18 @@ func handleProviderCooldownReset(w http.ResponseWriter, r *http.Request) {
 		Model string `json:"model"`
 	}
 	if err := json.Unmarshal(body, &req); err != nil {
-		writeAPI(w, http.StatusBadRequest, apiResponse{Error: "invalid_json"})
+		httpx.WriteAPI(w, http.StatusBadRequest, httpx.Response{Error: "invalid_json"})
 		return
 	}
 	req.ID = strings.TrimSpace(req.ID)
 	req.Model = strings.TrimSpace(req.Model)
 	if req.ID == "" {
-		writeAPI(w, http.StatusBadRequest, apiResponse{Error: "id is required"})
+		httpx.WriteAPI(w, http.StatusBadRequest, httpx.Response{Error: "id is required"})
 		return
 	}
-	providersMu.Lock()
+	Mu.Lock()
 	var removed int
-	for key := range providerCooldowns {
+	for key := range Cooldowns {
 		id := strings.SplitN(key, ":", 2)[0]
 		if id != req.ID {
 			continue
@@ -271,17 +270,17 @@ func handleProviderCooldownReset(w http.ResponseWriter, r *http.Request) {
 				continue
 			}
 		}
-		delete(providerCooldowns, key)
+		delete(Cooldowns, key)
 		removed++
 	}
 	if removed > 0 {
 		saveProviderCooldownsLocked()
 	}
-	providersMu.Unlock()
+	Mu.Unlock()
 	if removed == 0 {
-		writeAPI(w, http.StatusOK, apiResponse{Success: true, Data: map[string]any{"removed": 0}})
+		httpx.WriteAPI(w, http.StatusOK, httpx.Response{Success: true, Data: map[string]any{"removed": 0}})
 		return
 	}
 	log.Printf("admin: provider cooldown reset id=%s model=%s removed=%d", req.ID, req.Model, removed)
-	writeAPI(w, http.StatusOK, apiResponse{Success: true, Data: map[string]any{"removed": removed}})
+	httpx.WriteAPI(w, http.StatusOK, httpx.Response{Success: true, Data: map[string]any{"removed": removed}})
 }

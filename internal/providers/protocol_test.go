@@ -1,4 +1,4 @@
-package main
+package providers
 
 import (
 	"strings"
@@ -26,13 +26,13 @@ func TestProviderProtocolByBaseURL(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			p := &CustomProvider{BaseURL: c.base}
-			if got := providerProtocol(p); got != c.want {
-				t.Fatalf("providerProtocol(%q) = %q, want %q", c.base, got, c.want)
+			if got := Protocol(p); got != c.want {
+				t.Fatalf("Protocol(%q) = %q, want %q", c.base, got, c.want)
 			}
 		})
 	}
-	if got := providerProtocol(nil); got != "" {
-		t.Fatalf("providerProtocol(nil) = %q, want empty", got)
+	if got := Protocol(nil); got != "" {
+		t.Fatalf("Protocol(nil) = %q, want empty", got)
 	}
 }
 
@@ -66,8 +66,8 @@ func TestQoderPresetsAreRoutable(t *testing.T) {
 		}
 		// The dispatch path resolves the protocol by baseURL, so the preset's
 		// own baseURL has to round-trip.
-		if got := providerProtocol(&CustomProvider{BaseURL: p.BaseURL}); got != "qoder" {
-			t.Errorf("%s: providerProtocol(%q) = %q", id, p.BaseURL, got)
+		if got := Protocol(&CustomProvider{BaseURL: p.BaseURL}); got != "qoder" {
+			t.Errorf("%s: Protocol(%q) = %q", id, p.BaseURL, got)
 		}
 	}
 }

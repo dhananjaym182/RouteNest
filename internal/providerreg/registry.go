@@ -18,6 +18,9 @@ import (
 //go:embed presets/*.json
 var presetFS embed.FS
 
+//go:embed imported.json
+var importedFS embed.FS
+
 // ModelsFetcher describes an upstream model-catalog endpoint.
 type ModelsFetcher struct {
 	URL  string `json:"url"`
@@ -54,6 +57,22 @@ type Registry struct {
 	byID map[string]Preset
 }
 
+func clonePreset(p Preset) Preset {
+	cp := p
+	cp.ModelIDs = append([]string(nil), p.ModelIDs...)
+	if p.Headers != nil {
+		cp.Headers = make(map[string]string, len(p.Headers))
+		for key, value := range p.Headers {
+			cp.Headers[key] = value
+		}
+	}
+	if p.ModelsFetcher != nil {
+		fetcher := *p.ModelsFetcher
+		cp.ModelsFetcher = &fetcher
+	}
+	return cp
+}
+
 // New validates presets and returns an immutable registry.
 func New(presets map[string]Preset) (*Registry, error) {
 	if err := Validate(presets); err != nil {
@@ -61,7 +80,7 @@ func New(presets map[string]Preset) (*Registry, error) {
 	}
 	cp := make(map[string]Preset, len(presets))
 	for id, p := range presets {
-		cp[id] = p
+		cp[id] = clonePreset(p)
 	}
 	return &Registry{byID: cp}, nil
 }
@@ -69,14 +88,14 @@ func New(presets map[string]Preset) (*Registry, error) {
 // Get returns a preset by ID.
 func (r *Registry) Get(id string) (Preset, bool) {
 	p, ok := r.byID[id]
-	return p, ok
+	return clonePreset(p), ok
 }
 
 // All returns a copy of every preset.
 func (r *Registry) All() map[string]Preset {
 	out := make(map[string]Preset, len(r.byID))
 	for id, p := range r.byID {
-		out[id] = p
+		out[id] = clonePreset(p)
 	}
 	return out
 }
@@ -201,6 +220,41 @@ func LoadEmbedded() (*Registry, error) {
 		return nil, fmt.Errorf("no embedded presets found")
 	}
 	return New(presets)
+}
+
+// LoadImported reads and validates the ExtremeRouter-derived imported preset
+// catalog embedded as a single JSON object keyed by preset ID.
+func LoadImported() (*Registry, error) {
+	data, err := importedFS.ReadFile("imported.json")
+	if err != nil {
+		return nil, fmt.Errorf("read imported presets: %w", err)
+	}
+	var presets map[string]Preset
+	if err := json.Unmarshal(data, &presets); err != nil {
+		return nil, fmt.Errorf("decode imported presets: %w", err)
+	}
+	if len(presets) == 0 {
+		return nil, fmt.Errorf("no imported presets found")
+	}
+	return New(presets)
+}
+
+var (
+	importedOnce sync.Once
+	imported     *Registry
+	importedErr  error
+)
+
+// MustImported returns the immutable imported preset registry. Invalid
+// embedded data is a build defect and panics at first use, mirroring Builtin.
+func MustImported() *Registry {
+	importedOnce.Do(func() {
+		imported, importedErr = LoadImported()
+	})
+	if importedErr != nil {
+		panic("providerreg: invalid imported presets: " + importedErr.Error())
+	}
+	return imported
 }
 
 var (

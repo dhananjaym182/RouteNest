@@ -1,4 +1,4 @@
-package main
+package providers
 
 import (
 	"net/http"
@@ -13,11 +13,11 @@ func (s *roundTripperStub) RoundTrip(*http.Request) (*http.Response, error) {
 }
 
 func TestProviderTransportForInheritsGlobal(t *testing.T) {
-	old := httpClient.Transport
-	t.Cleanup(func() { httpClient.Transport = old })
+	old := TransportProvider
+	t.Cleanup(func() { TransportProvider = old })
 
 	probe := &roundTripperStub{}
-	httpClient.Transport = probe
+	TransportProvider = func() http.RoundTripper { return probe }
 
 	tr, err := providerTransportFor("")
 	if err != nil {

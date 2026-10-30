@@ -1,4 +1,4 @@
-package main
+package providers
 
 import (
 	"encoding/json"
@@ -43,7 +43,7 @@ func TestProviderPresetsEndpointMergePrecedence(t *testing.T) {
 
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/admin/api/providers/presets", nil)
-	handleProviderPresets(rec, req)
+	HandlePresets(rec, req)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status %d", rec.Code)
 	}

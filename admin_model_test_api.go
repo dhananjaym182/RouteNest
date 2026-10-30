@@ -26,12 +26,13 @@ import (
 	"cline-go-proxy/internal/accounts"
 	"cline-go-proxy/internal/connections"
 	"cline-go-proxy/internal/i18n"
+	"cline-go-proxy/internal/providers"
 )
 
 const (
 	// quickTestPoolTimeout 组合条目测试里 Cline 账号池路径的 ctx 超时（EP4 要求 ~20s）。
 	quickTestPoolTimeout = 20 * time.Second
-	// quickTestProviderTimeoutSec EP4 里 provider 路径的兜底超时秒数（callProvider 用
+	// quickTestProviderTimeoutSec EP4 里 provider 路径的兜底超时秒数（providers.Call 用
 	// provider.TimeoutSec 建独立 client，不接 ctx；测试时夹紧到 20s）。
 	quickTestProviderTimeoutSec = 20
 	// quickTestMaxAccounts 一次测试最多尝试的账号数（轮询换号上限，避免测试烧池）。
@@ -126,7 +127,7 @@ func runQuickModelTest(model string, forcedProvider *CustomProvider, pinSource s
 
 	// ---- provider 路径 ----
 	tryProvider := func(p *CustomProvider) {
-		resp, err := callProvider(p, params, false)
+		resp, err := providers.Call(p, params, false)
 		if err != nil {
 			setResult(upstreamProvider, err.Error())
 			return
@@ -196,8 +197,8 @@ func runQuickModelTest(model string, forcedProvider *CustomProvider, pinSource s
 
 	// cline 侧：先自定义 provider（若有），失败/缺席再走账号池。
 	var lastProviderErr error
-	for _, p := range resolveProvidersForModel(model) {
-		resp, err := callProvider(p, params, false)
+	for _, p := range providers.ResolveForModel(model) {
+		resp, err := providers.Call(p, params, false)
 		if err == nil {
 			recordSuccess(upstreamProvider, resp)
 			return result
@@ -315,7 +316,7 @@ func findEnabledProviderByName(name string) *CustomProvider {
 	if name == "" {
 		return nil
 	}
-	for _, p := range listProviders() {
+	for _, p := range providers.List() {
 		if p.Enabled && strings.EqualFold(strings.TrimSpace(p.Name), name) {
 			cp := p
 			return &cp
@@ -470,7 +471,7 @@ func discoverOpenAIModels(baseURL, apiKey string, headers map[string]string) ([]
 	}
 	if !probeOK {
 		// 目录端点与 baseURL 不同的预设（如 kilo gateway/models）：回退一次 ModelsFetcher URL
-		if fb := fetcherBaseForBase(baseURL); fb != "" {
+		if fb := providers.FetcherBaseForBase(baseURL); fb != "" {
 			if st2, b2, e2 := fetch(fb + "/models"); e2 == "" && st2 == http.StatusOK {
 				status, body = st2, b2
 			} else {
@@ -537,52 +538,45 @@ func handleProviderModels(w http.ResponseWriter, r *http.Request) {
 
 	baseURL := strings.TrimSpace(strings.TrimRight(req.BaseURL, "/"))
 	if req.ID != "" {
-		loadProviders()
-		providersMu.Lock()
-		for _, p := range customProviders {
-			if p.ID == req.ID {
-				// The qoder catalog is COSY-signed with the bound account's
-				// identity — a bearer/GET {baseURL}/models probe is meaningless.
-				// Route the qoder branch through its own discovery and return.
-				if providerProtocol(p) == "qoder" {
-					providersMu.Unlock()
-					entries, discErr := discoverQoderModels(p)
-					if discErr != nil {
-						writeAPI(w, http.StatusOK, apiResponse{Success: true, Data: map[string]any{
-							"error":  discErr.Error(),
-							"models": []any{},
-						}})
-						return
-					}
-					out := make([]map[string]string, 0, len(entries))
-					for _, e := range entries {
-						out = append(out, map[string]string{"id": e.ID})
-					}
+		if p := providers.Find(req.ID); p != nil {
+			// The qoder catalog is COSY-signed with the bound account's
+			// identity — a bearer/GET {baseURL}/models probe is meaningless.
+			// Route the qoder branch through its own discovery and return.
+			if providers.Protocol(p) == "qoder" {
+				entries, discErr := providers.DiscoverQoderModels(p)
+				if discErr != nil {
 					writeAPI(w, http.StatusOK, apiResponse{Success: true, Data: map[string]any{
-						"models": out,
-						"count":  len(out),
+						"error":  discErr.Error(),
+						"models": []any{},
 					}})
 					return
 				}
-				if baseURL == "" {
-					baseURL = strings.TrimRight(p.BaseURL, "/")
+				out := make([]map[string]string, 0, len(entries))
+				for _, e := range entries {
+					out = append(out, map[string]string{"id": e.ID})
 				}
-				if req.APIKey == "" {
-					req.APIKey = p.APIKey
+				writeAPI(w, http.StatusOK, apiResponse{Success: true, Data: map[string]any{
+					"models": out,
+					"count":  len(out),
+				}})
+				return
+			}
+			if baseURL == "" {
+				baseURL = strings.TrimRight(p.BaseURL, "/")
+			}
+			if req.APIKey == "" {
+				req.APIKey = p.APIKey
+			}
+			if req.Headers == nil {
+				req.Headers = p.Headers
+			}
+			// Providers bound to connections also use a connection ticket for discovery.
+			if conn := connections.PickConnectionForProvider(p); conn != nil {
+				if spec, ok := connections.ProviderDeviceFlows[conn.Provider]; ok {
+					req.APIKey = connections.ConnectionBearer(conn, spec)
 				}
-				if req.Headers == nil {
-					req.Headers = p.Headers
-				}
-				// Providers bound to connections also use a connection ticket for discovery.
-				if conn := connections.PickConnectionForProvider(p); conn != nil {
-					if spec, ok := connections.ProviderDeviceFlows[conn.Provider]; ok {
-						req.APIKey = connections.ConnectionBearer(conn, spec)
-					}
-				}
-				break
 			}
 		}
-		providersMu.Unlock()
 		if baseURL == "" {
 			writeAPI(w, http.StatusNotFound, apiResponse{Error: "provider not found"})
 			return

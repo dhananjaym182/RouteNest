@@ -4,6 +4,7 @@ package main
 // / EP3 单模型测试 / EP4 组合测试。全部走假 transport，不触网。
 
 import (
+	"cline-go-proxy/internal/providers"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -56,7 +57,7 @@ func TestProviderTestUnsavedOK(t *testing.T) {
 		gotModel = readReqModel(req)
 		return stubResp(req, http.StatusOK, okCompletion)
 	})
-	code, resp := postAdminJSON(t, handleProviderTest,
+	code, resp := postAdminJSON(t, providers.HandleTest,
 		`{"baseURL":"http://up.test/v1","apiKey":"sk-test","model":"unsaved-m"}`)
 	if code != 200 || !resp.Success {
 		t.Fatalf("status=%d success=%v err=%s", code, resp.Success, resp.Error)
@@ -86,7 +87,7 @@ func TestProviderTestUnsavedModelRequired(t *testing.T) {
 		t.Fatalf("no upstream call expected")
 		return stubResp(req, 500, "")
 	})
-	code, resp := postAdminJSON(t, handleProviderTest, `{"baseURL":"http://up.test/v1"}`)
+	code, resp := postAdminJSON(t, providers.HandleTest, `{"baseURL":"http://up.test/v1"}`)
 	if code != 200 || !resp.Success {
 		t.Fatalf("status=%d success=%v", code, resp.Success)
 	}
@@ -106,7 +107,7 @@ func TestProviderTestSavedModelOverride(t *testing.T) {
 		gotModel = readReqModel(req)
 		return stubResp(req, http.StatusOK, okCompletion)
 	})
-	_, resp := postAdminJSON(t, handleProviderTest, `{"id":"p1","model":"second-m"}`)
+	_, resp := postAdminJSON(t, providers.HandleTest, `{"id":"p1","model":"second-m"}`)
 	if d := dataMap(t, resp); d["model"] != "second-m" || gotModel != "second-m" {
 		t.Fatalf("model = %v (upstream saw %q), want second-m", d["model"], gotModel)
 	}
@@ -120,7 +121,7 @@ func TestProviderTestSavedUpstreamErrorIsOKEnvelope(t *testing.T) {
 	installTransport(t, func(req *http.Request) *http.Response {
 		return stubResp(req, http.StatusUnauthorized, `{"error":"bad key"}`)
 	})
-	code, resp := postAdminJSON(t, handleProviderTest, `{"id":"p1"}`)
+	code, resp := postAdminJSON(t, providers.HandleTest, `{"id":"p1"}`)
 	if code != 200 || !resp.Success {
 		t.Fatalf("status=%d success=%v", code, resp.Success)
 	}

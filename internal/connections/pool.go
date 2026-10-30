@@ -47,10 +47,18 @@ var IsFreeModel = func(model string) bool {
 	return strings.HasSuffix(model, ":free") || strings.Contains(model, "/free/")
 }
 
-// PruneProviderRefs is injected by the root package (the provider registry still
-// lives in package main) to drop a deleted connection ID from every provider's
-// binding list.
-var PruneProviderRefs func(connID string)
+var (
+	providerRefPrunerMu sync.RWMutex
+	providerRefPruner   func(connID string)
+)
+
+// RegisterProviderRefPruner installs the provider-owned cleanup callback.
+// Providers import connections, so registration keeps the dependency acyclic.
+func RegisterProviderRefPruner(fn func(connID string)) {
+	providerRefPrunerMu.Lock()
+	providerRefPruner = fn
+	providerRefPrunerMu.Unlock()
+}
 
 // ProviderConnIDs returns the connection IDs bound to a provider:
 // ConnectionIDs when present, else the legacy single ConnectionID.
@@ -206,11 +214,12 @@ func ConnectionExists(id string) bool {
 
 // PruneConnectionRefs drops a deleted connection ID from every provider's
 // binding list (both pool and legacy single field). Called by RemoveConnection.
-// The provider-side implementation is injected by the root package until the
-// provider registry moves out of package main.
 func PruneConnectionRefs(connID string) {
-	if PruneProviderRefs != nil {
-		PruneProviderRefs(connID)
+	providerRefPrunerMu.RLock()
+	pruner := providerRefPruner
+	providerRefPrunerMu.RUnlock()
+	if pruner != nil {
+		pruner(connID)
 	}
 }
 

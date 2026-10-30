@@ -1,4 +1,4 @@
-package main
+package providers
 
 // ============================================================================
 // §9.3 受控模型导入：拉取上游 /models → 有序信号分类每个模型的 free/paid →
@@ -21,6 +21,7 @@ import (
 
 	"cline-go-proxy/internal/accounts"
 	"cline-go-proxy/internal/connections"
+	"cline-go-proxy/internal/httpx"
 	"cline-go-proxy/internal/modelcatalog"
 	"cline-go-proxy/internal/upstream/qoder"
 )
@@ -42,24 +43,12 @@ const (
 // upstreamModelEntry is one parsed /models item (OpenAI list + OpenRouter-style pricing).
 type upstreamModelEntry = modelcatalog.Entry
 
-// freeIDAllowlist 内置免费模型 id 白名单（zen 种子表 + 别名），随包初始化。
-var freeIDAllowlist = func() map[string]bool {
-	m := map[string]bool{}
-	for _, sm := range zenSeedModels {
-		m[strings.ToLower(sm.ID)] = true
-		for _, al := range sm.Aliases {
-			m[strings.ToLower(al)] = true
-		}
-	}
-	return m
-}()
-
 func freeWord(s string) bool { return modelcatalog.FreeWord(s) }
 
 // classifyUpstreamModel checks signals in order and returns on the first hit.
 // Explicit free markers rank above explicit non-zero pricing.
 func classifyUpstreamModel(e upstreamModelEntry, providerFree bool) (tier, signal string) {
-	return modelcatalog.Classify(e, providerFree, freeIDAllowlist)
+	return modelcatalog.Classify(e, providerFree, freeModelIDAllowlist())
 }
 
 // discoverModelEntries 拉取 {baseURL}/models（404 时补试 /v1/models，再回退预设
@@ -68,12 +57,12 @@ func discoverModelEntries(baseURL, apiKey string, headers map[string]string) ([]
 	return modelcatalog.Discover(
 		connections.OAuthHTTPClient(15*time.Second),
 		baseURL, apiKey, headers,
-		fetcherBaseForBase(baseURL),
+		FetcherBaseForBase(baseURL),
 	)
 }
 
-// fetcherBaseForBase 按规范化 baseURL 匹配预设的 ModelsFetcher 目录端点。
-func fetcherBaseForBase(baseURL string) string {
+// FetcherBaseForBase 按规范化 baseURL 匹配预设的 ModelsFetcher 目录端点。
+func FetcherBaseForBase(baseURL string) string {
 	return modelcatalog.FetcherBaseFor(baseURL)
 }
 
@@ -81,17 +70,17 @@ func fetcherBaseForBase(baseURL string) string {
 // OpenAI-shaped one for everything else, and the signed Qoder catalog for
 // providers whose preset declares the qoder protocol.
 func discoverProviderModelEntries(p *CustomProvider, apiKey string, headers map[string]string) ([]upstreamModelEntry, error) {
-	if providerProtocol(p) == "qoder" {
-		return discoverQoderModels(p)
+	if Protocol(p) == "qoder" {
+		return DiscoverQoderModels(p)
 	}
 	return discoverModelEntries(p.BaseURL, apiKey, headers)
 }
 
-// discoverQoderModels reads the Qoder catalog. It cannot go through the
+// DiscoverQoderModels reads the Qoder catalog. It cannot go through the
 // OpenAI-shaped discovery path: the catalog lives at /algo/api/v2/model/list
 // and every request has to be COSY-signed with the bound account's user id, so
 // it needs the connection rather than a bearer key.
-func discoverQoderModels(p *CustomProvider) ([]upstreamModelEntry, error) {
+func DiscoverQoderModels(p *CustomProvider) ([]upstreamModelEntry, error) {
 	conn := connections.PickConnectionForProvider(p)
 	if conn == nil {
 		return nil, fmt.Errorf("connection unavailable (expired or reauth required)")
@@ -149,7 +138,7 @@ func buildImportBatch(p CustomProvider, entries []upstreamModelEntry) *importBat
 		existing[m.ID] = modelcatalog.Existing{Source: m.Source, TierSignal: m.TierSignal, Cost: m.Cost}
 	}
 	accounts.PoolMu.Unlock()
-	batch.Items, batch.Stats = modelcatalog.BuildImportItems(entries, p.Free, existing, freeIDAllowlist)
+	batch.Items, batch.Stats = modelcatalog.BuildImportItems(entries, p.Free, existing, freeModelIDAllowlist())
 	importsMu.Lock()
 	for id, old := range pendingImports {
 		if len(pendingImports) >= 20 && time.Since(old.CreatedAt) > time.Hour {
@@ -167,9 +156,9 @@ func buildImportBatch(p CustomProvider, entries []upstreamModelEntry) *importBat
 // 拉取 + 分类 + 生成预览批次。草稿（未保存 Provider）走后者，批次 providerId 为空、
 // 仅可预览：apply 端点找不到 provider 会拒绝，前端改为「所选并入并保存」。
 // 上游失败按既有约定：HTTP 200 包 {error}。
-func handleModelImportPreview(w http.ResponseWriter, r *http.Request) {
+func HandleImportPreview(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		writeAPI(w, http.StatusMethodNotAllowed, apiResponse{Error: "method_not_allowed"})
+		httpx.WriteAPI(w, http.StatusMethodNotAllowed, httpx.Response{Error: "method_not_allowed"})
 		return
 	}
 	var req struct {
@@ -181,16 +170,16 @@ func handleModelImportPreview(w http.ResponseWriter, r *http.Request) {
 		Name    string            `json:"name"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeAPI(w, http.StatusBadRequest, apiResponse{Error: "invalid_json"})
+		httpx.WriteAPI(w, http.StatusBadRequest, httpx.Response{Error: "invalid_json"})
 		return
 	}
-	loadProviders()
-	providersMu.Lock()
+	Load()
+	Mu.Lock()
 	var prov *CustomProvider
 	if req.ID != "" {
-		for _, p := range customProviders {
+		for _, p := range CustomProviders {
 			if p.ID == req.ID {
-				cp := *p
+				cp := *cloneProvider(p)
 				prov = &cp
 				break
 			}
@@ -204,28 +193,28 @@ func handleModelImportPreview(w http.ResponseWriter, r *http.Request) {
 			Free:    req.Free,
 		}
 	}
-	providersMu.Unlock()
+	Mu.Unlock()
 	if prov == nil {
-		writeAPI(w, http.StatusNotFound, apiResponse{Error: "provider not found"})
+		httpx.WriteAPI(w, http.StatusNotFound, httpx.Response{Error: "provider not found"})
 		return
 	}
 	// Protocol-aware discovery: a qoder provider catalog is COSY-signed and
 	// lives at /algo/api/v2/model/list, not {baseURL}/models.
 	entries, err := discoverProviderModelEntries(prov, prov.APIKey, prov.Headers)
 	if err != nil {
-		writeAPI(w, http.StatusOK, apiResponse{Success: true, Data: map[string]any{"error": err.Error()}})
+		httpx.WriteAPI(w, http.StatusOK, httpx.Response{Success: true, Data: map[string]any{"error": err.Error()}})
 		return
 	}
 	batch := buildImportBatch(*prov, entries)
-	writeAPI(w, http.StatusOK, apiResponse{Success: true, Data: map[string]any{"batch": batch}})
+	httpx.WriteAPI(w, http.StatusOK, httpx.Response{Success: true, Data: map[string]any{"batch": batch}})
 }
 
 // POST /admin/api/models/import/apply  body: {batchId, approve:[modelId…]}
 // 仅批准列表内的 add / tier_change 落盘；写入 provider.ModelIDs 使其在
-// syncProviderModels 清理逻辑中存续。
-func handleModelImportApply(w http.ResponseWriter, r *http.Request) {
+// SyncModels 清理逻辑中存续。
+func HandleImportApply(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		writeAPI(w, http.StatusMethodNotAllowed, apiResponse{Error: "method_not_allowed"})
+		httpx.WriteAPI(w, http.StatusMethodNotAllowed, httpx.Response{Error: "method_not_allowed"})
 		return
 	}
 	var req struct {
@@ -233,14 +222,14 @@ func handleModelImportApply(w http.ResponseWriter, r *http.Request) {
 		Approve []string `json:"approve"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeAPI(w, http.StatusBadRequest, apiResponse{Error: "invalid_json"})
+		httpx.WriteAPI(w, http.StatusBadRequest, httpx.Response{Error: "invalid_json"})
 		return
 	}
 	importsMu.Lock()
 	batch := pendingImports[req.BatchID]
 	importsMu.Unlock()
 	if batch == nil {
-		writeAPI(w, http.StatusNotFound, apiResponse{Error: "batch not found (already applied or expired)"})
+		httpx.WriteAPI(w, http.StatusNotFound, httpx.Response{Error: "batch not found (already applied or expired)"})
 		return
 	}
 	approved := make(map[string]bool, len(req.Approve))
@@ -252,19 +241,19 @@ func handleModelImportApply(w http.ResponseWriter, r *http.Request) {
 		byID[it.ModelID] = it
 	}
 	prov := func() *CustomProvider {
-		loadProviders()
-		providersMu.Lock()
-		defer providersMu.Unlock()
-		for _, p := range customProviders {
+		Load()
+		Mu.Lock()
+		defer Mu.Unlock()
+		for _, p := range CustomProviders {
 			if p.ID == batch.ProviderID {
-				cp := *p
+				cp := *cloneProvider(p)
 				return &cp
 			}
 		}
 		return nil
 	}()
 	if prov == nil {
-		writeAPI(w, http.StatusNotFound, apiResponse{Error: "provider no longer exists"})
+		httpx.WriteAPI(w, http.StatusNotFound, httpx.Response{Error: "provider no longer exists"})
 		return
 	}
 	added, changed, now := 0, 0, time.Now().Unix()
@@ -288,7 +277,7 @@ func handleModelImportApply(w http.ResponseWriter, r *http.Request) {
 			ID: id, Provider: prov.Name, Cost: it.Tier, Status: "active",
 			Source: "provider", TierSignal: it.Signal, TierDecidedAt: now,
 		})
-		// 进入 provider.ModelIDs：syncProviderModels 的清理循环以它为准
+		// 进入 provider.ModelIDs：SyncModels 的清理循环以它为准
 		found := false
 		for _, mid := range prov.ModelIDs {
 			if mid == id {
@@ -303,29 +292,29 @@ func handleModelImportApply(w http.ResponseWriter, r *http.Request) {
 	}
 	accounts.PoolMu.Unlock()
 	if added+changed == 0 {
-		writeAPI(w, http.StatusOK, apiResponse{Success: true, Data: map[string]any{"added": 0, "changed": 0}})
+		httpx.WriteAPI(w, http.StatusOK, httpx.Response{Success: true, Data: map[string]any{"added": 0, "changed": 0}})
 		return
 	}
-	providersMu.Lock()
-	for i, p := range customProviders {
+	Mu.Lock()
+	for i, p := range CustomProviders {
 		if p.ID == prov.ID {
-			customProviders[i].ModelIDs = prov.ModelIDs
+			CustomProviders[i].ModelIDs = append([]string(nil), prov.ModelIDs...)
 			break
 		}
 	}
-	saveProvidersLocked()
-	providersMu.Unlock()
+	SaveLocked()
+	Mu.Unlock()
 	accounts.SavePool()
 	importsMu.Lock()
 	delete(pendingImports, batch.ID)
 	importsMu.Unlock()
-	syncProviderModels()
+	SyncModels()
 	log.Printf("model import applied: batch %s provider %s added=%d tierChanged=%d", batch.ID, prov.Name, added, changed)
-	writeAPI(w, http.StatusOK, apiResponse{Success: true, Data: map[string]any{"added": added, "changed": changed}})
+	httpx.WriteAPI(w, http.StatusOK, httpx.Response{Success: true, Data: map[string]any{"added": added, "changed": changed}})
 }
 
 // GET /admin/api/models/import/pending — 当前待批准批次（摘要）。
-func handleModelImportPending(w http.ResponseWriter, r *http.Request) {
+func HandleImportPending(w http.ResponseWriter, r *http.Request) {
 	importsMu.Lock()
 	out := make([]map[string]any, 0, len(pendingImports))
 	for _, b := range pendingImports {
@@ -338,43 +327,43 @@ func handleModelImportPending(w http.ResponseWriter, r *http.Request) {
 	sort.Slice(out, func(i, j int) bool {
 		return out[i]["createdAt"].(time.Time).After(out[j]["createdAt"].(time.Time))
 	})
-	writeAPI(w, http.StatusOK, apiResponse{Success: true, Data: map[string]any{"batches": out}})
+	httpx.WriteAPI(w, http.StatusOK, httpx.Response{Success: true, Data: map[string]any{"batches": out}})
 }
 
 // GET /admin/api/models/import/batch?id=x — 读回待批准批次全文（横幅点击打开 Auto 批次用）。
-func handleModelImportBatch(w http.ResponseWriter, r *http.Request) {
+func HandleImportBatch(w http.ResponseWriter, r *http.Request) {
 	id := r.URL.Query().Get("id")
 	importsMu.Lock()
 	batch := pendingImports[id]
 	importsMu.Unlock()
 	if batch == nil {
-		writeAPI(w, http.StatusNotFound, apiResponse{Error: "batch not found (already applied or expired)"})
+		httpx.WriteAPI(w, http.StatusNotFound, httpx.Response{Error: "batch not found (already applied or expired)"})
 		return
 	}
-	writeAPI(w, http.StatusOK, apiResponse{Success: true, Data: map[string]any{"batch": batch}})
+	httpx.WriteAPI(w, http.StatusOK, httpx.Response{Success: true, Data: map[string]any{"batch": batch}})
 }
 
 // POST /admin/api/models/import/discard  body: {batchId}
-func handleModelImportDiscard(w http.ResponseWriter, r *http.Request) {
+func HandleImportDiscard(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		BatchID string `json:"batchId"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeAPI(w, http.StatusBadRequest, apiResponse{Error: "invalid_json"})
+		httpx.WriteAPI(w, http.StatusBadRequest, httpx.Response{Error: "invalid_json"})
 		return
 	}
 	importsMu.Lock()
 	delete(pendingImports, req.BatchID)
 	importsMu.Unlock()
-	writeAPI(w, http.StatusOK, apiResponse{Success: true})
+	httpx.WriteAPI(w, http.StatusOK, httpx.Response{Success: true})
 }
 
 // POST /admin/api/models/cost  body: {id, cost:"free"|"pass"|""}
 // 手动定级（TierSignal="manual"）；cost 传空字符串=恢复自动（清除 manual 标记，
 // 层级保留现值，等下一次导入/同步再判定）。§9.3：manual 条目在导入批次中 protected。
-func handleAdminModelCost(w http.ResponseWriter, r *http.Request) {
+func HandleModelCost(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		writeAPI(w, http.StatusMethodNotAllowed, apiResponse{Error: "method_not_allowed"})
+		httpx.WriteAPI(w, http.StatusMethodNotAllowed, httpx.Response{Error: "method_not_allowed"})
 		return
 	}
 	var req struct {
@@ -382,11 +371,11 @@ func handleAdminModelCost(w http.ResponseWriter, r *http.Request) {
 		Cost string `json:"cost"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeAPI(w, http.StatusBadRequest, apiResponse{Error: "invalid_json"})
+		httpx.WriteAPI(w, http.StatusBadRequest, httpx.Response{Error: "invalid_json"})
 		return
 	}
 	if req.ID == "" || (req.Cost != "free" && req.Cost != "pass" && req.Cost != "") {
-		writeAPI(w, http.StatusBadRequest, apiResponse{Error: "id and cost(free|pass|empty) required"})
+		httpx.WriteAPI(w, http.StatusBadRequest, httpx.Response{Error: "id and cost(free|pass|empty) required"})
 		return
 	}
 	p := accounts.LoadPool()
@@ -408,9 +397,9 @@ func handleAdminModelCost(w http.ResponseWriter, r *http.Request) {
 	}
 	accounts.PoolMu.Unlock()
 	if !found {
-		writeAPI(w, http.StatusNotFound, apiResponse{Error: "model not found"})
+		httpx.WriteAPI(w, http.StatusNotFound, httpx.Response{Error: "model not found"})
 		return
 	}
 	accounts.SavePool()
-	writeAPI(w, http.StatusOK, apiResponse{Success: true})
+	httpx.WriteAPI(w, http.StatusOK, httpx.Response{Success: true})
 }

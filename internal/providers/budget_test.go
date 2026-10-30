@@ -1,4 +1,4 @@
-package main
+package providers
 
 import (
 	"cline-go-proxy/internal/accounts"
@@ -15,23 +15,23 @@ import (
 // saveBudgetState 保存/恢复月度 token 预算相关的全部内存态，测试间互不污染。
 func saveBudgetState(t *testing.T) {
 	t.Helper()
-	providersMu.Lock()
-	oldProviders, oldLoaded, oldCooldowns := customProviders, providersLoaded, providerCooldowns
-	providersMu.Unlock()
+	Mu.Lock()
+	oldProviders, oldLoaded, oldCooldowns := CustomProviders, Loaded, Cooldowns
+	Mu.Unlock()
 	budgetMu.Lock()
 	oldDaily, oldRPM, oldTokens := providerDaily, providerRPM, providerTokens
 	budgetMu.Unlock()
 	t.Cleanup(func() {
-		providersMu.Lock()
-		customProviders, providersLoaded, providerCooldowns = oldProviders, oldLoaded, oldCooldowns
-		providersMu.Unlock()
+		Mu.Lock()
+		CustomProviders, Loaded, Cooldowns = oldProviders, oldLoaded, oldCooldowns
+		Mu.Unlock()
 		budgetMu.Lock()
 		providerDaily, providerRPM, providerTokens = oldDaily, oldRPM, oldTokens
 		budgetMu.Unlock()
 	})
 }
 
-// recordProviderTokenUsage 归集月度 token 用量。
+// RecordTokenUsage 归集月度 token 用量。
 func TestRecordProviderTokenUsageAccruesMonthly(t *testing.T) {
 	saveBudgetState(t)
 	budgetMu.Lock()
@@ -39,11 +39,11 @@ func TestRecordProviderTokenUsageAccruesMonthly(t *testing.T) {
 	budgetMu.Unlock()
 
 	month := time.Now().UTC().Format("2006-01")
-	recordProviderTokenUsage("prov_tok", 1200, "monthly")
-	recordProviderTokenUsage("prov_tok", 800, "monthly")
-	recordProviderTokenUsage("prov_tok", -3, "monthly")   // 异常回报忽略
-	recordProviderTokenUsage("", 999, "monthly")          // 无归属忽略
-	recordProviderTokenUsage("prov_tok", 1000, "monthly") // 跨家不同计数
+	RecordTokenUsage("prov_tok", 1200, "monthly")
+	RecordTokenUsage("prov_tok", 800, "monthly")
+	RecordTokenUsage("prov_tok", -3, "monthly")   // 异常回报忽略
+	RecordTokenUsage("", 999, "monthly")          // 无归属忽略
+	RecordTokenUsage("prov_tok", 1000, "monthly") // 跨家不同计数
 
 	budgetMu.Lock()
 	got := providerTokens["prov_tok"][month]
@@ -68,9 +68,9 @@ func TestRecordProviderTokenUsageDailyWindow(t *testing.T) {
 
 	day := time.Now().UTC().Format("2006-01-02")
 	month := time.Now().UTC().Format("2006-01")
-	recordProviderTokenUsage("prov_day", 700, "daily")
-	recordProviderTokenUsage("prov_day", 300, "daily")
-	recordProviderTokenUsage("prov_day", -5, "daily") // 异常回报忽略
+	RecordTokenUsage("prov_day", 700, "daily")
+	RecordTokenUsage("prov_day", 300, "daily")
+	RecordTokenUsage("prov_day", -5, "daily") // 异常回报忽略
 
 	budgetMu.Lock()
 	gotDay := providerTokens["prov_day"][day]
@@ -97,7 +97,7 @@ func TestRecordProviderTokenUsageMonthRollover(t *testing.T) {
 	if done := providerBudgetExceeded("prov_roll", "m", 0, 0, 100, "monthly"); done {
 		t.Fatal("last month's usage must not trip this month's quota")
 	}
-	recordProviderTokenUsage("prov_roll", 100, "monthly")
+	RecordTokenUsage("prov_roll", 100, "monthly")
 	if done := providerBudgetExceeded("prov_roll", "m", 0, 0, 100, "monthly"); !done {
 		t.Fatal("usage >= limit must trip the quota")
 	}
@@ -139,13 +139,13 @@ func TestProviderBudgetExhaustsDailyAndResetsNextDay(t *testing.T) {
 		t.Fatal("yesterday's exhausted quota must not carry into a new UTC day")
 	}
 	// 新的一天重新计量：12000 >= 10000 → 超配
-	recordProviderTokenUsage("prov_d", 12_000, "daily")
+	RecordTokenUsage("prov_d", 12_000, "daily")
 	if done := providerBudgetExceeded("prov_d", "m", 0, 0, 10_000, "daily"); !done {
 		t.Fatal("new-day usage >= limit must trip daily quota again")
 	}
 }
 
-// 空窗口值视同 monthly（与 handleProviderSave 归一化后一致）。
+// 空窗口值视同 monthly（与 HandleSave 归一化后一致）。
 func TestProviderBudgetEmptyWindowDefaultsMonthly(t *testing.T) {
 	saveBudgetState(t)
 	month := time.Now().UTC().Format("2006-01")
@@ -160,19 +160,19 @@ func TestProviderBudgetEmptyWindowDefaultsMonthly(t *testing.T) {
 	}
 }
 
-// resolveProvidersForModel：token 配额耗尽的 provider 不入候选。
+// ResolveForModel：token 配额耗尽的 provider 不入候选。
 func TestResolveSkipsTokenQuotaExhausted(t *testing.T) {
 	saveBudgetState(t)
-	providersMu.Lock()
-	customProviders = []*CustomProvider{
+	Mu.Lock()
+	CustomProviders = []*CustomProvider{
 		{ID: "prov_q", Name: "Q", ModelIDs: []string{"m"}, Enabled: true, TokenLimit: 1000},
 		{ID: "prov_qd", Name: "QD", ModelIDs: []string{"m"}, Enabled: true, TokenLimit: 1000, TokenWindow: "daily"},
 		{ID: "prov_ok", Name: "OK", ModelIDs: []string{"m"}, Enabled: true, TokenLimit: 1000},
 		{ID: "prov_free", Name: "FREE", ModelIDs: []string{"m"}, Enabled: true}, // 0 = 不启用
 	}
-	providersLoaded = true
-	providerCooldowns = map[string]time.Time{}
-	providersMu.Unlock()
+	Loaded = true
+	Cooldowns = map[string]time.Time{}
+	Mu.Unlock()
 	budgetMu.Lock()
 	providerTokens = map[string]map[string]int64{
 		"prov_q":  {time.Now().UTC().Format("2006-01"): 1000},    // 月窗用满
@@ -180,7 +180,7 @@ func TestResolveSkipsTokenQuotaExhausted(t *testing.T) {
 	}
 	budgetMu.Unlock()
 
-	got := resolveProvidersForModel("m")
+	got := ResolveForModel("m")
 	names := []string{}
 	for _, p := range got {
 		names = append(names, p.ID)
@@ -194,20 +194,20 @@ func TestResolveSkipsTokenQuotaExhausted(t *testing.T) {
 // 零/未配置 token 上限永不踢出 provider。
 func TestResolveZeroTokenLimitNeverSkips(t *testing.T) {
 	saveBudgetState(t)
-	providersMu.Lock()
-	customProviders = []*CustomProvider{
+	Mu.Lock()
+	CustomProviders = []*CustomProvider{
 		{ID: "prov_z", Name: "Z", ModelIDs: []string{"m"}, Enabled: true},
 	}
-	providersLoaded = true
-	providerCooldowns = map[string]time.Time{}
-	providersMu.Unlock()
+	Loaded = true
+	Cooldowns = map[string]time.Time{}
+	Mu.Unlock()
 	budgetMu.Lock()
 	providerTokens = map[string]map[string]int64{
 		"prov_z": {time.Now().UTC().Format("2006-01"): 99_999_999}, // 远超任何数
 	}
 	budgetMu.Unlock()
 
-	if got := resolveProvidersForModel("m"); len(got) != 1 || got[0].ID != "prov_z" {
+	if got := ResolveForModel("m"); len(got) != 1 || got[0].ID != "prov_z" {
 		t.Fatalf("resolved = %+v, want prov_z kept (tokenLimit 0 = 不启用)", got)
 	}
 }
@@ -215,15 +215,15 @@ func TestResolveZeroTokenLimitNeverSkips(t *testing.T) {
 // 健康快照暴露本窗口 token 用量与 limits.tokens / limits.tokenWindow。
 func TestProviderHealthSnapshotTokenFields(t *testing.T) {
 	saveBudgetState(t)
-	providersMu.Lock()
-	customProviders = []*CustomProvider{
+	Mu.Lock()
+	CustomProviders = []*CustomProvider{
 		{ID: "prov_h", Name: "H", TokenLimit: 5_000_000}, // 空窗口 = monthly
 		{ID: "prov_hd", Name: "HD", TokenLimit: 100, TokenWindow: "daily"},
 		{ID: "prov_h2", Name: "H2"},
 	}
-	providersLoaded = true
-	providerCooldowns = map[string]time.Time{}
-	providersMu.Unlock()
+	Loaded = true
+	Cooldowns = map[string]time.Time{}
+	Mu.Unlock()
 	now := time.Now().UTC()
 	budgetMu.Lock()
 	providerTokens = map[string]map[string]int64{
@@ -256,24 +256,24 @@ func TestProviderHealthSnapshotTokenFields(t *testing.T) {
 	}
 }
 
-// handleProviderSave 归一化 tokenWindow：空 → "monthly"，"daily"/"monthly" 保留，
+// HandleSave 归一化 tokenWindow：空 → "monthly"，"daily"/"monthly" 保留，
 // 其余值 400 拒绝。
 func TestHandleProviderSaveTokenWindowNormalization(t *testing.T) {
 	// 落盘路径全部隔离到临时目录（save 会写 provider 文件并同步模型池）。
-	oldProvPath, oldPoolPath, oldConnPath := providersFilePath, accounts.PoolPath, connections.FilePath
-	providersFilePath = filepath.Join(t.TempDir(), ".routenest-providers.json")
+	oldProvPath, oldPoolPath, oldConnPath := FilePath, accounts.PoolPath, connections.FilePath
+	FilePath = filepath.Join(t.TempDir(), ".routenest-providers.json")
 	accounts.PoolPath = filepath.Join(t.TempDir(), ".routenest-accounts.json")
 	connections.FilePath = filepath.Join(t.TempDir(), ".routenest-connections.json")
-	oldProvs, oldLoaded := customProviders, providersLoaded
+	oldProvs, oldLoaded := CustomProviders, Loaded
 	oldPool := accounts.Pool
 	t.Cleanup(func() {
-		providersFilePath, accounts.PoolPath, connections.FilePath = oldProvPath, oldPoolPath, oldConnPath
-		customProviders, providersLoaded, accounts.Pool = oldProvs, oldLoaded, oldPool
+		FilePath, accounts.PoolPath, connections.FilePath = oldProvPath, oldPoolPath, oldConnPath
+		CustomProviders, Loaded, accounts.Pool = oldProvs, oldLoaded, oldPool
 	})
 
 	save := func(body string) *httptest.ResponseRecorder {
 		rec := httptest.NewRecorder()
-		handleProviderSave(rec, httptest.NewRequest(http.MethodPost, "/admin/api/providers", strings.NewReader(body)))
+		HandleSave(rec, httptest.NewRequest(http.MethodPost, "/admin/api/providers", strings.NewReader(body)))
 		return rec
 	}
 	savedWindow := func(t *testing.T, rec *httptest.ResponseRecorder) string {

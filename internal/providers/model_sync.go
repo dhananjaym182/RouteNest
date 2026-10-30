@@ -1,4 +1,4 @@
-package main
+package providers
 
 // ============================================================================
 // §W3-C 已启用 Provider 模型清单后台自动检测（对齐 Cline/zen 同步语义）：
@@ -16,13 +16,13 @@ import (
 	"fmt"
 	"log"
 	"math/rand"
-	"net/http"
 	"sync"
 	"time"
 
 	"cline-go-proxy/internal/accounts"
 	"cline-go-proxy/internal/connections"
 	"cline-go-proxy/internal/modelcatalog"
+	"cline-go-proxy/internal/platform"
 	"cline-go-proxy/internal/store/syncstate"
 )
 
@@ -44,9 +44,9 @@ var (
 	providerSyncFilePath = ""
 )
 
-func init() { providerSyncFilePath = resolveDataPath(syncstate.FileName) }
+func init() { providerSyncFilePath = platform.ResolveDataPath(syncstate.FileName, nil) }
 
-func loadProviderRecheckState() {
+func LoadRecheckState() {
 	provRecheckMu.Lock()
 	defer provRecheckMu.Unlock()
 	if provRecheckLoaded {
@@ -55,7 +55,7 @@ func loadProviderRecheckState() {
 	provRecheckLoaded = true
 	persisted, err := syncstate.Load(providerSyncFilePath)
 	if err != nil {
-		backupCorruptFile(providerSyncFilePath, err)
+		platform.BackupCorruptFile(providerSyncFilePath, err)
 		return
 	}
 	for id, st := range persisted {
@@ -75,7 +75,7 @@ func saveProviderRecheckStateLocked() {
 	}
 }
 
-// recheckCreds 检测用的只读凭据，与 callProvider 的连接注入逻辑同源：
+// recheckCreds 检测用的只读凭据，与 Call 的连接注入逻辑同源：
 // APIKey/自定义头 + 绑定连接时的连接 token（含刷新/兑换）与动态组织头。
 // 绑定了连接但连接不可用（过期/需重登）返回 ok=false，跳过本轮检测。
 func recheckCreds(p *CustomProvider) (apiKey string, headers map[string]string, ok bool) {
@@ -110,7 +110,7 @@ func recheckCreds(p *CustomProvider) (apiKey string, headers map[string]string, 
 // recheckProviderModels 对单个 provider 检测一轮：下架标记 + 新模型入队。
 // 返回本轮展示状态副本。上游失败只记 error，不动缺失计数与标记。
 func recheckProviderModels(p CustomProvider) providerRecheckState {
-	loadProviderRecheckState()
+	LoadRecheckState()
 	st := providerRecheckState{}
 	apiKey, headers, ok := recheckCreds(&p)
 	if !ok {
@@ -223,7 +223,7 @@ func recheckProviderModels(p CustomProvider) providerRecheckState {
 }
 
 func setProviderRecheckState(providerID string, st providerRecheckState) {
-	loadProviderRecheckState()
+	LoadRecheckState()
 	cp := st
 	provRecheckMu.Lock()
 	if prev, ok := providerRecheckStat[providerID]; ok && st.LastCheckedMs == 0 {
@@ -259,9 +259,9 @@ func clearProviderRecheck(providerID string) {
 	importsMu.Unlock()
 }
 
-// runAllProviderRechecks 对全部启用 provider 顺序检测一轮（单飞：并发触发时后来的直接跳过）。
-func runAllProviderRechecks() map[string]providerRecheckState {
-	loadProviderRecheckState()
+// RunAllRechecks 对全部启用 provider 顺序检测一轮（单飞：并发触发时后来的直接跳过）。
+func RunAllRechecks() map[string]providerRecheckState {
+	LoadRecheckState()
 	provRecheckMu.Lock()
 	if provRecheckBusy {
 		provRecheckMu.Unlock()
@@ -276,7 +276,7 @@ func runAllProviderRechecks() map[string]providerRecheckState {
 	}()
 
 	out := map[string]providerRecheckState{}
-	for _, p := range listProviders() {
+	for _, p := range List() {
 		if !p.Enabled {
 			continue
 		}
@@ -286,9 +286,9 @@ func runAllProviderRechecks() map[string]providerRecheckState {
 	return out
 }
 
-// recheckOneProvider 手动触发单个 provider 检测。
-func recheckOneProvider(providerID string) (providerRecheckState, error) {
-	for _, p := range listProviders() {
+// RecheckOne 手动触发单个 provider 检测。
+func RecheckOne(providerID string) (providerRecheckState, error) {
+	for _, p := range List() {
 		if p.ID == providerID {
 			return recheckProviderModels(p), nil
 		}
@@ -296,31 +296,40 @@ func recheckOneProvider(providerID string) (providerRecheckState, error) {
 	return providerRecheckState{}, fmt.Errorf("provider not found")
 }
 
-// startProviderModelRecheck 启动后台检测循环：开机延迟一轮（避开首启模型同步抢带宽），
+// SyncStatusSnapshot returns the persisted/recent recheck state for every
+// enabled provider, including an empty entry for providers not checked yet.
+func SyncStatusSnapshot() map[string]any {
+	LoadRecheckState()
+	provRecheckMu.Lock()
+	out := make(map[string]providerRecheckState, len(providerRecheckStat))
+	for id, st := range providerRecheckStat {
+		out[id] = *st
+	}
+	provRecheckMu.Unlock()
+	for _, p := range List() {
+		if p.Enabled {
+			if _, ok := out[p.ID]; !ok {
+				out[p.ID] = providerRecheckState{}
+			}
+		}
+	}
+	result := make(map[string]any, len(out))
+	for id, st := range out {
+		result[id] = st
+	}
+	return result
+}
+
+// StartModelRecheck 启动后台检测循环：开机延迟一轮（避开首启模型同步抢带宽），
 // 之后 6h + 随机抖动周期执行。
-func startProviderModelRecheck() {
+func StartModelRecheck() {
 	go func() {
 		time.Sleep(providerRecheckBootDelay + time.Duration(rand.Intn(90))*time.Second)
-		runAllProviderRechecks()
+		RunAllRechecks()
 		for {
 			interval := providerRecheckInterval + time.Duration(rand.Intn(45))*time.Minute
 			time.Sleep(interval)
-			runAllProviderRechecks()
+			RunAllRechecks()
 		}
 	}()
-}
-
-// ---------- admin 端点 ----------
-
-// POST /admin/api/providers/recheck  body: {id} 或 {all:true}
-// 手动触发检测（同步执行返回摘要）。all 时串行检测全部启用 provider。
-// POST /admin/api/providers/recheck  body: {id} 或 {all:true}
-// 手动触发检测（同步执行返回摘要）。all 时串行检测全部启用 provider。
-func handleProviderRecheck(w http.ResponseWriter, r *http.Request) {
-	adminSync.ProviderRecheck(w, r)
-}
-
-// GET /admin/api/providers/sync-status — 各 provider 最近检测状态（含从未检测的启用 provider）。
-func handleProviderSyncStatus(w http.ResponseWriter, r *http.Request) {
-	adminSync.ProviderStatus(w, r)
 }

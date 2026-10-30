@@ -14,6 +14,7 @@ import (
 	"cline-go-proxy/internal/connections"
 	"cline-go-proxy/internal/httpx"
 	"cline-go-proxy/internal/i18n"
+	"cline-go-proxy/internal/providers"
 )
 
 type apiResponse = httpx.Response
@@ -148,20 +149,20 @@ func registerAdminRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/admin/api/models/test", auth(handleAdminModelTest))
 	mux.HandleFunc("/admin/api/config", auth(handleAdminConfig))
 	mux.HandleFunc("/admin/api/config/update", auth(handleAdminUpdateConfig))
-	mux.HandleFunc("/admin/api/providers", auth(handleProvidersList))
-	mux.HandleFunc("/admin/api/providers/save", auth(handleProviderSave))
-	mux.HandleFunc("/admin/api/providers/delete", auth(handleProviderDelete))
-	mux.HandleFunc("/admin/api/providers/test", auth(handleProviderTest))
+	mux.HandleFunc("/admin/api/providers", auth(providers.HandleList))
+	mux.HandleFunc("/admin/api/providers/save", auth(providers.HandleSave))
+	mux.HandleFunc("/admin/api/providers/delete", auth(providers.HandleDelete))
+	mux.HandleFunc("/admin/api/providers/test", auth(providers.HandleTest))
 	mux.HandleFunc("/admin/api/providers/models", auth(handleProviderModels))
-	mux.HandleFunc("/admin/api/providers/presets", auth(handleProviderPresets))
-	mux.HandleFunc("/admin/api/providers/recheck", auth(handleProviderRecheck))
-	mux.HandleFunc("/admin/api/providers/sync-status", auth(handleProviderSyncStatus))
-	mux.HandleFunc("/admin/api/models/import/preview", auth(handleModelImportPreview))
-	mux.HandleFunc("/admin/api/models/import/apply", auth(handleModelImportApply))
-	mux.HandleFunc("/admin/api/models/import/pending", auth(handleModelImportPending))
-	mux.HandleFunc("/admin/api/models/import/batch", auth(handleModelImportBatch))
-	mux.HandleFunc("/admin/api/models/import/discard", auth(handleModelImportDiscard))
-	mux.HandleFunc("/admin/api/models/cost", auth(handleAdminModelCost))
+	mux.HandleFunc("/admin/api/providers/presets", auth(providers.HandlePresets))
+	mux.HandleFunc("/admin/api/providers/recheck", auth(adminSync.ProviderRecheck))
+	mux.HandleFunc("/admin/api/providers/sync-status", auth(adminSync.ProviderStatus))
+	mux.HandleFunc("/admin/api/models/import/preview", auth(providers.HandleImportPreview))
+	mux.HandleFunc("/admin/api/models/import/apply", auth(providers.HandleImportApply))
+	mux.HandleFunc("/admin/api/models/import/pending", auth(providers.HandleImportPending))
+	mux.HandleFunc("/admin/api/models/import/batch", auth(providers.HandleImportBatch))
+	mux.HandleFunc("/admin/api/models/import/discard", auth(providers.HandleImportDiscard))
+	mux.HandleFunc("/admin/api/models/cost", auth(providers.HandleModelCost))
 	mux.HandleFunc("/admin/api/connections", auth(connections.HandleConnectionsList))
 	mux.HandleFunc("/admin/api/connections/login/start", auth(connections.HandleConnectionLoginStart))
 	mux.HandleFunc("/admin/api/connections/login/status", auth(connections.HandleConnectionLoginStatus))
@@ -178,8 +179,8 @@ func registerAdminRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/admin/api/password", auth(handleAdminPassword))
 	mux.HandleFunc("/admin/api/request-logs", auth(handleAdminRequestLogs))
 	mux.HandleFunc("/admin/api/request-logs/clear", auth(handleAdminRequestLogsClear))
-	mux.HandleFunc("/admin/api/providers/cooldown-reset", auth(handleProviderCooldownReset))
-	mux.HandleFunc("/admin/api/account-health", auth(handleAccountHealth))
+	mux.HandleFunc("/admin/api/providers/cooldown-reset", auth(providers.HandleCooldownReset))
+	mux.HandleFunc("/admin/api/account-health", auth(providers.HandleAccountHealth))
 	mux.HandleFunc("/admin/api/version-check", auth(buildinfo.HandleAdminVersionCheck))
 	mux.HandleFunc("/admin/api/open-external", auth(handleOpenExternal))
 }

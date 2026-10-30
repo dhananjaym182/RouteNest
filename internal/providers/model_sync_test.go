@@ -1,4 +1,4 @@
-package main
+package providers
 
 import (
 	"cline-go-proxy/internal/accounts"
@@ -222,7 +222,7 @@ func TestProviderRecheckConnectionUnavailable(t *testing.T) {
 	}
 }
 
-// syncProviderModels 刷新 provider 条目时保留 Delisted 标记（下架≠删除的存续前提）。
+// SyncModels 刷新 provider 条目时保留 Delisted 标记（下架≠删除的存续前提）。
 func TestSyncProviderModelsPreservesDelisted(t *testing.T) {
 	oldPool, oldPoolPath := accounts.Pool, accounts.PoolPath
 	accounts.PoolPath = filepath.Join(t.TempDir(), ".cline-accounts.json")
@@ -231,10 +231,10 @@ func TestSyncProviderModelsPreservesDelisted(t *testing.T) {
 	accounts.Pool = &AccountPool{Accounts: []*Account{}, Models: []Model{
 		{ID: "a", Provider: "SyncProv", Cost: "free", Status: "active", Source: "provider", Delisted: true},
 	}}
-	syncProviderModels()
+	SyncModels()
 	m, ok := poolModelByID("a")
 	if !ok || !m.Delisted {
-		t.Errorf("Delisted flag must survive syncProviderModels, got %+v ok=%v", m, ok)
+		t.Errorf("Delisted flag must survive SyncModels, got %+v ok=%v", m, ok)
 	}
 	if _, ok := poolModelByID("b"); !ok {
 		t.Error("declared model should be (re)added")

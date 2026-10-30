@@ -1,4 +1,4 @@
-package main
+package providers
 
 import (
 	"net"
@@ -24,7 +24,7 @@ func providerTransportFor(spec string) (http.RoundTripper, error) {
 		return nil, err
 	}
 	if norm == "" {
-		return httpClient.Transport, nil
+		return TransportProvider(), nil
 	}
 	if cached, ok := providerTransportCache.Load(norm); ok {
 		return cached.(http.RoundTripper), nil
@@ -39,7 +39,7 @@ func providerTransportFor(spec string) (http.RoundTripper, error) {
 // transport's Proxy hook intentionally honors when the pool is empty.
 func isolatedTransport(spec string) *http.Transport {
 	var tr *http.Transport
-	if base, ok := httpClient.Transport.(*http.Transport); ok {
+	if base, ok := TransportProvider().(*http.Transport); ok {
 		tr = base.Clone()
 	} else {
 		tr = &http.Transport{

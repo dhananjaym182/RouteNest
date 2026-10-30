@@ -2,6 +2,7 @@ package main
 
 import (
 	"cline-go-proxy/internal/accounts"
+	"cline-go-proxy/internal/providers"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -9,6 +10,32 @@ import (
 	"testing"
 	"time"
 )
+
+func TestProviderTransportFollowsHTTPClientReplacement(t *testing.T) {
+	oldClient := httpClient
+	t.Cleanup(func() { httpClient = oldClient })
+
+	called := false
+	httpClient = &http.Client{Transport: freeModelRoundTripper(func(req *http.Request) (*http.Response, error) {
+		called = true
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Body:       io.NopCloser(strings.NewReader(`{"choices":[{"message":{"content":"ok"}}]}`)),
+			Header:     make(http.Header),
+			Request:    req,
+		}, nil
+	})}
+	resp, err := providers.Call(&CustomProvider{ID: "rebind", Name: "Rebind", BaseURL: "https://provider-rebind.test/v1"}, map[string]any{
+		"model": "m", "messages": []any{},
+	}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if !called {
+		t.Fatal("provider transport did not follow replacement root httpClient")
+	}
+}
 
 // 自定义 provider 命中时优先走 provider 上游。
 func TestCustomProviderServesModel(t *testing.T) {
@@ -19,7 +46,7 @@ func TestCustomProviderServesModel(t *testing.T) {
 		accounts.Pool = oldPool
 		setProxyConfig(oldConfig)
 		httpClient.Transport = oldTransport
-		_ = deleteProvider("prov_test1")
+		_ = providers.Delete("prov_test1")
 	})
 
 	accounts.Pool = &AccountPool{Accounts: []*Account{{
@@ -58,7 +85,7 @@ func TestCustomProviderServesModel(t *testing.T) {
 		}, nil
 	})
 
-	upsertProvider(&CustomProvider{
+	providers.Upsert(&CustomProvider{
 		ID: "prov_test1", Name: "TestProv", BaseURL: "http://provider.test/v1",
 		APIKey: "sk-x", ModelIDs: []string{"custom-model-1"},
 		Headers: map[string]string{"X-Custom": "abc"}, Enabled: true, Priority: 10,
@@ -90,7 +117,7 @@ func TestCustomProviderFailureFallsBackToChain(t *testing.T) {
 		accounts.Pool = oldPool
 		setProxyConfig(oldConfig)
 		httpClient.Transport = oldTransport
-		_ = deleteProvider("prov_test2")
+		_ = providers.Delete("prov_test2")
 	})
 
 	accounts.Pool = &AccountPool{Accounts: []*Account{{
@@ -116,12 +143,12 @@ func TestCustomProviderFailureFallsBackToChain(t *testing.T) {
 		}, nil
 	})
 
-	upsertProvider(&CustomProvider{
+	providers.Upsert(&CustomProvider{
 		ID: "prov_test2", Name: "BrokenProv", BaseURL: "http://provider.test/v1",
 		APIKey: "sk-x", ModelIDs: []string{"z-ai/glm-5.3-flash"},
 		Enabled: true, Priority: 10,
 	})
-	defer setProviderCooldown("prov_test2", "z-ai/glm-5.3-flash", time.Time{})
+	defer providers.SetCooldown("prov_test2", "z-ai/glm-5.3-flash", time.Time{})
 
 	params := map[string]any{"model": "z-ai/glm-5.3-flash", "max_tokens": 16, "messages": []any{map[string]any{"role": "user", "content": "hi"}}}
 	resp, _, err := callClineAPI(params, false)
@@ -129,24 +156,4 @@ func TestCustomProviderFailureFallsBackToChain(t *testing.T) {
 		t.Fatalf("expected fallback success, got %v", err)
 	}
 	defer resp.Body.Close()
-}
-
-// 优先级：同模型多 provider 时取 priority 最小的可用者。
-func TestProviderPrioritySelection(t *testing.T) {
-	t.Cleanup(func() {
-		_ = deleteProvider("prov_p1")
-		_ = deleteProvider("prov_p2")
-	})
-	upsertProvider(&CustomProvider{ID: "prov_p1", Name: "Low", BaseURL: "http://a/v1", ModelIDs: []string{"m"}, Enabled: true, Priority: 5})
-	upsertProvider(&CustomProvider{ID: "prov_p2", Name: "High", BaseURL: "http://b/v1", ModelIDs: []string{"m"}, Enabled: true, Priority: 1})
-	p := resolveProviderForModel("m")
-	if p == nil || p.Name != "High" {
-		t.Fatalf("want High (priority 1), got %+v", p)
-	}
-	// 冷却 High 后选 Low
-	setProviderCooldown("prov_p2", "m", time.Now().Add(time.Minute))
-	p = resolveProviderForModel("m")
-	if p == nil || p.Name != "Low" {
-		t.Fatalf("after cooldown want Low, got %+v", p)
-	}
 }

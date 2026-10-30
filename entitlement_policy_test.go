@@ -2,6 +2,7 @@ package main
 
 import (
 	"cline-go-proxy/internal/accounts"
+	"cline-go-proxy/internal/modelcatalog"
 	"strings"
 	"testing"
 )
@@ -16,7 +17,7 @@ func TestModelFreeOnlyEligibility(t *testing.T) {
 	accounts.Pool = &AccountPool{Models: []Model{
 		{ID: "vendor/free-model", Cost: "free", TierSignal: "suffix-free", Source: "provider"},
 		{ID: "vendor/legacy-free", Cost: "free", Source: "remote"},
-		{ID: "vendor/provider-flag", Cost: "free", TierSignal: tierSignalProviderFree, Source: "provider"},
+		{ID: "vendor/provider-flag", Cost: "free", TierSignal: modelcatalog.TierSignalProviderFree, Source: "provider"},
 		{ID: "vendor/paid-model", Cost: "pass", TierSignal: "pricing-paid", Source: "provider"},
 		{ID: "cline-pass/model", Cost: "pass", Source: "remote"},
 	}}

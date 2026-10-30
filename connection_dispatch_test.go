@@ -15,6 +15,7 @@ import (
 
 	"cline-go-proxy/internal/connections"
 	"cline-go-proxy/internal/deviceflow"
+	"cline-go-proxy/internal/providers"
 )
 
 // importTestConn creates a connection in the real store and removes it on cleanup.
@@ -48,7 +49,7 @@ func TestCallProviderConnFailoverAndTag(t *testing.T) {
 		ConnectionIDs: []string{c1.ID, c2.ID}, ModelIDs: []string{"x"}})
 
 	params := map[string]any{"model": "x", "messages": []any{}}
-	resp, err := callProvider(&CustomProvider{ID: "fp1", Name: "FailProv", BaseURL: srv.URL, ConnectionIDs: []string{c1.ID, c2.ID}}, params, false)
+	resp, err := providers.Call(&CustomProvider{ID: "fp1", Name: "FailProv", BaseURL: srv.URL, ConnectionIDs: []string{c1.ID, c2.ID}}, params, false)
 	if err != nil {
 		t.Fatalf("want failover to c2, got err: %v", err)
 	}
@@ -67,7 +68,7 @@ func TestCallProviderConnFailoverAndTag(t *testing.T) {
 	// recordUsage attributes stats to the tagged connection, not any account.
 	rl := RequestLog{Model: "x"}
 	usage := tokenUsage{Valid: true, Prompt: 3, Completion: 4, Total: 7}
-	resp2, err := callProvider(&CustomProvider{ID: "fp1", Name: "FailProv", BaseURL: srv.URL, ConnectionIDs: []string{c2.ID}}, params, false)
+	resp2, err := providers.Call(&CustomProvider{ID: "fp1", Name: "FailProv", BaseURL: srv.URL, ConnectionIDs: []string{c2.ID}}, params, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -100,7 +101,7 @@ func TestCallProviderRotatesAcrossConnections(t *testing.T) {
 	params := map[string]any{"model": "x", "messages": []any{}}
 	want := []string{"Bearer tok-c1", "Bearer tok-c2", "Bearer tok-c1", "Bearer tok-c2"}
 	for i := range want {
-		resp, err := callProvider(p, params, false)
+		resp, err := providers.Call(p, params, false)
 		if err != nil {
 			t.Fatalf("dispatch %d: %v", i, err)
 		}
@@ -130,14 +131,14 @@ func TestCallProviderAllConnsDeadFailsOnce(t *testing.T) {
 	defer srv.Close()
 	c1 := importTestConn(t, "testprov", "t1", "dead-a@x.io")
 	p := &CustomProvider{ID: "d1", Name: "D", BaseURL: srv.URL, ConnectionIDs: []string{c1.ID}}
-	if _, err := callProvider(p, map[string]any{"model": "x"}, false); err == nil {
+	if _, err := providers.Call(p, map[string]any{"model": "x"}, false); err == nil {
 		t.Fatal("single dead conn should fail")
 	}
 	if c1.Status != "reauth_required" {
 		t.Error("final 401 should still mark reauth")
 	}
 	// now no usable connections left at all: fail fast, request never sent
-	if _, err := callProvider(p, map[string]any{"model": "x"}, false); err == nil {
+	if _, err := providers.Call(p, map[string]any{"model": "x"}, false); err == nil {
 		t.Fatal("want connection unavailable error")
 	}
 }
@@ -150,10 +151,7 @@ func TestRemoveConnectionPrunesProviders(t *testing.T) {
 	if !connections.RemoveConnection(c2.ID) {
 		t.Fatal("remove failed")
 	}
-	loadProviders()
-	providersMu.Lock()
-	p := customProviders[0]
-	providersMu.Unlock()
+	p := providers.Find("pp1")
 	if p.ConnectionID != "" {
 		t.Errorf("legacy field not pruned: %q", p.ConnectionID)
 	}
@@ -187,7 +185,7 @@ func TestCallProviderUsesConnectionAndMarksReauth(t *testing.T) {
 	p := &CustomProvider{ID: "p1", Name: "ConnProv", BaseURL: upstream.URL, Enabled: true, ConnectionID: conn.ID, ModelIDs: []string{"t/model"}}
 	installProviders(t, p)
 
-	resp, err := callProvider(p, map[string]any{"model": "t/model", "messages": []any{}}, false)
+	resp, err := providers.Call(p, map[string]any{"model": "t/model", "messages": []any{}}, false)
 	if err != nil {
 		t.Fatalf("callProvider: %v", err)
 	}
@@ -200,7 +198,7 @@ func TestCallProviderUsesConnectionAndMarksReauth(t *testing.T) {
 	connections.ConnectionsMu.Lock()
 	conn.ExpiresAt = time.Now().Add(-time.Hour).UnixMilli()
 	connections.ConnectionsMu.Unlock()
-	if got := resolveProvidersForModel("t/model"); len(got) != 0 {
+	if got := providers.ResolveForModel("t/model"); len(got) != 0 {
 		t.Errorf("expired connection provider must be filtered from selection, got %d", len(got))
 	}
 	if conn.Status != "reauth_required" {
@@ -213,7 +211,7 @@ func TestCallProviderUsesConnectionAndMarksReauth(t *testing.T) {
 		t.Fatal(err)
 	}
 	p.ConnectionID = conn2.ID
-	_, err = callProvider(p, map[string]any{"model": "t/model", "messages": []any{}}, false)
+	_, err = providers.Call(p, map[string]any{"model": "t/model", "messages": []any{}}, false)
 	if err == nil {
 		t.Fatal("401 should surface as error")
 	}

@@ -1,12 +1,12 @@
 #!/usr/bin/env node
-// Mine the ExtremeRouter provider registry into cline2api presets (Go).
+// Mine the ExtremeRouter provider registry into RouteNest preset JSON.
 import fs from "fs";
 import path from "path";
 import { fileURLToPath, pathToFileURL } from "url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const dir = process.argv[2] || "/home/dhan3713/extremerouter/open-sse/providers/registry";
-const files = fs.readdirSync(dir).filter((f) => f.endsWith(".js") && f !== "index.js" && f !== "README.js");
+const files = fs.readdirSync(dir).filter((f) => f.endsWith(".js") && f !== "index.js" && f !== "README.js").sort();
 
 const presets = [];
 const skipped = [];
@@ -90,9 +90,12 @@ const EXISTING_BASE = new Set([
   "http://127.0.0.1:8000/v1", "http://127.0.0.1:11434/v1",
 ]);
 const outDir = process.argv[3] || path.join(__dirname, "..", "internal", "providerreg", "presets");
+const importedPath = process.argv[4] || path.join(__dirname, "..", "internal", "providerreg", "imported.json");
 fs.mkdirSync(outDir, { recursive: true });
+fs.mkdirSync(path.dirname(importedPath), { recursive: true });
 const used = new Set();
 const notices = [];
+const imported = {};
 let written = 0;
 for (const p of presets) {
   if (used.has(p.key)) continue;
@@ -113,9 +116,13 @@ for (const p of presets) {
     kind: p.kind,
   };
   fs.writeFileSync(path.join(outDir, `${p.key}.json`), JSON.stringify(preset, null, 2) + "\n");
+  imported[p.key] = preset;
   written++;
 }
+const sortedImported = Object.fromEntries(Object.entries(imported).sort(([a], [b]) => a.localeCompare(b)));
+fs.writeFileSync(importedPath, JSON.stringify(sortedImported, null, 2) + "\n");
 for (const [id, why] of skipped) notices.push([id, why]);
 process.stderr.write(`wrote ${written} presets to ${outDir}\n`);
+process.stderr.write(`wrote ${Object.keys(sortedImported).length} imported presets to ${importedPath}\n`);
 process.stderr.write(`skipped ${notices.length}:\n`);
 for (const [id, why] of notices.slice(0, 80)) process.stderr.write(`  ${id}: ${why}\n`);

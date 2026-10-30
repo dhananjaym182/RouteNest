@@ -5,30 +5,8 @@ import (
 
 	"cline-go-proxy/internal/adminapi"
 	"cline-go-proxy/internal/i18n"
+	"cline-go-proxy/internal/providers"
 )
-
-func providerSyncStatusSnapshot() map[string]any {
-	loadProviderRecheckState()
-	provRecheckMu.Lock()
-	out := map[string]providerRecheckState{}
-	for id, st := range providerRecheckStat {
-		out[id] = *st
-	}
-	provRecheckMu.Unlock()
-	for _, p := range listProviders() {
-		if !p.Enabled {
-			continue
-		}
-		if _, ok := out[p.ID]; !ok {
-			out[p.ID] = providerRecheckState{}
-		}
-	}
-	providers := make(map[string]any, len(out))
-	for id, st := range out {
-		providers[id] = st
-	}
-	return providers
-}
 
 var adminSync = &adminapi.Sync{
 	ModelSync: func() (any, string) {
@@ -40,10 +18,10 @@ var adminSync = &adminapi.Sync{
 		setLastZenModelSync(res)
 		return res, res.Error
 	},
-	RecheckAll: func() any { return runAllProviderRechecks() },
+	RecheckAll: func() any { return providers.RunAllRechecks() },
 	RecheckOne: func(id string) (any, error) {
-		return recheckOneProvider(id)
+		return providers.RecheckOne(id)
 	},
-	SyncStatus: providerSyncStatusSnapshot,
+	SyncStatus: providers.SyncStatusSnapshot,
 	Translate:  func(r *http.Request, key string) string { return i18n.TAPI(r, key) },
 }

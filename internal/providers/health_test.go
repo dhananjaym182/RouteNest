@@ -1,4 +1,4 @@
-package main
+package providers
 
 import (
 	"encoding/json"
@@ -11,25 +11,25 @@ import (
 
 func TestProviderHealthSnapshot(t *testing.T) {
 	// 保存并恢复全部受影响的全局内存态
-	providersMu.Lock()
-	oldProviders, oldLoaded, oldCooldowns := customProviders, providersLoaded, providerCooldowns
-	customProviders = []*CustomProvider{
+	Mu.Lock()
+	oldProviders, oldLoaded, oldCooldowns := CustomProviders, Loaded, Cooldowns
+	CustomProviders = []*CustomProvider{
 		{ID: "provA", Name: "A", DailyLimit: 100, RpmLimit: 10},
 		{ID: "provB", Name: "B"},
 	}
-	providersLoaded = true
-	providerCooldowns = map[string]time.Time{
+	Loaded = true
+	Cooldowns = map[string]time.Time{
 		"provA:gpt-x": time.Now().Add(5 * time.Minute),
 		"provA:gpt-y": time.Now().Add(2 * time.Minute),
 		"provB:m":     time.Now().Add(-time.Minute), // 已过期，不应出现
 		"gone:m":      time.Now().Add(time.Minute),  // provider 已删除，忽略
 	}
 	oldDaily, oldRPM, oldScores := providerDaily, providerRPM, providerScores
-	providersMu.Unlock()
+	Mu.Unlock()
 	defer func() {
-		providersMu.Lock()
-		customProviders, providersLoaded, providerCooldowns = oldProviders, oldLoaded, oldCooldowns
-		providersMu.Unlock()
+		Mu.Lock()
+		CustomProviders, Loaded, Cooldowns = oldProviders, oldLoaded, oldCooldowns
+		Mu.Unlock()
 		budgetMu.Lock()
 		providerDaily, providerRPM = oldDaily, oldRPM
 		budgetMu.Unlock()
@@ -89,20 +89,15 @@ func TestProviderHealthSnapshot(t *testing.T) {
 }
 
 func TestAccountRecentOutcomes(t *testing.T) {
-	old := requestLogs
-	requestLogsMu.Lock()
-	requestLogs = []RequestLog{
+	oldSnapshot := RequestLogsSnapshot
+	logs := []RequestLog{
 		{ID: "3", AccountID: "acc1", StartedAt: time.Now(), Completed: true},
 		{ID: "2", AccountID: "acc1", StartedAt: time.Now().Add(-time.Minute), Completed: false, Error: "x"},
 		{ID: "1", AccountID: "acc1", StartedAt: time.Now().Add(-2 * time.Minute), Completed: true},
 		{ID: "0", AccountID: "", StartedAt: time.Now()},
 	}
-	requestLogsMu.Unlock()
-	defer func() {
-		requestLogsMu.Lock()
-		requestLogs = old
-		requestLogsMu.Unlock()
-	}()
+	RequestLogsSnapshot = func() []RequestLog { return logs }
+	t.Cleanup(func() { RequestLogsSnapshot = oldSnapshot })
 
 	got := accountRecentOutcomes()
 	acc := got["acc1"]
@@ -115,58 +110,58 @@ func TestAccountRecentOutcomes(t *testing.T) {
 }
 
 func TestProviderCooldownResetAndListPayload(t *testing.T) {
-	providersMu.Lock()
-	oldProviders, oldLoaded, oldCooldowns := customProviders, providersLoaded, providerCooldowns
-	oldPath := providersCooldownsPath
-	customProviders = []*CustomProvider{{ID: "provR", Name: "R"}}
-	providersLoaded = true
-	providerCooldowns = map[string]time.Time{
+	Mu.Lock()
+	oldProviders, oldLoaded, oldCooldowns := CustomProviders, Loaded, Cooldowns
+	oldPath := CooldownsPath
+	CustomProviders = []*CustomProvider{{ID: "provR", Name: "R"}}
+	Loaded = true
+	Cooldowns = map[string]time.Time{
 		"provR:m1": time.Now().Add(time.Minute),
 		"provR:m2": time.Now().Add(time.Minute),
 		"other:m":  time.Now().Add(time.Minute),
 	}
-	providersCooldownsPath = t.TempDir() + "/.cline-providers-cooldowns.json"
-	providersMu.Unlock()
+	CooldownsPath = t.TempDir() + "/.cline-providers-cooldowns.json"
+	Mu.Unlock()
 	defer func() {
-		providersMu.Lock()
-		customProviders, providersLoaded, providerCooldowns = oldProviders, oldLoaded, oldCooldowns
-		providersCooldownsPath = oldPath
-		providersMu.Unlock()
+		Mu.Lock()
+		CustomProviders, Loaded, Cooldowns = oldProviders, oldLoaded, oldCooldowns
+		CooldownsPath = oldPath
+		Mu.Unlock()
 	}()
 
 	// 只清 m1
 	rec := httptest.NewRecorder()
-	handleProviderCooldownReset(rec, httptest.NewRequest(http.MethodPost, "/admin/api/providers/cooldown-reset",
+	HandleCooldownReset(rec, httptest.NewRequest(http.MethodPost, "/admin/api/providers/cooldown-reset",
 		strings.NewReader(`{"id":"provR","model":"m1"}`)))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", rec.Code, rec.Body.String())
 	}
-	providersMu.Lock()
-	_, m1 := providerCooldowns["provR:m1"]
-	_, m2 := providerCooldowns["provR:m2"]
-	_, other := providerCooldowns["other:m"]
-	providersMu.Unlock()
+	Mu.Lock()
+	_, m1 := Cooldowns["provR:m1"]
+	_, m2 := Cooldowns["provR:m2"]
+	_, other := Cooldowns["other:m"]
+	Mu.Unlock()
 	if m1 || !m2 || !other {
 		t.Fatalf("after scoped reset m1=%v m2=%v other=%v", m1, m2, other)
 	}
 
 	// 清整个 provider
 	rec = httptest.NewRecorder()
-	handleProviderCooldownReset(rec, httptest.NewRequest(http.MethodPost, "/admin/api/providers/cooldown-reset",
+	HandleCooldownReset(rec, httptest.NewRequest(http.MethodPost, "/admin/api/providers/cooldown-reset",
 		strings.NewReader(`{"id":"provR"}`)))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d", rec.Code)
 	}
-	providersMu.Lock()
-	remaining := len(providerCooldowns)
-	providersMu.Unlock()
+	Mu.Lock()
+	remaining := len(Cooldowns)
+	Mu.Unlock()
 	if remaining != 1 {
 		t.Fatalf("cooldowns left = %d, want only other:m", remaining)
 	}
 
 	// 缺 id → 400
 	rec = httptest.NewRecorder()
-	handleProviderCooldownReset(rec, httptest.NewRequest(http.MethodPost, "/admin/api/providers/cooldown-reset",
+	HandleCooldownReset(rec, httptest.NewRequest(http.MethodPost, "/admin/api/providers/cooldown-reset",
 		strings.NewReader(`{}`)))
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("missing-id status = %d", rec.Code)
@@ -174,7 +169,7 @@ func TestProviderCooldownResetAndListPayload(t *testing.T) {
 
 	// 列表接口带 health 字段
 	rec = httptest.NewRecorder()
-	handleProvidersList(rec, httptest.NewRequest(http.MethodGet, "/admin/api/providers", nil))
+	HandleList(rec, httptest.NewRequest(http.MethodGet, "/admin/api/providers", nil))
 	var payload struct {
 		Success bool `json:"success"`
 		Data    struct {

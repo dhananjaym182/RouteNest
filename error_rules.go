@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"cline-go-proxy/internal/config"
+	"cline-go-proxy/internal/providers"
 )
 
 // Request error rules give the administrator per-signature control over
@@ -59,7 +60,7 @@ func clineErrorStatus(err error) int {
 // ruleCooldownUntil reuses the provider failure classification when it has an
 // opinion about the status; otherwise applies a short 2-minute penalty.
 func ruleCooldownUntil(status int) time.Time {
-	if until := providerCooldownUntil(status, "", ""); !until.IsZero() {
+	if until := providers.CooldownUntil(status, "", ""); !until.IsZero() {
 		return until
 	}
 	return time.Now().Add(2 * time.Minute)

@@ -10,7 +10,7 @@ package main
 //   - 组合内的顺序是唯一权威。**不**按用量/延迟/质量/随机/账号轮询重排健康条目；
 //     运行时可用性只会让某个条目被「跳过」，不会改变配置顺序。
 //   - 每个条目的派发复用既有路径：zen 免费模型走 callZenAPI；自定义 provider 走
-//     callCustomProviderAPI（含冗余组、粘性会话）；其余走 Cline 账号池（含账号轮询、
+//     providers.CallAPI（含冗余组、粘性会话）；其余走 Cline 账号池（含账号轮询、
 //     模型级冷却、402/429 处理）。**不**对每个条目递归调用全局 ModelChain / free 链。
 //   - 默认情况下组合只走自己的序列；只有管理员显式开启 emergencyFallback 才允许
 //     落到全局 free 链（应急），且该行为在 UI 与报告中明确标注。
@@ -32,6 +32,7 @@ import (
 
 	"cline-go-proxy/internal/accounts"
 	"cline-go-proxy/internal/i18n"
+	"cline-go-proxy/internal/providers"
 )
 
 // comboEntryKey 组合条目去重键：同一模型但不同上游固定（Source/Provider）不算重复，
@@ -135,7 +136,7 @@ func knownModelIDs() map[string]bool {
 			known[m.ID] = true
 		}
 	}
-	for _, p := range listProviders() {
+	for _, p := range providers.List() {
 		if !p.Enabled {
 			continue
 		}
@@ -291,7 +292,7 @@ func validateComboEntryPin(en ComboEntry, model string) error {
 				msg: "provider name is required when source=provider",
 			}
 		}
-		if !providerNameServesModel(name, model) {
+		if !providers.NameServesModel(name, model) {
 			return &comboPinError{
 				key:  "combo_entry_provider_unknown",
 				msg:  fmt.Sprintf("no enabled provider %q serves model %q", name, model),
@@ -625,8 +626,8 @@ func entryRouteKind(e ComboEntry) string {
 // 或 free 链：这是组合回退的安全基础。
 //
 //   - zen 免费模型 → callZenAPI（含匿名免费层处理）
-//   - 自定义 provider → callCustomProviderAPI（冗余组 + 粘性会话）；条目固定到
-//     某一 provider 时改走 callCustomProviderAPINamed（只看该家，不回退账号池）
+//   - 自定义 provider → providers.CallAPI（冗余组 + 粘性会话）；条目固定到
+//     某一 provider 时改走 providers.CallAPINamed（只看该家，不回退账号池）
 //   - 其余 → Cline 账号池（模型级冷却、402/429 换号，账号轮询）
 //
 // 返回：resp / 使用的账号（若有）/ 上游归因 / 实际服务的自定义 provider 显示名
@@ -636,7 +637,7 @@ func callSingleModel(params map[string]any, entry ComboEntry, stream bool, sessi
 	ep := withModel(params, model)
 	delete(ep, servedByParam)
 	delete(ep, providerNameParam)
-	delete(ep, providerIDParam)
+	delete(ep, providers.ProviderIDParam)
 
 	switch entryRouteKind(entry) {
 	case "reject":
@@ -683,7 +684,7 @@ func callSingleModel(params map[string]any, entry ComboEntry, stream bool, sessi
 	case "provider":
 		// 显式固定到某一家 provider：只看它，失败也**不**回退到 Cline 账号池
 		// （用户明确指定了唯一上游）。
-		resp, perr, attempted, provName := callCustomProviderAPINamed(ep, stream, entry.Provider)
+		resp, perr, attempted, provName := providers.CallAPINamed(ep, stream, entry.Provider)
 		if !attempted {
 			return nil, nil, upstreamProvider, "", &freeModelUnavailableError{
 				message: fmt.Sprintf("model %q is not served by provider %q", model, strings.TrimSpace(entry.Provider)),
@@ -700,7 +701,7 @@ func callSingleModel(params map[string]any, entry ComboEntry, stream bool, sessi
 	case "cline":
 		// 显式固定到 Cline 账号池：跳过自定义 provider 尝试，直接走账号池。
 	default:
-		if resp, perr, attempted, provName := callCustomProviderAPI(ep, stream); attempted {
+		if resp, perr, attempted, provName := providers.CallAPI(ep, stream); attempted {
 			if perr == nil {
 				return resp, nil, upstreamProvider, provName, nil
 			}
@@ -812,7 +813,7 @@ func runCombo(params map[string]any, combo ModelCombo, stream bool, sessionID st
 			continue
 		}
 		if getProxyConfig().OnlyFree {
-			bare, _ := splitProviderPin(m)
+			bare, _ := providers.SplitPin(m)
 			if !modelFreeOnlyEligible(bare) {
 				trace = append(trace, AttemptLog{Model: m, Order: order, Outcome: "skipped",
 					Reason: fmt.Sprintf("not eligible under onlyFree (access class: %s)", modelRouteAccess(bare).Class),
@@ -848,7 +849,7 @@ func runCombo(params map[string]any, combo ModelCombo, stream bool, sessionID st
 			} else {
 				delete(params, servedByParam)
 				delete(params, providerNameParam)
-				delete(params, providerIDParam)
+				delete(params, providers.ProviderIDParam)
 			}
 			trace = append(trace, AttemptLog{
 				Model: m, Order: order, Upstream: upstream, Outcome: "success", DurationMs: elapsed,
@@ -895,10 +896,10 @@ func runCombo(params map[string]any, combo ModelCombo, stream bool, sessionID st
 			}
 			if v, ok := fp[providerNameParam].(string); ok {
 				params[providerNameParam] = v // free 链经 provider 服务时同步归因名
-				params[providerIDParam] = fp[providerIDParam]
+				params[providers.ProviderIDParam] = fp[providers.ProviderIDParam]
 			} else {
 				delete(params, providerNameParam)
-				delete(params, providerIDParam)
+				delete(params, providers.ProviderIDParam)
 			}
 			trace = append(trace, AttemptLog{
 				Model: fm, Order: -1, Upstream: upstreamCline, Outcome: "success",

@@ -8,24 +8,6 @@ import (
 	"testing"
 )
 
-func TestSplitProviderPin(t *testing.T) {
-	cases := []struct{ in, bare, pin string }{
-		{"deepseek-chat@MyProvider", "deepseek-chat", "MyProvider"},
-		{"org/model:free@KeyP", "org/model:free", "KeyP"},
-		{"a@b@c", "a@b", "c"},
-		{"plain/model", "plain/model", ""},
-		{"@leading", "@leading", ""},
-		{"trail@", "trail@", ""},
-		{"x@ ", "x@ ", ""},
-	}
-	for _, c := range cases {
-		bare, pin := splitProviderPin(c.in)
-		if bare != c.bare || pin != c.pin {
-			t.Errorf("splitProviderPin(%q) = %q/%q want %q/%q", c.in, bare, pin, c.bare, c.pin)
-		}
-	}
-}
-
 // Two providers serve the same model id. A pinned request must hit exactly the
 // named provider, stamp attribution, and never touch the sibling; pinned
 // failures must not fall back; an unknown pin must fail without upstream calls.
