@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"regexp"
 	"routenest/internal/domain"
 	"routenest/internal/egress"
 	"routenest/internal/models"
+	"routenest/internal/zen"
 	"strings"
 	"sync"
 	"time"
@@ -267,30 +267,16 @@ func TriggerModelSync() SyncResult {
 	return syncClineModels()
 }
 
-// modelGoneRe 匹配上游「模型不存在」类错误响应体（400/404）。
-var modelGoneRe = regexp.MustCompile(
-	`(?i)model[\s_-]*(not[\s_-]*found|does\s+not\s+exist|no\s+such|unknown|invalid)|(invalid|unknown|no\s+such)[\s_-]*model`)
-
-// IsModelGoneError 判断上游响应是否为明确的「模型不存在」类错误（400/404）。
+// IsModelGoneError reports whether an upstream response means the model no
+// longer exists. The classifier lives in zen, which uses it on its own requests.
 func IsModelGoneError(status int, body string) bool {
-	if status != http.StatusBadRequest && status != http.StatusNotFound {
-		return false
-	}
-	return modelGoneRe.MatchString(body)
+	return zen.IsModelGoneError(status, body)
 }
 
-// MarkModelGone 上游明确报「模型不存在」时按请求校验自动清理：只删同步打上
-// Delisted 标记的模型 —— 官方列表下架后仍保留的残留，实测大概率还能用，但
-// 上游真删了就该清掉。仍在官方列表里的模型报错可能是瞬时路由问题，不凭单次
-// 请求误删；自定义模型（Custom）永远留给用户手动处理。
+// MarkModelGone removes a delisted model that upstream reports as gone. See
+// zen.MarkModelGone.
 func MarkModelGone(model string) {
-	model = strings.TrimSpace(model)
-	if model == "" {
-		return
-	}
-	if models.RemoveDelisted(model) {
-		log.Printf("model %q removed: upstream reports it no longer exists (was delisted)", model)
-	}
+	zen.MarkModelGone(model)
 }
 
 // GetModelSyncResult 返回最近一次同步结果（供管理后台展示）。

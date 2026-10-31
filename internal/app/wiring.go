@@ -68,8 +68,6 @@ func configure() {
 
 	egress.ConfigProvider = config.Live
 	requestlog.Path = platform.ResolveDataPath(requestlogstore.FileName, nil)
-	zen.IsModelGoneError = routing.IsModelGoneError
-	zen.MarkModelGone = routing.MarkModelGone
 	routing.ConfigProvider = config.Live
 	routing.ModelsProvider = routing.AllModels
 	routing.SetComboCatalog(combos.RoutingCombos{})

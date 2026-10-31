@@ -16,8 +16,6 @@ var (
 	BodyOptionsProvider = func() openaicompat.BodyOptions {
 		return openaicompat.BodyOptions{MinMaxTokens: 16, DefaultMaxTokens: 32000}
 	}
-	IsModelGoneError = func(int, string) bool { return false }
-	MarkModelGone    = func(string) {}
 )
 
 // ============================================================================
