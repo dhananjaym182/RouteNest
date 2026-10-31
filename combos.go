@@ -20,6 +20,7 @@ package main
 // 也**不**从模型名推断质量。
 
 import (
+	"cline-go-proxy/internal/routing"
 	"cline-go-proxy/internal/zen"
 	"context"
 	"errors"
@@ -816,9 +817,9 @@ func runCombo(params map[string]any, combo ModelCombo, stream bool, sessionID st
 		}
 		if getProxyConfig().OnlyFree {
 			bare, _ := providers.SplitPin(m)
-			if !modelFreeOnlyEligible(bare) {
+			if !routing.ModelFreeOnlyEligible(bare) {
 				trace = append(trace, AttemptLog{Model: m, Order: order, Outcome: "skipped",
-					Reason: fmt.Sprintf("not eligible under onlyFree (access class: %s)", modelRouteAccess(bare).Class),
+					Reason: fmt.Sprintf("not eligible under onlyFree (access class: %s)", routing.ModelRouteAccess(bare).Class),
 					Source: strings.TrimSpace(entry.Source), Provider: strings.TrimSpace(entry.Provider)})
 				continue
 			}

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"cline-go-proxy/internal/routing"
 	"cline-go-proxy/internal/zen"
 	"context"
 	"encoding/json"
@@ -227,7 +228,7 @@ func handleResponses(w http.ResponseWriter, r *http.Request) {
 	log.Printf("  responses: model=%s stream=%v", model, isStream)
 
 	// Administrator model policy: alias rewrite + wildcard exclusions.
-	if resolved, reject := resolveClientModel(model); reject != "" {
+	if resolved, reject := routing.ResolveClientModel(model); reject != "" {
 		writeJSON(w, http.StatusBadRequest, map[string]any{
 			"error": map[string]string{"message": reject, "type": "invalid_request_error"},
 		})
@@ -247,7 +248,7 @@ func handleResponses(w http.ResponseWriter, r *http.Request) {
 
 	reqLog := RequestLog{StartedAt: time.Now(), Protocol: "responses", Model: model, Stream: isStream}
 
-	if msg := freeOnlyRejection(model); msg != "" {
+	if msg := routing.FreeOnlyRejection(model); msg != "" {
 		requestlog.Finalize(&reqLog, tokenUsage{}, time.Time{}, reqLog.StartedAt, false, msg)
 		writeJSON(w, http.StatusBadRequest, map[string]any{
 			"error": map[string]string{"message": msg, "type": "invalid_request_error"},

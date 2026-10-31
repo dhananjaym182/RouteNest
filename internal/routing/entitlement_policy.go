@@ -1,4 +1,4 @@
-package main
+package routing
 
 import (
 	"cline-go-proxy/internal/zen"
@@ -10,10 +10,10 @@ import (
 	"cline-go-proxy/internal/domain"
 )
 
-// modelRouteAccess resolves the access class of a model's current route from
+// ModelRouteAccess resolves the access class of a model's current route from
 // catalog metadata. Unknown models are unknown: they never silently qualify for
 // Free-only routing.
-func modelRouteAccess(id string) dispatch.RouteAccess {
+func ModelRouteAccess(id string) dispatch.RouteAccess {
 	id = strings.TrimSpace(id)
 	if id == "" {
 		return dispatch.RouteAccess{Class: domain.AccessUnknown}
@@ -35,28 +35,28 @@ func modelRouteAccess(id string) dispatch.RouteAccess {
 	return dispatch.RouteAccess{Class: domain.AccessUnknown}
 }
 
-// modelFreeOnlyEligible reports whether a model may be used while Free-only
+// ModelFreeOnlyEligible reports whether a model may be used while Free-only
 // routing is enabled. The "free" alias resolves to the explicit free chain.
-func modelFreeOnlyEligible(id string) bool {
+func ModelFreeOnlyEligible(id string) bool {
 	if strings.TrimSpace(id) == "free" {
 		return true
 	}
-	return dispatch.FreeOnlyEligible(modelRouteAccess(id))
+	return dispatch.FreeOnlyEligible(ModelRouteAccess(id))
 }
 
-// freeOnlyRejection returns a user-facing error when the requested model may
+// FreeOnlyRejection returns a user-facing error when the requested model may
 // not be served under Free-only routing. Named combos are validated per entry
 // during execution instead.
-func freeOnlyRejection(model string) string {
-	if !getProxyConfig().OnlyFree || model == "" {
+func FreeOnlyRejection(model string) string {
+	if !ConfigProvider().OnlyFree || model == "" {
 		return ""
 	}
-	if _, ok := findCombo(model); ok {
+	if _, ok := FindCombo(model); ok {
 		return ""
 	}
-	if modelFreeOnlyEligible(model) {
+	if ModelFreeOnlyEligible(model) {
 		return ""
 	}
-	class := modelRouteAccess(model).Class
+	class := ModelRouteAccess(model).Class
 	return fmt.Sprintf("model %q is not eligible while onlyFree is enabled (access class: %s)", model, class)
 }

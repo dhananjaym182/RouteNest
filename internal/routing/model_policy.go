@@ -1,30 +1,39 @@
-package main
+package routing
 
 import (
+	"cline-go-proxy/internal/config"
+	"cline-go-proxy/internal/domain"
 	"cline-go-proxy/internal/providers"
 	"log"
 	"strings"
 	"time"
 )
 
+var (
+	ConfigProvider = config.DefaultProxy
+	FindCombo      = func(string) (domain.ModelCombo, bool) { return domain.ModelCombo{}, false }
+	ModelsProvider = func() []domain.Model { return nil }
+	ModelDisabled  = func(string) bool { return false }
+)
+
 // Client-visible model policy: administrator aliases, wildcard exclusions, and
 // per-model capability metadata. All three entry points (chat, Responses,
-// Anthropic) funnel the requested id through resolveClientModel before it
+// Anthropic) funnel the requested id through ResolveClientModel before it
 // reaches routing, so the policy is enforced in the backend rather than in UI
 // labels.
 
-// resolveClientModel applies alias rewrites and exclusion patterns.
+// ResolveClientModel applies alias rewrites and exclusion patterns.
 // It returns the id routing should use and a non-empty reason when the request
 // must be rejected. The reserved "free" alias and named combos are never
 // rewritten or excluded by policy (they are explicit admin constructs).
-func resolveClientModel(raw string) (resolved string, reject string) {
+func ResolveClientModel(raw string) (resolved string, reject string) {
 	id := strings.TrimSpace(raw)
 	if id == "" {
 		return id, ""
 	}
-	cfg := getProxyConfig()
+	cfg := ConfigProvider()
 
-	if _, isCombo := findCombo(id); !isCombo && id != "free" {
+	if _, isCombo := FindCombo(id); !isCombo && id != "free" {
 		if alias, ok := cfg.AliasFor(id); ok && (alias.Force || !catalogHasModel(id)) {
 			target := alias.Target
 			bare, pin := providers.SplitPin(target)
@@ -46,7 +55,7 @@ func resolveClientModel(raw string) (resolved string, reject string) {
 func catalogHasModel(id string) bool {
 	id = strings.TrimPrefix(strings.TrimSpace(id), "opencode/")
 	bare, _ := providers.SplitPin(id)
-	for _, m := range getAllModels() {
+	for _, m := range ModelsProvider() {
 		if m.ID == bare || m.ID == id {
 			return true
 		}
@@ -55,20 +64,20 @@ func catalogHasModel(id string) bool {
 }
 
 // modelEntryMeta returns the capability metadata stored for a model id.
-func modelEntryMeta(id string) (Model, bool) {
+func modelEntryMeta(id string) (model, bool) {
 	id = strings.TrimPrefix(strings.TrimSpace(id), "opencode/")
 	bare, _ := providers.SplitPin(id)
-	for _, m := range getAllModels() {
+	for _, m := range ModelsProvider() {
 		if m.ID == bare || m.ID == id {
 			return m, true
 		}
 	}
-	return Model{}, false
+	return model{}, false
 }
 
-// applyThinkingPolicy drops reasoning-effort parameters the resolved model does
+// ApplyThinkingPolicy drops reasoning-effort parameters the resolved model does
 // not declare. A model without metadata keeps the client's request untouched.
-func applyThinkingPolicy(params map[string]any, model string) {
+func ApplyThinkingPolicy(params map[string]any, model string) {
 	effort, _ := params["reasoning_effort"].(string)
 	if effort == "" {
 		if r, ok := params["reasoning"].(map[string]any); ok {
@@ -97,22 +106,22 @@ func applyThinkingPolicy(params map[string]any, model string) {
 	}
 }
 
-// excludedForListing filters pool models, combos, and alias entries for
+// ExcludedForListing filters pool models, combos, and alias entries for
 // /v1/models and admin listings.
-func excludedForListing(id string) bool {
-	return getProxyConfig().ExcludesModel(id)
+func ExcludedForListing(id string) bool {
+	return ConfigProvider().ExcludesModel(id)
 }
 
-// aliasListingEntries returns client-visible alias entries whose targets are
+// AliasListingEntries returns client-visible alias entries whose targets are
 // not themselves excluded or disabled.
-func aliasListingEntries() []map[string]any {
-	cfg := getProxyConfig()
+func AliasListingEntries() []map[string]any {
+	cfg := ConfigProvider()
 	out := make([]map[string]any, 0, len(cfg.ModelAliases))
 	for _, a := range cfg.ModelAliases {
-		if excludedForListing(a.Alias) || excludedForListing(a.Target) {
+		if ExcludedForListing(a.Alias) || ExcludedForListing(a.Target) {
 			continue
 		}
-		if isModelDisabled(a.Target) {
+		if ModelDisabled(a.Target) {
 			continue
 		}
 		out = append(out, map[string]any{

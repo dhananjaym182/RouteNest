@@ -1,6 +1,7 @@
 package main
 
 import (
+	"cline-go-proxy/internal/routing"
 	"cline-go-proxy/internal/zen"
 	"net/http"
 
@@ -134,7 +135,7 @@ func normalizeAdminModels(models []domain.Model) []domain.Model {
 
 var adminModels = &adminapi.Models{
 	Store:     rootModelStore{},
-	LastSync:  func() any { return getModelSyncResult() },
+	LastSync:  func() any { return routing.GetModelSyncResult() },
 	Normalize: normalizeAdminModels,
 	Translate: func(r *http.Request, key string) string { return i18n.TAPI(r, key) },
 }

@@ -1,4 +1,4 @@
-package main
+package routing
 
 import (
 	"cline-go-proxy/internal/accounts"
@@ -40,24 +40,24 @@ func TestModelFreeOnlyEligibility(t *testing.T) {
 		{"", false},
 	}
 	for _, tc := range cases {
-		if got := modelFreeOnlyEligible(tc.model); got != tc.want {
+		if got := ModelFreeOnlyEligible(tc.model); got != tc.want {
 			t.Errorf("modelFreeOnlyEligible(%q) = %v, want %v", tc.model, got, tc.want)
 		}
 	}
 
-	if msg := freeOnlyRejection("vendor/paid-model"); !strings.Contains(msg, "not eligible") {
+	if msg := FreeOnlyRejection("vendor/paid-model"); !strings.Contains(msg, "not eligible") {
 		t.Fatalf("paid model should be rejected, got %q", msg)
 	}
-	if msg := freeOnlyRejection("vendor/provider-flag"); !strings.Contains(msg, "unknown") {
+	if msg := FreeOnlyRejection("vendor/provider-flag"); !strings.Contains(msg, "unknown") {
 		t.Fatalf("provider-level free flag must be unknown, got %q", msg)
 	}
-	if msg := freeOnlyRejection("vendor/free-model"); msg != "" {
+	if msg := FreeOnlyRejection("vendor/free-model"); msg != "" {
 		t.Fatalf("free model should pass, got %q", msg)
 	}
 
 	cfg.OnlyFree = false
 	setProxyConfig(cfg)
-	if msg := freeOnlyRejection("vendor/paid-model"); msg != "" {
+	if msg := FreeOnlyRejection("vendor/paid-model"); msg != "" {
 		t.Fatalf("Free-only policy must not apply when onlyFree is disabled, got %q", msg)
 	}
 }

@@ -2,6 +2,7 @@ package main
 
 import (
 	"cline-go-proxy/internal/accounts"
+	"cline-go-proxy/internal/routing"
 	"cline-go-proxy/internal/zen"
 	"crypto/sha256"
 	"encoding/hex"
@@ -484,7 +485,7 @@ func modelForCompaction(model string) Model {
 		}
 	}
 	accounts.PoolMu.Unlock()
-	if meta, ok := lookupClineModelMeta(model); ok {
+	if meta, ok := routing.LookupClineModelMeta(model); ok {
 		return Model{ID: model, Context: meta.Context, Output: meta.Output}
 	}
 	return Model{ID: model}

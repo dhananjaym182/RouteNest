@@ -1,7 +1,8 @@
-package main
+package routing
 
 import (
 	"cline-go-proxy/internal/accounts"
+	"cline-go-proxy/internal/domain"
 	"cline-go-proxy/internal/egress"
 	"encoding/json"
 	"fmt"
@@ -12,6 +13,8 @@ import (
 	"sync"
 	"time"
 )
+
+type model = domain.Model
 
 // clineRecommendedModelsURL 是 Cline 官方的「推荐/免费模型」接口（无需认证）。
 // 参考 docs/model-api.md：Cline 4.1.15 的 Free Models 由该接口直接返回。
@@ -47,8 +50,8 @@ type clineRecommendedResponse struct {
 	ClinePass   []clineRemoteModel `json:"clinePass"`
 }
 
-// modelSyncResult 是一次模型同步的结果（供管理后台弹窗展示）。
-type modelSyncResult struct {
+// SyncResult 是一次模型同步的结果（供管理后台弹窗展示）。
+type SyncResult struct {
 	Changed  bool     `json:"changed"`
 	Added    []string `json:"added"`
 	Removed  []string `json:"removed"`
@@ -58,9 +61,9 @@ type modelSyncResult struct {
 }
 
 var (
-	modelSyncMu   sync.Mutex
-	lastModelSync modelSyncResult
-	modelSyncRan  bool // 启动后是否已同步过（避免重复）
+	SyncMu        sync.Mutex
+	lastModelSync SyncResult
+	SyncRan       bool // 启动后是否已同步过（避免重复）
 	modelSyncBusy bool // 同步进行中（防并发触发）
 )
 
@@ -92,8 +95,8 @@ func fetchClineRecommendedModels() (clineRecommendedResponse, error) {
 	return data, nil
 }
 
-// modelMeta 是已知模型的上下文窗口 / 最大输出 token 元数据。
-type modelMeta struct {
+// ModelMeta 是已知模型的上下文窗口 / 最大输出 token 元数据。
+type ModelMeta struct {
 	Context int
 	Output  int
 }
@@ -103,7 +106,7 @@ type modelMeta struct {
 // 只能按实测维护；上游网关按路由（vertex/google）强制校验 maxOutputTokens。
 // gemini-3.8-flash：vertex 路由实测支持范围 1~65536 —— maxOutputTokens=128000
 // 会被直接 400 invalid argument（2026-09 实测，含 google 路由的同源报错）。
-var clineModelMeta = map[string]modelMeta{
+var clineModelMeta = map[string]ModelMeta{
 	"gemini-3.8-flash": {Context: 1048576, Output: 65536},
 }
 
@@ -125,8 +128,8 @@ func modelBaseName(id string) string {
 	return id
 }
 
-// lookupClineModelMeta 按基名查已知模型元数据；未收录时 ok=false。
-func lookupClineModelMeta(id string) (modelMeta, bool) {
+// LookupClineModelMeta 按基名查已知模型元数据；未收录时 ok=false。
+func LookupClineModelMeta(id string) (ModelMeta, bool) {
 	meta, ok := clineModelMeta[modelBaseName(id)]
 	return meta, ok
 }
@@ -159,23 +162,23 @@ func remoteProvider(id string) string {
 //  4. 记录 lastModelSync 供管理后台弹窗
 //
 // 任何一步失败都会把错误写进 lastModelSync，不阻塞服务启动。
-func syncClineModels() modelSyncResult {
-	modelSyncMu.Lock()
+func syncClineModels() SyncResult {
+	SyncMu.Lock()
 	if modelSyncBusy {
-		modelSyncMu.Unlock()
+		SyncMu.Unlock()
 		return lastModelSync
 	}
 	modelSyncBusy = true
-	modelSyncMu.Unlock()
-	defer func() { modelSyncMu.Lock(); modelSyncBusy = false; modelSyncMu.Unlock() }()
+	SyncMu.Unlock()
+	defer func() { SyncMu.Lock(); modelSyncBusy = false; SyncMu.Unlock() }()
 
-	res := modelSyncResult{SyncedAt: time.Now().Format(time.RFC3339)}
-	fail := func(err error) modelSyncResult {
+	res := SyncResult{SyncedAt: time.Now().Format(time.RFC3339)}
+	fail := func(err error) SyncResult {
 		log.Printf("models sync failed: %v", err)
 		res.Error = err.Error()
-		modelSyncMu.Lock()
+		SyncMu.Lock()
 		lastModelSync = res
-		modelSyncMu.Unlock()
+		SyncMu.Unlock()
 		return res
 	}
 
@@ -188,7 +191,7 @@ func syncClineModels() modelSyncResult {
 	// 先取池中旧 remote 条目：管理页锁定过 Context/Output（MetaLocked）的保留原值。
 	p := accounts.LoadPool()
 	accounts.PoolMu.Lock()
-	oldRemote := make(map[string]Model)
+	oldRemote := make(map[string]model)
 	for _, m := range p.Models {
 		if m.Source == "remote" {
 			oldRemote[m.ID] = m
@@ -196,7 +199,7 @@ func syncClineModels() modelSyncResult {
 	}
 	accounts.PoolMu.Unlock()
 
-	var remote []Model
+	var remote []model
 	seen := make(map[string]bool)
 	addGroup := func(group []clineRemoteModel, inFree bool) {
 		for _, m := range group {
@@ -204,7 +207,7 @@ func syncClineModels() modelSyncResult {
 				continue
 			}
 			seen[m.ID] = true
-			entry := Model{
+			entry := model{
 				ID:       m.ID,
 				Provider: remoteProvider(m.ID),
 				Cost:     remoteCost(m, inFree),
@@ -227,7 +230,7 @@ func syncClineModels() modelSyncResult {
 			// 预填，不参与压缩/封顶）。Output 保持 0=未知，不引入意外封顶。
 			if old, ok := oldRemote[m.ID]; ok && old.MetaLocked {
 				entry.Context, entry.Output, entry.MetaLocked = old.Context, old.Output, true
-			} else if meta, ok := lookupClineModelMeta(m.ID); ok {
+			} else if meta, ok := LookupClineModelMeta(m.ID); ok {
 				entry.Context, entry.Output = meta.Context, meta.Output
 			} else if entry.Context == 0 {
 				entry.Context = 1048576
@@ -247,7 +250,7 @@ func syncClineModels() modelSyncResult {
 	p = accounts.LoadPool()
 	accounts.PoolMu.Lock()
 	oldIDs := make(map[string]bool)
-	var kept []Model
+	var kept []model
 	for _, m := range p.Models {
 		if m.Source == "remote" {
 			oldIDs[m.ID] = true
@@ -283,18 +286,18 @@ func syncClineModels() modelSyncResult {
 	remoteModelsEnabled = true
 	remoteModelsEnabledMu.Unlock()
 
-	modelSyncMu.Lock()
+	SyncMu.Lock()
 	lastModelSync = res
-	modelSyncRan = true
-	modelSyncMu.Unlock()
+	SyncRan = true
+	SyncMu.Unlock()
 
 	log.Printf("models sync: %d models, +%d added, -%d removed",
 		res.Total, len(res.Added), len(res.Removed))
 	return res
 }
 
-// triggerModelSync 供管理后台手动触发同步；非阻塞等待完成并返回结果。
-func triggerModelSync() modelSyncResult {
+// TriggerModelSync 供管理后台手动触发同步；非阻塞等待完成并返回结果。
+func TriggerModelSync() SyncResult {
 	return syncClineModels()
 }
 
@@ -302,19 +305,19 @@ func triggerModelSync() modelSyncResult {
 var modelGoneRe = regexp.MustCompile(
 	`(?i)model[\s_-]*(not[\s_-]*found|does\s+not\s+exist|no\s+such|unknown|invalid)|(invalid|unknown|no\s+such)[\s_-]*model`)
 
-// isModelGoneError 判断上游响应是否为明确的「模型不存在」类错误（400/404）。
-func isModelGoneError(status int, body string) bool {
+// IsModelGoneError 判断上游响应是否为明确的「模型不存在」类错误（400/404）。
+func IsModelGoneError(status int, body string) bool {
 	if status != http.StatusBadRequest && status != http.StatusNotFound {
 		return false
 	}
 	return modelGoneRe.MatchString(body)
 }
 
-// markModelGone 上游明确报「模型不存在」时按请求校验自动清理：只删同步打上
+// MarkModelGone 上游明确报「模型不存在」时按请求校验自动清理：只删同步打上
 // Delisted 标记的模型 —— 官方列表下架后仍保留的残留，实测大概率还能用，但
 // 上游真删了就该清掉。仍在官方列表里的模型报错可能是瞬时路由问题，不凭单次
 // 请求误删；自定义模型（Custom）永远留给用户手动处理。
-func markModelGone(model string) {
+func MarkModelGone(model string) {
 	model = strings.TrimSpace(model)
 	if model == "" {
 		return
@@ -339,21 +342,21 @@ func markModelGone(model string) {
 	}
 }
 
-// getModelSyncResult 返回最近一次同步结果（供管理后台展示）。
-func getModelSyncResult() modelSyncResult {
-	modelSyncMu.Lock()
-	defer modelSyncMu.Unlock()
-	if !modelSyncRan {
-		return modelSyncResult{SyncedAt: ""}
+// GetModelSyncResult 返回最近一次同步结果（供管理后台展示）。
+func GetModelSyncResult() SyncResult {
+	SyncMu.Lock()
+	defer SyncMu.Unlock()
+	if !SyncRan {
+		return SyncResult{SyncedAt: ""}
 	}
 	return lastModelSync
 }
 
-// startModelSync 在服务启动时异步同步一次（不阻塞启动），
+// StartModelSync 在服务启动时异步同步一次（不阻塞启动），
 // 之后按 clineModelSyncInterval 周期重同步，让长期运行的进程跟上模型上下架。
-func startModelSync() {
+func StartModelSync() {
 	go func() {
-		if !modelSyncRan {
+		if !SyncRan {
 			syncClineModels()
 		}
 		runModelSyncLoop(nil, clineModelSyncInterval, syncClineModels)
@@ -361,7 +364,7 @@ func startModelSync() {
 }
 
 // runModelSyncLoop 按 interval 周期执行 sync，stop 关闭后返回（测试注入短间隔用）。
-func runModelSyncLoop(stop <-chan struct{}, interval time.Duration, sync func() modelSyncResult) {
+func runModelSyncLoop(stop <-chan struct{}, interval time.Duration, sync func() SyncResult) {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 	for {
@@ -374,14 +377,9 @@ func runModelSyncLoop(stop <-chan struct{}, interval time.Duration, sync func() 
 	}
 }
 
-// remoteModelsActive 返回远程模型是否已启用（同步成功过）。
-func remoteModelsActive() bool {
+// RemoteModelsActive 返回远程模型是否已启用（同步成功过）。
+func RemoteModelsActive() bool {
 	remoteModelsEnabledMu.Lock()
 	defer remoteModelsEnabledMu.Unlock()
 	return remoteModelsEnabled
-}
-
-// POST /admin/api/models/sync — 手动触发一次模型同步
-func handleAdminModelSync(w http.ResponseWriter, r *http.Request) {
-	adminSync.Models(w, r)
 }

@@ -10,6 +10,7 @@ import (
 	"cline-go-proxy/internal/egress"
 	"cline-go-proxy/internal/providers"
 	"cline-go-proxy/internal/requestlog"
+	"cline-go-proxy/internal/routing"
 	requestlogstore "cline-go-proxy/internal/store/requestlog"
 	"cline-go-proxy/internal/upstream/openaicompat"
 	"cline-go-proxy/internal/zen"
@@ -22,8 +23,12 @@ func init() {
 	egress.ConfigProvider = getProxyConfig
 	requestlog.Path = resolveDataPath(requestlogstore.FileName)
 	zen.DataPathResolver = func(name string) string { return resolveDataPath(name) }
-	zen.IsModelGoneError = isModelGoneError
-	zen.MarkModelGone = markModelGone
+	zen.IsModelGoneError = routing.IsModelGoneError
+	zen.MarkModelGone = routing.MarkModelGone
+	routing.ConfigProvider = getProxyConfig
+	routing.FindCombo = findCombo
+	routing.ModelsProvider = getAllModels
+	routing.ModelDisabled = isModelDisabled
 
 	buildinfo.HTTPClient = egress.Client
 	accounts.HTTPClient = egress.Client

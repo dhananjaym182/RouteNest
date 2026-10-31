@@ -1,6 +1,7 @@
 package main
 
 import (
+	"cline-go-proxy/internal/routing"
 	"cline-go-proxy/internal/zen"
 	"net/http"
 
@@ -11,7 +12,7 @@ import (
 
 var adminSync = &adminapi.Sync{
 	ModelSync: func() (any, string) {
-		res := triggerModelSync()
+		res := routing.TriggerModelSync()
 		return res, res.Error
 	},
 	ZenModelSync: func() (any, string) {
@@ -25,4 +26,9 @@ var adminSync = &adminapi.Sync{
 	},
 	SyncStatus: providers.SyncStatusSnapshot,
 	Translate:  func(r *http.Request, key string) string { return i18n.TAPI(r, key) },
+}
+
+// POST /admin/api/models/sync — 手动触发一次模型同步
+func handleAdminModelSync(w http.ResponseWriter, r *http.Request) {
+	adminSync.Models(w, r)
 }

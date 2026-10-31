@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"cline-go-proxy/internal/routing"
 	"cline-go-proxy/internal/zen"
 	"context"
 	"encoding/json"
@@ -211,7 +212,7 @@ func buildModelsList(onlyFree bool) []map[string]any {
 			continue
 		}
 		// 通配符排除的模型不进列表（与请求入口同一策略）
-		if excludedForListing(m.ID) {
+		if routing.ExcludedForListing(m.ID) {
 			continue
 		}
 		if onlyFree && !isFreeModelEntry(m) {
@@ -245,7 +246,7 @@ func buildModelsList(onlyFree bool) []map[string]any {
 		list = append(list, entry)
 	}
 	for _, c := range comboEnabledList() {
-		if excludedForListing(c.ID) {
+		if routing.ExcludedForListing(c.ID) {
 			continue
 		}
 		list = append(list, map[string]any{
@@ -255,7 +256,7 @@ func buildModelsList(onlyFree bool) []map[string]any {
 			"owned_by": "combo",
 		})
 	}
-	list = append(list, aliasListingEntries()...)
+	list = append(list, routing.AliasListingEntries()...)
 	return list
 }
 
@@ -277,7 +278,7 @@ func getDefaultModel() string {
 				break
 			}
 		}
-		if !defaultDisabled && (!remoteModelsActive() || liveModelSet(p)[p.DefaultModel]) {
+		if !defaultDisabled && (!routing.RemoteModelsActive() || liveModelSet(p)[p.DefaultModel]) {
 			return p.DefaultModel
 		}
 	}
@@ -291,7 +292,7 @@ func getDefaultModel() string {
 	// 远程同步已启用但上游没有免费模型（列表调整 / 接口变化）：从仍然在线的
 	// 模型里挑一个，绝不在有实时数据时退回下面的硬编码内置表（写死的模型
 	// 已下架时会让每个无模型请求必败）。
-	if remoteModelsActive() {
+	if routing.RemoteModelsActive() {
 		for _, m := range p.Models {
 			if m.Status == "active" && !m.Disabled {
 				return m.ID
@@ -451,7 +452,7 @@ func startProxy(host string, port int) error {
 	log.Printf("Loaded %d active accounts from pool", activeCount)
 
 	// 启动时异步同步一次 Cline 官方推荐模型（不阻塞启动）
-	startModelSync()
+	routing.StartModelSync()
 
 	// §W3-C：已启用 provider 的上游模型清单后台自动检测（下架标记 + 新模型入队待审）
 	providers.StartModelRecheck()
@@ -529,7 +530,7 @@ func startProxy(host string, port int) error {
 
 		// Administrator model policy: alias rewrite + wildcard exclusions,
 		// enforced before routing and before the disabled check.
-		if resolved, reject := resolveClientModel(model); reject != "" {
+		if resolved, reject := routing.ResolveClientModel(model); reject != "" {
 			writeJSON(w, http.StatusBadRequest, map[string]any{
 				"error": map[string]string{"message": reject, "type": "invalid_request_error"},
 			})
@@ -538,7 +539,7 @@ func startProxy(host string, port int) error {
 			model = resolved
 			params["model"] = resolved
 		}
-		applyThinkingPolicy(params, model)
+		routing.ApplyThinkingPolicy(params, model)
 
 		// 管理员手动停用的模型在入口直接拒绝（不进列表，也不可点名调用）
 		if model != "" && isModelDisabled(model) {
@@ -553,7 +554,7 @@ func startProxy(host string, port int) error {
 
 		// Free-only routing rejects models whose route access is not verified
 		// free (or free_tier with an active allowance).
-		if msg := freeOnlyRejection(model); msg != "" {
+		if msg := routing.FreeOnlyRejection(model); msg != "" {
 			requestlog.Finalize(&reqLog, tokenUsage{}, time.Time{}, reqLog.StartedAt, false, msg)
 			writeJSON(w, http.StatusBadRequest, map[string]any{
 				"error": map[string]string{"message": msg, "type": "invalid_request_error"},
@@ -912,7 +913,7 @@ func numericInt(value any) (int, bool) {
 // （remote 同步 / 管理页设置 / 用户自定义模型）。zen 模型的 Output 是压缩预算
 // 用的估值（未知模型默认 32768），作为硬上限会误伤长输出，跳过。
 func modelMaxOutputLimit(model string) int {
-	if meta, ok := lookupClineModelMeta(model); ok && meta.Output > 0 {
+	if meta, ok := routing.LookupClineModelMeta(model); ok && meta.Output > 0 {
 		return meta.Output
 	}
 	if strings.TrimSpace(model) == "" {
@@ -1111,8 +1112,8 @@ func callClineAPI(params map[string]any, stream bool) (*http.Response, *Account,
 	// to a redundancy sibling, the Cline pool, or the fallback chain.
 	if bare, pin := providers.SplitPin(model); pin != "" {
 		params["model"] = bare // upstream body and log attribution carry the bare id
-		if getProxyConfig().OnlyFree && !modelFreeOnlyEligible(bare) {
-			return nil, nil, fmt.Errorf("model %q is not eligible while onlyFree is enabled (access class: %s)", bare, modelRouteAccess(bare).Class)
+		if getProxyConfig().OnlyFree && !routing.ModelFreeOnlyEligible(bare) {
+			return nil, nil, fmt.Errorf("model %q is not eligible while onlyFree is enabled (access class: %s)", bare, routing.ModelRouteAccess(bare).Class)
 		}
 		resp, perr, attempted, provName := providers.CallAPINamed(params, stream, pin)
 		switch {
@@ -1170,10 +1171,10 @@ func callClineAPI(params map[string]any, stream bool) (*http.Response, *Account,
 	if getProxyConfig().OnlyFree {
 		eligible := make([]string, 0, len(chain))
 		for _, m := range chain {
-			if modelFreeOnlyEligible(m) {
+			if routing.ModelFreeOnlyEligible(m) {
 				eligible = append(eligible, m)
 			} else {
-				log.Printf("  onlyFree: skipping model %q (access class %s)", m, modelRouteAccess(m).Class)
+				log.Printf("  onlyFree: skipping model %q (access class %s)", m, routing.ModelRouteAccess(m).Class)
 			}
 		}
 		chain = eligible
@@ -1337,7 +1338,7 @@ func isFreeAliasModel(model string) bool {
 // 已下架的内置模型（如 longcat-2.0，不在远程同步列表）自动排除，不再写死；
 // 从未同步成功（离线）时回退内置常量链。
 func defaultFreeChain() []string {
-	remote := remoteModelsActive()
+	remote := routing.RemoteModelsActive()
 	p := accounts.LoadPool()
 	known := make(map[string]bool, len(p.Models))
 	var remoteFree []string
@@ -1432,7 +1433,7 @@ func isModelDisabled(id string) bool {
 // 远程同步从未成功（离线冷启动）时不判定、原样保留；剔空时也原样保留
 // （宁可按原链试一次，也不要空链直接报错）。
 func filterStaleModels(chain []string) []string {
-	if len(chain) == 0 || !remoteModelsActive() {
+	if len(chain) == 0 || !routing.RemoteModelsActive() {
 		return chain
 	}
 	p := accounts.LoadPool()
@@ -1493,10 +1494,10 @@ func callFreeClineAPI(params map[string]any, stream bool) (*http.Response, *Acco
 	if getProxyConfig().OnlyFree {
 		eligible := make([]string, 0, len(chain))
 		for _, m := range chain {
-			if modelFreeOnlyEligible(m) {
+			if routing.ModelFreeOnlyEligible(m) {
 				eligible = append(eligible, m)
 			} else {
-				log.Printf("  onlyFree: skipping free-chain model %q (access class %s)", m, modelRouteAccess(m).Class)
+				log.Printf("  onlyFree: skipping free-chain model %q (access class %s)", m, routing.ModelRouteAccess(m).Class)
 			}
 		}
 		chain = eligible
@@ -1677,8 +1678,8 @@ func callClineAPIWithAccountCtx(ctx context.Context, acc *Account, params map[st
 			}
 		}
 		// 上游明确报「模型不存在」时清理下架残留（同步标记 Delisted 保留的模型）
-		if model, _ := body["model"].(string); model != "" && isModelGoneError(resp.StatusCode, bodyStr) {
-			markModelGone(model)
+		if model, _ := body["model"].(string); model != "" && routing.IsModelGoneError(resp.StatusCode, bodyStr) {
+			routing.MarkModelGone(model)
 		}
 		return nil, acc, egress.NewAPIError(resp.StatusCode, truncate(bodyStr, 500))
 	}
@@ -2143,7 +2144,7 @@ func handleAnthropicMessages(w http.ResponseWriter, r *http.Request) {
 	reqLog := RequestLog{StartedAt: time.Now(), Protocol: "anthropic", Model: req.Model, Stream: req.Stream}
 
 	// Administrator model policy: alias rewrite + wildcard exclusions.
-	if resolved, reject := resolveClientModel(req.Model); reject != "" {
+	if resolved, reject := routing.ResolveClientModel(req.Model); reject != "" {
 		requestlog.Finalize(&reqLog, tokenUsage{}, time.Time{}, reqLog.StartedAt, false, reject)
 		writeJSON(w, http.StatusBadRequest, map[string]any{
 			"error": map[string]string{"message": reject, "type": "invalid_request_error"},
@@ -2155,7 +2156,7 @@ func handleAnthropicMessages(w http.ResponseWriter, r *http.Request) {
 		openAIReq["model"] = resolved
 	}
 
-	if msg := freeOnlyRejection(req.Model); msg != "" {
+	if msg := routing.FreeOnlyRejection(req.Model); msg != "" {
 		requestlog.Finalize(&reqLog, tokenUsage{}, time.Time{}, reqLog.StartedAt, false, msg)
 		writeJSON(w, http.StatusBadRequest, map[string]any{
 			"error": map[string]string{"message": msg, "type": "invalid_request_error"},

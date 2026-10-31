@@ -4,6 +4,7 @@ import (
 	"cline-go-proxy/internal/accounts"
 	"cline-go-proxy/internal/egress"
 	"cline-go-proxy/internal/requestlog"
+	"cline-go-proxy/internal/routing"
 	"cline-go-proxy/internal/zen"
 	"context"
 	"encoding/json"
@@ -30,9 +31,9 @@ func protocolTestServer(t *testing.T) string {
 	listener.Close()
 
 	protocolModelSyncOnce.Do(func() {
-		modelSyncMu.Lock()
-		modelSyncRan = true
-		modelSyncMu.Unlock()
+		routing.SyncMu.Lock()
+		routing.SyncRan = true
+		routing.SyncMu.Unlock()
 	})
 
 	zen.ConfigMu.Lock()
