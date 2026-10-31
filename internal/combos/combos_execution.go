@@ -46,7 +46,7 @@ func Retryable(err error) bool {
 	if err == nil {
 		return false
 	}
-	if IsAccountUnavailable(err) {
+	if isAccountUnavailable(err) {
 		return true // 账号不可用：可能换号/换条目即可恢复
 	}
 	var apiErr *egress.APIError
@@ -173,7 +173,7 @@ func EntryRouteKind(e domain.ComboEntry) string {
 // （upstream=="provider" 时非空，cline/opencode 为空）/ error。
 func CallSingleModel(params map[string]any, entry domain.ComboEntry, stream bool, sessionID string) (*http.Response, *domain.Account, string, string, error) {
 	model := strings.TrimSpace(entry.Model)
-	ep := WithModel(params, model)
+	ep := routing.WithModel(params, model)
 	delete(ep, servedByParam)
 	delete(ep, providerNameParam)
 	delete(ep, providers.ProviderIDParam)
@@ -185,14 +185,14 @@ func CallSingleModel(params map[string]any, entry domain.ComboEntry, stream bool
 		// zen 处于故障转移窗口：绝不把 zen 免费模型 ID 原样发给 Cline（会被判
 		// 400 "invalid model format"，进而被组合误判为永久失败）。按运行时不可用
 		// 跳过该条目 —— 返回可重试错误，组合继续尝试下一个条目。
-		return nil, nil, zen.UpstreamOpenCode, "", NewUnavailableError(
+		return nil, nil, zen.UpstreamOpenCode, "", newUnavailableError(
 			fmt.Sprintf("model %q temporarily unavailable (opencode zen degraded)", model),
 		)
 	case "unavailable":
 		// 条目固定的上游当前无法服务该模型（zen 固定到非免费/非 zen 模型，或
 		// cline 固定到 provider-only 模型等）：按运行时不可用跳过，返回可重试错误，
 		// 让组合继续尝试下一个条目而不是中止。
-		return nil, nil, zen.UpstreamOpenCode, "", NewUnavailableError(
+		return nil, nil, zen.UpstreamOpenCode, "", newUnavailableError(
 			fmt.Sprintf("model %q is not available on the pinned source", model),
 		)
 	case "zen":
@@ -225,14 +225,14 @@ func CallSingleModel(params map[string]any, entry domain.ComboEntry, stream bool
 		// （用户明确指定了唯一上游）。
 		resp, perr, attempted, provName := providers.CallAPINamed(ep, stream, entry.Provider)
 		if !attempted {
-			return nil, nil, zen.UpstreamProvider, "", NewUnavailableError(
+			return nil, nil, zen.UpstreamProvider, "", newUnavailableError(
 				fmt.Sprintf("model %q is not served by provider %q", model, strings.TrimSpace(entry.Provider)),
 			)
 		}
 		if perr != nil {
 			// 固定 provider 失败：包装成可重试的「跳过」，避免 400/401/403（如
 			// 一把被轮换的 API key）被 Retryable 判为永久错误而中止整条组合。
-			return nil, nil, zen.UpstreamProvider, provName, NewUnavailableError(
+			return nil, nil, zen.UpstreamProvider, provName, newUnavailableError(
 				fmt.Sprintf("pinned provider %q failed for %q: %s", strings.TrimSpace(entry.Provider), model, platform.Truncate(perr.Error(), 200)),
 			)
 		}
@@ -252,11 +252,11 @@ func CallSingleModel(params map[string]any, entry domain.ComboEntry, stream bool
 	for {
 		acc := accounts.PickAccountForModelStrict(model)
 		if acc == nil {
-			return nil, nil, zen.UpstreamCline, "", NewUnavailableError(fmt.Sprintf("model %q has no available account", model))
+			return nil, nil, zen.UpstreamCline, "", newUnavailableError(fmt.Sprintf("model %q has no available account", model))
 		}
 		if tried[acc.AccountID] {
 			// 防呆：账号轮询下也不应无限重试同一个账号（fill 策略等边界）。
-			return nil, acc, zen.UpstreamCline, "", NewUnavailableError(fmt.Sprintf("model %q unavailable on all eligible accounts", model))
+			return nil, acc, zen.UpstreamCline, "", newUnavailableError(fmt.Sprintf("model %q unavailable on all eligible accounts", model))
 		}
 		tried[acc.AccountID] = true
 
@@ -264,13 +264,13 @@ func CallSingleModel(params map[string]any, entry domain.ComboEntry, stream bool
 		if err == nil {
 			return resp, usedAcc, zen.UpstreamCline, "", nil
 		}
-		if IsAccountUnavailable(err) {
+		if isAccountUnavailable(err) {
 			continue // token 失效等：换下一个账号
 		}
 		// 确定性 payload 400（invalid-request 语义，如工具可选字段 null 被网关硬拒）：
 		// 换账号不可能自愈，立即上抛 —— 不在账号池上空转注定失败的上游往返。
 		// （上下文超限 400 除外：RunCombo 层有压缩+重试路径。）
-		if IsDeterministicRequestError(err) {
+		if routing.IsDeterministicRequestError(err) {
 			return nil, usedAcc, zen.UpstreamCline, "", err
 		}
 		if apiErr, ok := err.(*egress.APIError); ok {
@@ -278,7 +278,7 @@ func CallSingleModel(params map[string]any, entry domain.ComboEntry, stream bool
 			case 402:
 				// 余额不足是账号级问题：冷却该账号该模型后换号，仍试同一模型。
 				SetModelCooldown(usedAcc, model, time.Now().Add(30*time.Minute))
-				log.Printf("  combo: model %q on %s: insufficient credits (402), cooling 30m, next account", model, TruncateEmail(usedAcc.Email))
+				log.Printf("  combo: model %q on %s: insufficient credits (402), cooling 30m, next account", model, routing.TruncateEmail(usedAcc.Email))
 				continue
 			case 429:
 				continue // 模型级冷却已记录，换号
@@ -420,7 +420,7 @@ func RunCombo(params map[string]any, combo domain.ModelCombo, stream bool, sessi
 	// 默认：组合只走自己的序列，不触发全局回退。
 	if combo.EmergencyFallback {
 		log.Printf("  combo %q: all entries failed, emergency fallback (opt-in) to free chain", combo.ID)
-		fp := WithModel(params, "free")
+		fp := routing.WithModel(params, "free")
 		if resp, acc, err := CallFreeClineAPI(fp, stream); err == nil {
 			fm, _ := fp["model"].(string)
 			if fm == "" {
@@ -454,7 +454,7 @@ func RunCombo(params map[string]any, combo domain.ModelCombo, stream bool, sessi
 	}
 
 	if lastErr == nil {
-		lastErr = NewUnavailableError(fmt.Sprintf("combo %q has no eligible entries", combo.ID))
+		lastErr = newUnavailableError(fmt.Sprintf("combo %q has no eligible entries", combo.ID))
 	}
 	return Run{Trace: trace, Err: lastErr}
 }

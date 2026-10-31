@@ -5,7 +5,6 @@ package app
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"net/http"
 	"strings"
 	"sync"
@@ -57,23 +56,13 @@ func configure() {
 		return admin.Config
 	}
 	combos.SaveConfig = admin.SaveProxyConfigLocked
-	combos.IsAccountUnavailable = func(err error) bool {
-		var e *routing.ClineAccountUnavailableError
-		return errors.As(err, &e)
-	}
-	combos.NewUnavailableError = func(message string) error {
-		return &routing.FreeModelUnavailableError{Message: message}
-	}
 	combos.CallClineAPIWithAccount = func(ctx context.Context, acc *domain.Account, params map[string]any, stream bool) (*http.Response, *domain.Account, error) {
 		return routing.CallClineAPIWithAccountCtx(ctx, acc, params, stream)
 	}
-	combos.IsDeterministicRequestError = routing.IsDeterministicRequestError
 	combos.SetModelCooldown = routing.SetModelCooldown
-	combos.TruncateEmail = routing.TruncateEmail
 	combos.CallFreeClineAPI = func(params map[string]any, stream bool) (*http.Response, *domain.Account, error) {
 		return routing.CallFreeClineAPI(params, stream)
 	}
-	combos.WithModel = routing.WithModel
 
 	compaction.AnthropicToOpenAI = func(body []byte) (map[string]any, error) {
 		var req proxycore.AnthropicReq

@@ -21,10 +21,12 @@ package combos
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"routenest/internal/config"
 	"routenest/internal/domain"
+	"routenest/internal/routing"
 	"sync"
 	"time"
 )
@@ -38,24 +40,12 @@ var (
 	EnsureConfig = func() *config.Proxy { return defaultConfig }
 	SaveConfig   = func() {}
 
-	IsAccountUnavailable    = func(error) bool { return false }
-	NewUnavailableError     = func(message string) error { return &unavailableError{message: message} }
 	CallClineAPIWithAccount = func(context.Context, *domain.Account, map[string]any, bool) (*http.Response, *domain.Account, error) {
 		return nil, nil, fmt.Errorf("cline API not wired")
 	}
-	IsDeterministicRequestError = func(error) bool { return false }
-	SetModelCooldown            = func(*domain.Account, string, time.Time) {}
-	TruncateEmail               = func(email string) string { return email }
-	CallFreeClineAPI            = func(map[string]any, bool) (*http.Response, *domain.Account, error) {
+	SetModelCooldown = func(*domain.Account, string, time.Time) {}
+	CallFreeClineAPI = func(map[string]any, bool) (*http.Response, *domain.Account, error) {
 		return nil, nil, fmt.Errorf("free chain not wired")
-	}
-	WithModel = func(params map[string]any, model string) map[string]any {
-		cp := make(map[string]any, len(params)+1)
-		for k, v := range params {
-			cp[k] = v
-		}
-		cp["model"] = model
-		return cp
 	}
 )
 
@@ -64,6 +54,15 @@ var (
 	defaultConfig   = config.DefaultProxy()
 )
 
-type unavailableError struct{ message string }
+// newUnavailableError reports a combo entry that cannot serve the request. The
+// routing error type lets the HTTP layer map it to a status.
+func newUnavailableError(message string) error {
+	return &routing.FreeModelUnavailableError{Message: message}
+}
 
-func (e *unavailableError) Error() string { return e.message }
+// isAccountUnavailable reports an error from a Cline account that cannot serve
+// the request, so the combo moves on to another account.
+func isAccountUnavailable(err error) bool {
+	var e *routing.ClineAccountUnavailableError
+	return errors.As(err, &e)
+}
