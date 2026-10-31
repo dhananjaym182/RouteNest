@@ -1,0 +1,192 @@
+== GET /v1/models status=OK
+{
+  "data": [
+    {
+      "context_length": 200000,
+      "created": "\u003ctimestamp\u003e",
+      "id": "remote/alpha",
+      "max_output_tokens": 8192,
+      "object": "model",
+      "owned_by": "cline"
+    },
+    {
+      "created": "\u003ctimestamp\u003e",
+      "id": "remote/gone",
+      "object": "model",
+      "owned_by": "cline"
+    },
+    {
+      "created": "\u003ctimestamp\u003e",
+      "id": "zen/free",
+      "object": "model",
+      "owned_by": "opencode"
+    },
+    {
+      "created": "\u003ctimestamp\u003e",
+      "id": "custom/beta",
+      "object": "model",
+      "owned_by": "cline",
+      "thinking_levels": [
+        "low",
+        "high"
+      ]
+    },
+    {
+      "created": "\u003ctimestamp\u003e",
+      "id": "fixture/one",
+      "object": "model",
+      "owned_by": "cline"
+    },
+    {
+      "created": "\u003ctimestamp\u003e",
+      "id": "combo-fixture",
+      "object": "model",
+      "owned_by": "combo"
+    },
+    {
+      "alias_of": "custom/beta",
+      "created": "\u003ctimestamp\u003e",
+      "id": "fixture-fast",
+      "object": "model",
+      "owned_by": "alias"
+    }
+  ],
+  "object": "list"
+}
+== GET /admin/api/models status=OK
+{
+  "data": {
+    "lastSync": {
+      "added": null,
+      "changed": false,
+      "removed": null,
+      "syncedAt": "",
+      "total": 0
+    },
+    "models": [
+      {
+        "context": 200000,
+        "cost": "pass",
+        "custom": false,
+        "id": "remote/alpha",
+        "output": 8192,
+        "provider": "cline",
+        "source": "remote",
+        "status": "active"
+      },
+      {
+        "cost": "free",
+        "custom": false,
+        "delisted": true,
+        "id": "remote/gone",
+        "provider": "cline",
+        "source": "remote",
+        "status": "active"
+      },
+      {
+        "cost": "free",
+        "custom": false,
+        "id": "zen/free",
+        "provider": "opencode",
+        "source": "zen",
+        "status": "active"
+      },
+      {
+        "cost": "pass",
+        "custom": true,
+        "id": "custom/beta",
+        "provider": "custom",
+        "status": "active",
+        "thinkingLevels": [
+          "low",
+          "high"
+        ]
+      },
+      {
+        "cost": "pass",
+        "custom": true,
+        "disabled": true,
+        "id": "custom/off",
+        "provider": "custom",
+        "status": "active"
+      },
+      {
+        "cost": "pass",
+        "custom": false,
+        "id": "fixture/one",
+        "provider": "Fixture Provider",
+        "source": "provider",
+        "status": "active"
+      }
+    ]
+  },
+  "success": true
+}
+== GET /admin/api/providers status=OK
+{
+  "data": {
+    "accountHealth": "\u003cruntime-history\u003e",
+    "health": {
+      "pfix": {
+        "avgLatencyMs": 0,
+        "cooldowns": [],
+        "daily": 0,
+        "limits": {
+          "daily": 0,
+          "rpm": 0,
+          "tokenWindow": "monthly",
+          "tokens": 0
+        },
+        "rate": 0,
+        "recent": [],
+        "rpm": 0,
+        "samples": 0,
+        "tokens": 0
+      }
+    },
+    "providers": [
+      {
+        "apiKey": "fixture-key",
+        "baseURL": "http://127.0.0.1:9",
+        "createdAt": "\u003ctime\u003e",
+        "enabled": true,
+        "free": false,
+        "id": "pfix",
+        "modelIds": [
+          "fixture/one"
+        ],
+        "name": "Fixture Provider",
+        "priority": 0
+      }
+    ]
+  },
+  "success": true
+}
+== GET /admin/api/connections status=OK
+{
+  "data": {
+    "connections": [
+      {
+        "accessToken": "",
+        "authType": "",
+        "createdAt": "\u003ctime\u003e",
+        "email": "fixture@example.invalid",
+        "id": "\u003cconnection-id\u003e",
+        "provider": "qwen",
+        "status": "active"
+      }
+    ],
+    "flows": [
+      "codebuddy-cn",
+      "codebuddy-intl",
+      "github",
+      "kilocode",
+      "kimi-coding",
+      "qoder",
+      "qoder-cn",
+      "qwen",
+      "workbuddy"
+    ]
+  },
+  "success": true
+}
