@@ -4,7 +4,7 @@ package integration
 //
 // Two layers:
 //  1. Static inventory: every mux.HandleFunc("<literal>", ...) registration in
-//     the public server (internal/proxycore/proxy.go) and admin registrar
+//     the public server (internal/proxycore/server.go, proxy.go) and admin registrar
 //     (internal/admin/admin.go), with the wrapper chain and handler name.
 //     Public routes are built inline inside proxycore.Start, which binds a port
 //     and starts background loops, so they cannot be probed from a test.
@@ -43,6 +43,7 @@ var updateRouteGolden = flag.Bool("update-route-golden", false, "rewrite route i
 // registrationSources are the files that call mux.HandleFunc with literal paths.
 var registrationSources = []string{
 	"../proxycore/proxy.go",
+	"../proxycore/server.go",
 	"../admin/admin.go",
 }
 
