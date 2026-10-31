@@ -1,10 +1,11 @@
 package main
 
 // 组合条目的上游固定（provider-pinned combo entries）测试。
-// 覆盖：entryRouteKind 各 Source 取值（含空=自动）、固定 provider 时命中指定上游、
-// 同一模型不同固定不被去重、validateCombo 拒绝非法固定，以及空固定行为不变。
+// 覆盖：combos.EntryRouteKind 各 Source 取值（含空=自动）、固定 provider 时命中指定上游、
+// 同一模型不同固定不被去重、combos.ValidateCombo 拒绝非法固定，以及空固定行为不变。
 
 import (
+	"cline-go-proxy/internal/combos"
 	"cline-go-proxy/internal/providers"
 	"cline-go-proxy/internal/zen"
 	"net/http"
@@ -36,7 +37,7 @@ func installProviders(t *testing.T, provs ...*CustomProvider) {
 	}
 }
 
-// ============================ entryRouteKind ============================
+// ============================ combos.EntryRouteKind ============================
 
 func TestEntryRouteKind(t *testing.T) {
 	installPool(t, []Model{
@@ -61,24 +62,24 @@ func TestEntryRouteKind(t *testing.T) {
 		zen.StateMu.Unlock()
 	})
 
-	// 空固定 = 自动：与 comboRouteKind 完全一致。
-	if got, want := entryRouteKind(ComboEntry{Model: "m-a"}), comboRouteKind("m-a"); got != want || got != "cline" {
-		t.Fatalf("empty source route = %q (comboRouteKind=%q), want cline", got, want)
+	// 空固定 = 自动：与 combos.RouteKind 完全一致。
+	if got, want := combos.EntryRouteKind(ComboEntry{Model: "m-a"}), combos.RouteKind("m-a"); got != want || got != "cline" {
+		t.Fatalf("empty source route = %q (combos.RouteKind=%q), want cline", got, want)
 	}
-	if got := entryRouteKind(ComboEntry{Model: "zen-free-x"}); got != "zen" {
+	if got := combos.EntryRouteKind(ComboEntry{Model: "zen-free-x"}); got != "zen" {
 		t.Fatalf("empty source on zen model = %q, want zen", got)
 	}
 
 	// 显式 cline / provider 都落到 cline 分支（provider 名称在分支内强制）。
-	if got := entryRouteKind(ComboEntry{Model: "m-a", Source: "cline"}); got != "cline" {
+	if got := combos.EntryRouteKind(ComboEntry{Model: "m-a", Source: "cline"}); got != "cline" {
 		t.Fatalf("source=cline route = %q, want cline", got)
 	}
-	if got := entryRouteKind(ComboEntry{Model: "m-a", Source: "provider", Provider: "P"}); got != "cline" {
+	if got := combos.EntryRouteKind(ComboEntry{Model: "m-a", Source: "provider", Provider: "P"}); got != "cline" {
 		t.Fatalf("source=provider route = %q, want cline", got)
 	}
 
 	// 健康 zen：source=zen 走 zen。
-	if got := entryRouteKind(ComboEntry{Model: "zen-free-x", Source: "zen"}); got != "zen" {
+	if got := combos.EntryRouteKind(ComboEntry{Model: "zen-free-x", Source: "zen"}); got != "zen" {
 		t.Fatalf("source=zen healthy route = %q, want zen", got)
 	}
 
@@ -86,7 +87,7 @@ func TestEntryRouteKind(t *testing.T) {
 	zen.StateMu.Lock()
 	zen.FailCount, zen.FailUntil = 99, time.Now().Add(time.Minute)
 	zen.StateMu.Unlock()
-	if got := entryRouteKind(ComboEntry{Model: "zen-free-x", Source: "zen"}); got != "zen-degraded" {
+	if got := combos.EntryRouteKind(ComboEntry{Model: "zen-free-x", Source: "zen"}); got != "zen-degraded" {
 		t.Fatalf("source=zen degraded route = %q, want zen-degraded", got)
 	}
 	zen.StateMu.Lock()
@@ -94,7 +95,7 @@ func TestEntryRouteKind(t *testing.T) {
 	zen.StateMu.Unlock()
 
 	// 非 zen 模型固定到 zen → 不可用。
-	if got := entryRouteKind(ComboEntry{Model: "m-a", Source: "zen"}); got != "unavailable" {
+	if got := combos.EntryRouteKind(ComboEntry{Model: "m-a", Source: "zen"}); got != "unavailable" {
 		t.Fatalf("source=zen on non-zen model route = %q, want unavailable", got)
 	}
 }
@@ -120,7 +121,7 @@ func TestRunComboPinsProvider(t *testing.T) {
 
 	combo := ModelCombo{ID: "c", Name: "C", Enabled: true,
 		Entries: []ComboEntry{{Model: "m-r", Source: "provider", Provider: "P2"}}}
-	run := runCombo(chatParams("c"), combo, false, "")
+	run := combos.RunCombo(chatParams("c"), combo, false, "")
 	if run.Err != nil {
 		t.Fatalf("run err: %v", run.Err)
 	}
@@ -159,7 +160,7 @@ func TestRunComboSameModelDifferentPinsNotDeduped(t *testing.T) {
 		{Model: "m-r", Source: "provider", Provider: "P1"},
 		{Model: "m-r", Source: "provider", Provider: "P2"},
 	}}
-	run := runCombo(chatParams("c"), combo, false, "")
+	run := combos.RunCombo(chatParams("c"), combo, false, "")
 	if run.Err != nil {
 		t.Fatalf("run err: %v", run.Err)
 	}
@@ -191,7 +192,7 @@ func TestRunComboSameModelSamePinDeduped(t *testing.T) {
 		{Model: "m-r", Source: "provider", Provider: "P1"},
 		{Model: "m-r", Source: "provider", Provider: "P1"},
 	}}
-	run := runCombo(chatParams("c"), combo, false, "")
+	run := combos.RunCombo(chatParams("c"), combo, false, "")
 	if calls != 1 {
 		t.Fatalf("upstream calls = %d, want 1 (identical pin must be deduped, not retried)", calls)
 	}
@@ -204,7 +205,7 @@ func TestRunComboSameModelSamePinDeduped(t *testing.T) {
 	}
 }
 
-// ============================ validateCombo 固定校验 ============================
+// ============================ combos.ValidateCombo 固定校验 ============================
 
 func TestValidateComboPins(t *testing.T) {
 	installPool(t, []Model{
@@ -219,21 +220,21 @@ func TestValidateComboPins(t *testing.T) {
 	)
 
 	// 合法固定：cline（池内非 zen 模型）/ provider（启用且服务该模型）。
-	if err := validateCombo(ModelCombo{ID: "c", Name: "C", Enabled: true,
+	if err := combos.ValidateCombo(ModelCombo{ID: "c", Name: "C", Enabled: true,
 		Entries: []ComboEntry{{Model: "m-a", Source: "cline"}}}, nil); err != nil {
 		t.Fatalf("valid cline pin rejected: %v", err)
 	}
-	if err := validateCombo(ModelCombo{ID: "c", Name: "C", Enabled: true,
+	if err := combos.ValidateCombo(ModelCombo{ID: "c", Name: "C", Enabled: true,
 		Entries: []ComboEntry{{Model: "m-a", Source: "provider", Provider: "P-serves"}}}, nil); err != nil {
 		t.Fatalf("valid provider pin rejected: %v", err)
 	}
 	// 空固定行为不变。
-	if err := validateCombo(ModelCombo{ID: "c", Name: "C", Enabled: true,
+	if err := combos.ValidateCombo(ModelCombo{ID: "c", Name: "C", Enabled: true,
 		Entries: []ComboEntry{{Model: "m-a"}}}, nil); err != nil {
 		t.Fatalf("empty-pin combo rejected: %v", err)
 	}
 	// provider 名称大小写/空白不敏感。
-	if err := validateCombo(ModelCombo{ID: "c", Name: "C", Enabled: true,
+	if err := combos.ValidateCombo(ModelCombo{ID: "c", Name: "C", Enabled: true,
 		Entries: []ComboEntry{{Model: "m-a", Source: "provider", Provider: "  p-serves  "}}}, nil); err != nil {
 		t.Fatalf("case-insensitive provider pin rejected: %v", err)
 	}
@@ -249,7 +250,7 @@ func TestValidateComboPins(t *testing.T) {
 		{"zen pin on non-zen model", ComboEntry{Model: "m-a", Source: "zen"}},
 	}
 	for _, tc := range reject {
-		err := validateCombo(ModelCombo{ID: "c", Name: "C", Enabled: true,
+		err := combos.ValidateCombo(ModelCombo{ID: "c", Name: "C", Enabled: true,
 			Entries: []ComboEntry{tc.entry}}, nil)
 		if err == nil {
 			t.Errorf("%s: expected validation error, got nil", tc.name)
@@ -272,20 +273,20 @@ func TestValidateComboRejectsProviderOnlyClinePin(t *testing.T) {
 	)
 
 	// 老的非严格判定仍会认为它「存在」（保证 helper 语义差异被测试锁定）。
-	if !clineModelWithIDExists("m-p") {
-		t.Fatal("setup: clineModelWithIDExists should treat provider rows as non-zen")
+	if !combos.ClineModelWithIDExists("m-p") {
+		t.Fatal("setup: combos.ClineModelWithIDExists should treat provider rows as non-zen")
 	}
-	if clinePoolModelExists("m-p") {
-		t.Fatal("setup: clinePoolModelExists must exclude provider-source rows")
+	if combos.ClinePoolModelExists("m-p") {
+		t.Fatal("setup: combos.ClinePoolModelExists must exclude provider-source rows")
 	}
 
-	err := validateCombo(ModelCombo{ID: "c", Name: "C", Enabled: true,
+	err := combos.ValidateCombo(ModelCombo{ID: "c", Name: "C", Enabled: true,
 		Entries: []ComboEntry{{Model: "m-p", Source: "cline"}}}, nil)
 	if err == nil {
 		t.Fatal("expected validation error: source=cline pin on provider-only model")
 	}
-	if got := entryRouteKind(ComboEntry{Model: "m-p", Source: "cline"}); got != "unavailable" {
-		t.Fatalf("entryRouteKind(provider-only, source=cline) = %q, want unavailable", got)
+	if got := combos.EntryRouteKind(ComboEntry{Model: "m-p", Source: "cline"}); got != "unavailable" {
+		t.Fatalf("combos.EntryRouteKind(provider-only, source=cline) = %q, want unavailable", got)
 	}
 }
 
@@ -315,12 +316,12 @@ func TestEntryRouteKindZenPinWinsOverClineCollision(t *testing.T) {
 	})
 
 	// AUTO（空固定）仍让给 cline（既有行为不变）。
-	if got := comboRouteKind("dual-free"); got != "cline" {
-		t.Fatalf("auto comboRouteKind = %q, want cline (collision diversion unchanged)", got)
+	if got := combos.RouteKind("dual-free"); got != "cline" {
+		t.Fatalf("auto combos.RouteKind = %q, want cline (collision diversion unchanged)", got)
 	}
 	// 显式 zen 固定：pin 胜出，走 zen。
-	if got := entryRouteKind(ComboEntry{Model: "dual-free", Source: "zen"}); got != "zen" {
-		t.Fatalf("entryRouteKind(zen pin, collision) = %q, want zen", got)
+	if got := combos.EntryRouteKind(ComboEntry{Model: "dual-free", Source: "zen"}); got != "zen" {
+		t.Fatalf("combos.EntryRouteKind(zen pin, collision) = %q, want zen", got)
 	}
 }
 
@@ -344,7 +345,7 @@ func TestRunComboPinnedProvider401DoesNotAbort(t *testing.T) {
 		{Model: "m-auth", Source: "provider", Provider: "P-bad"},
 		{Model: "m-ok"},
 	}}
-	run := runCombo(chatParams("c"), combo, false, "")
+	run := combos.RunCombo(chatParams("c"), combo, false, "")
 	if run.Err != nil {
 		t.Fatalf("run err (401 from pinned provider must not abort): %v", run.Err)
 	}
@@ -376,7 +377,7 @@ func TestRunComboSkippedTraceCarriesPin(t *testing.T) {
 		{Model: "m-a", Source: "provider", Provider: "P1"},
 		{Model: "m-a", Source: "provider", Provider: "P1"},
 	}}
-	run := runCombo(chatParams("c"), combo, false, "")
+	run := combos.RunCombo(chatParams("c"), combo, false, "")
 	if len(run.Trace) != 3 {
 		t.Fatalf("trace = %+v, want 3 entries", run.Trace)
 	}

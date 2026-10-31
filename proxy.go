@@ -22,6 +22,8 @@ import (
 
 	"cline-go-proxy/internal/accounts"
 	"cline-go-proxy/internal/buildinfo"
+	"cline-go-proxy/internal/combos"
+	"cline-go-proxy/internal/compaction"
 	"cline-go-proxy/internal/dispatch"
 	"cline-go-proxy/internal/egress"
 	"cline-go-proxy/internal/httpapi"
@@ -245,7 +247,7 @@ func buildModelsList(onlyFree bool) []map[string]any {
 		}
 		list = append(list, entry)
 	}
-	for _, c := range comboEnabledList() {
+	for _, c := range combos.EnabledList() {
 		if routing.ExcludedForListing(c.ID) {
 			continue
 		}
@@ -461,7 +463,7 @@ func startProxy(host string, port int) error {
 	if zen.GetConfig().Enabled {
 		zen.StartModelsRefresher()
 	}
-	startCompactCleanup()
+	compaction.StartCleanup()
 
 	freePort(port)
 
@@ -596,7 +598,7 @@ func startProxy(host string, port int) error {
 		// 模型组合：具名有序回退。命中组合时在普通路由之前分流 —— 组合 ID 不是
 		// 真实上游模型，必须在此拦截，按管理员配置的顺序逐个尝试；不会走全局
 		// ModelChain / free 链（除非组合显式开启 emergencyFallback）。
-		if combo, ok := findCombo(model); ok {
+		if combo, ok := combos.FindCombo(model); ok {
 			if !combo.Enabled {
 				msg := fmt.Sprintf("model combo %q is disabled", model)
 				requestlog.Finalize(&reqLog, tokenUsage{}, time.Time{}, reqLog.StartedAt, false, msg)
@@ -606,8 +608,8 @@ func startProxy(host string, port int) error {
 				return
 			}
 			reqLog.ToolNames = clampParamsToolNames(params)
-			run := runCombo(params, combo, isStream, requestSessionID(params, r.Header))
-			applyComboTrace(&reqLog, combo, run)
+			run := combos.RunCombo(params, combo, isStream, compaction.RequestSessionID(params, r.Header))
+			combos.ApplyTrace(&reqLog, combo, run)
 			stampUpstream(&reqLog, params) // 归因实际服务方（provider / opencode / cline）
 			if run.Acc != nil {
 				reqLog.AccountID = run.Acc.AccountID
@@ -615,7 +617,7 @@ func startProxy(host string, port int) error {
 			}
 			if run.Err != nil {
 				log.Printf("  combo %q error: %v", combo.ID, run.Err)
-				msg := comboTraceSummary(combo, run)
+				msg := combos.TraceSummary(combo, run)
 				requestlog.Finalize(&reqLog, tokenUsage{}, time.Time{}, reqLog.StartedAt, false, msg)
 				writeJSON(w, clineErrorHTTPStatus(run.Err), map[string]any{
 					"error": map[string]string{"message": msg, "type": "api_error"},
@@ -623,7 +625,7 @@ func startProxy(host string, port int) error {
 				return
 			}
 			defer run.Resp.Body.Close()
-			// 非流式：完整按条目顺序回退。流式：仅在连接级回退（runCombo 在写任何
+			// 非流式：完整按条目顺序回退。流式：仅在连接级回退（combos.RunCombo 在写任何
 			// 字节给客户端前拿到 200 响应）；空流由统一契约补发 in-band 错误，不再
 			// 伪装成正常结束（Anthropic 端点另有 streamAnthropicCombo 的预提交回退）。
 			if isStream {
@@ -646,17 +648,17 @@ func startProxy(host string, port int) error {
 		case "zen":
 			reqLog.Upstream = zen.UpstreamOpenCode
 			zm, _ := zen.ResolveInfo(model)
-			out := maybeCompact(params, zm, requestSessionID(params, r.Header))
-			if out.changed {
-				log.Printf("  chat %s", out.note)
+			out := compaction.MaybeCompact(params, zm, compaction.RequestSessionID(params, r.Header))
+			if out.Changed {
+				log.Printf("  chat %s", out.Note)
 			}
 			resp, err := zen.Call(params, isStream)
 			// 上游返回「上下文超限」400：压缩后重试一次，避免 Claude Code 大上下文直接失败
-			if err != nil && isContextLengthError(err) {
+			if err != nil && compaction.IsContextLengthError(err) {
 				log.Printf("  chat: context length exceeded, compacting and retrying")
-				out2 := fallbackTruncate(params, zm)
-				if out2.changed {
-					log.Printf("  chat %s", out2.note)
+				out2 := compaction.FallbackTruncate(params, zm)
+				if out2.Changed {
+					log.Printf("  chat %s", out2.Note)
 					resp, err = zen.Call(params, isStream)
 				}
 			}
@@ -734,13 +736,13 @@ func startProxy(host string, port int) error {
 		// Cline 通道：截短超长工具名并记录映射，回程由响应处理器还原（Meta 后端硬限 ≤64）
 		// 主动压缩同样适用于 cline/provider 路由 —— 此前只有 zen 路径会压缩，
 		// 大上下文请求会直接撞上游窗口失败。
-		zm := modelForCompaction(model)
-		compactForRequest(params, zm, requestSessionID(params, r.Header), "chat")
+		zm := compaction.ModelForCompaction(model)
+		compaction.CompactForRequest(params, zm, compaction.RequestSessionID(params, r.Header), "chat")
 		reqLog.ToolNames = clampParamsToolNames(params)
 		resp, acc, err := callClineAPI(params, isStream)
-		if err != nil && isContextLengthError(err) {
-			if out := fallbackTruncate(params, zm); out.changed {
-				log.Printf("  chat %s", out.note)
+		if err != nil && compaction.IsContextLengthError(err) {
+			if out := compaction.FallbackTruncate(params, zm); out.Changed {
+				log.Printf("  chat %s", out.Note)
 				resp, acc, err = callClineAPI(params, isStream)
 			}
 		}
@@ -801,7 +803,7 @@ func startProxy(host string, port int) error {
 			writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
 			return
 		}
-		handleAnthropicCountTokens(w, r)
+		compaction.HandleCountTokens(w, r)
 	})
 	mux.HandleFunc("/v1/messages/count_tokens", withBodyLimit(countTokensHandler))
 	mux.HandleFunc("/messages/count_tokens", withBodyLimit(countTokensHandler))
@@ -1055,10 +1057,10 @@ func clineErrorHTTPStatus(err error) int {
 // isDeterministicRequestError 判断 err 是否为「换账号/换模型重试也无法自愈」的
 // 上游确定性 400：invalid-request 语义（invalid_request_error 类型、invalid_request
 // 伪码、网关字段校验 "Invalid input"，如工具可选字段被序列化为 null）。
-// 上下文超限 400 显式排除（isContextLengthError）：那类错误有压缩+重试的自愈路径，
+// 上下文超限 400 显式排除（IsContextLengthError）：那类错误有压缩+重试的自愈路径，
 // 必须保留现有的 truncate/retry 行为。限流 429/5xx 不在此列。
 func isDeterministicRequestError(err error) bool {
-	if err == nil || isContextLengthError(err) {
+	if err == nil || compaction.IsContextLengthError(err) {
 		return false
 	}
 	var apiErr *egress.APIError
@@ -2166,12 +2168,12 @@ func handleAnthropicMessages(w http.ResponseWriter, r *http.Request) {
 
 	// Context management (Anthropic context_management edits) — polyfill.
 	// Inspected before routing so compaction can rewrite openAIReq["messages"].
-	var cmResult *CMResult
+	var cmResult *compaction.CMResult
 	cmPaused := false
 	var cmCompactionSummary string
-	var cmApplied []CMAppliedEdit
+	var cmApplied []compaction.CMAppliedEdit
 	if len(req.ContextManagement) > 0 {
-		res, err := applyContextManagement(r.Context(), req, openAIReq)
+		res, err := compaction.ApplyContextManagement(r.Context(), req.Model, req.ContextManagement, openAIReq)
 		if err != nil {
 			msg := err.Error()
 			requestlog.Finalize(&reqLog, tokenUsage{}, time.Time{}, reqLog.StartedAt, false, msg)
@@ -2183,7 +2185,7 @@ func handleAnthropicMessages(w http.ResponseWriter, r *http.Request) {
 			if res.AppliedEdits != nil {
 				cmApplied = res.AppliedEdits
 			} else {
-				cmApplied = []CMAppliedEdit{}
+				cmApplied = []compaction.CMAppliedEdit{}
 			}
 			if res.Compacted {
 				cmCompactionSummary = res.Summary
@@ -2215,13 +2217,13 @@ func handleAnthropicMessages(w http.ResponseWriter, r *http.Request) {
 			sw.Write([]byte(": ping\n\n"))
 			if !sw.CompactionEmitted {
 				sw.CompactionEmitted = true
-				emitCompactionBlock(sw, cmCompactionSummary)
+				compaction.EmitCompactionBlock(sw, cmCompactionSummary)
 			}
 			emit("message_delta", map[string]any{
 				"type":               "message_delta",
 				"delta":              map[string]any{"stop_reason": "compaction", "stop_sequence": nil},
 				"usage":              map[string]any{"output_tokens": 0},
-				"context_management": cmContextManagementResponse(cmApplied),
+				"context_management": compaction.ContextManagementResponse(cmApplied),
 			})
 			emit("message_stop", map[string]any{"type": "message_stop"})
 			requestlog.Finalize(&reqLog, tokenUsage{}, time.Time{}, reqLog.StartedAt, true, "")
@@ -2235,7 +2237,7 @@ func handleAnthropicMessages(w http.ResponseWriter, r *http.Request) {
 			"model":              req.Model,
 			"stop_reason":        "compaction",
 			"usage":              map[string]any{"input_tokens": 0, "output_tokens": 0},
-			"context_management": cmContextManagementResponse(cmApplied),
+			"context_management": compaction.ContextManagementResponse(cmApplied),
 		})
 		requestlog.Finalize(&reqLog, tokenUsage{}, time.Time{}, reqLog.StartedAt, true, "")
 		return
@@ -2253,7 +2255,7 @@ func handleAnthropicMessages(w http.ResponseWriter, r *http.Request) {
 
 	// 模型组合：在普通路由之前分流（组合 ID 不是真实上游模型）。按配置顺序回退，
 	// 默认不触发全局 ModelChain / free 链。
-	if combo, ok := findCombo(req.Model); ok {
+	if combo, ok := combos.FindCombo(req.Model); ok {
 		if !combo.Enabled {
 			msg := fmt.Sprintf("model combo %q is disabled", req.Model)
 			requestlog.Finalize(&reqLog, tokenUsage{}, time.Time{}, reqLog.StartedAt, false, msg)
@@ -2262,7 +2264,7 @@ func handleAnthropicMessages(w http.ResponseWriter, r *http.Request) {
 			})
 			return
 		}
-		sessionID := requestSessionID(map[string]any{"session_id": r.Header.Get("x-opencode-session")}, nil)
+		sessionID := compaction.RequestSessionID(map[string]any{"session_id": r.Header.Get("x-opencode-session")}, nil)
 		reqLog.ToolNames = clampParamsToolNames(openAIReq)
 
 		if req.Stream {
@@ -2270,8 +2272,8 @@ func handleAnthropicMessages(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		run := runCombo(openAIReq, combo, false, sessionID)
-		applyComboTrace(&reqLog, combo, run)
+		run := combos.RunCombo(openAIReq, combo, false, sessionID)
+		combos.ApplyTrace(&reqLog, combo, run)
 		stampUpstream(&reqLog, openAIReq)
 		if run.Acc != nil {
 			reqLog.AccountID = run.Acc.AccountID
@@ -2279,7 +2281,7 @@ func handleAnthropicMessages(w http.ResponseWriter, r *http.Request) {
 		}
 		if run.Err != nil {
 			log.Printf("  anthropic combo %q error: %v", combo.ID, run.Err)
-			msg := comboTraceSummary(combo, run)
+			msg := combos.TraceSummary(combo, run)
 			requestlog.Finalize(&reqLog, tokenUsage{}, time.Time{}, reqLog.StartedAt, false, msg)
 			writeJSON(w, clineErrorHTTPStatus(run.Err), map[string]any{
 				"error": map[string]string{"message": msg, "type": "api_error"},
@@ -2302,7 +2304,7 @@ func handleAnthropicMessages(w http.ResponseWriter, r *http.Request) {
 		requestlog.Finalize(&reqLog, usage, time.Time{}, reqLog.StartedAt, true, "")
 		restoreToolCallsInResponse(out, reqLog.ToolNames)
 		anthropicResp := openAIToAnthropic(out)
-		applyCMToResponse(anthropicResp, cmResult)
+		compaction.ApplyCMToResponse(anthropicResp, cmResult)
 		if hasToolUseBlocks(anthropicResp["content"]) {
 			anthropicResp["stop_reason"] = "tool_use"
 		}
@@ -2322,17 +2324,17 @@ func handleAnthropicMessages(w http.ResponseWriter, r *http.Request) {
 	case "zen":
 		reqLog.Upstream = zen.UpstreamOpenCode
 		zm, _ := zen.ResolveInfo(req.Model)
-		out := maybeCompact(openAIReq, zm, requestSessionID(map[string]any{"session_id": r.Header.Get("x-opencode-session")}, nil))
-		if out.changed {
-			log.Printf("  anthropic %s", out.note)
+		out := compaction.MaybeCompact(openAIReq, zm, compaction.RequestSessionID(map[string]any{"session_id": r.Header.Get("x-opencode-session")}, nil))
+		if out.Changed {
+			log.Printf("  anthropic %s", out.Note)
 		}
 		resp, err := zen.Call(openAIReq, req.Stream)
 		// 上游返回「上下文超限」400：压缩后重试一次
-		if err != nil && isContextLengthError(err) {
+		if err != nil && compaction.IsContextLengthError(err) {
 			log.Printf("  anthropic: context length exceeded, compacting and retrying")
-			out2 := fallbackTruncate(openAIReq, zm)
-			if out2.changed {
-				log.Printf("  anthropic %s", out2.note)
+			out2 := compaction.FallbackTruncate(openAIReq, zm)
+			if out2.Changed {
+				log.Printf("  anthropic %s", out2.Note)
 				resp, err = zen.Call(openAIReq, req.Stream)
 			}
 		}
@@ -2375,7 +2377,7 @@ func handleAnthropicMessages(w http.ResponseWriter, r *http.Request) {
 						requestlog.Finalize(&reqLog, usage, time.Time{}, reqLog.StartedAt, true, "")
 						restoreToolCallsInResponse(out2, reqLog.ToolNames)
 						anthropicResp := openAIToAnthropic(out2)
-						applyCMToResponse(anthropicResp, cmResult)
+						compaction.ApplyCMToResponse(anthropicResp, cmResult)
 						if hasToolUseBlocks(anthropicResp["content"]) {
 							anthropicResp["stop_reason"] = "tool_use"
 						}
@@ -2417,7 +2419,7 @@ func handleAnthropicMessages(w http.ResponseWriter, r *http.Request) {
 			usage := parseTokenUsage(out2["usage"])
 			requestlog.Finalize(&reqLog, usage, time.Time{}, reqLog.StartedAt, true, "")
 			anthropicResp := openAIToAnthropic(out2)
-			applyCMToResponse(anthropicResp, cmResult)
+			compaction.ApplyCMToResponse(anthropicResp, cmResult)
 			if hasToolUseBlocks(anthropicResp["content"]) {
 				anthropicResp["stop_reason"] = "tool_use"
 			}
@@ -2446,17 +2448,17 @@ func handleAnthropicMessages(w http.ResponseWriter, r *http.Request) {
 
 	// Cline 池 / provider 路由也要主动压缩：此前仅 zen 路径会压，大上下文
 	// 请求会直接撞上游窗口失败。
-	zm := modelForCompaction(req.Model)
-	compactForRequest(openAIReq, zm, requestSessionID(map[string]any{"session_id": r.Header.Get("x-opencode-session")}, nil), "anthropic")
+	zm := compaction.ModelForCompaction(req.Model)
+	compaction.CompactForRequest(openAIReq, zm, compaction.RequestSessionID(map[string]any{"session_id": r.Header.Get("x-opencode-session")}, nil), "anthropic")
 
 	if req.Stream {
 		contextRetried := false
 		streamAnthropicWithRetry(r.Context(), w, func() (*http.Response, *Account, error) {
 			resp, acc, err := callClineAPI(openAIReq, req.Stream)
-			if err != nil && !contextRetried && isContextLengthError(err) {
+			if err != nil && !contextRetried && compaction.IsContextLengthError(err) {
 				contextRetried = true
-				if out := fallbackTruncate(openAIReq, zm); out.changed {
-					log.Printf("  anthropic %s", out.note)
+				if out := compaction.FallbackTruncate(openAIReq, zm); out.Changed {
+					log.Printf("  anthropic %s", out.Note)
 					resp, acc, err = callClineAPI(openAIReq, req.Stream)
 				}
 			}
@@ -2474,9 +2476,9 @@ func handleAnthropicMessages(w http.ResponseWriter, r *http.Request) {
 	// Cline 通道：截短超长工具名并记录映射，回程由响应处理器还原（Meta 后端硬限 ≤64）
 	reqLog.ToolNames = clampParamsToolNames(openAIReq)
 	resp, acc, err := callClineAPI(openAIReq, req.Stream)
-	if err != nil && isContextLengthError(err) {
-		if out := fallbackTruncate(openAIReq, zm); out.changed {
-			log.Printf("  anthropic %s", out.note)
+	if err != nil && compaction.IsContextLengthError(err) {
+		if out := compaction.FallbackTruncate(openAIReq, zm); out.Changed {
+			log.Printf("  anthropic %s", out.Note)
 			resp, acc, err = callClineAPI(openAIReq, req.Stream)
 		}
 	}
@@ -2525,7 +2527,7 @@ func handleAnthropicMessages(w http.ResponseWriter, r *http.Request) {
 		restoreToolCallsInResponse(out, reqLog.ToolNames)
 		anthropicResp := openAIToAnthropic(out)
 
-		applyCMToResponse(anthropicResp, cmResult)
+		compaction.ApplyCMToResponse(anthropicResp, cmResult)
 		if hasToolUseBlocks(anthropicResp["content"]) {
 			anthropicResp["stop_reason"] = "tool_use"
 		}
@@ -2601,7 +2603,7 @@ func finishAnthropicStreamFailure(sw *sseWriter, w http.ResponseWriter, reqLog *
 // CM 已在路由前应用并改写了 params["messages"]；组合流同样要在信封后发出压缩 advisory
 // 块与 message_delta 里的 context_management。compaction 块由 sseWriter.compactionEmitted
 // 幂等保护，预提交回退时不会重复发送。
-func streamAnthropicCombo(ctx context.Context, w http.ResponseWriter, params map[string]any, combo ModelCombo, reqLog *RequestLog, sessionID string, compactionSummary string, compactionApplied []CMAppliedEdit) {
+func streamAnthropicCombo(ctx context.Context, w http.ResponseWriter, params map[string]any, combo ModelCombo, reqLog *RequestLog, sessionID string, compactionSummary string, compactionApplied []compaction.CMAppliedEdit) {
 	sw := newSSEWriter(w)
 
 	type cand struct {
@@ -2622,7 +2624,7 @@ func streamAnthropicCombo(ctx context.Context, w http.ResponseWriter, params map
 				Source: strings.TrimSpace(e.Source), Provider: strings.TrimSpace(e.Provider)})
 			continue
 		}
-		key := comboEntryKey(e)
+		key := combos.EntryKey(e)
 		if seen[key] || isModelDisabled(m) {
 			reason := "duplicate entry"
 			if isModelDisabled(m) {
@@ -2636,7 +2638,7 @@ func streamAnthropicCombo(ctx context.Context, w http.ResponseWriter, params map
 		cands = append(cands, cand{model: m, entry: e, order: i + 1})
 	}
 	// 预置组合字段：handleAnthropicStream 成功时会直接 finalize 请求日志。
-	applyComboLog(reqLog, combo, trace, "")
+	combos.ApplyLog(reqLog, combo, trace, "")
 	stampUpstream(reqLog, params)
 
 	if len(cands) == 0 {
@@ -2646,13 +2648,13 @@ func streamAnthropicCombo(ctx context.Context, w http.ResponseWriter, params map
 	}
 
 	// 组合级主动压缩：以候选模型中最小的有效上下文为预算，一次压缩写回共享
-	// params（callSingleModel 压缩的是 map 副本，条目之间不会传递）。
-	if out := maybeCompact(params, comboCompactionModel(combo), sessionID); out.changed {
-		log.Printf("  combo %q %s", combo.ID, out.note)
+	// params（combos.CallSingleModel 压缩的是 map 副本，条目之间不会传递）。
+	if out := compaction.MaybeCompact(params, combos.CompactionModel(combo), sessionID); out.Changed {
+		log.Printf("  combo %q %s", combo.ID, out.Note)
 	}
 
 	// 上下文超限的「截断重试」整条组合只做一次：截断后的 params 在后续条目间共享。
-	// 与 runCombo 的非流式路径保持一致 —— 流式组合此前缺少这一步，导致某个条目
+	// 与 combos.RunCombo 的非流式路径保持一致 —— 流式组合此前缺少这一步，导致某个条目
 	// 因上下文超限返回 400 时整条组合直接中止（单模型路径会先压缩/截断再回退）。
 	truncatedForRun := false
 
@@ -2661,27 +2663,27 @@ func streamAnthropicCombo(ctx context.Context, w http.ResponseWriter, params map
 			return
 		}
 		start := time.Now()
-		resp, acc, upstream, provName, err := callSingleModel(params, c.entry, true, sessionID)
-		if err != nil && isContextLengthError(err) && !truncatedForRun {
+		resp, acc, upstream, provName, err := combos.CallSingleModel(params, c.entry, true, sessionID)
+		if err != nil && compaction.IsContextLengthError(err) && !truncatedForRun {
 			truncatedForRun = true
 			log.Printf("  combo %q: entry %d %q context length exceeded, truncating and retrying", combo.ID, c.order, c.model)
-			if out := fallbackTruncate(params, modelForCompaction(c.model)); out.changed {
-				log.Printf("  combo %s", out.note)
+			if out := compaction.FallbackTruncate(params, compaction.ModelForCompaction(c.model)); out.Changed {
+				log.Printf("  combo %s", out.Note)
 				start = time.Now()
-				resp, acc, upstream, provName, err = callSingleModel(params, c.entry, true, sessionID)
+				resp, acc, upstream, provName, err = combos.CallSingleModel(params, c.entry, true, sessionID)
 			}
 		}
 		if err != nil {
-			trace = append(trace, AttemptLog{Model: c.model, Order: c.order, Upstream: upstream, Status: attemptStatus(err),
+			trace = append(trace, AttemptLog{Model: c.model, Order: c.order, Upstream: upstream, Status: combos.AttemptStatus(err),
 				Outcome: "failed", Reason: truncate(err.Error(), 200), DurationMs: time.Since(start).Milliseconds(),
 				Source: strings.TrimSpace(c.entry.Source), Provider: strings.TrimSpace(c.entry.Provider),
 				ProviderName: provName})
-			applyComboLog(reqLog, combo, trace, "")
-			if isContextLengthError(err) {
+			combos.ApplyLog(reqLog, combo, trace, "")
+			if compaction.IsContextLengthError(err) {
 				// 上下文上限是模型/上游各自的属性：当前条目装不下，换下一个条目仍可能成功。
 				continue
 			}
-			if !comboRetryable(err) {
+			if !combos.Retryable(err) {
 				break
 			}
 			continue
@@ -2707,7 +2709,7 @@ func streamAnthropicCombo(ctx context.Context, w http.ResponseWriter, params map
 			Outcome: "success", DurationMs: time.Since(start).Milliseconds(),
 			Source: strings.TrimSpace(c.entry.Source), Provider: strings.TrimSpace(c.entry.Provider),
 			ProviderName: provName})
-		applyComboLog(reqLog, combo, trace, c.model)
+		combos.ApplyLog(reqLog, combo, trace, c.model)
 
 		if handleAnthropicStream(ctx, sw, resp, acc, reqLog, firstContentTimeoutForAttempt(idx+1, len(cands)), compactionSummary, compactionApplied) {
 			return // 已交付内容 / 已完整收尾（含带内 error）
@@ -2722,7 +2724,7 @@ func streamAnthropicCombo(ctx context.Context, w http.ResponseWriter, params map
 			DurationMs: time.Since(start).Milliseconds(),
 			Source:     strings.TrimSpace(c.entry.Source), Provider: strings.TrimSpace(c.entry.Provider),
 			ProviderName: provName}
-		applyComboLog(reqLog, combo, trace, "")
+		combos.ApplyLog(reqLog, combo, trace, "")
 		// 仅当组合里还有下一个条目时才冷却该模型（避免单条目组合冷却掉唯一模型，
 		// 让下一次请求直接失败）；不再用全局 modelFallbackChain 作为判定依据。
 		if acc != nil && c.model != "" && idx+1 < len(cands) {
@@ -2738,7 +2740,7 @@ func streamAnthropicCombo(ctx context.Context, w http.ResponseWriter, params map
 		"combo stream failed before first token", "upstream stream failed before first token")
 }
 
-func streamAnthropicWithRetry(ctx context.Context, w http.ResponseWriter, fetch func() (*http.Response, *Account, error), reqLog *RequestLog, compactionSummary string, compactionApplied []CMAppliedEdit) {
+func streamAnthropicWithRetry(ctx context.Context, w http.ResponseWriter, fetch func() (*http.Response, *Account, error), reqLog *RequestLog, compactionSummary string, compactionApplied []compaction.CMAppliedEdit) {
 	sw := newSSEWriter(w)
 	// 尝试次数不超过降级链上的模型数：每个模型只给一次机会。
 	maxAttempts := maxStreamAttempts
@@ -2813,7 +2815,7 @@ func streamAnthropicWithRetry(ctx context.Context, w http.ResponseWriter, fetch 
 //
 // 返回 true 表示客户端响应已完整处理（正常收尾或已发出 error 事件）；
 // 返回 false 表示上游尚未产出任何内容 —— 调用方重试，或用 sw.Started 判断后发带内 error。
-func handleAnthropicStream(ctx context.Context, sw *sseWriter, upstream *http.Response, acc *Account, reqLog *RequestLog, firstContentTimeout time.Duration, compactionSummary string, compactionApplied []CMAppliedEdit) bool {
+func handleAnthropicStream(ctx context.Context, sw *sseWriter, upstream *http.Response, acc *Account, reqLog *RequestLog, firstContentTimeout time.Duration, compactionSummary string, compactionApplied []compaction.CMAppliedEdit) bool {
 	if upstream.StatusCode != http.StatusOK {
 		b, _ := io.ReadAll(io.LimitReader(upstream.Body, 2048))
 		upstream.Body.Close()
@@ -2899,7 +2901,7 @@ func handleAnthropicStream(ctx context.Context, sw *sseWriter, upstream *http.Re
 
 	if compactionSummary != "" && !sw.CompactionEmitted {
 		sw.CompactionEmitted = true
-		emitCompactionBlock(sw, compactionSummary)
+		compaction.EmitCompactionBlock(sw, compactionSummary)
 	}
 
 	// commit：上游首条有效数据行到达，开始实时转发（信封已提前发送）。
@@ -3077,7 +3079,7 @@ L:
 		},
 	}
 	if compactionApplied != nil {
-		msgDelta["context_management"] = cmContextManagementResponse(compactionApplied)
+		msgDelta["context_management"] = compaction.ContextManagementResponse(compactionApplied)
 	}
 	emit("message_delta", msgDelta)
 	recordUsage(acc, upstream, reqLog, reqLog.Model, latestUsage)

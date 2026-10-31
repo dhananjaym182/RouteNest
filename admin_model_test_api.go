@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"cline-go-proxy/internal/accounts"
+	"cline-go-proxy/internal/combos"
 	"cline-go-proxy/internal/connections"
 	"cline-go-proxy/internal/egress"
 	"cline-go-proxy/internal/i18n"
@@ -79,7 +80,7 @@ func quickTestLock(model string) *sync.Mutex {
 
 // quickModelTest 任一模型的 best-effort 小补全测试（EP3 入口；EP4 明细见
 // runQuickModelTest）。路由：自定义 provider → zen（免费）→ Cline 账号池，
-// 与 callSingleModel 的派发语义一致。
+// 与 combos.CallSingleModel 的派发语义一致。
 func quickModelTest(model string, forcedProvider *CustomProvider) map[string]any {
 	return runQuickModelTest(model, forcedProvider, "", 0)
 }
@@ -87,7 +88,7 @@ func quickModelTest(model string, forcedProvider *CustomProvider) map[string]any
 // runQuickModelTest quickModelTest 的展开形式：
 //   - forcedProvider 非空 → 只测这一家 provider（EP4 source=provider）。
 //   - pinSource "provider" → 只走 forcedProvider；"cline" → 只走账号池；
-//     "zen" → 只走 zen；"" 自动（provider → zen → 池，callSingleModel 语义）。
+//     "zen" → 只走 zen；"" 自动（provider → zen → 池，combos.CallSingleModel 语义）。
 //   - poolTimeout > 0 时账号池调用带 ctx 超时（EP4 每条目 ~20s）。
 //
 // 返回 map 键：ok / upstream("provider"|"opencode"|"cline") / model / durationMs /
@@ -178,13 +179,13 @@ func runQuickModelTest(model string, forcedProvider *CustomProvider, pinSource s
 		return result
 	}
 
-	// ---- 自动派发（pinSource=""）：与 callSingleModel 的 auto 分支同序 ----
+	// ---- 自动派发（pinSource=""）：与 combos.CallSingleModel 的 auto 分支同序 ----
 	if forcedProvider != nil {
 		tryProvider(forcedProvider)
 		return result
 	}
 
-	kind := comboRouteKind(model)
+	kind := combos.RouteKind(model)
 	switch kind {
 	case "reject":
 		setResult(zen.UpstreamOpenCode, fmt.Sprintf("model %q is a paid opencode model; only free models are proxied", model))
@@ -216,7 +217,7 @@ func runQuickModelTest(model string, forcedProvider *CustomProvider, pinSource s
 }
 
 // quickPoolAttempt 账号池小补全尝试：最多试 quickTestMaxAccounts 个账号（严格
-// 挑选 + 402/换号 + 429/换号 + 确定性 400 立即失败），与 callSingleModel 的池
+// 挑选 + 402/换号 + 429/换号 + 确定性 400 立即失败），与 combos.CallSingleModel 的池
 // 分支同语义但不无限循环、不走模型冷却后的兜底挑选。
 func quickPoolAttempt(model string, params map[string]any, timeout time.Duration) (*http.Response, error) {
 	ctx := context.Background()
@@ -381,7 +382,7 @@ func handleComboTest(w http.ResponseWriter, r *http.Request) {
 		writeAPI(w, http.StatusBadRequest, apiResponse{Error: i18n.TAPI(r, "invalid_json")})
 		return
 	}
-	combo, ok := findCombo(req.ID)
+	combo, ok := combos.FindCombo(req.ID)
 	if !ok {
 		writeAPI(w, http.StatusNotFound, apiResponse{Error: i18n.TAPI(r, "combo_not_found")})
 		return

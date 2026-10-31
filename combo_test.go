@@ -7,6 +7,7 @@ package main
 
 import (
 	"cline-go-proxy/internal/accounts"
+	"cline-go-proxy/internal/combos"
 	"cline-go-proxy/internal/egress"
 	"cline-go-proxy/internal/zen"
 	"encoding/json"
@@ -103,7 +104,7 @@ func TestComboValidate(t *testing.T) {
 
 	valid := ModelCombo{ID: "premium", Name: "Premium", Enabled: true,
 		Entries: []ComboEntry{{Model: "m-a"}, {Model: "m-b", Disabled: true}}}
-	if err := validateCombo(valid, nil); err != nil {
+	if err := combos.ValidateCombo(valid, nil); err != nil {
 		t.Fatalf("valid combo rejected: %v", err)
 	}
 
@@ -129,7 +130,7 @@ func TestComboValidate(t *testing.T) {
 			Entries: []ComboEntry{{Model: "m-a", Disabled: true}}}, nil},
 	}
 	for _, tc := range cases {
-		if err := validateCombo(tc.c, tc.existing); err == nil {
+		if err := combos.ValidateCombo(tc.c, tc.existing); err == nil {
 			t.Errorf("%s: expected validation error, got nil", tc.name)
 		}
 	}
@@ -148,7 +149,7 @@ func TestComboPersistenceAndReload(t *testing.T) {
 	proxyConfigMu.Unlock()
 	saveProxyConfigLocked()
 
-	if _, err := upsertCombo(ModelCombo{ID: "c1", Name: "C1", Enabled: true, Entries: []ComboEntry{{Model: "m-a"}}}); err != nil {
+	if _, err := combos.UpsertCombo(ModelCombo{ID: "c1", Name: "C1", Enabled: true, Entries: []ComboEntry{{Model: "m-a"}}}); err != nil {
 		t.Fatalf("upsert: %v", err)
 	}
 	loaded := loadProxyConfigFromDisk()
@@ -156,12 +157,12 @@ func TestComboPersistenceAndReload(t *testing.T) {
 		t.Fatalf("reload got %+v, want combo c1", loaded.Combos)
 	}
 	// 重新加载（模拟重启）后仍可解析
-	if c, ok := findEnabledCombo("c1"); !ok || c.Name != "C1" {
-		t.Fatalf("findEnabledCombo after reload = %+v ok=%v", c, ok)
+	if c, ok := combos.FindEnabledCombo("c1"); !ok || c.Name != "C1" {
+		t.Fatalf("combos.FindEnabledCombo after reload = %+v ok=%v", c, ok)
 	}
 	// 删除后持久化
-	if !deleteCombo("c1") {
-		t.Fatal("deleteCombo returned false")
+	if !combos.DeleteCombo("c1") {
+		t.Fatal("combos.DeleteCombo returned false")
 	}
 	if got := loadProxyConfigFromDisk(); len(got.Combos) != 0 {
 		t.Fatalf("after delete reload got %+v", got.Combos)
@@ -181,7 +182,7 @@ func TestRunComboFirstEntrySucceeds(t *testing.T) {
 
 	combo := ModelCombo{ID: "c", Name: "C", Enabled: true,
 		Entries: []ComboEntry{{Model: "combo-a"}, {Model: "combo-b"}}}
-	run := runCombo(chatParams("c"), combo, false, "")
+	run := combos.RunCombo(chatParams("c"), combo, false, "")
 	if run.Err != nil {
 		t.Fatalf("run err: %v", run.Err)
 	}
@@ -205,7 +206,7 @@ func TestRunComboRetryableFallback(t *testing.T) {
 
 	combo := ModelCombo{ID: "c", Name: "C", Enabled: true,
 		Entries: []ComboEntry{{Model: "combo-a"}, {Model: "combo-b"}}}
-	run := runCombo(chatParams("c"), combo, false, "")
+	run := combos.RunCombo(chatParams("c"), combo, false, "")
 	if run.Err != nil {
 		t.Fatalf("run err: %v", run.Err)
 	}
@@ -223,7 +224,7 @@ func TestRunComboRetryableFallback(t *testing.T) {
 	}
 	// 请求日志归因
 	var rl RequestLog
-	applyComboTrace(&rl, combo, run)
+	combos.ApplyTrace(&rl, combo, run)
 	if rl.RequestedModel != "c" || rl.Model != "combo-b" {
 		t.Fatalf("log requested=%q actual=%q, want c/combo-b", rl.RequestedModel, rl.Model)
 	}
@@ -243,7 +244,7 @@ func TestRunComboPermanentErrorStops(t *testing.T) {
 
 	combo := ModelCombo{ID: "c", Name: "C", Enabled: true,
 		Entries: []ComboEntry{{Model: "combo-a"}, {Model: "combo-b"}}}
-	run := runCombo(chatParams("c"), combo, false, "")
+	run := combos.RunCombo(chatParams("c"), combo, false, "")
 	if run.Err == nil {
 		t.Fatal("expected error for permanent failure")
 	}
@@ -269,7 +270,7 @@ func TestRunComboPreservesConfiguredOrder(t *testing.T) {
 	// combo-b 看起来「更优」（用量低），但配置顺序 combo-a 在前 —— 不得重排。
 	combo := ModelCombo{ID: "c", Name: "C", Enabled: true,
 		Entries: []ComboEntry{{Model: "combo-a"}, {Model: "combo-b"}}}
-	run := runCombo(chatParams("c"), combo, false, "")
+	run := combos.RunCombo(chatParams("c"), combo, false, "")
 	if run.Model != "combo-a" {
 		t.Fatalf("served %q, want combo-a (configured order must win)", run.Model)
 	}
@@ -292,7 +293,7 @@ func TestRunComboSkipsDisabledEntries(t *testing.T) {
 		{Model: "combo-b"},                 // 池内模型被管理员停用
 		{Model: "combo-c"},                 // 可用
 	}}
-	run := runCombo(chatParams("c"), combo, false, "")
+	run := combos.RunCombo(chatParams("c"), combo, false, "")
 	if run.Err != nil {
 		t.Fatalf("run err: %v", run.Err)
 	}
@@ -326,7 +327,7 @@ func TestRunComboDoesNotInvokeGlobalChainByDefault(t *testing.T) {
 	})
 
 	combo := ModelCombo{ID: "c", Name: "C", Enabled: true, Entries: []ComboEntry{{Model: "combo-a"}}}
-	run := runCombo(chatParams("c"), combo, false, "")
+	run := combos.RunCombo(chatParams("c"), combo, false, "")
 	if run.Err == nil {
 		t.Fatal("expected failure (no emergency fallback enabled)")
 	}
@@ -349,7 +350,7 @@ func TestRunComboEmergencyFallbackOptIn(t *testing.T) {
 
 	combo := ModelCombo{ID: "c", Name: "C", Enabled: true, EmergencyFallback: true,
 		Entries: []ComboEntry{{Model: "combo-a"}}}
-	run := runCombo(chatParams("c"), combo, false, "")
+	run := combos.RunCombo(chatParams("c"), combo, false, "")
 	if run.Err != nil {
 		t.Fatalf("run err: %v", run.Err)
 	}
@@ -380,7 +381,7 @@ func TestComboEntryUsesProviderPath(t *testing.T) {
 
 	combo := ModelCombo{ID: "c", Name: "C", Enabled: true,
 		Entries: []ComboEntry{{Model: "prov-x"}, {Model: "cline-y"}}}
-	run := runCombo(chatParams("c"), combo, false, "")
+	run := combos.RunCombo(chatParams("c"), combo, false, "")
 	if run.Err != nil {
 		t.Fatalf("run err: %v", run.Err)
 	}
@@ -416,7 +417,7 @@ func TestComboSpansSourcesFallback(t *testing.T) {
 
 	combo := ModelCombo{ID: "c", Name: "C", Enabled: true,
 		Entries: []ComboEntry{{Model: "prov-x"}, {Model: "cline-y"}}}
-	run := runCombo(chatParams("c"), combo, false, "")
+	run := combos.RunCombo(chatParams("c"), combo, false, "")
 	if run.Err != nil {
 		t.Fatalf("run err: %v", run.Err)
 	}
@@ -446,7 +447,7 @@ func TestComboSameModelProviderRedundancy(t *testing.T) {
 	})
 
 	combo := ModelCombo{ID: "c", Name: "C", Enabled: true, Entries: []ComboEntry{{Model: "m-r"}}}
-	run := runCombo(chatParams("c"), combo, false, "")
+	run := combos.RunCombo(chatParams("c"), combo, false, "")
 	if run.Err != nil {
 		t.Fatalf("run err: %v", run.Err)
 	}
@@ -498,36 +499,11 @@ func TestComboDisabledResolution(t *testing.T) {
 	cfg.Combos = []ModelCombo{{ID: "c-off", Name: "Off", Enabled: false, Entries: []ComboEntry{{Model: "m-a"}}}}
 	installConfig(t, cfg)
 
-	if _, ok := findCombo("c-off"); !ok {
-		t.Fatal("findCombo should find disabled combo")
+	if _, ok := combos.FindCombo("c-off"); !ok {
+		t.Fatal("combos.FindCombo should find disabled combo")
 	}
-	if _, ok := findEnabledCombo("c-off"); ok {
-		t.Fatal("findEnabledCombo must not return a disabled combo")
-	}
-}
-
-// ============================ 请求日志归因 ============================
-
-func TestApplyComboLogFields(t *testing.T) {
-	rl := RequestLog{Model: "c"}
-	combo := ModelCombo{ID: "c", Name: "Combo Display"}
-	trace := []AttemptLog{
-		{Model: "combo-a", Order: 1, Upstream: zen.UpstreamCline, Status: 500, Outcome: "failed", Reason: "API 500: boom"},
-		{Model: "combo-b", Order: 2, Upstream: zen.UpstreamOpenCode, Outcome: "success"},
-	}
-	applyComboLog(&rl, combo, trace, "combo-b")
-
-	if rl.RequestedModel != "c" || rl.ComboID != "c" || rl.ComboName != "Combo Display" {
-		t.Fatalf("combo attribution = %+v", rl)
-	}
-	if rl.Model != "combo-b" {
-		t.Fatalf("actual model = %q, want combo-b", rl.Model)
-	}
-	if !rl.FallbackUsed || rl.FallbackCount != 1 {
-		t.Fatalf("fallback used=%v count=%d, want true/1", rl.FallbackUsed, rl.FallbackCount)
-	}
-	if len(rl.Attempts) != 2 || rl.Attempts[0].Reason == "" {
-		t.Fatalf("attempts not recorded: %+v", rl.Attempts)
+	if _, ok := combos.FindEnabledCombo("c-off"); ok {
+		t.Fatal("combos.FindEnabledCombo must not return a disabled combo")
 	}
 }
 
@@ -546,14 +522,14 @@ func TestComboConcurrentConfigAccess(t *testing.T) {
 			defer wg.Done()
 			id := "c" + string(rune('a'+n))
 			for j := 0; j < 20; j++ {
-				_, _ = upsertCombo(ModelCombo{ID: id, Name: id, Enabled: true, Entries: []ComboEntry{{Model: "m-a"}}})
-				_ = listCombos()
-				_, _ = findCombo(id)
+				_, _ = combos.UpsertCombo(ModelCombo{ID: id, Name: id, Enabled: true, Entries: []ComboEntry{{Model: "m-a"}}})
+				_ = combos.ListCombos()
+				_, _ = combos.FindCombo(id)
 			}
 		}(i)
 	}
 	wg.Wait()
-	if got := listCombos(); len(got) != 8 {
+	if got := combos.ListCombos(); len(got) != 8 {
 		t.Fatalf("after concurrency got %d combos, want 8", len(got))
 	}
 }
@@ -590,8 +566,8 @@ func TestComboRouteKindZenDegraded(t *testing.T) {
 	zen.StateMu.Lock()
 	zen.FailCount, zen.FailUntil = 0, time.Time{}
 	zen.StateMu.Unlock()
-	if k := comboRouteKind(model); k != "zen" {
-		t.Fatalf("healthy comboRouteKind = %q, want zen", k)
+	if k := combos.RouteKind(model); k != "zen" {
+		t.Fatalf("healthy combos.RouteKind = %q, want zen", k)
 	}
 
 	// 降级窗口：zen.RouteModel 降级为 cline，但组合必须判 zen-degraded。
@@ -602,8 +578,8 @@ func TestComboRouteKindZenDegraded(t *testing.T) {
 	if got := zen.RouteModel(model); got != "cline" {
 		t.Fatalf("routeModel in failover window = %q, want cline", got)
 	}
-	if k := comboRouteKind(model); k != "zen-degraded" {
-		t.Fatalf("degraded comboRouteKind = %q, want zen-degraded", k)
+	if k := combos.RouteKind(model); k != "zen-degraded" {
+		t.Fatalf("degraded combos.RouteKind = %q, want zen-degraded", k)
 	}
 }
 
@@ -611,7 +587,7 @@ func TestComboRouteKindZenDegraded(t *testing.T) {
 // （否则组合可以保存成功但永远不可服务）。
 func TestComboValidateRejectsEnabledComboWithOnlyDisabledModel(t *testing.T) {
 	installPool(t, []Model{{ID: "m-off", Cost: "free", Status: "active", Source: "remote", Disabled: true}})
-	err := validateCombo(ModelCombo{ID: "c", Name: "C", Enabled: true,
+	err := combos.ValidateCombo(ModelCombo{ID: "c", Name: "C", Enabled: true,
 		Entries: []ComboEntry{{Model: "m-off"}}}, nil)
 	if err == nil {
 		t.Fatal("expected error: enabled combo whose only entry model is admin-disabled")
@@ -625,20 +601,20 @@ func TestComboCloneTruncatesLongID(t *testing.T) {
 	old := getProxyConfig()
 	t.Cleanup(func() { setProxyConfig(old) })
 
-	longID := strings.Repeat("a", comboIDMaxLen) // 64 字符
-	if len(longID) != comboIDMaxLen {
+	longID := strings.Repeat("a", combos.IDMaxLen) // 64 字符
+	if len(longID) != combos.IDMaxLen {
 		t.Fatalf("setup: len=%d", len(longID))
 	}
-	if _, err := upsertCombo(ModelCombo{ID: longID, Name: "Long", Enabled: true,
+	if _, err := combos.UpsertCombo(ModelCombo{ID: longID, Name: "Long", Enabled: true,
 		Entries: []ComboEntry{{Model: "m-a"}}}); err != nil {
 		t.Fatalf("upsert long-id combo: %v", err)
 	}
-	cp, err := cloneCombo(longID)
+	cp, err := combos.CloneCombo(longID)
 	if err != nil {
 		t.Fatalf("clone: %v", err)
 	}
-	if len(cp.ID) > comboIDMaxLen {
-		t.Fatalf("cloned id length %d exceeds max %d (%q)", len(cp.ID), comboIDMaxLen, cp.ID)
+	if len(cp.ID) > combos.IDMaxLen {
+		t.Fatalf("cloned id length %d exceeds max %d (%q)", len(cp.ID), combos.IDMaxLen, cp.ID)
 	}
 }
 
@@ -656,7 +632,7 @@ func TestCallSingleModelDeterministic400StopsAccountLoop(t *testing.T) {
 		return stubResp(req, http.StatusBadRequest,
 			`{"error":{"message":"Invalid input: expected string, received null","param":"tools.0.function.description"}}`)
 	})
-	_, _, _, _, err := callSingleModel(chatParams("combo-a"), ComboEntry{Model: "combo-a"}, false, "")
+	_, _, _, _, err := combos.CallSingleModel(chatParams("combo-a"), ComboEntry{Model: "combo-a"}, false, "")
 	if err == nil {
 		t.Fatal("expected upstream error to surface")
 	}
@@ -726,7 +702,7 @@ func TestRunComboContextLength400ContinuesToNextEntry(t *testing.T) {
 	})
 	combo := ModelCombo{ID: "c", Name: "C", Enabled: true,
 		Entries: []ComboEntry{{Model: "combo-a"}, {Model: "combo-b"}}}
-	run := runCombo(chatParams("c"), combo, false, "")
+	run := combos.RunCombo(chatParams("c"), combo, false, "")
 	if run.Err != nil {
 		t.Fatalf("context-length 400 must continue to next entry, got err: %v", run.Err)
 	}

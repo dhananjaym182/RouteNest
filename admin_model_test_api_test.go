@@ -4,6 +4,7 @@ package main
 // / EP3 单模型测试 / EP4 组合测试。全部走假 transport，不触网。
 
 import (
+	"cline-go-proxy/internal/combos"
 	"cline-go-proxy/internal/providers"
 	"cline-go-proxy/internal/zen"
 	"encoding/json"
@@ -333,12 +334,12 @@ func TestHandleComboTest(t *testing.T) {
 		}
 		return stubResp(req, http.StatusOK, okCompletion)
 	})
-	if _, err := upsertCombo(ModelCombo{ID: "ct", Name: "CT", Enabled: true, Entries: []ComboEntry{
+	if _, err := combos.UpsertCombo(ModelCombo{ID: "ct", Name: "CT", Enabled: true, Entries: []ComboEntry{
 		{Model: "mprov", Source: "provider", Provider: "PP"},
 		{Model: "mcline", Disabled: true},
 		{Model: "mcline", Source: "cline"},
 	}}); err != nil {
-		t.Fatalf("upsertCombo: %v", err)
+		t.Fatalf("combos.UpsertCombo: %v", err)
 	}
 
 	// 全量测试：禁用条目跳过 → 2 条结果
@@ -393,12 +394,12 @@ func TestComboTestDoesNotMutateCombo(t *testing.T) {
 	installTransport(t, func(req *http.Request) *http.Response {
 		return stubResp(req, http.StatusOK, okCompletion)
 	})
-	if _, err := upsertCombo(ModelCombo{ID: "cm", Name: "CM", Enabled: true,
+	if _, err := combos.UpsertCombo(ModelCombo{ID: "cm", Name: "CM", Enabled: true,
 		Entries: []ComboEntry{{Model: "mcline"}}}); err != nil {
-		t.Fatalf("upsertCombo: %v", err)
+		t.Fatalf("combos.UpsertCombo: %v", err)
 	}
 	_ = quickModelTest("mcline", nil)
-	c, ok := findCombo("cm")
+	c, ok := combos.FindCombo("cm")
 	if !ok || len(c.Entries) != 1 || c.Entries[0].Model != "mcline" {
 		t.Fatalf("combo mutated by test: %+v", c)
 	}

@@ -1,7 +1,8 @@
-package main
+package compaction
 
 import (
 	"cline-go-proxy/internal/accounts"
+	"cline-go-proxy/internal/domain"
 	"cline-go-proxy/internal/routing"
 	"cline-go-proxy/internal/zen"
 	"crypto/sha256"
@@ -80,8 +81,33 @@ var (
 	compactStatesMu sync.Mutex
 )
 
-// startCompactCleanup 定期清理 24 小时未更新的会话压缩状态。
-func startCompactCleanup() {
+// CallClineAPI routes a non-zen summary request through the regular Cline
+// provider path. Root composition wires the real implementation; the default
+// fails so callers fall back to truncation when the seam is unwired.
+var CallClineAPI = func(params map[string]any, stream bool) (*http.Response, error) {
+	return nil, fmt.Errorf("cline API not wired")
+}
+
+// CompactStateKeys returns the conversation keys with retained summaries.
+func CompactStateKeys() []string {
+	compactStatesMu.Lock()
+	defer compactStatesMu.Unlock()
+	keys := make([]string, 0, len(compactStates))
+	for k := range compactStates {
+		keys = append(keys, k)
+	}
+	return keys
+}
+
+// ResetCompactStates clears all retained conversation summaries.
+func ResetCompactStates() {
+	compactStatesMu.Lock()
+	compactStates = make(map[string]*compactState)
+	compactStatesMu.Unlock()
+}
+
+// StartCleanup 定期清理 24 小时未更新的会话压缩状态。
+func StartCleanup() {
 	go func() {
 		ticker := time.NewTicker(30 * time.Minute)
 		defer ticker.Stop()
@@ -315,7 +341,7 @@ func callSummaryModel(model, prompt string, maxSummary int) (string, error) {
 	if zm, ok := zen.ResolveInfo(model); ok && zen.IsFreeModel(zm) {
 		resp, err = zen.Call(body, false)
 	} else {
-		resp, _, err = callClineAPI(body, false)
+		resp, err = CallClineAPI(body, false)
 	}
 	if err != nil {
 		return "", err
@@ -428,8 +454,8 @@ func estimateRequestTokens(params map[string]any) int {
 	return weight / 3
 }
 
-// requestSessionID 会话标识：优先 x-opencode-session 头，其次 body.session_id。
-func requestSessionID(params map[string]any, hdr http.Header) string {
+// RequestSessionID 会话标识：优先 x-opencode-session 头，其次 body.session_id。
+func RequestSessionID(params map[string]any, hdr http.Header) string {
 	if hdr != nil {
 		if sid := hdr.Get("x-opencode-session"); sid != "" {
 			return sid
@@ -438,20 +464,20 @@ func requestSessionID(params map[string]any, hdr http.Header) string {
 	return strField(params, "session_id")
 }
 
-// compactOutcome 压缩结果描述。
-type compactOutcome struct {
-	changed bool
-	note    string
+// CompactOutcome 压缩结果描述。
+type CompactOutcome struct {
+	Changed bool
+	Note    string
 }
 
-// defaultCompactContextCeiling 压缩预算的保守封顶：cline-pool 远程同步会给未知模型
+// DefaultCompactContextCeiling 压缩预算的保守封顶：cline-pool 远程同步会给未知模型
 // 默认 1M 上下文（models_sync），但真实窗口往往小得多 —— 不封顶的话压缩阈值高达
 // ~4MB，永远不触发，等上游先报错。此封顶只影响压缩/截断预算，展示值不变。
-const defaultCompactContextCeiling = 128000
+const DefaultCompactContextCeiling = 128000
 
-// effectiveCompactContext 返回用于压缩/截断预算的有效上下文窗口：
+// EffectiveCompactContext 返回用于压缩/截断预算的有效上下文窗口：
 // 管理页显式锁定（MetaLocked）的值优先；否则把解析出的窗口封顶在保守上限。
-func effectiveCompactContext(zm Model) int {
+func EffectiveCompactContext(zm domain.Model) int {
 	if zm.MetaLocked && zm.Context > 0 {
 		return zm.Context
 	}
@@ -459,19 +485,19 @@ func effectiveCompactContext(zm Model) int {
 	if context <= 0 {
 		context = 200000
 	}
-	if context > defaultCompactContextCeiling {
-		return defaultCompactContextCeiling
+	if context > DefaultCompactContextCeiling {
+		return DefaultCompactContextCeiling
 	}
 	return context
 }
 
-// modelForCompaction resolves the best-known context/output metadata for a
+// ModelForCompaction resolves the best-known context/output metadata for a
 // model so compaction budgets apply to every route (zen, Cline pool, custom
 // provider), not only to zen models.
-func modelForCompaction(model string) Model {
+func ModelForCompaction(model string) domain.Model {
 	model = strings.TrimSpace(model)
 	if model == "" {
-		return Model{}
+		return domain.Model{}
 	}
 	if zm, ok := zen.ResolveInfo(model); ok {
 		return zm
@@ -486,30 +512,30 @@ func modelForCompaction(model string) Model {
 	}
 	accounts.PoolMu.Unlock()
 	if meta, ok := routing.LookupClineModelMeta(model); ok {
-		return Model{ID: model, Context: meta.Context, Output: meta.Output}
+		return domain.Model{ID: model, Context: meta.Context, Output: meta.Output}
 	}
-	return Model{ID: model}
+	return domain.Model{ID: model}
 }
 
-// compactForRequest applies proactive compaction and logs the outcome under the
+// CompactForRequest applies proactive compaction and logs the outcome under the
 // caller's label ("chat", "anthropic", "responses", "combo").
-func compactForRequest(params map[string]any, zm Model, sessionID, label string) {
-	if out := maybeCompact(params, zm, sessionID); out.changed {
-		log.Printf("  %s %s", label, out.note)
+func CompactForRequest(params map[string]any, zm domain.Model, sessionID, label string) {
+	if out := MaybeCompact(params, zm, sessionID); out.Changed {
+		log.Printf("  %s %s", label, out.Note)
 	}
 }
 
-// maybeCompact 估算超限时执行摘要压缩并原地改写 params["messages"]。
-func maybeCompact(params map[string]any, zm Model, sessionID string) compactOutcome {
+// MaybeCompact 估算超限时执行摘要压缩并原地改写 params["messages"]。
+func MaybeCompact(params map[string]any, zm domain.Model, sessionID string) CompactOutcome {
 	cfg := zen.GetConfig()
 	if !cfg.Compaction.Auto {
-		return compactOutcome{}
+		return CompactOutcome{}
 	}
 	// Clients often send no session header (Anthropic /v1/messages has none), so
 	// derive a stable per-conversation key; otherwise the previous summary was
 	// never reused and every turn re-summarised the whole history.
 	sessionID = compactSessionKey(params, sessionID)
-	context := effectiveCompactContext(zm)
+	context := EffectiveCompactContext(zm)
 	buffer := cfg.Compaction.Buffer
 	if buffer <= 0 {
 		buffer = 20000
@@ -530,12 +556,12 @@ func maybeCompact(params map[string]any, zm Model, sessionID string) compactOutc
 	threshold := context - output
 	est := estimateRequestTokens(params)
 	if est <= threshold {
-		return compactOutcome{}
+		return CompactOutcome{}
 	}
 
 	messages, _ := params["messages"].([]any)
 	if len(messages) == 0 {
-		return compactOutcome{}
+		return CompactOutcome{}
 	}
 
 	serialized := make([]string, 0, len(messages))
@@ -547,7 +573,7 @@ func maybeCompact(params map[string]any, zm Model, sessionID string) compactOutc
 
 	sel := selectRecent(serialized, keep)
 	if sel == nil || sel.split <= 0 {
-		return compactOutcome{}
+		return CompactOutcome{}
 	}
 
 	previousSummary := loadCompactState(sessionID).summary
@@ -565,7 +591,7 @@ func maybeCompact(params map[string]any, zm Model, sessionID string) compactOutc
 		contextParts = append(contextParts, head)
 	}
 	if previousSummary == "" && head == "" && st.recent == "" {
-		return compactOutcome{}
+		return CompactOutcome{}
 	}
 	prompt := buildSummaryPrompt(previousSummary, contextParts)
 
@@ -581,7 +607,7 @@ func maybeCompact(params map[string]any, zm Model, sessionID string) compactOutc
 	summary, err := generateSummary(summaryModel, prompt, maxSum)
 	if err != nil {
 		log.Printf("  compact: summary generation failed (%v), falling back to truncation", err)
-		return fallbackTruncate(params, zm)
+		return FallbackTruncate(params, zm)
 	}
 
 	var newMsgs []any
@@ -598,9 +624,9 @@ func maybeCompact(params map[string]any, zm Model, sessionID string) compactOutc
 
 	updateCompactState(sessionID, summary, strings.Join(sel.recent, "\n\n"))
 	params["messages"] = newMsgs
-	return compactOutcome{
-		changed: true,
-		note:    fmt.Sprintf("[compacted via summary] summary_model=%s kept=%d msgs", summaryModel, len(messages)-sel.split),
+	return CompactOutcome{
+		Changed: true,
+		Note:    fmt.Sprintf("[compacted via summary] summary_model=%s kept=%d msgs", summaryModel, len(messages)-sel.split),
 	}
 }
 
@@ -707,15 +733,15 @@ func findExistingSummary(messages []any, upTo int) string {
 	return ""
 }
 
-// fallbackTruncate 摘要失败时退回尾部截断：保留 system + 尾部消息至 60% 预算。
-func fallbackTruncate(params map[string]any, zm Model) compactOutcome {
+// FallbackTruncate 摘要失败时退回尾部截断：保留 system + 尾部消息至 60% 预算。
+func FallbackTruncate(params map[string]any, zm domain.Model) CompactOutcome {
 	messages, _ := params["messages"].([]any)
 	if len(messages) == 0 {
-		return compactOutcome{}
+		return CompactOutcome{}
 	}
-	// 预算同 maybeCompact 走有效窗口（默认 1M 会被封顶到保守上限），零值 Model 也
+	// 预算同 MaybeCompact 走有效窗口（默认 1M 会被封顶到保守上限），零值 domain.Model 也
 	// 会落到 200k 默认并封顶，截断预算始终合理。
-	ctxBudget := effectiveCompactContext(zm)
+	ctxBudget := EffectiveCompactContext(zm)
 	budget := int(float64(ctxBudget) * 0.6)
 	// Tool schemas are sent on every request and cannot be dropped here; leave
 	// room for them so truncation does not keep the request over the window
@@ -776,12 +802,12 @@ func fallbackTruncate(params map[string]any, zm Model) compactOutcome {
 		out = append(out, k.msg)
 	}
 	params["messages"] = out
-	return compactOutcome{changed: true, note: "[compacted via truncation]"}
+	return CompactOutcome{Changed: true, Note: "[compacted via truncation]"}
 }
 
-// isContextLengthError reports whether err is an upstream 400 indicating the
+// IsContextLengthError reports whether err is an upstream 400 indicating the
 // request exceeded the model's maximum context window.
-func isContextLengthError(err error) bool {
+func IsContextLengthError(err error) bool {
 	if err == nil {
 		return false
 	}

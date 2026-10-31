@@ -12,9 +12,13 @@
 //
 // When context_management is absent the request path is untouched, so all
 // existing Cline/Zen/custom-provider behaviour is preserved.
-package main
+package compaction
 
 import (
+	"cline-go-proxy/internal/dispatch"
+	"cline-go-proxy/internal/domain"
+	"cline-go-proxy/internal/httpx"
+	anthropicconv "cline-go-proxy/internal/protocol/anthropic"
 	"cline-go-proxy/internal/zen"
 	"context"
 	"encoding/json"
@@ -24,6 +28,18 @@ import (
 	"net/http"
 	"strings"
 )
+
+// AnthropicToOpenAI converts a raw Anthropic Messages request body to OpenAI
+// chat params. Root composition wires the full converter (system override,
+// reasoning effort, tool-id generation); the default uses the internal
+// protocol converter.
+var AnthropicToOpenAI = func(body []byte) (map[string]any, error) {
+	var req anthropicconv.Request
+	if err := json.Unmarshal(body, &req); err != nil {
+		return nil, err
+	}
+	return anthropicconv.ToOpenAI(req, anthropicconv.Options{}), nil
+}
 
 // ---------- Types ----------
 
@@ -115,11 +131,11 @@ func parseCMConfig(raw json.RawMessage) (*CMConfig, error) {
 
 // ---------- Main entry ----------
 
-// applyContextManagement inspects and applies supported context_management edits
+// ApplyContextManagement inspects and applies supported context_management edits
 // to openAIReq (mutated in place). Returns nil when context_management is
 // absent so callers can treat "no CM" as a no-op and preserve existing behaviour.
-func applyContextManagement(ctx context.Context, req anthropicReq, openAIReq map[string]any) (*CMResult, error) {
-	cfg, err := parseCMConfig(req.ContextManagement)
+func ApplyContextManagement(ctx context.Context, model string, raw json.RawMessage, openAIReq map[string]any) (*CMResult, error) {
+	cfg, err := parseCMConfig(raw)
 	if err != nil {
 		return nil, err
 	}
@@ -181,7 +197,7 @@ func applyContextManagement(ctx context.Context, req anthropicReq, openAIReq map
 
 	// Handle compaction if requested.
 	if compactEdit != nil {
-		status, summary, paused := runCompaction(ctx, req, openAIReq, compactEdit, messages)
+		status, summary, paused := runCompaction(ctx, model, openAIReq, compactEdit, messages)
 		result.CompactionStatus = status
 		result.Summary = summary
 		result.Paused = paused
@@ -296,7 +312,7 @@ func applyClearToolUses(openAIReq map[string]any, e *CMEdit) (int, int) {
 
 // ---------- compaction ----------
 
-func runCompaction(ctx context.Context, req anthropicReq, openAIReq map[string]any, edit *CMEdit, origMessages []any) (status, summary string, paused bool) {
+func runCompaction(ctx context.Context, model string, openAIReq map[string]any, edit *CMEdit, origMessages []any) (status, summary string, paused bool) {
 	cfg := zen.GetConfig()
 	messages, _ := openAIReq["messages"].([]any)
 	if len(messages) == 0 {
@@ -339,8 +355,8 @@ func runCompaction(ctx context.Context, req anthropicReq, openAIReq map[string]a
 	sel := selectRecent(toSerialized(messages), keep)
 	if sel == nil || sel.split <= 0 {
 		// nothing to compact (too few messages) -> fallback truncate
-		outcome := fallbackTruncate(openAIReq, modelForCM(req))
-		if outcome.changed {
+		outcome := FallbackTruncate(openAIReq, modelForCM(model))
+		if outcome.Changed {
 			return "truncated", "", edit.PauseAfterCompact
 		}
 		return "skipped", "", false
@@ -364,7 +380,7 @@ func runCompaction(ctx context.Context, req anthropicReq, openAIReq map[string]a
 	if summaryModel == "" {
 		// The request model is only a hint: generateSummary falls back to a free
 		// zen model and then the Cline free chain when it is unavailable.
-		summaryModel = req.Model
+		summaryModel = model
 	}
 
 	log.Printf("  cm: compact triggered est=%d trigger=%d keep=%d split@%d/%d summary_model=%s",
@@ -373,16 +389,16 @@ func runCompaction(ctx context.Context, req anthropicReq, openAIReq map[string]a
 	summary, err := generateSummary(summaryModel, prompt, maxSum)
 	if err != nil {
 		log.Printf("  cm: summary generation failed (%v), falling back to truncation", err)
-		outcome := fallbackTruncate(openAIReq, modelForCM(req))
-		if outcome.changed {
+		outcome := FallbackTruncate(openAIReq, modelForCM(model))
+		if outcome.Changed {
 			return "truncated", "", edit.PauseAfterCompact
 		}
 		return "skipped", "", false
 	}
 	summary = strings.TrimSpace(summary)
 	if summary == "" {
-		outcome := fallbackTruncate(openAIReq, modelForCM(req))
-		if outcome.changed {
+		outcome := FallbackTruncate(openAIReq, modelForCM(model))
+		if outcome.Changed {
 			return "truncated", "", edit.PauseAfterCompact
 		}
 		return "skipped", "", false
@@ -433,36 +449,35 @@ func toSerialized(messages []any) []string {
 	return out
 }
 
-func modelForCM(req anthropicReq) Model {
-	if zm := modelForCompaction(req.Model); zm.Context > 0 {
+func modelForCM(model string) domain.Model {
+	if zm := ModelForCompaction(model); zm.Context > 0 {
 		return zm
 	}
-	return Model{ID: req.Model, Context: 200000, Output: 20000}
+	return domain.Model{ID: model, Context: 200000, Output: 20000}
 }
 
 // ---------- count_tokens ----------
 
-// handleAnthropicCountTokens implements POST /v1/messages/count_tokens.
-func handleAnthropicCountTokens(w http.ResponseWriter, r *http.Request) {
+// HandleCountTokens implements POST /v1/messages/count_tokens.
+func HandleCountTokens(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "POST" {
-		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+		httpx.WriteJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
 		return
 	}
 	body, err := io.ReadAll(r.Body)
 	r.Body.Close()
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": map[string]string{"message": err.Error(), "type": "parse_error"}})
+		httpx.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": map[string]string{"message": err.Error(), "type": "parse_error"}})
 		return
 	}
-	var req anthropicReq
-	if err := json.Unmarshal(body, &req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": map[string]string{"message": err.Error(), "type": "parse_error"}})
+	openAIReq, err := AnthropicToOpenAI(body)
+	if err != nil {
+		httpx.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": map[string]string{"message": err.Error(), "type": "parse_error"}})
 		return
 	}
-	openAIReq := anthropicToOpenAI(req)
-	// Keep the same conservative estimator used by maybeCompact.
+	// Keep the same conservative estimator used by MaybeCompact.
 	est := estimateRequestTokens(openAIReq)
-	writeJSON(w, http.StatusOK, map[string]any{
+	httpx.WriteJSON(w, http.StatusOK, map[string]any{
 		"input_tokens": est,
 		"context_management": map[string]any{
 			"original_input_tokens": est,
@@ -472,9 +487,9 @@ func handleAnthropicCountTokens(w http.ResponseWriter, r *http.Request) {
 
 // ---------- SSE helpers for compaction ----------
 
-// emitCompactionBlock writes the SSE events for a compaction content block
+// EmitCompactionBlock writes the SSE events for a compaction content block
 // (index 0). Caller must have already emitted message_start.
-func emitCompactionBlock(sw *sseWriter, summary string) {
+func EmitCompactionBlock(sw *dispatch.SSEWriter, summary string) {
 	emit := func(event string, data any) {
 		d, _ := json.Marshal(data)
 		sw.Write([]byte(fmt.Sprintf("event: %s\ndata: %s\n\n", event, string(d))))
@@ -502,8 +517,8 @@ func emitCompactionBlock(sw *sseWriter, summary string) {
 	})
 }
 
-// cmContextManagementResponse builds the top-level context_management object.
-func cmContextManagementResponse(applied []CMAppliedEdit) map[string]any {
+// ContextManagementResponse builds the top-level context_management object.
+func ContextManagementResponse(applied []CMAppliedEdit) map[string]any {
 	if applied == nil {
 		applied = []CMAppliedEdit{}
 	}
@@ -512,9 +527,9 @@ func cmContextManagementResponse(applied []CMAppliedEdit) map[string]any {
 	}
 }
 
-// applyCMToResponse shapes an Anthropic response (already converted from OpenAI)
+// ApplyCMToResponse shapes an Anthropic response (already converted from OpenAI)
 // with compaction block + context_management when compaction was applied.
-func applyCMToResponse(resp map[string]any, cm *CMResult) {
+func ApplyCMToResponse(resp map[string]any, cm *CMResult) {
 	if cm == nil {
 		return
 	}
@@ -524,6 +539,6 @@ func applyCMToResponse(resp map[string]any, cm *CMResult) {
 		resp["content"] = append([]any{block}, content...)
 	}
 	if cm.AppliedEdits != nil || cm.Compacted {
-		resp["context_management"] = cmContextManagementResponse(cm.AppliedEdits)
+		resp["context_management"] = ContextManagementResponse(cm.AppliedEdits)
 	}
 }

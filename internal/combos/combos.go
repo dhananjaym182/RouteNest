@@ -1,4 +1,4 @@
-package main
+package combos
 
 // 模型组合（Named Model Combos）+ 有序回退 —— Phase 1。
 //
@@ -20,6 +20,14 @@ package main
 // 也**不**从模型名推断质量。
 
 import (
+	"cline-go-proxy/internal/accounts"
+	"cline-go-proxy/internal/compaction"
+	"cline-go-proxy/internal/config"
+	"cline-go-proxy/internal/domain"
+	"cline-go-proxy/internal/egress"
+	"cline-go-proxy/internal/i18n"
+	"cline-go-proxy/internal/platform"
+	"cline-go-proxy/internal/providers"
 	"cline-go-proxy/internal/routing"
 	"cline-go-proxy/internal/zen"
 	"context"
@@ -30,17 +38,57 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"sync"
 	"time"
-
-	"cline-go-proxy/internal/accounts"
-	"cline-go-proxy/internal/egress"
-	"cline-go-proxy/internal/i18n"
-	"cline-go-proxy/internal/providers"
 )
 
-// comboEntryKey 组合条目去重键：同一模型但不同上游固定（Source/Provider）不算重复，
+// Root-owned live state seams, wired once from root composition. Defaults keep
+// the package self-contained for unit tests.
+var (
+	ConfigMu     = &defaultConfigMu
+	Config       = func() *config.Proxy { return defaultConfig }
+	GetConfig    = func() *config.Proxy { return defaultConfig }
+	EnsureConfig = func() *config.Proxy { return defaultConfig }
+	SaveConfig   = func() {}
+
+	IsAccountUnavailable    = func(error) bool { return false }
+	NewUnavailableError     = func(message string) error { return &unavailableError{message: message} }
+	CallClineAPIWithAccount = func(context.Context, *domain.Account, map[string]any, bool) (*http.Response, *domain.Account, error) {
+		return nil, nil, fmt.Errorf("cline API not wired")
+	}
+	IsDeterministicRequestError = func(error) bool { return false }
+	SetModelCooldown            = func(*domain.Account, string, time.Time) {}
+	TruncateEmail               = func(email string) string { return email }
+	CallFreeClineAPI            = func(map[string]any, bool) (*http.Response, *domain.Account, error) {
+		return nil, nil, fmt.Errorf("free chain not wired")
+	}
+	WithModel = func(params map[string]any, model string) map[string]any {
+		cp := make(map[string]any, len(params)+1)
+		for k, v := range params {
+			cp[k] = v
+		}
+		cp["model"] = model
+		return cp
+	}
+)
+
+var (
+	defaultConfigMu sync.Mutex
+	defaultConfig   = config.DefaultProxy()
+)
+
+type unavailableError struct{ message string }
+
+func (e *unavailableError) Error() string { return e.message }
+
+const (
+	servedByParam     = "__served_by"
+	providerNameParam = "__served_by_name"
+)
+
+// EntryKey 组合条目去重键：同一模型但不同上游固定（Source/Provider）不算重复，
 // 允许把同一模型分别钉到不同的上游。
-func comboEntryKey(e ComboEntry) string {
+func EntryKey(e domain.ComboEntry) string {
 	return strings.TrimSpace(e.Model) + "\x00" + strings.TrimSpace(e.Source) + "\x00" + strings.TrimSpace(e.Provider)
 }
 
@@ -49,7 +97,7 @@ func comboEntryKey(e ComboEntry) string {
 var comboIDRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*$`)
 
 const (
-	comboIDMaxLen   = 64
+	IDMaxLen        = 64
 	comboMaxEntries = 64
 )
 
@@ -58,15 +106,15 @@ const (
 // ============================================================================
 
 // cloneCombos 深拷贝，避免调用方在锁外持有内部切片引用。
-func cloneCombos(in []ModelCombo) []ModelCombo {
+func cloneCombos(in []domain.ModelCombo) []domain.ModelCombo {
 	if len(in) == 0 {
 		return nil
 	}
-	out := make([]ModelCombo, len(in))
+	out := make([]domain.ModelCombo, len(in))
 	for i, c := range in {
 		out[i] = c
 		if len(c.Entries) > 0 {
-			ents := make([]ComboEntry, len(c.Entries))
+			ents := make([]domain.ComboEntry, len(c.Entries))
 			copy(ents, c.Entries)
 			out[i].Entries = ents
 		}
@@ -74,54 +122,54 @@ func cloneCombos(in []ModelCombo) []ModelCombo {
 	return out
 }
 
-// listCombos 返回全部组合（含停用）的快照副本。
-func listCombos() []ModelCombo {
-	proxyConfigMu.Lock()
-	defer proxyConfigMu.Unlock()
-	if proxyConfig == nil {
+// ListCombos 返回全部组合（含停用）的快照副本。
+func ListCombos() []domain.ModelCombo {
+	ConfigMu.Lock()
+	defer ConfigMu.Unlock()
+	if Config() == nil {
 		return nil
 	}
-	return cloneCombos(proxyConfig.Combos)
+	return cloneCombos(Config().Combos)
 }
 
-// findCombo 按 ID 查找组合（含停用）。ID 精确匹配（去空白）。
-func findCombo(id string) (ModelCombo, bool) {
+// FindCombo 按 ID 查找组合（含停用）。ID 精确匹配（去空白）。
+func FindCombo(id string) (domain.ModelCombo, bool) {
 	id = strings.TrimSpace(id)
 	if id == "" {
-		return ModelCombo{}, false
+		return domain.ModelCombo{}, false
 	}
-	proxyConfigMu.Lock()
-	defer proxyConfigMu.Unlock()
-	if proxyConfig == nil {
-		return ModelCombo{}, false
+	ConfigMu.Lock()
+	defer ConfigMu.Unlock()
+	if Config() == nil {
+		return domain.ModelCombo{}, false
 	}
-	for _, c := range proxyConfig.Combos {
+	for _, c := range Config().Combos {
 		if c.ID == id {
 			cp := c
 			if len(c.Entries) > 0 {
-				ents := make([]ComboEntry, len(c.Entries))
+				ents := make([]domain.ComboEntry, len(c.Entries))
 				copy(ents, c.Entries)
 				cp.Entries = ents
 			}
 			return cp, true
 		}
 	}
-	return ModelCombo{}, false
+	return domain.ModelCombo{}, false
 }
 
-// findEnabledCombo 只在组合存在且启用时返回（路由用）。
-func findEnabledCombo(id string) (ModelCombo, bool) {
-	c, ok := findCombo(id)
+// FindEnabledCombo 只在组合存在且启用时返回（路由用）。
+func FindEnabledCombo(id string) (domain.ModelCombo, bool) {
+	c, ok := FindCombo(id)
 	if !ok || !c.Enabled {
-		return ModelCombo{}, false
+		return domain.ModelCombo{}, false
 	}
 	return c, true
 }
 
 // comboEnabledIDs 返回启用中组合 ID 集合（供 /v1/models 暴露）。
-func comboEnabledList() []ModelCombo {
-	all := listCombos()
-	out := make([]ModelCombo, 0, len(all))
+func EnabledList() []domain.ModelCombo {
+	all := ListCombos()
+	out := make([]domain.ModelCombo, 0, len(all))
 	for _, c := range all {
 		if c.Enabled {
 			out = append(out, c)
@@ -134,7 +182,7 @@ func comboEnabledList() []ModelCombo {
 // 声明的模型 + zen 种子/别名。组合 ID 与条目引用都基于这一集合校验。
 func knownModelIDs() map[string]bool {
 	known := make(map[string]bool)
-	for _, m := range getAllModels() {
+	for _, m := range routing.ModelsProvider() {
 		if m.ID != "" {
 			known[m.ID] = true
 		}
@@ -166,14 +214,14 @@ func knownModelIDs() map[string]bool {
 // 校验
 // ============================================================================
 
-// validateCombo 校验组合定义。existing 是除自身以外的现有组合（用于唯一性校验）。
-func validateCombo(c ModelCombo, existing []ModelCombo) error {
+// ValidateCombo 校验组合定义。existing 是除自身以外的现有组合（用于唯一性校验）。
+func ValidateCombo(c domain.ModelCombo, existing []domain.ModelCombo) error {
 	id := strings.TrimSpace(c.ID)
 	if id == "" {
 		return errors.New("combo id is required")
 	}
-	if len(id) > comboIDMaxLen {
-		return fmt.Errorf("combo id is too long (max %d characters)", comboIDMaxLen)
+	if len(id) > IDMaxLen {
+		return fmt.Errorf("combo id is too long (max %d characters)", IDMaxLen)
 	}
 	if !comboIDRe.MatchString(id) {
 		return errors.New("combo id may only contain letters, digits, dot, underscore and hyphen")
@@ -213,7 +261,7 @@ func validateCombo(c ModelCombo, existing []ModelCombo) error {
 		if m == "free" {
 			return errors.New(`the "free" alias cannot be used as a combo entry; add concrete models instead`)
 		}
-		key := comboEntryKey(en)
+		key := EntryKey(en)
 		if seen[key] {
 			return fmt.Errorf("duplicate combo entry %q", m)
 		}
@@ -227,7 +275,7 @@ func validateCombo(c ModelCombo, existing []ModelCombo) error {
 		if err := validateComboEntryPin(en, m); err != nil {
 			return err
 		}
-		if !en.Disabled && !isModelDisabled(m) {
+		if !en.Disabled && !routing.ModelDisabled(m) {
 			enabledCount++
 		}
 	}
@@ -247,9 +295,9 @@ type comboPinError struct {
 
 func (e *comboPinError) Error() string { return e.msg }
 
-// localizeComboError 把校验错误本地化：comboPinError 走 tAPI key，其余（既有英文
+// LocalizeComboError 把校验错误本地化：comboPinError 走 tAPI key，其余（既有英文
 // 校验信息）原样返回。
-func localizeComboError(r *http.Request, err error) string {
+func LocalizeComboError(r *http.Request, err error) string {
 	if err == nil {
 		return ""
 	}
@@ -262,14 +310,14 @@ func localizeComboError(r *http.Request, err error) string {
 
 // validateComboEntryPin 校验条目的上游固定（Source/Provider）。空 Source 表示自动
 // 派发（默认优先级），永远合法；非空时必须指向一个真实可用的目标。
-func validateComboEntryPin(en ComboEntry, model string) error {
+func validateComboEntryPin(en domain.ComboEntry, model string) error {
 	switch src := strings.TrimSpace(en.Source); src {
 	case "":
 		return nil
 	case "cline":
 		// 必须存在同名、真能由 Cline 账号池服务的池内条目（排除 zen 与
 		// provider-only 模型），否则固定到 cline 账号池要么无模型、要么必然 400。
-		if !clinePoolModelExists(model) {
+		if !ClinePoolModelExists(model) {
 			return &comboPinError{
 				key:  "combo_entry_cline_unknown",
 				msg:  fmt.Sprintf("model %q is not a Cline account-pool model (non-zen); cannot pin source=cline", model),
@@ -313,12 +361,12 @@ func validateComboEntryPin(en ComboEntry, model string) error {
 }
 
 // normalizeCombo 规整输入：去空白、丢弃空条目行。
-func normalizeCombo(c ModelCombo) ModelCombo {
+func normalizeCombo(c domain.ModelCombo) domain.ModelCombo {
 	c.ID = strings.TrimSpace(c.ID)
 	c.Name = strings.TrimSpace(c.Name)
 	c.Description = strings.TrimSpace(c.Description)
 	c.Category = strings.TrimSpace(c.Category)
-	ents := make([]ComboEntry, 0, len(c.Entries))
+	ents := make([]domain.ComboEntry, 0, len(c.Entries))
 	for _, en := range c.Entries {
 		en.Model = strings.TrimSpace(en.Model)
 		en.Source = strings.TrimSpace(en.Source)
@@ -336,118 +384,118 @@ func normalizeCombo(c ModelCombo) ModelCombo {
 // CRUD
 // ============================================================================
 
-// upsertCombo 新建或更新组合（ID 为主键）并持久化。
-func upsertCombo(c ModelCombo) (ModelCombo, error) {
+// UpsertCombo 新建或更新组合（ID 为主键）并持久化。
+func UpsertCombo(c domain.ModelCombo) (domain.ModelCombo, error) {
 	c = normalizeCombo(c)
 
-	// 校验在**不持有** proxyConfigMu 的情况下进行：validateCombo 会读取模型目录、
+	// 校验在**不持有** proxyConfigMu 的情况下进行：ValidateCombo 会读取模型目录、
 	// provider 列表并做 zen 路由判定（涉及 accounts.PoolMu / providersMu / zen.ConfigMu）。
 	// 在配置锁内做这些外部读取会扩大锁范围并带来锁序风险，故先快照再校验。
-	existing := listCombos()
-	others := make([]ModelCombo, 0, len(existing))
+	existing := ListCombos()
+	others := make([]domain.ModelCombo, 0, len(existing))
 	for _, e := range existing {
 		if e.ID == c.ID {
 			continue
 		}
 		others = append(others, e)
 	}
-	if err := validateCombo(c, others); err != nil {
-		return ModelCombo{}, err
+	if err := ValidateCombo(c, others); err != nil {
+		return domain.ModelCombo{}, err
 	}
 
-	proxyConfigMu.Lock()
-	defer proxyConfigMu.Unlock()
-	if proxyConfig == nil {
-		proxyConfig = defaultProxyConfig()
+	ConfigMu.Lock()
+	defer ConfigMu.Unlock()
+	if Config() == nil {
+		EnsureConfig()
 	}
 	idx := -1
-	for i, e := range proxyConfig.Combos {
+	for i, e := range Config().Combos {
 		if e.ID == c.ID {
 			idx = i
 			continue
 		}
 		// 锁内仅做无外部调用的复核：防止校验与写入之间并发新增导致的名称冲突。
 		if strings.EqualFold(strings.TrimSpace(e.Name), c.Name) {
-			return ModelCombo{}, fmt.Errorf("combo name %q is already in use", c.Name)
+			return domain.ModelCombo{}, fmt.Errorf("combo name %q is already in use", c.Name)
 		}
 	}
 	now := time.Now()
 	if idx >= 0 {
-		c.CreatedAt = proxyConfig.Combos[idx].CreatedAt
+		c.CreatedAt = Config().Combos[idx].CreatedAt
 	} else if c.CreatedAt.IsZero() {
 		c.CreatedAt = now
 	}
 	c.UpdatedAt = now
 	if idx >= 0 {
-		proxyConfig.Combos[idx] = c
+		Config().Combos[idx] = c
 	} else {
-		proxyConfig.Combos = append(proxyConfig.Combos, c)
+		Config().Combos = append(Config().Combos, c)
 	}
-	saveProxyConfigLocked()
+	SaveConfig()
 	return c, nil
 }
 
-// deleteCombo 删除组合。
-func deleteCombo(id string) bool {
+// DeleteCombo 删除组合。
+func DeleteCombo(id string) bool {
 	id = strings.TrimSpace(id)
-	proxyConfigMu.Lock()
-	defer proxyConfigMu.Unlock()
-	if proxyConfig == nil {
+	ConfigMu.Lock()
+	defer ConfigMu.Unlock()
+	if Config() == nil {
 		return false
 	}
-	for i, c := range proxyConfig.Combos {
+	for i, c := range Config().Combos {
 		if c.ID == id {
-			proxyConfig.Combos = append(proxyConfig.Combos[:i], proxyConfig.Combos[i+1:]...)
-			saveProxyConfigLocked()
+			Config().Combos = append(Config().Combos[:i], Config().Combos[i+1:]...)
+			SaveConfig()
 			return true
 		}
 	}
 	return false
 }
 
-// setComboEnabled 启停组合。
-func setComboEnabled(id string, enabled bool) (ModelCombo, error) {
+// SetComboEnabled 启停组合。
+func SetComboEnabled(id string, enabled bool) (domain.ModelCombo, error) {
 	id = strings.TrimSpace(id)
-	proxyConfigMu.Lock()
-	defer proxyConfigMu.Unlock()
-	if proxyConfig == nil {
-		return ModelCombo{}, errors.New("combo not found")
+	ConfigMu.Lock()
+	defer ConfigMu.Unlock()
+	if Config() == nil {
+		return domain.ModelCombo{}, errors.New("combo not found")
 	}
-	for i := range proxyConfig.Combos {
-		if proxyConfig.Combos[i].ID == id {
+	for i := range Config().Combos {
+		if Config().Combos[i].ID == id {
 			if enabled {
 				enabledCount := 0
-				for _, en := range proxyConfig.Combos[i].Entries {
+				for _, en := range Config().Combos[i].Entries {
 					if !en.Disabled {
 						enabledCount++
 					}
 				}
 				if enabledCount == 0 {
-					return ModelCombo{}, errors.New("cannot enable a combo with no enabled entries")
+					return domain.ModelCombo{}, errors.New("cannot enable a combo with no enabled entries")
 				}
 			}
-			proxyConfig.Combos[i].Enabled = enabled
-			proxyConfig.Combos[i].UpdatedAt = time.Now()
-			saveProxyConfigLocked()
-			cp := proxyConfig.Combos[i]
+			Config().Combos[i].Enabled = enabled
+			Config().Combos[i].UpdatedAt = time.Now()
+			SaveConfig()
+			cp := Config().Combos[i]
 			if len(cp.Entries) > 0 {
-				ents := make([]ComboEntry, len(cp.Entries))
+				ents := make([]domain.ComboEntry, len(cp.Entries))
 				copy(ents, cp.Entries)
 				cp.Entries = ents
 			}
 			return cp, nil
 		}
 	}
-	return ModelCombo{}, errors.New("combo not found")
+	return domain.ModelCombo{}, errors.New("combo not found")
 }
 
-// cloneCombo 复制一个组合，生成唯一 ID/名称。
-func cloneCombo(id string) (ModelCombo, error) {
-	src, ok := findCombo(id)
+// CloneCombo 复制一个组合，生成唯一 ID/名称。
+func CloneCombo(id string) (domain.ModelCombo, error) {
+	src, ok := FindCombo(id)
 	if !ok {
-		return ModelCombo{}, errors.New("combo not found")
+		return domain.ModelCombo{}, errors.New("combo not found")
 	}
-	all := listCombos()
+	all := ListCombos()
 	takenID := map[string]bool{}
 	takenName := map[string]bool{}
 	for _, c := range all {
@@ -455,8 +503,8 @@ func cloneCombo(id string) (ModelCombo, error) {
 		takenName[strings.ToLower(c.Name)] = true
 	}
 	base := src.ID
-	// 预留后缀空间，避免 64 字符 ID 克隆后超长被 validateCombo 拒绝。
-	if max := comboIDMaxLen - len("-copy-99"); len(base) > max {
+	// 预留后缀空间，避免 64 字符 ID 克隆后超长被 ValidateCombo 拒绝。
+	if max := IDMaxLen - len("-copy-99"); len(base) > max {
 		base = base[:max]
 	}
 	newID := base + "-copy"
@@ -472,33 +520,32 @@ func cloneCombo(id string) (ModelCombo, error) {
 	cp.Name = newName
 	cp.CreatedAt = time.Time{}
 	cp.UpdatedAt = time.Time{}
-	return upsertCombo(cp)
+	return UpsertCombo(cp)
 }
 
 // ============================================================================
 // 组合运行：有序回退
 // ============================================================================
 
-// comboRun 是一次组合派发的完整结果。
-type comboRun struct {
+// Run 是一次组合派发的完整结果。
+type Run struct {
 	Resp     *http.Response
-	Acc      *Account
+	Acc      *domain.Account
 	Upstream string
 	Model    string // 实际服务的模型
-	Trace    []AttemptLog
+	Trace    []domain.AttemptLog
 	Err      error
 }
 
-// comboRetryable 判断某次条目尝试的失败是否可重试（应继续尝试下一个条目）。
+// Retryable 判断某次条目尝试的失败是否可重试（应继续尝试下一个条目）。
 //
 // 可重试：限流(429)/配额(402)/网关重定向(421)/瞬态 5xx/超时/传输错误/模型不存在(404)。
 // 不可重试：客户端/配置类错误 400/401/403 —— 重试下一个模型没有意义，直接失败。
-func comboRetryable(err error) bool {
+func Retryable(err error) bool {
 	if err == nil {
 		return false
 	}
-	var acct *clineAccountUnavailableError
-	if errors.As(err, &acct) {
+	if IsAccountUnavailable(err) {
 		return true // 账号不可用：可能换号/换条目即可恢复
 	}
 	var apiErr *egress.APIError
@@ -518,8 +565,8 @@ func comboRetryable(err error) bool {
 	return true
 }
 
-// attemptStatus 从错误里尽量提取上游 HTTP 状态码（供尝试轨迹展示）。
-func attemptStatus(err error) int {
+// AttemptStatus 从错误里尽量提取上游 HTTP 状态码（供尝试轨迹展示）。
+func AttemptStatus(err error) int {
 	var apiErr *egress.APIError
 	if errors.As(err, &apiErr) {
 		return apiErr.StatusCode
@@ -527,7 +574,7 @@ func attemptStatus(err error) int {
 	return 0
 }
 
-// comboRouteKind 判定组合条目的派发路径：zen / reject（付费 zen）/ cline，以及
+// RouteKind 判定组合条目的派发路径：zen / reject（付费 zen）/ cline，以及
 // zen-degraded（zen 处于故障转移窗口，条目运行时不可用应跳过）。
 //
 // 与 zen.RouteModel 的唯一区别：zen.RouteModel 在 zen 故障转移窗口会把 zen 免费模型降级
@@ -535,7 +582,7 @@ func attemptStatus(err error) int {
 // 模型 ID 原样发给 Cline 会得到 400 "invalid model format"，进而被误判为永久失败
 // 并中止整条组合。故这里显式区分「同名 cline 冲突」（走 cline，与 zen.RouteModel 一致）
 // 与「zen 降级」（走 zen-degraded → 跳过条目）。
-func comboRouteKind(model string) string {
+func RouteKind(model string) string {
 	switch zen.RouteModel(model) {
 	case "reject":
 		return "reject"
@@ -547,15 +594,15 @@ func comboRouteKind(model string) string {
 	if !ok || !zen.IsFreeModel(zm) {
 		return "cline" // 普通 cline 模型
 	}
-	if clineModelWithIDExists(model) {
+	if ClineModelWithIDExists(model) {
 		return "cline" // 同名 cline 冲突：cline 优先（与 zen.RouteModel 一致）
 	}
 	return "zen-degraded"
 }
 
-// clineModelWithIDExists 判断池内是否存在与给定模型同名的非 zen 模型
+// ClineModelWithIDExists 判断池内是否存在与给定模型同名的非 zen 模型
 // （自定义冲突场景，zen.RouteModel 会把同名 zen 模型让给 cline）。
-func clineModelWithIDExists(model string) bool {
+func ClineModelWithIDExists(model string) bool {
 	id := strings.TrimPrefix(strings.TrimSpace(model), "opencode/")
 	p := accounts.LoadPool()
 	accounts.PoolMu.Lock()
@@ -568,10 +615,10 @@ func clineModelWithIDExists(model string) bool {
 	return false
 }
 
-// clinePoolModelExists 判断模型是否真能由 Cline 账号池服务：排除 zen 与自定义
+// ClinePoolModelExists 判断模型是否真能由 Cline 账号池服务：排除 zen 与自定义
 // provider 来源。source=cline 固定必须用它（严格）——provider 同步进池的条目
 // 走 Cline 会得到 400 "invalid model format"，进而被组合误判为永久失败。
-func clinePoolModelExists(model string) bool {
+func ClinePoolModelExists(model string) bool {
 	id := strings.TrimPrefix(strings.TrimSpace(model), "opencode/")
 	p := accounts.LoadPool()
 	accounts.PoolMu.Lock()
@@ -584,18 +631,18 @@ func clinePoolModelExists(model string) bool {
 	return false
 }
 
-// entryRouteKind 在 comboRouteKind 之上叠加条目的上游固定（Source/Provider）。
+// EntryRouteKind 在 RouteKind 之上叠加条目的上游固定（Source/Provider）。
 //
-//   - Source == "" → comboRouteKind(Model)（默认自动派发，行为不变）。
+//   - Source == "" → RouteKind(Model)（默认自动派发，行为不变）。
 //   - "cline"      → 模型真能由 Cline 账号池服务时 "cline"（跳过自定义 provider），
 //     否则 "unavailable"（跳过，避免 provider-only 模型被发给 Cline 触发 400 中止）。
 //   - "provider"   → "cline"（provider 名称在 cline 分支里强制指定）。
 //   - "zen"        → 显式固定压过 AUTO 的同名 cline 冲突降级：可解析且为免费 zen
 //     模型时返回 "zen"，zen→cline 故障转移窗口内返回 "zen-degraded"，否则
 //     "unavailable"（跳过）。
-//   - 其他（未知，通常已被 validateCombo 拦截）→ 回退到自动派发，避免运行时误伤。
-func entryRouteKind(e ComboEntry) string {
-	base := comboRouteKind(e.Model)
+//   - 其他（未知，通常已被 ValidateCombo 拦截）→ 回退到自动派发，避免运行时误伤。
+func EntryRouteKind(e domain.ComboEntry) string {
+	base := RouteKind(e.Model)
 	switch strings.TrimSpace(e.Source) {
 	case "":
 		return base
@@ -603,7 +650,7 @@ func entryRouteKind(e ComboEntry) string {
 		// 严格判定：模型必须真能由 Cline 账号池服务。provider-only 模型（含同步
 		// 进池的 source=provider 行）走 Cline 会 400，故按运行时不可用跳过该条目，
 		// 而不是把 provider 的模型 ID 原样发给 Cline 触发整条组合中止。
-		if !clinePoolModelExists(e.Model) {
+		if !ClinePoolModelExists(e.Model) {
 			return "unavailable"
 		}
 		return "cline"
@@ -625,7 +672,7 @@ func entryRouteKind(e ComboEntry) string {
 	}
 }
 
-// callSingleModel 通过既有 provider/账号路径调用**单个**模型，不触发全局 ModelChain
+// CallSingleModel 通过既有 provider/账号路径调用**单个**模型，不触发全局 ModelChain
 // 或 free 链：这是组合回退的安全基础。
 //
 //   - zen 免费模型 → zen.Call（含匿名免费层处理）
@@ -635,43 +682,43 @@ func entryRouteKind(e ComboEntry) string {
 //
 // 返回：resp / 使用的账号（若有）/ 上游归因 / 实际服务的自定义 provider 显示名
 // （upstream=="provider" 时非空，cline/opencode 为空）/ error。
-func callSingleModel(params map[string]any, entry ComboEntry, stream bool, sessionID string) (*http.Response, *Account, string, string, error) {
+func CallSingleModel(params map[string]any, entry domain.ComboEntry, stream bool, sessionID string) (*http.Response, *domain.Account, string, string, error) {
 	model := strings.TrimSpace(entry.Model)
-	ep := withModel(params, model)
+	ep := WithModel(params, model)
 	delete(ep, servedByParam)
 	delete(ep, providerNameParam)
 	delete(ep, providers.ProviderIDParam)
 
-	switch entryRouteKind(entry) {
+	switch EntryRouteKind(entry) {
 	case "reject":
 		return nil, nil, zen.UpstreamOpenCode, "", fmt.Errorf("model %q is a paid opencode model; only free models are proxied", model)
 	case "zen-degraded":
 		// zen 处于故障转移窗口：绝不把 zen 免费模型 ID 原样发给 Cline（会被判
 		// 400 "invalid model format"，进而被组合误判为永久失败）。按运行时不可用
 		// 跳过该条目 —— 返回可重试错误，组合继续尝试下一个条目。
-		return nil, nil, zen.UpstreamOpenCode, "", &freeModelUnavailableError{
-			message: fmt.Sprintf("model %q temporarily unavailable (opencode zen degraded)", model),
-		}
+		return nil, nil, zen.UpstreamOpenCode, "", NewUnavailableError(
+			fmt.Sprintf("model %q temporarily unavailable (opencode zen degraded)", model),
+		)
 	case "unavailable":
 		// 条目固定的上游当前无法服务该模型（zen 固定到非免费/非 zen 模型，或
 		// cline 固定到 provider-only 模型等）：按运行时不可用跳过，返回可重试错误，
 		// 让组合继续尝试下一个条目而不是中止。
-		return nil, nil, zen.UpstreamOpenCode, "", &freeModelUnavailableError{
-			message: fmt.Sprintf("model %q is not available on the pinned source", model),
-		}
+		return nil, nil, zen.UpstreamOpenCode, "", NewUnavailableError(
+			fmt.Sprintf("model %q is not available on the pinned source", model),
+		)
 	case "zen":
 		if zm, ok := zen.ResolveInfo(model); ok {
-			if out := maybeCompact(ep, zm, sessionID); out.changed {
-				log.Printf("  combo %s", out.note)
+			if out := compaction.MaybeCompact(ep, zm, sessionID); out.Changed {
+				log.Printf("  combo %s", out.Note)
 			}
 		}
 		resp, err := zen.Call(ep, stream)
 		// 上游返回「上下文超限」400：压缩后重试一次
-		if err != nil && isContextLengthError(err) {
+		if err != nil && compaction.IsContextLengthError(err) {
 			if zm, ok := zen.ResolveInfo(model); ok {
 				log.Printf("  combo: context length exceeded, compacting and retrying")
-				if out := fallbackTruncate(ep, zm); out.changed {
-					log.Printf("  combo %s", out.note)
+				if out := compaction.FallbackTruncate(ep, zm); out.Changed {
+					log.Printf("  combo %s", out.Note)
 					resp, err = zen.Call(ep, stream)
 				}
 			}
@@ -689,16 +736,16 @@ func callSingleModel(params map[string]any, entry ComboEntry, stream bool, sessi
 		// （用户明确指定了唯一上游）。
 		resp, perr, attempted, provName := providers.CallAPINamed(ep, stream, entry.Provider)
 		if !attempted {
-			return nil, nil, zen.UpstreamProvider, "", &freeModelUnavailableError{
-				message: fmt.Sprintf("model %q is not served by provider %q", model, strings.TrimSpace(entry.Provider)),
-			}
+			return nil, nil, zen.UpstreamProvider, "", NewUnavailableError(
+				fmt.Sprintf("model %q is not served by provider %q", model, strings.TrimSpace(entry.Provider)),
+			)
 		}
 		if perr != nil {
 			// 固定 provider 失败：包装成可重试的「跳过」，避免 400/401/403（如
-			// 一把被轮换的 API key）被 comboRetryable 判为永久错误而中止整条组合。
-			return nil, nil, zen.UpstreamProvider, provName, &freeModelUnavailableError{
-				message: fmt.Sprintf("pinned provider %q failed for %q: %s", strings.TrimSpace(entry.Provider), model, truncate(perr.Error(), 200)),
-			}
+			// 一把被轮换的 API key）被 Retryable 判为永久错误而中止整条组合。
+			return nil, nil, zen.UpstreamProvider, provName, NewUnavailableError(
+				fmt.Sprintf("pinned provider %q failed for %q: %s", strings.TrimSpace(entry.Provider), model, platform.Truncate(perr.Error(), 200)),
+			)
 		}
 		return resp, nil, zen.UpstreamProvider, provName, nil
 	case "cline":
@@ -716,34 +763,33 @@ func callSingleModel(params map[string]any, entry ComboEntry, stream bool, sessi
 	for {
 		acc := accounts.PickAccountForModelStrict(model)
 		if acc == nil {
-			return nil, nil, zen.UpstreamCline, "", &freeModelUnavailableError{message: fmt.Sprintf("model %q has no available account", model)}
+			return nil, nil, zen.UpstreamCline, "", NewUnavailableError(fmt.Sprintf("model %q has no available account", model))
 		}
 		if tried[acc.AccountID] {
 			// 防呆：账号轮询下也不应无限重试同一个账号（fill 策略等边界）。
-			return nil, acc, zen.UpstreamCline, "", &freeModelUnavailableError{message: fmt.Sprintf("model %q unavailable on all eligible accounts", model)}
+			return nil, acc, zen.UpstreamCline, "", NewUnavailableError(fmt.Sprintf("model %q unavailable on all eligible accounts", model))
 		}
 		tried[acc.AccountID] = true
 
-		resp, usedAcc, err := callClineAPIWithAccountCtx(context.Background(), acc, ep, stream)
+		resp, usedAcc, err := CallClineAPIWithAccount(context.Background(), acc, ep, stream)
 		if err == nil {
 			return resp, usedAcc, zen.UpstreamCline, "", nil
 		}
-		var accountErr *clineAccountUnavailableError
-		if errors.As(err, &accountErr) {
+		if IsAccountUnavailable(err) {
 			continue // token 失效等：换下一个账号
 		}
 		// 确定性 payload 400（invalid-request 语义，如工具可选字段 null 被网关硬拒）：
 		// 换账号不可能自愈，立即上抛 —— 不在账号池上空转注定失败的上游往返。
-		// （上下文超限 400 除外：runCombo 层有压缩+重试路径。）
-		if isDeterministicRequestError(err) {
+		// （上下文超限 400 除外：RunCombo 层有压缩+重试路径。）
+		if IsDeterministicRequestError(err) {
 			return nil, usedAcc, zen.UpstreamCline, "", err
 		}
 		if apiErr, ok := err.(*egress.APIError); ok {
 			switch apiErr.StatusCode {
 			case 402:
 				// 余额不足是账号级问题：冷却该账号该模型后换号，仍试同一模型。
-				setModelCooldown(usedAcc, model, time.Now().Add(30*time.Minute))
-				log.Printf("  combo: model %q on %s: insufficient credits (402), cooling 30m, next account", model, truncateEmail(usedAcc.Email))
+				SetModelCooldown(usedAcc, model, time.Now().Add(30*time.Minute))
+				log.Printf("  combo: model %q on %s: insufficient credits (402), cooling 30m, next account", model, TruncateEmail(usedAcc.Email))
 				continue
 			case 429:
 				continue // 模型级冷却已记录，换号
@@ -753,41 +799,41 @@ func callSingleModel(params map[string]any, entry ComboEntry, stream bool, sessi
 	}
 }
 
-// comboCompactionModel 取候选条目中最小的有效上下文窗口作为组合压缩预算：
+// CompactionModel 取候选条目中最小的有效上下文窗口作为组合压缩预算：
 // 组合里最窄的模型决定上限，压缩后的历史对所有条目都安全。未知模型落到
-// effectiveCompactContext 的默认封顶。
-func comboCompactionModel(combo ModelCombo) Model {
-	var chosen Model
+// EffectiveCompactContext 的默认封顶。
+func CompactionModel(combo domain.ModelCombo) domain.Model {
+	var chosen domain.Model
 	best := 0
 	for _, e := range combo.Entries {
 		m := strings.TrimSpace(e.Model)
 		if m == "" || e.Disabled {
 			continue
 		}
-		zm := modelForCompaction(m)
-		ctx := effectiveCompactContext(zm)
+		zm := compaction.ModelForCompaction(m)
+		ctx := compaction.EffectiveCompactContext(zm)
 		if best == 0 || ctx < best {
 			best = ctx
 			chosen = zm
 		}
 	}
 	if best == 0 {
-		return Model{Context: defaultCompactContextCeiling}
+		return domain.Model{Context: compaction.DefaultCompactContextCeiling}
 	}
 	chosen.Context = best
 	return chosen
 }
 
-// runCombo 按配置顺序执行组合，返回首个成功的上游响应；失败/跳过的条目记入轨迹。
-func runCombo(params map[string]any, combo ModelCombo, stream bool, sessionID string) comboRun {
-	trace := make([]AttemptLog, 0, len(combo.Entries))
+// RunCombo 按配置顺序执行组合，返回首个成功的上游响应；失败/跳过的条目记入轨迹。
+func RunCombo(params map[string]any, combo domain.ModelCombo, stream bool, sessionID string) Run {
+	trace := make([]domain.AttemptLog, 0, len(combo.Entries))
 	tried := make(map[string]bool, len(combo.Entries))
 	failed := 0
 	var lastErr error
 	// 组合级主动压缩：以候选模型中最小的有效上下文为预算，一次压缩写回共享
-	// params（callSingleModel 压缩的是 map 副本，条目之间不会传递）。
-	if out := maybeCompact(params, comboCompactionModel(combo), sessionID); out.changed {
-		log.Printf("  combo %q %s", combo.ID, out.note)
+	// params（CallSingleModel 压缩的是 map 副本，条目之间不会传递）。
+	if out := compaction.MaybeCompact(params, CompactionModel(combo), sessionID); out.Changed {
+		log.Printf("  combo %q %s", combo.ID, out.Note)
 	}
 
 	// 上下文超限的「截断重试」整条组合只做一次：截断后的 params 在后续条目间共享。
@@ -800,25 +846,25 @@ func runCombo(params map[string]any, combo ModelCombo, stream bool, sessionID st
 		}
 		order := i + 1
 		if entry.Disabled {
-			trace = append(trace, AttemptLog{Model: m, Order: order, Outcome: "skipped", Reason: "entry disabled by admin",
+			trace = append(trace, domain.AttemptLog{Model: m, Order: order, Outcome: "skipped", Reason: "entry disabled by admin",
 				Source: strings.TrimSpace(entry.Source), Provider: strings.TrimSpace(entry.Provider)})
 			continue
 		}
-		key := comboEntryKey(entry)
+		key := EntryKey(entry)
 		if tried[key] {
-			trace = append(trace, AttemptLog{Model: m, Order: order, Outcome: "skipped", Reason: "duplicate entry",
+			trace = append(trace, domain.AttemptLog{Model: m, Order: order, Outcome: "skipped", Reason: "duplicate entry",
 				Source: strings.TrimSpace(entry.Source), Provider: strings.TrimSpace(entry.Provider)})
 			continue
 		}
-		if isModelDisabled(m) {
-			trace = append(trace, AttemptLog{Model: m, Order: order, Outcome: "skipped", Reason: "model disabled by admin",
+		if routing.ModelDisabled(m) {
+			trace = append(trace, domain.AttemptLog{Model: m, Order: order, Outcome: "skipped", Reason: "model disabled by admin",
 				Source: strings.TrimSpace(entry.Source), Provider: strings.TrimSpace(entry.Provider)})
 			continue
 		}
-		if getProxyConfig().OnlyFree {
+		if GetConfig().OnlyFree {
 			bare, _ := providers.SplitPin(m)
 			if !routing.ModelFreeOnlyEligible(bare) {
-				trace = append(trace, AttemptLog{Model: m, Order: order, Outcome: "skipped",
+				trace = append(trace, domain.AttemptLog{Model: m, Order: order, Outcome: "skipped",
 					Reason: fmt.Sprintf("not eligible under onlyFree (access class: %s)", routing.ModelRouteAccess(bare).Class),
 					Source: strings.TrimSpace(entry.Source), Provider: strings.TrimSpace(entry.Provider)})
 				continue
@@ -827,22 +873,22 @@ func runCombo(params map[string]any, combo ModelCombo, stream bool, sessionID st
 		tried[key] = true
 
 		start := time.Now()
-		resp, acc, upstream, provName, err := callSingleModel(params, entry, stream, sessionID)
+		resp, acc, upstream, provName, err := CallSingleModel(params, entry, stream, sessionID)
 		elapsed := time.Since(start).Milliseconds()
 		// 上下文超限（400 + context-length error）：整条组合还没截断过时截断一次并
-		// 重试**当前**条目。模型不是 zen 时用零值 Model 兜底 —— fallbackTruncate /
-		// maybeCompact 的零值默认（200k+封顶）仍会给出合理预算。
-		if err != nil && isContextLengthError(err) && !truncatedForRun {
+		// 重试**当前**条目。模型不是 zen 时用零值 Model 兜底 —— FallbackTruncate /
+		// MaybeCompact 的零值默认（200k+封顶）仍会给出合理预算。
+		if err != nil && compaction.IsContextLengthError(err) && !truncatedForRun {
 			truncatedForRun = true
 			log.Printf("  combo %q: entry %d %q context length exceeded, truncating and retrying", combo.ID, order, m)
-			if out := fallbackTruncate(params, modelForCompaction(m)); out.changed {
-				log.Printf("  combo %s", out.note)
+			if out := compaction.FallbackTruncate(params, compaction.ModelForCompaction(m)); out.Changed {
+				log.Printf("  combo %s", out.Note)
 				start = time.Now()
-				resp, acc, upstream, provName, err = callSingleModel(params, entry, stream, sessionID)
+				resp, acc, upstream, provName, err = CallSingleModel(params, entry, stream, sessionID)
 				elapsed = time.Since(start).Milliseconds()
 			}
 			// 截断后（或截断未生效）仍报上下文超限：按可重试错误继续下一个条目，
-			// 不让 400 经 comboRetryable 判为永久错误而中止整条组合。
+			// 不让 400 经 Retryable 判为永久错误而中止整条组合。
 		}
 		if err == nil {
 			params["model"] = m
@@ -854,39 +900,39 @@ func runCombo(params map[string]any, combo ModelCombo, stream bool, sessionID st
 				delete(params, providerNameParam)
 				delete(params, providers.ProviderIDParam)
 			}
-			trace = append(trace, AttemptLog{
+			trace = append(trace, domain.AttemptLog{
 				Model: m, Order: order, Upstream: upstream, Outcome: "success", DurationMs: elapsed,
 				Source: strings.TrimSpace(entry.Source), Provider: strings.TrimSpace(entry.Provider),
 				ProviderName: provName,
 			})
-			return comboRun{Resp: resp, Acc: acc, Upstream: upstream, Model: m, Trace: trace}
+			return Run{Resp: resp, Acc: acc, Upstream: upstream, Model: m, Trace: trace}
 		}
 
 		failed++
 		lastErr = err
-		trace = append(trace, AttemptLog{
-			Model: m, Order: order, Upstream: upstream, Status: attemptStatus(err),
-			Outcome: "failed", Reason: truncate(err.Error(), 200), DurationMs: elapsed,
+		trace = append(trace, domain.AttemptLog{
+			Model: m, Order: order, Upstream: upstream, Status: AttemptStatus(err),
+			Outcome: "failed", Reason: platform.Truncate(err.Error(), 200), DurationMs: elapsed,
 			Source: strings.TrimSpace(entry.Source), Provider: strings.TrimSpace(entry.Provider),
 			ProviderName: provName,
 		})
 		log.Printf("  combo %q: entry %d %q failed (%v)", combo.ID, order, m, err)
 
-		if isContextLengthError(err) {
-			// 上下文超限：即便 HTTP 400（comboRetryable 判为永久）也继续换下一个条目。
+		if compaction.IsContextLengthError(err) {
+			// 上下文超限：即便 HTTP 400（Retryable 判为永久）也继续换下一个条目。
 			continue
 		}
-		if !comboRetryable(err) {
+		if !Retryable(err) {
 			// 永久性错误（400/401/403 等）：继续换模型没有意义，直接失败。
-			return comboRun{Trace: trace, Err: err}
+			return Run{Trace: trace, Err: err}
 		}
 	}
 
 	// 默认：组合只走自己的序列，不触发全局回退。
 	if combo.EmergencyFallback {
 		log.Printf("  combo %q: all entries failed, emergency fallback (opt-in) to free chain", combo.ID)
-		fp := withModel(params, "free")
-		if resp, acc, err := callFreeClineAPI(fp, stream); err == nil {
+		fp := WithModel(params, "free")
+		if resp, acc, err := CallFreeClineAPI(fp, stream); err == nil {
 			fm, _ := fp["model"].(string)
 			if fm == "" {
 				fm = "free"
@@ -904,28 +950,28 @@ func runCombo(params map[string]any, combo ModelCombo, stream bool, sessionID st
 				delete(params, providerNameParam)
 				delete(params, providers.ProviderIDParam)
 			}
-			trace = append(trace, AttemptLog{
+			trace = append(trace, domain.AttemptLog{
 				Model: fm, Order: -1, Upstream: zen.UpstreamCline, Outcome: "success",
 				Reason: "emergency fallback outside combo (opt-in)",
 			})
-			return comboRun{Resp: resp, Acc: acc, Upstream: zen.UpstreamCline, Model: fm, Trace: trace}
+			return Run{Resp: resp, Acc: acc, Upstream: zen.UpstreamCline, Model: fm, Trace: trace}
 		} else {
 			lastErr = err
-			trace = append(trace, AttemptLog{
+			trace = append(trace, domain.AttemptLog{
 				Model: "free", Order: -1, Upstream: zen.UpstreamCline, Outcome: "failed",
-				Reason: truncate(err.Error(), 200), Status: attemptStatus(err),
+				Reason: platform.Truncate(err.Error(), 200), Status: AttemptStatus(err),
 			})
 		}
 	}
 
 	if lastErr == nil {
-		lastErr = &freeModelUnavailableError{message: fmt.Sprintf("combo %q has no eligible entries", combo.ID)}
+		lastErr = NewUnavailableError(fmt.Sprintf("combo %q has no eligible entries", combo.ID))
 	}
-	return comboRun{Trace: trace, Err: lastErr}
+	return Run{Trace: trace, Err: lastErr}
 }
 
-// applyComboLog 把组合运行轨迹写入请求日志（保持 Model 语义为实际服务模型）。
-func applyComboLog(reqLog *RequestLog, combo ModelCombo, trace []AttemptLog, servedModel string) {
+// ApplyLog 把组合运行轨迹写入请求日志（保持 Model 语义为实际服务模型）。
+func ApplyLog(reqLog *domain.RequestLog, combo domain.ModelCombo, trace []domain.AttemptLog, servedModel string) {
 	reqLog.RequestedModel = combo.ID
 	reqLog.ComboID = combo.ID
 	reqLog.ComboName = combo.Name
@@ -943,13 +989,13 @@ func applyComboLog(reqLog *RequestLog, combo ModelCombo, trace []AttemptLog, ser
 	}
 }
 
-// applyComboTrace 把组合运行结果写入请求日志。
-func applyComboTrace(reqLog *RequestLog, combo ModelCombo, run comboRun) {
-	applyComboLog(reqLog, combo, run.Trace, run.Model)
+// ApplyTrace 把组合运行结果写入请求日志。
+func ApplyTrace(reqLog *domain.RequestLog, combo domain.ModelCombo, run Run) {
+	ApplyLog(reqLog, combo, run.Trace, run.Model)
 }
 
-// comboTraceSummary 生成简洁的失败说明（用于最终错误信息）。
-func comboTraceSummary(combo ModelCombo, run comboRun) string {
+// TraceSummary 生成简洁的失败说明（用于最终错误信息）。
+func TraceSummary(combo domain.ModelCombo, run Run) string {
 	var attempted []string
 	for _, a := range run.Trace {
 		if a.Outcome == "success" {
@@ -972,9 +1018,9 @@ func comboTraceSummary(combo ModelCombo, run comboRun) string {
 // 管理 API
 // ============================================================================
 
-// combosCatalog 返回组合条目可引用的模型目录（供管理页选择器使用）。
-func combosCatalog() []map[string]any {
-	models := getAllModels()
+// Catalog 返回组合条目可引用的模型目录（供管理页选择器使用）。
+func Catalog() []map[string]any {
+	models := routing.ModelsProvider()
 	out := make([]map[string]any, 0, len(models))
 	for _, m := range models {
 		cost := m.Cost
@@ -991,29 +1037,4 @@ func combosCatalog() []map[string]any {
 		})
 	}
 	return out
-}
-
-// GET /admin/api/combos
-func handleCombosList(w http.ResponseWriter, r *http.Request) {
-	adminCombos.List(w, r)
-}
-
-// POST /admin/api/combos/save  body: ModelCombo
-func handleComboSave(w http.ResponseWriter, r *http.Request) {
-	adminCombos.Save(w, r)
-}
-
-// POST /admin/api/combos/delete  body: {id}
-func handleComboDelete(w http.ResponseWriter, r *http.Request) {
-	adminCombos.Delete(w, r)
-}
-
-// POST /admin/api/combos/toggle  body: {id, enabled}
-func handleComboToggle(w http.ResponseWriter, r *http.Request) {
-	adminCombos.Toggle(w, r)
-}
-
-// POST /admin/api/combos/clone  body: {id}
-func handleComboClone(w http.ResponseWriter, r *http.Request) {
-	adminCombos.Clone(w, r)
 }

@@ -1,6 +1,8 @@
 package main
 
 import (
+	"cline-go-proxy/internal/combos"
+	"cline-go-proxy/internal/compaction"
 	"cline-go-proxy/internal/routing"
 	"cline-go-proxy/internal/zen"
 	"context"
@@ -274,7 +276,7 @@ func handleResponses(w http.ResponseWriter, r *http.Request) {
 	// 模型组合：在普通路由之前分流（组合 ID 不是真实上游模型）。按配置顺序回退，
 	// 默认不触发全局 ModelChain / free 链；流式在连接级（尚未向客户端写字节）可
 	// 回退，建流后若上游空流则补发 in-band 错误，不再伪装成 response.completed。
-	if combo, ok := findCombo(chatModel); ok {
+	if combo, ok := combos.FindCombo(chatModel); ok {
 		if !combo.Enabled {
 			msg := fmt.Sprintf("model combo %q is disabled", chatModel)
 			requestlog.Finalize(&reqLog, tokenUsage{}, time.Time{}, reqLog.StartedAt, false, msg)
@@ -284,8 +286,8 @@ func handleResponses(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		reqLog.ToolNames = clampParamsToolNames(chat)
-		run := runCombo(chat, combo, isStream, requestSessionID(chat, r.Header))
-		applyComboTrace(&reqLog, combo, run)
+		run := combos.RunCombo(chat, combo, isStream, compaction.RequestSessionID(chat, r.Header))
+		combos.ApplyTrace(&reqLog, combo, run)
 		stampUpstream(&reqLog, chat)
 		if run.Acc != nil {
 			reqLog.AccountID = run.Acc.AccountID
@@ -293,7 +295,7 @@ func handleResponses(w http.ResponseWriter, r *http.Request) {
 		}
 		if run.Err != nil {
 			log.Printf("  responses combo %q error: %v", combo.ID, run.Err)
-			msg := comboTraceSummary(combo, run)
+			msg := combos.TraceSummary(combo, run)
 			requestlog.Finalize(&reqLog, tokenUsage{}, time.Time{}, reqLog.StartedAt, false, msg)
 			writeJSON(w, clineErrorHTTPStatus(run.Err), map[string]any{
 				"error": map[string]string{"message": msg, "type": "api_error"},
@@ -336,9 +338,9 @@ func handleResponses(w http.ResponseWriter, r *http.Request) {
 	case "zen":
 		reqLog.Upstream = zen.UpstreamOpenCode
 		zm, _ := zen.ResolveInfo(chatModel)
-		out := maybeCompact(chat, zm, requestSessionID(chat, r.Header))
-		if out.changed {
-			log.Printf("  responses %s", out.note)
+		out := compaction.MaybeCompact(chat, zm, compaction.RequestSessionID(chat, r.Header))
+		if out.Changed {
+			log.Printf("  responses %s", out.Note)
 		}
 		upResp, err := zen.Call(chat, isStream)
 		if err != nil {
@@ -428,13 +430,13 @@ func handleResponses(w http.ResponseWriter, r *http.Request) {
 	default: // cline
 		// Cline 通道：截短超长工具名并记录映射，回程由响应处理器还原（Meta 后端硬限 ≤64）
 		// 主动压缩对 cline/provider 路由同样生效。
-		zm := modelForCompaction(chatModel)
-		compactForRequest(chat, zm, requestSessionID(chat, r.Header), "responses")
+		zm := compaction.ModelForCompaction(chatModel)
+		compaction.CompactForRequest(chat, zm, compaction.RequestSessionID(chat, r.Header), "responses")
 		reqLog.ToolNames = clampParamsToolNames(chat)
 		upResp, acc, err := callClineAPI(chat, isStream)
-		if err != nil && isContextLengthError(err) {
-			if out := fallbackTruncate(chat, zm); out.changed {
-				log.Printf("  responses %s", out.note)
+		if err != nil && compaction.IsContextLengthError(err) {
+			if out := compaction.FallbackTruncate(chat, zm); out.Changed {
+				log.Printf("  responses %s", out.Note)
 				upResp, acc, err = callClineAPI(chat, isStream)
 			}
 		}

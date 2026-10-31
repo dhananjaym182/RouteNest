@@ -6,6 +6,7 @@ import (
 
 	"cline-go-proxy/internal/accounts"
 	"cline-go-proxy/internal/buildinfo"
+	"cline-go-proxy/internal/combos"
 	"cline-go-proxy/internal/connections"
 	"cline-go-proxy/internal/egress"
 	"cline-go-proxy/internal/providers"
@@ -26,7 +27,7 @@ func init() {
 	zen.IsModelGoneError = routing.IsModelGoneError
 	zen.MarkModelGone = routing.MarkModelGone
 	routing.ConfigProvider = getProxyConfig
-	routing.FindCombo = findCombo
+	routing.FindCombo = combos.FindCombo
 	routing.ModelsProvider = getAllModels
 	routing.ModelDisabled = isModelDisabled
 
