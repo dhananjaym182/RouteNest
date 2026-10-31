@@ -10,14 +10,12 @@ import (
 	"log"
 	"net"
 	"net/http"
-	"os"
 	"os/exec"
 	"routenest/internal/routing"
 	"routenest/internal/zen"
 	"strconv"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"routenest/internal/accounts"
@@ -402,7 +400,7 @@ func Start(host string, port int, registerAdmin func(*http.ServeMux)) error {
 		}
 
 		// Override system prompt from override.md for OpenAI format
-		if override := loadOverrideContent(); override != "" {
+		if override := config.OverrideContent(); override != "" {
 			if msgs, ok := params["messages"].([]any); ok {
 				found := false
 				for _, m := range msgs {
@@ -720,6 +718,12 @@ func restoreToolCallsInResponse(obj map[string]any, shortToOrig map[string]strin
 func sanitizeMessages(messages []any) []any {
 	return openaichat.SanitizeMessages(messages)
 }
+
+// AnthropicReq is the Anthropic Messages request body. The type lives in
+// protocol/anthropic; the alias keeps the proxycore call sites unchanged.
+type AnthropicReq = anthropicconv.MessagesRequest
+
+type anthropicMsg = anthropicconv.MessagesMessage
 
 // genToolUseID returns a fallback tool_use block id.
 func genToolUseID() string {
@@ -1062,50 +1066,6 @@ func handleNonStreamResponse(w http.ResponseWriter, upstream *http.Response, acc
 }
 
 // Anthropic Messages API support
-type anthropicMsg struct {
-	Role    string `json:"role"`
-	Content any    `json:"content"`
-}
-
-type AnthropicReq struct {
-	Model             string          `json:"model"`
-	MaxTokens         int             `json:"max_tokens"`
-	Messages          []anthropicMsg  `json:"messages"`
-	System            json.RawMessage `json:"system,omitempty"`
-	Stream            bool            `json:"stream,omitempty"`
-	Temperature       float64         `json:"temperature,omitempty"`
-	TopP              float64         `json:"top_p,omitempty"`
-	TopK              int             `json:"top_k,omitempty"`
-	Stop              json.RawMessage `json:"stop_sequences,omitempty"`
-	Thinking          json.RawMessage `json:"thinking,omitempty"`
-	Tools             json.RawMessage `json:"tools,omitempty"`
-	ToolChoice        json.RawMessage `json:"tool_choice,omitempty"`
-	Metadata          json.RawMessage `json:"metadata,omitempty"`
-	ContextManagement json.RawMessage `json:"context_management,omitempty"`
-	Extra             map[string]any  `json:"-"`
-}
-
-func loadOverrideContent() string {
-	data, err := os.ReadFile("override.md")
-	if err != nil {
-		// 每个请求都会调用本函数；“文件不存在”只在首次打印一次，避免刷屏
-		if overrideMissLogged.CompareAndSwap(false, true) {
-			log.Printf("  override.md not found: %v", err)
-		}
-		return ""
-	}
-	overrideMissLogged.Store(false) // 文件出现了，重新允许日后删除时再提示一次
-	content := strings.TrimSpace(string(data))
-	if content != "" {
-		log.Printf("  using override.md as system prompt (%d bytes)", len(content))
-	} else {
-		log.Printf("  override.md is empty")
-	}
-	return content
-}
-
-// overrideMissLogged override.md 缺失日志的去重标记（详见 loadOverrideContent）。
-var overrideMissLogged atomic.Bool
 
 func extractStringContent(raw json.RawMessage) string {
 	return anthropicconv.ExtractStringContent(raw)
@@ -1115,21 +1075,10 @@ func AnthropicToolsToOpenAI(tools []any) []any {
 	return anthropicconv.ToolsToOpenAI(tools)
 }
 
+// AnthropicToOpenAI converts an Anthropic Messages request to OpenAI form, using
+// the same options as the compaction path (see compaction.AnthropicOptions).
 func AnthropicToOpenAI(req AnthropicReq) map[string]any {
-	msgs := make([]anthropicconv.Message, 0, len(req.Messages))
-	for _, m := range req.Messages {
-		msgs = append(msgs, anthropicconv.Message{Role: m.Role, Content: m.Content})
-	}
-	return anthropicconv.ToOpenAI(anthropicconv.Request{
-		Model: req.Model, MaxTokens: req.MaxTokens, Stream: req.Stream,
-		Temperature: req.Temperature, TopP: req.TopP, System: req.System,
-		Messages: msgs, Tools: req.Tools, ToolChoice: req.ToolChoice, Thinking: req.Thinking,
-	}, anthropicconv.Options{
-		SystemOverride:  loadOverrideContent(),
-		ReasoningEffort: routing.ReasoningEffort(),
-		NewToolUseID:    genToolUseID,
-		Logf:            log.Printf,
-	})
+	return anthropicconv.MessagesToOpenAI(req, compaction.AnthropicOptions())
 }
 
 func openAIToAnthropic(openAI map[string]any) map[string]any {

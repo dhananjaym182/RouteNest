@@ -4,7 +4,6 @@ package app
 
 import (
 	"context"
-	"encoding/json"
 	"net/http"
 	"strings"
 	"sync"
@@ -12,7 +11,6 @@ import (
 	"routenest/internal/accounts"
 	"routenest/internal/buildinfo"
 	"routenest/internal/combos"
-	"routenest/internal/compaction"
 	"routenest/internal/config"
 	"routenest/internal/connections"
 	"routenest/internal/domain"
@@ -56,14 +54,6 @@ func configure() {
 	combos.SetModelCooldown = routing.SetModelCooldown
 	combos.CallFreeClineAPI = func(params map[string]any, stream bool) (*http.Response, *domain.Account, error) {
 		return routing.CallFreeClineAPI(params, stream)
-	}
-
-	compaction.AnthropicToOpenAI = func(body []byte) (map[string]any, error) {
-		var req proxycore.AnthropicReq
-		if err := json.Unmarshal(body, &req); err != nil {
-			return nil, err
-		}
-		return proxycore.AnthropicToOpenAI(req), nil
 	}
 
 	egress.ConfigProvider = config.Live

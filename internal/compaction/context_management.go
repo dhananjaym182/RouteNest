@@ -24,22 +24,9 @@ import (
 	"routenest/internal/dispatch"
 	"routenest/internal/domain"
 	"routenest/internal/httpx"
-	anthropicconv "routenest/internal/protocol/anthropic"
 	"routenest/internal/zen"
 	"strings"
 )
-
-// AnthropicToOpenAI converts a raw Anthropic Messages request body to OpenAI
-// chat params. Root composition wires the full converter (system override,
-// reasoning effort, tool-id generation); the default uses the internal
-// protocol converter.
-var AnthropicToOpenAI = func(body []byte) (map[string]any, error) {
-	var req anthropicconv.Request
-	if err := json.Unmarshal(body, &req); err != nil {
-		return nil, err
-	}
-	return anthropicconv.ToOpenAI(req, anthropicconv.Options{}), nil
-}
 
 // ---------- Types ----------
 
