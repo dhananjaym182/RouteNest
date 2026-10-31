@@ -226,3 +226,10 @@ func OpenCodeUsageToday() map[string]any {
 		"totalTokens":  total,
 	}
 }
+
+// Snapshot returns a copy of the in-memory request logs, newest first.
+func Snapshot() []domain.RequestLog {
+	Mu.Lock()
+	defer Mu.Unlock()
+	return append([]domain.RequestLog(nil), Logs...)
+}

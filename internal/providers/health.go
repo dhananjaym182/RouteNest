@@ -1,6 +1,7 @@
 package providers
 
 import (
+	"routenest/internal/domain"
 	"sort"
 	"strings"
 	"time"
@@ -178,13 +179,13 @@ func providerHealthSnapshot() map[string]*providerHealth {
 }
 
 // accountRecentOutcomes 从请求日志提取每个账号最近 N 次成败（时间升序）。
-func accountRecentOutcomes() map[string][]int {
+func accountRecentOutcomes(logs []domain.RequestLog) map[string][]int {
 	result := map[string][]int{}
 	type acc struct {
 		items []int
 	}
 	counts := map[string]*acc{}
-	for _, e := range RequestLogsSnapshot() { // 新→旧
+	for _, e := range logs { // 新→旧
 		if e.AccountID == "" {
 			continue
 		}

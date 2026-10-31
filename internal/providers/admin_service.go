@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"routenest/internal/connections"
+	"routenest/internal/domain"
 	"routenest/internal/platform"
 	"routenest/internal/protocol/openaichat"
 	"routenest/internal/providerreg"
@@ -31,17 +32,18 @@ type Overview struct {
 
 // ProviderOverview returns the saved providers with their health and recent
 // account outcomes.
-func ProviderOverview() Overview {
+// logs is the request-log snapshot the caller provides; account health is derived from it.
+func ProviderOverview(logs []domain.RequestLog) Overview {
 	return Overview{
 		Providers:     List(),
 		Health:        providerHealthSnapshot(),
-		AccountHealth: accountRecentOutcomes(),
+		AccountHealth: accountRecentOutcomes(logs),
 	}
 }
 
 // AccountOutcomes returns recent success and failure history per account.
-func AccountOutcomes() map[string][]int {
-	return accountRecentOutcomes()
+func AccountOutcomes(logs []domain.RequestLog) map[string][]int {
+	return accountRecentOutcomes(logs)
 }
 
 // SaveCustomProvider normalises and validates p, stores it, and refreshes the

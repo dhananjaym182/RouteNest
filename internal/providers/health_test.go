@@ -85,17 +85,13 @@ func TestProviderHealthSnapshot(t *testing.T) {
 }
 
 func TestAccountRecentOutcomes(t *testing.T) {
-	oldSnapshot := RequestLogsSnapshot
 	logs := []RequestLog{
 		{ID: "3", AccountID: "acc1", StartedAt: time.Now(), Completed: true},
 		{ID: "2", AccountID: "acc1", StartedAt: time.Now().Add(-time.Minute), Completed: false, Error: "x"},
 		{ID: "1", AccountID: "acc1", StartedAt: time.Now().Add(-2 * time.Minute), Completed: true},
 		{ID: "0", AccountID: "", StartedAt: time.Now()},
 	}
-	RequestLogsSnapshot = func() []RequestLog { return logs }
-	t.Cleanup(func() { RequestLogsSnapshot = oldSnapshot })
-
-	got := accountRecentOutcomes()
+	got := accountRecentOutcomes(logs)
 	acc := got["acc1"]
 	if len(acc) != 3 || acc[0] != 1 || acc[1] != 0 || acc[2] != 1 {
 		t.Fatalf("acc1 outcomes = %v, want ascending [1 0 1]", acc)
@@ -150,7 +146,7 @@ func TestProviderCooldownResetAndListPayload(t *testing.T) {
 	}
 
 	// 列表视图带 health 字段
-	ov := ProviderOverview()
+	ov := ProviderOverview(nil)
 	if len(ov.Providers) != 1 {
 		t.Fatalf("providers = %d, want 1", len(ov.Providers))
 	}

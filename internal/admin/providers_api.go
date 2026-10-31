@@ -14,11 +14,12 @@ import (
 	"routenest/internal/i18n"
 	"routenest/internal/providerreg"
 	"routenest/internal/providers"
+	"routenest/internal/requestlog"
 )
 
 // GET /admin/api/providers
 func handleProvidersList(w http.ResponseWriter, r *http.Request) {
-	ov := providers.ProviderOverview()
+	ov := providers.ProviderOverview(requestlog.Snapshot())
 	httpx.WriteAPI(w, http.StatusOK, httpx.Response{Success: true, Data: map[string]any{
 		"providers":     ov.Providers,
 		"health":        ov.Health,
@@ -143,7 +144,7 @@ func handleAccountHealth(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteAPI(w, http.StatusMethodNotAllowed, httpx.Response{Error: i18n.TAPI(r, "method_not_allowed")})
 		return
 	}
-	httpx.WriteAPI(w, http.StatusOK, httpx.Response{Success: true, Data: map[string]any{"accounts": providers.AccountOutcomes()}})
+	httpx.WriteAPI(w, http.StatusOK, httpx.Response{Success: true, Data: map[string]any{"accounts": providers.AccountOutcomes(requestlog.Snapshot())}})
 }
 
 // POST /admin/api/providers/cooldown-reset  body: {id, model?}

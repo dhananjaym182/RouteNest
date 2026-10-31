@@ -33,8 +33,6 @@ var (
 		return openaicompat.BodyOptions{}
 	}
 	ConfigProvider = config.DefaultProxy
-
-	RequestLogsSnapshot = func() []RequestLog { return nil }
 )
 
 var freeIDs = func() *atomic.Value {

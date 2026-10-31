@@ -89,11 +89,6 @@ func configure() {
 	providers.BodyOptionsProvider = bodyOptionsProvider
 	zen.BodyOptionsProvider = bodyOptionsProvider
 	providers.ConfigProvider = config.Live
-	providers.RequestLogsSnapshot = func() []domain.RequestLog {
-		requestlog.Mu.Lock()
-		defer requestlog.Mu.Unlock()
-		return append([]domain.RequestLog(nil), requestlog.Logs...)
-	}
 	freeIDs := make([]string, 0, len(zen.SeedModels)*2)
 	for _, seed := range zen.SeedModels {
 		freeIDs = append(freeIDs, strings.ToLower(seed.ID))
