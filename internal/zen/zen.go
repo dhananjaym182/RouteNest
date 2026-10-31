@@ -14,7 +14,6 @@ import (
 	"sync"
 	"time"
 
-	"routenest/internal/accounts"
 	"routenest/internal/config"
 	"routenest/internal/dispatch"
 	"routenest/internal/domain"
@@ -176,17 +175,9 @@ func IsSource(m Model) bool {
 // CurrentModels 返回当前生效的 zen 模型（pool 中 zen 来源条目；
 // 从未同步成功时回退到种子表）。
 func CurrentModels() []Model {
-	p := accounts.LoadPool()
-	accounts.PoolMu.Lock()
-	var zen []Model
-	for _, m := range p.Models {
-		if IsSource(m) {
-			zen = append(zen, m)
-		}
-	}
-	accounts.PoolMu.Unlock()
-	if len(zen) > 0 || RemoteActive() {
-		return zen
+	zenOwned := models.Where(IsSource)
+	if len(zenOwned) > 0 || RemoteActive() {
+		return zenOwned
 	}
 	return BuiltinModels()
 }
@@ -260,15 +251,10 @@ func RouteModel(id string) string {
 		return "reject"
 	}
 	// 极端情况：同名 ID 同时是 cline 模型（自定义冲突）→ 让给 cline
-	p := accounts.LoadPool()
-	accounts.PoolMu.Lock()
-	for _, pm := range p.Models {
-		if !IsSource(pm) && pm.ID == strings.TrimPrefix(strings.TrimSpace(id), "opencode/") {
-			accounts.PoolMu.Unlock()
-			return "cline"
-		}
+	wanted := strings.TrimPrefix(strings.TrimSpace(id), "opencode/")
+	if _, clash := models.Find(func(pm Model) bool { return !IsSource(pm) && pm.ID == wanted }); clash {
+		return "cline"
 	}
-	accounts.PoolMu.Unlock()
 
 	cfg := GetConfig()
 	if cfg.Failover && FailedNow() {

@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"routenest/internal/accounts"
 	"routenest/internal/domain"
+	"routenest/internal/models"
 	"routenest/internal/routing"
 	"routenest/internal/zen"
 	"sort"
@@ -502,15 +502,9 @@ func ModelForCompaction(model string) domain.Model {
 	if zm, ok := zen.ResolveInfo(model); ok {
 		return zm
 	}
-	p := accounts.LoadPool()
-	accounts.PoolMu.Lock()
-	for _, m := range p.Models {
-		if m.ID == model {
-			accounts.PoolMu.Unlock()
-			return m
-		}
+	if m, ok := models.Find(func(m domain.Model) bool { return m.ID == model }); ok {
+		return m
 	}
-	accounts.PoolMu.Unlock()
 	if meta, ok := routing.LookupClineModelMeta(model); ok {
 		return domain.Model{ID: model, Context: meta.Context, Output: meta.Output}
 	}

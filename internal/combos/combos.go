@@ -32,6 +32,7 @@ import (
 	"routenest/internal/domain"
 	"routenest/internal/egress"
 	"routenest/internal/i18n"
+	"routenest/internal/models"
 	"routenest/internal/platform"
 	"routenest/internal/providers"
 	"routenest/internal/routing"
@@ -604,15 +605,8 @@ func RouteKind(model string) string {
 // （自定义冲突场景，zen.RouteModel 会把同名 zen 模型让给 cline）。
 func ClineModelWithIDExists(model string) bool {
 	id := strings.TrimPrefix(strings.TrimSpace(model), "opencode/")
-	p := accounts.LoadPool()
-	accounts.PoolMu.Lock()
-	defer accounts.PoolMu.Unlock()
-	for _, pm := range p.Models {
-		if !zen.IsSource(pm) && pm.ID == id {
-			return true
-		}
-	}
-	return false
+	_, ok := models.Find(func(pm domain.Model) bool { return !zen.IsSource(pm) && pm.ID == id })
+	return ok
 }
 
 // ClinePoolModelExists 判断模型是否真能由 Cline 账号池服务：排除 zen 与自定义
@@ -620,15 +614,10 @@ func ClineModelWithIDExists(model string) bool {
 // 走 Cline 会得到 400 "invalid model format"，进而被组合误判为永久失败。
 func ClinePoolModelExists(model string) bool {
 	id := strings.TrimPrefix(strings.TrimSpace(model), "opencode/")
-	p := accounts.LoadPool()
-	accounts.PoolMu.Lock()
-	defer accounts.PoolMu.Unlock()
-	for _, pm := range p.Models {
-		if !zen.IsSource(pm) && pm.Source != "provider" && pm.ID == id {
-			return true
-		}
-	}
-	return false
+	_, ok := models.Find(func(pm domain.Model) bool {
+		return !zen.IsSource(pm) && pm.Source != "provider" && pm.ID == id
+	})
+	return ok
 }
 
 // EntryRouteKind 在 RouteKind 之上叠加条目的上游固定（Source/Provider）。

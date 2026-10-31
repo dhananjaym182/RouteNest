@@ -18,6 +18,7 @@ import (
 	"routenest/internal/dispatch"
 	"routenest/internal/domain"
 	"routenest/internal/egress"
+	"routenest/internal/models"
 	"routenest/internal/platform"
 	"routenest/internal/protocol/openaichat"
 	"routenest/internal/providers"
@@ -286,15 +287,13 @@ func ModelMaxOutputLimit(model string) int {
 	if strings.TrimSpace(model) == "" {
 		return 0
 	}
-	p := accounts.LoadPool()
-	accounts.PoolMu.Lock()
-	defer accounts.PoolMu.Unlock()
-	for _, m := range p.Models {
-		if m.ID == model && !zen.IsSource(m) && m.Output > 0 {
-			return m.Output
-		}
+	m, ok := models.Find(func(m domain.Model) bool {
+		return m.ID == model && !zen.IsSource(m) && m.Output > 0
+	})
+	if !ok {
+		return 0
 	}
-	return 0
+	return m.Output
 }
 
 func BuildUpstreamBody(params map[string]any, stream bool) map[string]any {
@@ -625,19 +624,20 @@ func isFreeAliasModel(model string) bool {
 // 从未同步成功（离线）时回退内置常量链。
 func defaultFreeChain() []string {
 	remote := RemoteModelsActive()
-	p := accounts.LoadPool()
-	known := make(map[string]bool, len(p.Models))
+	known := map[string]bool{}
 	var remoteFree []string
-	for _, m := range p.Models {
-		known[m.ID] = true
-		if remote && m.Source == "remote" && m.Cost == "free" && m.Status == "active" {
-			remoteFree = append(remoteFree, m.ID)
+	// One locked pass collects the ids and the free classifications.
+	models.Read(func(list []domain.Model) {
+		for _, m := range list {
+			known[m.ID] = true
+			if remote && m.Source == "remote" && m.Cost == "free" && m.Status == "active" {
+				remoteFree = append(remoteFree, m.ID)
+			}
+			if m.Source == "provider" && m.Cost == "free" && m.Status == "active" && !m.Disabled {
+				remoteFree = append(remoteFree, m.ID)
+			}
 		}
-
-		if m.Source == "provider" && m.Cost == "free" && m.Status == "active" && !m.Disabled {
-			remoteFree = append(remoteFree, m.ID)
-		}
-	}
+	})
 	chain := make([]string, 0, len(remoteFree)+len(FreeModelChain))
 	seen := make(map[string]bool, len(remoteFree)+len(FreeModelChain))
 	for _, m := range remoteFree {
@@ -697,15 +697,8 @@ func IsModelDisabled(id string) bool {
 	if id == "" {
 		return false
 	}
-	p := accounts.LoadPool()
-	accounts.PoolMu.Lock()
-	defer accounts.PoolMu.Unlock()
-	for _, m := range p.Models {
-		if m.ID == id && m.Disabled {
-			return true
-		}
-	}
-	return false
+	_, disabled := models.Find(func(m domain.Model) bool { return m.ID == id && m.Disabled })
+	return disabled
 }
 
 // filterStaleModels 从回退链里剔除已下架的模型。

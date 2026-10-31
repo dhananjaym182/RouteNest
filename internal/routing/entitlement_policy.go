@@ -2,10 +2,10 @@ package routing
 
 import (
 	"fmt"
+	"routenest/internal/models"
 	"routenest/internal/zen"
 	"strings"
 
-	"routenest/internal/accounts"
 	"routenest/internal/dispatch"
 	"routenest/internal/domain"
 )
@@ -19,16 +19,9 @@ func ModelRouteAccess(id string) dispatch.RouteAccess {
 		return dispatch.RouteAccess{Class: domain.AccessUnknown}
 	}
 	bare := strings.TrimPrefix(id, "opencode/")
-	p := accounts.LoadPool()
-	accounts.PoolMu.Lock()
-	for _, m := range p.Models {
-		if m.ID == bare {
-			class := dispatch.ModelAccessClass(m.Cost, m.TierSignal, m.Source)
-			accounts.PoolMu.Unlock()
-			return dispatch.RouteAccess{Class: class}
-		}
+	if m, ok := models.Find(func(m domain.Model) bool { return m.ID == bare }); ok {
+		return dispatch.RouteAccess{Class: dispatch.ModelAccessClass(m.Cost, m.TierSignal, m.Source)}
 	}
-	accounts.PoolMu.Unlock()
 	if zm, ok := zen.ResolveInfo(id); ok {
 		return dispatch.RouteAccess{Class: dispatch.ModelAccessClass(zm.Cost, zm.TierSignal, zm.Source)}
 	}
