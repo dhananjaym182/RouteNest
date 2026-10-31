@@ -1,4 +1,4 @@
-package main
+package integration
 
 // 本地测试（按仓库策略 *_test.go 不提交）：EP1 provider 未保存测试 / EP2 模型发现
 // / EP3 单模型测试 / EP4 组合测试。全部走假 transport，不触网。

@@ -1,4 +1,4 @@
-package main
+package integration
 
 // 组合条目的上游固定（provider-pinned combo entries）测试。
 // 覆盖：combos.EntryRouteKind 各 Source 取值（含空=自动）、固定 provider 时命中指定上游、

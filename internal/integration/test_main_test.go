@@ -1,6 +1,7 @@
-package main
+package integration
 
 import (
+	_ "cline-go-proxy/internal/app"
 	"os"
 	"path/filepath"
 	"testing"

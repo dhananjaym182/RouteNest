@@ -1,12 +1,14 @@
 # Contributing
 
-This repository is a `package main` composition layer plus `internal/`
-packages. Keep the dependency direction:
+The repository root contains only the CLI and desktop entry points. Service
+composition lives in `internal/app`; implementation lives under `internal/`.
+Keep the dependency direction:
 
 ```
 platform -> domain -> config -> transport / httpx / i18n -> store/*
   -> providerreg / upstream/* / protocol/* / deviceflow
-  -> modelcatalog -> dispatch -> httpapi / adminapi -> root main
+  -> modelcatalog -> dispatch -> routing / providers / zen / egress
+  -> compaction / combos -> proxycore / admin -> app -> entry points
 ```
 
 Rule of thumb: stores persist state and never call upstream APIs; device flows

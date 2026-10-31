@@ -1,4 +1,4 @@
-package main
+package integration
 
 import (
 	"encoding/json"
@@ -40,7 +40,7 @@ func usePoolPath(t *testing.T, path string) {
 // 无论工作目录/exe 目录是否存在同名文件，数据一律落到该目录，且目录自动创建。
 func TestResolveDataPathEnvOverride(t *testing.T) {
 	dir := t.TempDir()
-	t.Setenv(dataDirEnv, dir)
+	t.Setenv(platform.DataDirEnv, dir)
 
 	// 工作目录里故意放一个同名文件，验证 env 目录仍具有最高优先级
 	chdir(t, t.TempDir())
@@ -48,7 +48,7 @@ func TestResolveDataPathEnvOverride(t *testing.T) {
 		t.Fatalf("seed cwd file: %v", err)
 	}
 
-	got := resolveDataPath(".cline-accounts.json")
+	got := platform.ResolveDataPath(".cline-accounts.json", nil)
 	if want := filepath.Join(dir, ".cline-accounts.json"); got != want {
 		t.Fatalf("resolveDataPath = %q, want %q", got, want)
 	}
@@ -62,7 +62,7 @@ func TestResolveDataPathEnvOverride(t *testing.T) {
 // （cwd → exe → 主目录）只在编译出的正式二进制（testing.Testing()==false）
 // 中可达，行为由 TestResolveDataPathLegacyHeuristicOnBinary 手工在二进制上回归。
 func TestResolveDataPathIsolationUnderGoTest(t *testing.T) {
-	t.Setenv(dataDirEnv, "") // 显式置空，屏蔽运行环境中可能存在的同名变量
+	t.Setenv(platform.DataDirEnv, "") // 显式置空，屏蔽运行环境中可能存在的同名变量
 
 	const name = ".cline-test-fixture.json" // 不会被迁移逻辑使用的独立文件名
 	work := t.TempDir()
@@ -71,9 +71,9 @@ func TestResolveDataPathIsolationUnderGoTest(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(work, name), []byte("{}"), 0600); err != nil {
 		t.Fatalf("seed file: %v", err)
 	}
-	got := resolveDataPath(name)
-	if !strings.HasPrefix(got, testIsolatedDataDir()) {
-		t.Fatalf("go test: resolveDataPath = %q, want under isolated dir %q", got, testIsolatedDataDir())
+	got := platform.ResolveDataPath(name, nil)
+	if !strings.HasPrefix(got, platform.TestIsolatedDataDir()) {
+		t.Fatalf("go test: resolveDataPath = %q, want under isolated dir %q", got, platform.TestIsolatedDataDir())
 	}
 }
 
@@ -81,16 +81,14 @@ func TestResolveDataPathIsolationUnderGoTest(t *testing.T) {
 // 拷贝为目录下的新版 .routenest-* 文件名：仅当目标不存在时拷贝
 // （不覆盖已有新数据），且重复调用幂等。
 func TestMigrateLegacyDataFiles(t *testing.T) {
-	t.Setenv(dataDirEnv, "")
+	t.Setenv(platform.DataDirEnv, "")
 	work := t.TempDir()
 	chdir(t, work)
 	dir := filepath.Join(work, "data")
 
 	// 隔离旧目录探测：只把当前临时工作目录视为旧数据位置，
 	// 避免 exe 目录/主目录里的同名文件（如其他测试写出的默认配置）干扰断言。
-	origOverride := legacyDataDirsOverride
-	legacyDataDirsOverride = func() []string { return []string{work} }
-	t.Cleanup(func() { legacyDataDirsOverride = origOverride })
+	legacyDataDirsOverride := func() []string { return []string{work} }
 
 	// 旧版名字 → 迁移后的新数据目录内容
 	legacy := map[string]string{
@@ -103,7 +101,7 @@ func TestMigrateLegacyDataFiles(t *testing.T) {
 		}
 	}
 
-	migrateLegacyDataFiles(dir)
+	platform.MigrateLegacyDataFiles(dir, legacyDataDirsOverride)
 
 	for oldName, content := range legacy {
 		name := platform.CurrentDataFileName(oldName)
@@ -124,7 +122,7 @@ func TestMigrateLegacyDataFiles(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(work, ".cline-accounts.json"), []byte(`{"keys":["sk-older"],"accounts":[]}`), 0600); err != nil {
 		t.Fatalf("reseed legacy: %v", err)
 	}
-	migrateLegacyDataFiles(dir)
+	platform.MigrateLegacyDataFiles(dir, legacyDataDirsOverride)
 	data, err := os.ReadFile(existing)
 	if err != nil {
 		t.Fatalf("read destination: %v", err)
@@ -139,10 +137,10 @@ func TestWriteFileAtomic(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, ".cline-accounts.json")
 
-	if err := writeFileAtomic(path, []byte("v1"), 0600); err != nil {
+	if err := platform.WriteFileAtomic(path, []byte("v1"), 0600); err != nil {
 		t.Fatalf("first write: %v", err)
 	}
-	if err := writeFileAtomic(path, []byte("v2"), 0600); err != nil {
+	if err := platform.WriteFileAtomic(path, []byte("v2"), 0600); err != nil {
 		t.Fatalf("overwrite: %v", err)
 	}
 	data, err := os.ReadFile(path)
@@ -221,7 +219,7 @@ func TestPoolPersistenceRoundTrip(t *testing.T) {
 // （ROUTENEST_DATA_DIR 优先，旧的 CLINE2API_DATA_DIR 仍兜底）。
 func TestFindCredentialsFileEnv(t *testing.T) {
 	dir := t.TempDir()
-	t.Setenv(dataDirEnv, dir)
+	t.Setenv(platform.DataDirEnv, dir)
 	if got := accounts.FindCredentialsFile(); got != filepath.Join(dir, ".routenest-credentials.json") {
 		t.Fatalf("findCredentialsFile = %q, want %q", got, filepath.Join(dir, ".routenest-credentials.json"))
 	}

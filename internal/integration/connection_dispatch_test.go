@@ -1,4 +1,4 @@
-package main
+package integration
 
 // Dispatch-level integration tests for the connection pool. The store and
 // rotation primitives live in internal/connections; these tests exercise them
@@ -6,6 +6,7 @@ package main
 // in package main until the provider extraction.
 
 import (
+	"cline-go-proxy/internal/app"
 	"cline-go-proxy/internal/proxycore"
 	"net/http"
 	"net/http/httptest"
@@ -73,7 +74,7 @@ func TestCallProviderConnFailoverAndTag(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	recordUsage(nil, resp2, &rl, "x", usage)
+	app.RecordUsage(nil, resp2, &rl, "x", usage)
 	if rl.ConnectionID != c2.ID || rl.ConnectionEmail != "failover-b@x.io" {
 		t.Errorf("reqLog stamp = %+v", rl)
 	}
@@ -112,7 +113,7 @@ func TestCallProviderRotatesAcrossConnections(t *testing.T) {
 			t.Errorf("dispatch %d tagged %+v, want %s", i, tag, wantID)
 		}
 		rl := RequestLog{Model: "x"}
-		recordUsage(nil, resp, &rl, "x", proxycore.TokenUsage{Valid: true, Prompt: 1, Completion: 1, Total: 2})
+		app.RecordUsage(nil, resp, &rl, "x", proxycore.TokenUsage{Valid: true, Prompt: 1, Completion: 1, Total: 2})
 		resp.Body.Close()
 	}
 	mu.Lock()

@@ -1,9 +1,10 @@
-package main
+package integration
 
 import (
 	"cline-go-proxy/internal/accounts"
 	"cline-go-proxy/internal/admin"
 	"cline-go-proxy/internal/egress"
+	"cline-go-proxy/internal/platform"
 	"cline-go-proxy/internal/proxycore"
 	"context"
 	"encoding/json"
@@ -20,7 +21,7 @@ import (
 // context length must not abort the whole combo while later entries could
 // still serve the (truncated) request.
 func TestStreamAnthropicComboContinuesWhenEntryHitsContextLimit(t *testing.T) {
-	t.Setenv(dataDirEnv, t.TempDir())
+	t.Setenv(platform.DataDirEnv, t.TempDir())
 	oldPool := accounts.Pool
 	oldConfig := admin.GetProxyConfig()
 	oldTransport := egress.Client.Transport

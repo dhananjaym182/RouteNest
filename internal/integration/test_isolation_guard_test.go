@@ -1,6 +1,7 @@
-package main
+package integration
 
 import (
+	"cline-go-proxy/internal/platform"
 	"os"
 	"path/filepath"
 	"strings"
@@ -13,8 +14,8 @@ func TestResolveDataPathRedirectsUnderTest(t *testing.T) {
 	if !testing.Testing() {
 		t.Fatal("expected testing.Testing() == true under go test")
 	}
-	for _, name := range knownDataFiles {
-		p := resolveDataPath(name)
+	for _, name := range platform.KnownDataFiles() {
+		p := platform.ResolveDataPath(name, nil)
 		if !strings.HasPrefix(p, os.TempDir()) {
 			t.Errorf("%s resolved to %s, want under os.TempDir()", name, p)
 		}
@@ -23,7 +24,7 @@ func TestResolveDataPathRedirectsUnderTest(t *testing.T) {
 		}
 	}
 	// 数据目录所有文件共享同一个隔离目录（cache 生效）
-	if a, b := resolveDataPath(".cline-config.json"), resolveDataPath(".cline-accounts.json"); filepath.Dir(a) != filepath.Dir(b) {
+	if a, b := platform.ResolveDataPath(".cline-config.json", nil), platform.ResolveDataPath(".cline-accounts.json", nil); filepath.Dir(a) != filepath.Dir(b) {
 		t.Errorf("shared dir: %s vs %s", filepath.Dir(a), filepath.Dir(b))
 	}
 }

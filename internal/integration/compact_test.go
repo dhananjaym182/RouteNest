@@ -1,10 +1,11 @@
-package main
+package integration
 
 import (
 	"cline-go-proxy/internal/accounts"
 	"cline-go-proxy/internal/admin"
 	"cline-go-proxy/internal/compaction"
 	"cline-go-proxy/internal/egress"
+	"cline-go-proxy/internal/platform"
 	"cline-go-proxy/internal/zen"
 	"io"
 	"net/http"
@@ -17,7 +18,7 @@ import (
 // never works": zen returns 429, and the summary must still be produced through
 // the Cline free chain instead of silently degrading to truncation.
 func TestMaybeCompactFallsBackToClineSummary(t *testing.T) {
-	t.Setenv(dataDirEnv, t.TempDir())
+	t.Setenv(platform.DataDirEnv, t.TempDir())
 	resetZenTestState(t)
 
 	oldPool := accounts.Pool

@@ -4,6 +4,7 @@ package main
 
 import (
 	"cline-go-proxy/internal/accounts"
+	_ "cline-go-proxy/internal/app"
 	"cline-go-proxy/internal/proxycore"
 	"flag"
 	"fmt"

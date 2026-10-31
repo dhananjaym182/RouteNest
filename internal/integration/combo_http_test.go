@@ -1,4 +1,4 @@
-package main
+package integration
 
 // Phase 1 —— 模型组合的端到端（HTTP）与流式回归测试。
 // 覆盖：/v1/chat/completions 组合首个条目成功 / 可重试回退 / 停用组合拒绝；

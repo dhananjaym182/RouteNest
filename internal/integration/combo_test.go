@@ -1,4 +1,4 @@
-package main
+package integration
 
 // Phase 1 —— 具名模型组合 + 有序回退的测试。
 // 覆盖：校验、持久化、有序回退、可重试/永久错误分类、跳过停用条目、不触发全局
@@ -10,6 +10,7 @@ import (
 	"cline-go-proxy/internal/admin"
 	"cline-go-proxy/internal/combos"
 	"cline-go-proxy/internal/egress"
+	"cline-go-proxy/internal/platform"
 	"cline-go-proxy/internal/routing"
 	"cline-go-proxy/internal/zen"
 	"encoding/json"
@@ -42,7 +43,7 @@ func installPool(t *testing.T, models []Model, accs ...*Account) {
 
 func installConfig(t *testing.T, cfg *admin.ProxyConfig) {
 	t.Helper()
-	t.Setenv(dataDirEnv, t.TempDir()) // 配置落盘隔离到临时目录
+	t.Setenv(platform.DataDirEnv, t.TempDir()) // 配置落盘隔离到临时目录
 	old := admin.GetProxyConfig()
 	t.Cleanup(func() { admin.SetProxyConfig(old) })
 	admin.SetProxyConfig(cfg)
@@ -142,7 +143,7 @@ func TestComboValidate(t *testing.T) {
 
 func TestComboPersistenceAndReload(t *testing.T) {
 	installPool(t, []Model{{ID: "m-a", Cost: "free", Status: "active", Source: "remote"}})
-	t.Setenv(dataDirEnv, t.TempDir())
+	t.Setenv(platform.DataDirEnv, t.TempDir())
 	old := admin.GetProxyConfig()
 	t.Cleanup(func() { admin.SetProxyConfig(old) })
 
@@ -513,7 +514,7 @@ func TestComboDisabledResolution(t *testing.T) {
 
 func TestComboConcurrentConfigAccess(t *testing.T) {
 	installPool(t, []Model{{ID: "m-a", Cost: "free", Status: "active", Source: "remote"}})
-	t.Setenv(dataDirEnv, t.TempDir())
+	t.Setenv(platform.DataDirEnv, t.TempDir())
 	old := admin.GetProxyConfig()
 	t.Cleanup(func() { admin.SetProxyConfig(old) })
 
@@ -599,7 +600,7 @@ func TestComboValidateRejectsEnabledComboWithOnlyDisabledModel(t *testing.T) {
 // 回归 L5：对 64 字符 ID 执行克隆不得生成超长 ID 而被校验拒绝。
 func TestComboCloneTruncatesLongID(t *testing.T) {
 	installPool(t, []Model{{ID: "m-a", Cost: "free", Status: "active", Source: "remote"}})
-	t.Setenv(dataDirEnv, t.TempDir())
+	t.Setenv(platform.DataDirEnv, t.TempDir())
 	old := admin.GetProxyConfig()
 	t.Cleanup(func() { admin.SetProxyConfig(old) })
 
