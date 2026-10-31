@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"routenest/internal/admin"
 	"routenest/internal/combos"
+	"routenest/internal/config"
 	"routenest/internal/egress"
 	"routenest/internal/platform"
 	"routenest/internal/routing"
@@ -146,9 +147,9 @@ func TestComboPersistenceAndReload(t *testing.T) {
 	old := admin.GetProxyConfig()
 	t.Cleanup(func() { admin.SetProxyConfig(old) })
 
-	admin.ConfigMu.Lock()
-	admin.Config.Combos = nil
-	admin.ConfigMu.Unlock()
+	config.Mu.Lock()
+	config.Held().Combos = nil
+	config.Mu.Unlock()
 	admin.SaveProxyConfigLocked()
 
 	if _, err := combos.UpsertCombo(ModelCombo{ID: "c1", Name: "C1", Enabled: true, Entries: []ComboEntry{{Model: "m-a"}}}); err != nil {

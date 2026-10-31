@@ -46,15 +46,10 @@ func Configure() {
 }
 
 func configure() {
-	combos.ConfigMu = &admin.ConfigMu
-	combos.Config = func() *config.Proxy { return admin.Config }
+	combos.ConfigMu = &config.Mu
+	combos.Config = config.Held
 	combos.GetConfig = admin.GetProxyConfig
-	combos.EnsureConfig = func() *config.Proxy {
-		if admin.Config == nil {
-			admin.Config = admin.DefaultProxyConfig()
-		}
-		return admin.Config
-	}
+	combos.EnsureConfig = config.Held
 	combos.SaveConfig = admin.SaveProxyConfigLocked
 	combos.CallClineAPIWithAccount = func(ctx context.Context, acc *domain.Account, params map[string]any, stream bool) (*http.Response, *domain.Account, error) {
 		return routing.CallClineAPIWithAccountCtx(ctx, acc, params, stream)

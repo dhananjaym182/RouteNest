@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"routenest/internal/routing"
 	"routenest/internal/zen"
-	"sync"
 	"time"
 
 	"routenest/internal/accounts"
@@ -16,7 +15,6 @@ import (
 	"routenest/internal/egress"
 	"routenest/internal/httpx"
 	"routenest/internal/i18n"
-	"routenest/internal/platform"
 	"routenest/internal/proxycore"
 	"routenest/internal/requestlog"
 )
@@ -399,11 +397,6 @@ func handleAdminAccountTest(w http.ResponseWriter, r *http.Request) {
 }
 
 // Global proxy config (mutable via API, persisted to .routenest-config.json)
-var (
-	Config   = LoadProxyConfigFromDisk()
-	ConfigMu sync.Mutex
-)
-
 type ProxyConfig = config.Proxy
 
 // init 注入 accounts 包需要的根状态：代理配置读取器与 Cline 错误分类器
@@ -434,46 +427,29 @@ func DefaultProxyConfig() *ProxyConfig {
 	return config.DefaultProxy()
 }
 
-const proxyConfigPath = config.ProxyPath
-
-// LoadProxyConfigFromDisk 启动时加载持久化的代理配置（轮询策略/请求头），
-// 文件不存在或损坏时回退默认值（损坏文件改名备份，不静默覆盖）。
+// LoadProxyConfigFromDisk loads the persisted proxy configuration at startup.
 func LoadProxyConfigFromDisk() *ProxyConfig {
-	path := platform.ResolveDataPath(proxyConfigPath, nil)
-	cfg, err := config.LoadProxy(path)
-	if err != nil {
-		platform.BackupCorruptFile(path, err)
-	}
-	return cfg
+	return config.LoadLiveFromDisk()
 }
 
-// SaveProxyConfigLocked 落盘当前配置（调用方需持有 ConfigMu）。
+// SaveProxyConfigLocked persists the live configuration. The caller holds config.Mu.
 func SaveProxyConfigLocked() {
-	if err := config.SaveProxy(platform.ResolveDataPath(proxyConfigPath, nil), Config); err != nil {
-		log.Printf("proxy config save failed: %v", err)
-	}
+	config.SaveLocked()
 }
 
+// GetProxyConfig returns the live configuration. See config.Live.
 func GetProxyConfig() *ProxyConfig {
-	ConfigMu.Lock()
-	defer ConfigMu.Unlock()
-	return Config
+	return config.Live()
 }
 
-// SnapshotProxyConfig returns a deep copy of the live configuration, taken under
-// the config lock. Writers edit the copy and publish it with SetProxy, so they
-// never mutate the configuration that requests are reading.
+// SnapshotProxyConfig returns a private copy of the live configuration.
 func SnapshotProxyConfig() *ProxyConfig {
-	ConfigMu.Lock()
-	defer ConfigMu.Unlock()
-	return Config.Clone()
+	return config.Snapshot()
 }
 
+// SetProxyConfig publishes c as the live configuration and persists it.
 func SetProxyConfig(c *ProxyConfig) {
-	ConfigMu.Lock()
-	defer ConfigMu.Unlock()
-	Config = c
-	SaveProxyConfigLocked()
+	config.Publish(c)
 }
 
 // GET /admin/api/keys
