@@ -9,12 +9,39 @@ import (
 	"time"
 )
 
+// ComboCatalog is the read-only view of named combos that routing consults. The
+// combos package implements it and the composition root installs it, so routing
+// never imports combos.
+type ComboCatalog interface {
+	FindCombo(id string) (domain.ModelCombo, bool)
+	EnabledCombos() []domain.ModelCombo
+}
+
+type noCombos struct{}
+
+func (noCombos) FindCombo(string) (domain.ModelCombo, bool) { return domain.ModelCombo{}, false }
+func (noCombos) EnabledCombos() []domain.ModelCombo         { return nil }
+
+var comboCatalog ComboCatalog = noCombos{}
+
+// SetComboCatalog installs the combo source. A nil value restores the empty catalog.
+func SetComboCatalog(c ComboCatalog) {
+	if c == nil {
+		c = noCombos{}
+	}
+	comboCatalog = c
+}
+
+// HasComboCatalog reports whether a combo source has been installed.
+func HasComboCatalog() bool {
+	_, empty := comboCatalog.(noCombos)
+	return !empty
+}
+
 var (
-	ConfigProvider        = config.DefaultProxy
-	FindCombo             = func(string) (domain.ModelCombo, bool) { return domain.ModelCombo{}, false }
-	ModelsProvider        = func() []domain.Model { return nil }
-	ModelDisabled         = func(string) bool { return false }
-	EnabledCombosProvider = func() []domain.ModelCombo { return nil }
+	ConfigProvider = config.DefaultProxy
+	ModelsProvider = func() []domain.Model { return nil }
+	ModelDisabled  = func(string) bool { return false }
 )
 
 // Client-visible model policy: administrator aliases, wildcard exclusions, and
@@ -34,7 +61,7 @@ func ResolveClientModel(raw string) (resolved string, reject string) {
 	}
 	cfg := ConfigProvider()
 
-	if _, isCombo := FindCombo(id); !isCombo && id != "free" {
+	if _, isCombo := comboCatalog.FindCombo(id); !isCombo && id != "free" {
 		if alias, ok := cfg.AliasFor(id); ok && (alias.Force || !catalogHasModel(id)) {
 			target := alias.Target
 			bare, pin := providers.SplitPin(target)

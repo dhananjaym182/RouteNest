@@ -88,10 +88,9 @@ func configure() {
 	zen.IsModelGoneError = routing.IsModelGoneError
 	zen.MarkModelGone = routing.MarkModelGone
 	routing.ConfigProvider = admin.GetProxyConfig
-	routing.FindCombo = combos.FindCombo
 	routing.ModelsProvider = routing.AllModels
 	routing.ModelDisabled = routing.IsModelDisabled
-	routing.EnabledCombosProvider = combos.EnabledList
+	routing.SetComboCatalog(combos.RoutingCombos{})
 
 	buildinfo.HTTPClient = egress.Client
 	accounts.HTTPClient = egress.Client

@@ -32,16 +32,24 @@ func init() {
 	ModelsProvider = func() []domain.Model {
 		return accounts.LoadPool().Models
 	}
-	FindCombo = func(id string) (domain.ModelCombo, bool) {
-		id = strings.TrimSpace(id)
-		if id == "" {
-			return domain.ModelCombo{}, false
-		}
-		for _, combo := range testProxyConfig.Combos {
-			if combo.ID == id {
-				return combo, true
-			}
-		}
+	SetComboCatalog(testCombos{})
+}
+
+// testCombos finds combos in the test proxy config. The enabled list stays empty,
+// as it did when no combo provider was installed.
+type testCombos struct{}
+
+func (testCombos) FindCombo(id string) (domain.ModelCombo, bool) {
+	id = strings.TrimSpace(id)
+	if id == "" {
 		return domain.ModelCombo{}, false
 	}
+	for _, combo := range testProxyConfig.Combos {
+		if combo.ID == id {
+			return combo, true
+		}
+	}
+	return domain.ModelCombo{}, false
 }
+
+func (testCombos) EnabledCombos() []domain.ModelCombo { return nil }

@@ -123,7 +123,7 @@ func BuildModelsList(onlyFree bool) []map[string]any {
 		}
 		list = append(list, entry)
 	}
-	for _, c := range EnabledCombosProvider() {
+	for _, c := range comboCatalog.EnabledCombos() {
 		if ExcludedForListing(c.ID) {
 			continue
 		}

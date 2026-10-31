@@ -15,7 +15,7 @@ func TestConfigureIsIdempotent(t *testing.T) {
 	if configureCalls != 1 {
 		t.Fatalf("configure ran %d times, want 1", configureCalls)
 	}
-	if routing.ConfigProvider == nil || routing.FindCombo == nil || proxycore.RegisterAdminRoutes == nil {
+	if routing.ConfigProvider == nil || !routing.HasComboCatalog() || proxycore.RegisterAdminRoutes == nil {
 		t.Fatal("composition hooks were not installed")
 	}
 }

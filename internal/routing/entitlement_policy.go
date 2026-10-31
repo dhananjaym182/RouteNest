@@ -44,7 +44,7 @@ func FreeOnlyRejection(model string) string {
 	if !ConfigProvider().OnlyFree || model == "" {
 		return ""
 	}
-	if _, ok := FindCombo(model); ok {
+	if _, ok := comboCatalog.FindCombo(model); ok {
 		return ""
 	}
 	if ModelFreeOnlyEligible(model) {
