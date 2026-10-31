@@ -1,0 +1,142 @@
+{
+  "object": "list",
+  "data": [
+    {
+      "id": "agnes-2.0-flash",
+      "object": "model",
+      "owned_by": "byNara",
+      "context_window": 512000,
+      "weight": 0.1,
+      "vision": true,
+      "reasoning": true
+    },
+    {
+      "id": "agnes-2.5-flash",
+      "object": "model",
+      "owned_by": "byNara",
+      "context_window": 512000,
+      "weight": 0.2,
+      "vision": true,
+      "reasoning": true
+    },
+    {
+      "id": "glm-5.3-flash-free",
+      "object": "model",
+      "owned_by": "byNara",
+      "context_window": 1000000,
+      "weight": 1,
+      "vision": true,
+      "reasoning": true
+    },
+    {
+      "id": "glm-5.3-free",
+      "object": "model",
+      "owned_by": "byNara",
+      "context_window": 128000,
+      "weight": 1,
+      "reasoning": true
+    },
+    {
+      "id": "grok-4.5-free",
+      "object": "model",
+      "owned_by": "byNara",
+      "context_window": 212000,
+      "weight": 1,
+      "vision": true
+    },
+    {
+      "id": "laguna-s-2.1",
+      "object": "model",
+      "owned_by": "byNara",
+      "context_window": 262000,
+      "weight": 0.5,
+      "reasoning": true
+    },
+    {
+      "id": "ling-3.0-flash-fin-free",
+      "object": "model",
+      "owned_by": "byNara",
+      "context_window": 262000,
+      "weight": 1
+    },
+    {
+      "id": "minimax-m3-free",
+      "object": "model",
+      "owned_by": "byNara",
+      "context_window": 1000000,
+      "weight": 1,
+      "vision": true,
+      "reasoning": true
+    },
+    {
+      "id": "mistral-large",
+      "object": "model",
+      "owned_by": "byNara",
+      "context_window": 252000,
+      "weight": 1
+    },
+    {
+      "id": "mistral-medium-3-5",
+      "object": "model",
+      "owned_by": "byNara",
+      "context_window": 256000,
+      "weight": 1,
+      "vision": true
+    },
+    {
+      "id": "nemotron-3.5-lightning-free",
+      "object": "model",
+      "owned_by": "byNara",
+      "context_window": 261996,
+      "weight": 0.5
+    },
+    {
+      "id": "qwen-3.8-max-free",
+      "object": "model",
+      "owned_by": "byNara",
+      "context_window": 262144,
+      "weight": 1
+    },
+    {
+      "id": "qwen3.8-27b",
+      "object": "model",
+      "owned_by": "byNara",
+      "context_window": 1000000,
+      "weight": 1,
+      "reasoning": true
+    },
+    {
+      "id": "stepfun-3.7-flash",
+      "object": "model",
+      "owned_by": "byNara",
+      "context_window": 262000,
+      "weight": 1,
+      "vision": true,
+      "reasoning": true
+    },
+    {
+      "id": "tencent-hy3-free",
+      "object": "model",
+      "owned_by": "byNara",
+      "context_window": 262000,
+      "weight": 1
+    },
+    {
+      "id": "deepseek-v4-flash",
+      "object": "model",
+      "owned_by": "byNara",
+      "context_window": 1000000,
+      "weight": 1.5,
+      "reasoning": true
+    },
+    {
+      "id": "qwen3.8-flash-free",
+      "object": "model",
+      "owned_by": "byNara",
+      "context_window": 1000000,
+      "weight": 1,
+      "vision": true,
+      "reasoning": true
+    }
+  ]
+}
