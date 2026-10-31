@@ -1,4 +1,4 @@
-package main
+package proxycore
 
 // Unified SSE forwarding contract for the chat and Responses endpoints.
 //
@@ -24,8 +24,10 @@ import (
 	"sync"
 	"time"
 
+	"cline-go-proxy/internal/domain"
 	responsesconv "cline-go-proxy/internal/protocol/responses"
 	"cline-go-proxy/internal/requestlog"
+	"cline-go-proxy/internal/routing"
 )
 
 // streamHeartbeatInterval is a variable so tests can shorten it.
@@ -35,7 +37,7 @@ var streamHeartbeatInterval = 15 * time.Second
 // StreamPolicy.KeepaliveSeconds: 0/absent keeps the built-in interval, -1
 // disables heartbeats entirely.
 func streamHeartbeatActive() bool {
-	if s := getProxyConfig().Stream.KeepaliveSeconds; s < 0 {
+	if s := ConfigProvider().Stream.KeepaliveSeconds; s < 0 {
 		return false
 	}
 	return streamHeartbeatInterval > 0
@@ -44,7 +46,7 @@ func streamHeartbeatActive() bool {
 // heartbeatInterval returns the ticker period: the built-in default when
 // KeepaliveSeconds is unset, otherwise the configured interval.
 func heartbeatIntervalOrDefault() time.Duration {
-	if s := getProxyConfig().Stream.KeepaliveSeconds; s > 0 {
+	if s := ConfigProvider().Stream.KeepaliveSeconds; s > 0 {
 		return time.Duration(s) * time.Second
 	}
 	return streamHeartbeatInterval
@@ -53,7 +55,7 @@ func heartbeatIntervalOrDefault() time.Duration {
 // effectiveBootstrapRetries: StreamPolicy.BootstrapRetries=0 must preserve the
 // historic single retry, so it maps to 1; N maps to N attempts after the first.
 func effectiveBootstrapRetries() int {
-	if n := getProxyConfig().Stream.BootstrapRetries; n > 0 {
+	if n := ConfigProvider().Stream.BootstrapRetries; n > 0 {
 		return n
 	}
 	return 1
@@ -93,7 +95,7 @@ type keepaliveWriter struct {
 // newKeepaliveWriter wraps w when ProxyConfig.NonstreamKeepaliveSeconds > 0,
 // otherwise returns nil (no wrapping, historic behavior).
 func newKeepaliveWriter(w http.ResponseWriter) *keepaliveWriter {
-	secs := getProxyConfig().NonstreamKeepaliveSeconds
+	secs := ConfigProvider().NonstreamKeepaliveSeconds
 	if secs <= 0 {
 		return nil
 	}
@@ -189,7 +191,7 @@ func (k *keepaliveWriter) Flush() {
 // attempt has produced no semantic content within FirstContentTimeoutSeconds.
 // Zero config or an unbuffered sink yields a nil channel (never fires).
 func firstContentDeadline(sink *sseSink) (<-chan time.Time, func()) {
-	secs := getProxyConfig().Stream.FirstContentTimeoutSeconds
+	secs := ConfigProvider().Stream.FirstContentTimeoutSeconds
 	if secs <= 0 || sink.boot == nil {
 		return nil, func() {}
 	}
@@ -211,7 +213,7 @@ type streamResult struct {
 	// without a terminator.
 	truncated     bool
 	clientGone    bool
-	usage         tokenUsage
+	usage         TokenUsage
 	firstOutputAt time.Time
 	// stalled means the bootstrap first-content deadline expired while the
 	// attempt had produced nothing; like empty, it stays retryable.
@@ -295,7 +297,7 @@ type bootstrapBuffer struct {
 }
 
 func newBootstrapBuffer(w http.ResponseWriter) *bootstrapBuffer {
-	cfg := getProxyConfig().Stream
+	cfg := ConfigProvider().Stream
 	f, _ := w.(http.Flusher)
 	maxBytes := cfg.BootstrapBufferBytes
 	if maxBytes <= 0 {
@@ -448,7 +450,7 @@ func emitResponsesStreamError(w http.ResponseWriter, code, message string) {
 // produced and finalizes the request log once an attempt is terminal,
 // truncated, or the client leaves. An empty attempt is not finalized so the
 // caller can retry on the same downstream response.
-func handleStreamResponse(ctx context.Context, w http.ResponseWriter, upstream *http.Response, acc *Account, reqLog *RequestLog) streamResult {
+func handleStreamResponse(ctx context.Context, w http.ResponseWriter, upstream *http.Response, acc *domain.Account, reqLog *domain.RequestLog) streamResult {
 	defer upstream.Body.Close()
 	// Cancelling on return releases the pump goroutine even when this attempt
 	// stops early (sentinel seen, write failure) with lines still buffered.
@@ -464,7 +466,7 @@ func handleStreamResponse(ctx context.Context, w http.ResponseWriter, upstream *
 	stallC, stopStall := firstContentDeadline(sink)
 	defer stopStall()
 
-	var latestUsage tokenUsage
+	var latestUsage TokenUsage
 	sawTerminal := false
 	sawDone := false
 
@@ -473,7 +475,7 @@ func handleStreamResponse(ctx context.Context, w http.ResponseWriter, upstream *
 		if reqLog == nil {
 			return
 		}
-		recordUsage(acc, upstream, reqLog, reqLog.Model, latestUsage)
+		RecordUsage(acc, upstream, reqLog, reqLog.Model, latestUsage)
 		requestlog.Finalize(reqLog, latestUsage, res.firstOutputAt, reqLog.StartedAt, ok, reason)
 	}
 
@@ -572,11 +574,11 @@ func handleStreamResponse(ctx context.Context, w http.ResponseWriter, upstream *
 			var obj map[string]any
 			if err := json.Unmarshal([]byte(payload), &obj); err == nil {
 				obj = unwrapDataEnvelope(obj)
-				normalized := normalizeOpenAIResponse(obj)
+				normalized := NormalizeOpenAIResponse(obj)
 				if reqLog != nil {
 					restoreToolCallsInResponse(normalized, reqLog.ToolNames)
 				}
-				if usage := parseTokenUsage(normalized["usage"]); usage.Valid {
+				if usage := ParseTokenUsage(normalized["usage"]); usage.Valid {
 					latestUsage = mergeTokenUsage(latestUsage, usage)
 				}
 				if chatChunkHasOutput(normalized) {
@@ -615,10 +617,10 @@ func handleStreamResponse(ctx context.Context, w http.ResponseWriter, upstream *
 // through the retry callback up to Stream.BootstrapRetries times (default 1,
 // the historic behavior). A nil retry means the caller has no failover path;
 // the failure is then reported in-band.
-func serveChatStream(ctx context.Context, w http.ResponseWriter, resp *http.Response, acc *Account, reqLog *RequestLog, retry func() (*http.Response, *Account, error)) {
+func serveChatStream(ctx context.Context, w http.ResponseWriter, resp *http.Response, acc *domain.Account, reqLog *domain.RequestLog, retry func() (*http.Response, *domain.Account, error)) {
 	copyPassthroughHeaders(w, resp.Header)
 	newSSESink(w).commitSSEHeaders()
-	run := func(ctx context.Context, bw *bootstrapBuffer, current *http.Response, currentAcc *Account) streamResult {
+	run := func(ctx context.Context, bw *bootstrapBuffer, current *http.Response, currentAcc *domain.Account) streamResult {
 		return handleStreamResponse(ctx, bw, current, currentAcc, reqLog)
 	}
 	serveWithBootstrap(ctx, w, resp, acc, reqLog, retry, "chat stream",
@@ -627,10 +629,10 @@ func serveChatStream(ctx context.Context, w http.ResponseWriter, resp *http.Resp
 
 // serveResponsesStream runs a Responses stream attempt with the same bootstrap
 // retry semantics as serveChatStream.
-func serveResponsesStream(ctx context.Context, w http.ResponseWriter, resp *http.Response, reqLog *RequestLog, acc *Account, retry func() (*http.Response, *Account, error)) {
+func serveResponsesStream(ctx context.Context, w http.ResponseWriter, resp *http.Response, reqLog *domain.RequestLog, acc *domain.Account, retry func() (*http.Response, *domain.Account, error)) {
 	copyPassthroughHeaders(w, resp.Header)
 	newSSESink(w).commitSSEHeaders()
-	run := func(ctx context.Context, bw *bootstrapBuffer, current *http.Response, currentAcc *Account) streamResult {
+	run := func(ctx context.Context, bw *bootstrapBuffer, current *http.Response, currentAcc *domain.Account) streamResult {
 		return chatStreamToResponses(ctx, bw, current, reqLog, currentAcc)
 	}
 	serveWithBootstrap(ctx, w, resp, acc, reqLog, retry, "responses stream",
@@ -648,12 +650,12 @@ func serveWithBootstrap(
 	ctx context.Context,
 	w http.ResponseWriter,
 	resp *http.Response,
-	acc *Account,
-	reqLog *RequestLog,
-	retry func() (*http.Response, *Account, error),
+	acc *domain.Account,
+	reqLog *domain.RequestLog,
+	retry func() (*http.Response, *domain.Account, error),
 	label, emptyMsg string,
 	emitError func(http.ResponseWriter, string),
-	run func(context.Context, *bootstrapBuffer, *http.Response, *Account) streamResult,
+	run func(context.Context, *bootstrapBuffer, *http.Response, *domain.Account) streamResult,
 ) {
 	maxBoot := effectiveBootstrapRetries()
 	current, currentAcc := resp, acc
@@ -678,7 +680,7 @@ func serveWithBootstrap(
 		}
 		if currentAcc != nil && reqLog.Model != "" {
 			log.Printf("  %s: model %q produced no content, cooling %s and retrying (%d/%d)", label, reqLog.Model, streamFailoverCooldown, attempt+1, maxBoot)
-			setModelCooldown(currentAcc, reqLog.Model, time.Now().Add(streamFailoverCooldown))
+			routing.SetModelCooldown(currentAcc, reqLog.Model, time.Now().Add(streamFailoverCooldown))
 		}
 		retryResp, retryAcc, err := retry()
 		if err != nil || retryResp == nil || retryResp.Body == nil {

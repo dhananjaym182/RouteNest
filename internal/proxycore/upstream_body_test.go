@@ -1,9 +1,13 @@
-package main
+package proxycore
 
-import "testing"
+import (
+	"testing"
+
+	"cline-go-proxy/internal/routing"
+)
 
 func TestBuildUpstreamBodyNoneDropsReasoningEffort(t *testing.T) {
-	body := buildUpstreamBody(map[string]any{
+	body := routing.BuildUpstreamBody(map[string]any{
 		"model":            "m1",
 		"reasoning_effort": "none",
 	}, false)
@@ -12,9 +16,9 @@ func TestBuildUpstreamBodyNoneDropsReasoningEffort(t *testing.T) {
 	}
 
 	// 默认仍然下发 high
-	body2 := buildUpstreamBody(map[string]any{"model": "m1"}, false)
-	if body2["reasoning_effort"] != defaultReasoningEffort {
-		t.Errorf("default reasoning_effort = %v, want %v", body2["reasoning_effort"], defaultReasoningEffort)
+	body2 := routing.BuildUpstreamBody(map[string]any{"model": "m1"}, false)
+	if body2["reasoning_effort"] != routing.DefaultReasoningEffort {
+		t.Errorf("default reasoning_effort = %v, want %v", body2["reasoning_effort"], routing.DefaultReasoningEffort)
 	}
 }
 
@@ -27,17 +31,17 @@ func TestBuildUpstreamBodyClampsMaxTokens(t *testing.T) {
 		params map[string]any
 		want   int
 	}{
-		{"absent", map[string]any{"model": "m1"}, defaultMaxTokens},
-		{"zero", map[string]any{"model": "m1", "max_tokens": float64(0)}, defaultMaxTokens},
-		{"tiny", map[string]any{"model": "m1", "max_tokens": float64(8)}, defaultMaxTokens},
-		{"completion-tiny", map[string]any{"model": "m1", "max_completion_tokens": float64(8)}, defaultMaxTokens},
+		{"absent", map[string]any{"model": "m1"}, routing.DefaultMaxTokens},
+		{"zero", map[string]any{"model": "m1", "max_tokens": float64(0)}, routing.DefaultMaxTokens},
+		{"tiny", map[string]any{"model": "m1", "max_tokens": float64(8)}, routing.DefaultMaxTokens},
+		{"completion-tiny", map[string]any{"model": "m1", "max_completion_tokens": float64(8)}, routing.DefaultMaxTokens},
 		{"boundary-16", map[string]any{"model": "m1", "max_tokens": float64(16)}, 16},
 		{"normal", map[string]any{"model": "m1", "max_tokens": float64(1024)}, 1024},
 		{"completion-int", map[string]any{"model": "m1", "max_completion_tokens": 2048}, 2048},
 		{"max-tokens-precedes-completion", map[string]any{"model": "m1", "max_tokens": 1024, "max_completion_tokens": 2048}, 1024},
 	}
 	for _, tc := range cases {
-		body := buildUpstreamBody(tc.params, false)
+		body := routing.BuildUpstreamBody(tc.params, false)
 		if got, _ := body["max_tokens"].(int); got != tc.want {
 			t.Errorf("%s: max_tokens = %d, want %d", tc.name, got, tc.want)
 		}
@@ -45,13 +49,13 @@ func TestBuildUpstreamBodyClampsMaxTokens(t *testing.T) {
 }
 
 func TestBuildUpstreamBodyPreservesAnthropicIntegerMaxTokens(t *testing.T) {
-	params := anthropicToOpenAI(anthropicReq{
+	params := AnthropicToOpenAI(AnthropicReq{
 		Model:     "m1",
 		MaxTokens: 1024,
 		Messages:  []anthropicMsg{{Role: "user", Content: "hi"}},
 	})
 
-	body := buildUpstreamBody(params, false)
+	body := routing.BuildUpstreamBody(params, false)
 	if got, _ := body["max_tokens"].(int); got != 1024 {
 		t.Fatalf("max_tokens = %d, want 1024", got)
 	}

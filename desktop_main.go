@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"time"
 
+	"cline-go-proxy/internal/proxycore"
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
@@ -29,7 +30,7 @@ func main() {
 
 	proxyErr := make(chan error, 1)
 	go func() {
-		proxyErr <- startProxy(*host, *port)
+		proxyErr <- proxycore.Start(*host, *port)
 	}()
 
 	if err := waitForEmbeddedProxy(*port, 15*time.Second, proxyErr); err != nil {
@@ -41,7 +42,7 @@ func main() {
 		return
 	}
 
-	if !isLoopbackHost(*host) {
+	if !proxycore.IsLoopbackHost(*host) {
 		log.Printf("警告: 监听 %s 非本机回环地址，桌面窗口可能无法自动连接，建议使用 127.0.0.1 或 0.0.0.0", *host)
 	}
 

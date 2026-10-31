@@ -1,6 +1,7 @@
 package main
 
 import (
+	"cline-go-proxy/internal/routing"
 	"testing"
 	"time"
 
@@ -81,7 +82,7 @@ func TestDashboardOverviewAggregatesWindow(t *testing.T) {
 	}
 
 	rt := got["runtime"].(map[string]any)
-	if rt["version"] != buildinfo.AppVersion || rt["defaultModel"] != getDefaultModel() {
+	if rt["version"] != buildinfo.AppVersion || rt["defaultModel"] != routing.DefaultModel() {
 		t.Fatalf("runtime = %+v", rt)
 	}
 }

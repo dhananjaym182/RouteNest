@@ -1,6 +1,7 @@
 package main
 
 import (
+	"cline-go-proxy/internal/routing"
 	"cline-go-proxy/internal/zen"
 	"io"
 	"net/http"
@@ -36,7 +37,7 @@ func TestCallClineAPIPinnedProvider(t *testing.T) {
 	)
 
 	params := map[string]any{"model": "shared/x@Beta", "messages": []any{}}
-	resp, acc, err := callClineAPI(params, false)
+	resp, acc, err := routing.CallClineAPI(params, false)
 	if err != nil {
 		t.Fatalf("pinned request failed: %v", err)
 	}
@@ -54,15 +55,15 @@ func TestCallClineAPIPinnedProvider(t *testing.T) {
 	if got, _ := params["model"].(string); got != "shared/x" {
 		t.Errorf("model should be rewritten to bare id for logging/upstream, got %q", got)
 	}
-	if pn, _ := params[providerNameParam].(string); pn != "Beta" {
+	if pn, _ := params[routing.ProviderNameParam].(string); pn != "Beta" {
 		t.Errorf("provider name attribution = %q", pn)
 	}
-	if sb, _ := params[servedByParam].(string); sb != zen.UpstreamProvider {
+	if sb, _ := params[routing.ServedByParam].(string); sb != zen.UpstreamProvider {
 		t.Errorf("served-by = %q", sb)
 	}
 
 	// Unknown pin: loud error, zero upstream dispatch.
-	_, _, err = callClineAPI(map[string]any{"model": "shared/x@Gamma", "messages": []any{}}, false)
+	_, _, err = routing.CallClineAPI(map[string]any{"model": "shared/x@Gamma", "messages": []any{}}, false)
 	if err == nil {
 		t.Fatal("unknown provider pin should error")
 	}
@@ -74,7 +75,7 @@ func TestCallClineAPIPinnedProvider(t *testing.T) {
 		&CustomProvider{ID: "pA", Name: "Alpha", BaseURL: srvA.URL, APIKey: "ka", Enabled: true, Priority: 0, ModelIDs: []string{"shared/x"}},
 		&CustomProvider{ID: "pB", Name: "Beta", BaseURL: srvDown.URL, APIKey: "kb", Enabled: true, Priority: 5, ModelIDs: []string{"shared/x"}},
 	)
-	_, _, err = callClineAPI(map[string]any{"model": "shared/x@Beta", "messages": []any{}}, false)
+	_, _, err = routing.CallClineAPI(map[string]any{"model": "shared/x@Beta", "messages": []any{}}, false)
 	if err == nil {
 		t.Fatal("pinned 5xx should surface as error")
 	}
@@ -84,7 +85,7 @@ func TestCallClineAPIPinnedProvider(t *testing.T) {
 
 	// Unpinned stays priority-ordered (Alpha first) — pin must not change defaults.
 	atomic.StoreInt32(&hitsA, 0)
-	resp2, _, err2 := callClineAPI(map[string]any{"model": "shared/x", "messages": []any{}}, false)
+	resp2, _, err2 := routing.CallClineAPI(map[string]any{"model": "shared/x", "messages": []any{}}, false)
 	if err2 != nil {
 		t.Fatalf("unpinned request failed: %v", err2)
 	}

@@ -4,6 +4,8 @@ import (
 	"bufio"
 	"cline-go-proxy/internal/accounts"
 	"cline-go-proxy/internal/egress"
+	"cline-go-proxy/internal/proxycore"
+	"cline-go-proxy/internal/routing"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -82,7 +84,7 @@ func TestAnthropicStreamRetriesTransparentlyBeforeFirstToken(t *testing.T) {
 		}
 		return &http.Response{
 			StatusCode: http.StatusOK,
-			Body:       io.NopCloser(strings.NewReader("data: {\"id\":\"retry-ok\",\"model\":\"" + freeModelPrimary + "\",\"choices\":[{\"delta\":{\"content\":\"recovered\"}}]}\n\ndata: [DONE]\n\n")),
+			Body:       io.NopCloser(strings.NewReader("data: {\"id\":\"retry-ok\",\"model\":\"" + routing.FreeModelPrimary + "\",\"choices\":[{\"delta\":{\"content\":\"recovered\"}}]}\n\ndata: [DONE]\n\n")),
 			Header:     http.Header{"Content-Type": []string{"text/event-stream"}},
 			Request:    req,
 		}, nil
@@ -390,7 +392,7 @@ func TestAnthropicStreamFailsOverToNextModelBeforeFirstToken(t *testing.T) {
 	if got := strings.Count(string(body), "event: message_start"); got != 1 {
 		t.Fatalf("message_start count = %d, want exactly 1: %s", got, body)
 	}
-	if !modelCooldownActive(account, "primary-model") {
+	if !routing.ModelCooldownActive(account, "primary-model") {
 		t.Fatal("failed model must be cooling after a pre-content failure")
 	}
 }
@@ -472,7 +474,7 @@ func TestAnthropicStreamEmptyCompletionFailsOver(t *testing.T) {
 	if got := strings.Count(string(body), "event: message_stop"); got != 1 {
 		t.Fatalf("message_stop count = %d, want exactly 1 (no empty tail from failed model): %s", got, body)
 	}
-	if !modelCooldownActive(account, "primary-model") {
+	if !routing.ModelCooldownActive(account, "primary-model") {
 		t.Fatal("model that returned an empty completion must be cooling")
 	}
 }
@@ -625,24 +627,24 @@ func TestAnthropicStreamBreakBeforeContentFailsOver(t *testing.T) {
 // "maximum context length is 262144 tokens, however you requested about 263503 tokens
 // (... 128000 in the output)" 这类 400，必须夹到安全上限。
 func TestBuildUpstreamBodyMaxTokensEnvCap(t *testing.T) {
-	body := buildUpstreamBody(map[string]any{"max_tokens": float64(128000)}, true)
-	if got := body["max_tokens"].(int); got != defaultMaxTokens {
-		t.Fatalf("oversized max_tokens = %d, want clamped to %d", got, defaultMaxTokens)
+	body := routing.BuildUpstreamBody(map[string]any{"max_tokens": float64(128000)}, true)
+	if got := body["max_tokens"].(int); got != routing.DefaultMaxTokens {
+		t.Fatalf("oversized max_tokens = %d, want clamped to %d", got, routing.DefaultMaxTokens)
 	}
 
-	body = buildUpstreamBody(map[string]any{"max_tokens": float64(1024)}, true)
+	body = routing.BuildUpstreamBody(map[string]any{"max_tokens": float64(1024)}, true)
 	if got := body["max_tokens"].(int); got != 1024 {
 		t.Fatalf("small max_tokens = %d, want 1024 (unchanged)", got)
 	}
 
 	// 未指定时也用上限而不是 128k
-	body = buildUpstreamBody(map[string]any{}, true)
-	if got := body["max_tokens"].(int); got != defaultMaxTokens {
-		t.Fatalf("default max_tokens = %d, want %d", got, defaultMaxTokens)
+	body = routing.BuildUpstreamBody(map[string]any{}, true)
+	if got := body["max_tokens"].(int); got != routing.DefaultMaxTokens {
+		t.Fatalf("default max_tokens = %d, want %d", got, routing.DefaultMaxTokens)
 	}
 
 	t.Setenv("ROUTENEST_MAX_TOKENS", "64000")
-	body = buildUpstreamBody(map[string]any{"max_tokens": float64(128000)}, true)
+	body = routing.BuildUpstreamBody(map[string]any{"max_tokens": float64(128000)}, true)
 	if got := body["max_tokens"].(int); got != 64000 {
 		t.Fatalf("ROUTENEST_MAX_TOKENS override ignored: max_tokens = %d, want 64000", got)
 	}
@@ -661,7 +663,7 @@ func TestAnthropicToolsToOpenAIOmitsNullOptionalFields(t *testing.T) {
 			// description / input_schema 缺省：转换后必须省略键，不得为 null/空串
 		},
 	}
-	got := anthropicToolsToOpenAI(tools)
+	got := proxycore.AnthropicToolsToOpenAI(tools)
 	if len(got) != 1 {
 		t.Fatalf("got %d tools, want 1", len(got))
 	}
@@ -697,7 +699,7 @@ func TestAnthropicToolsToOpenAIPreservesPresentFields(t *testing.T) {
 			},
 		},
 	}
-	fn := anthropicToolsToOpenAI(tools)[0].(map[string]any)["function"].(map[string]any)
+	fn := proxycore.AnthropicToolsToOpenAI(tools)[0].(map[string]any)["function"].(map[string]any)
 	if fn["description"] != "Read a file" {
 		t.Errorf("description = %v, want preserved", fn["description"])
 	}
@@ -723,7 +725,7 @@ func TestSanitizeToolsForUpstreamSharedHelper(t *testing.T) {
 		// 无 name：整条剔除
 		map[string]any{"type": "function", "function": map[string]any{"description": "no name"}},
 	}}
-	sanitizeToolsForUpstream(body)
+	proxycore.SanitizeToolsForUpstream(body)
 	tools := body["tools"].([]any)
 	if len(tools) != 3 {
 		t.Fatalf("kept %d tools, want 3 (nameless one dropped)", len(tools))

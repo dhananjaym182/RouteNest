@@ -28,21 +28,22 @@ func init() {
 	zen.MarkModelGone = routing.MarkModelGone
 	routing.ConfigProvider = getProxyConfig
 	routing.FindCombo = combos.FindCombo
-	routing.ModelsProvider = getAllModels
-	routing.ModelDisabled = isModelDisabled
+	routing.ModelsProvider = routing.AllModels
+	routing.ModelDisabled = routing.IsModelDisabled
+	routing.EnabledCombosProvider = combos.EnabledList
 
 	buildinfo.HTTPClient = egress.Client
 	accounts.HTTPClient = egress.Client
 	connections.HTTPClient = egress.Client
-	connections.IsFreeModel = isFreeModelID
+	connections.IsFreeModel = routing.IsFreeModelID
 
 	providers.TransportProvider = func() http.RoundTripper { return egress.Client.Transport }
 	bodyOptionsProvider := func() openaicompat.BodyOptions {
 		return openaicompat.BodyOptions{
-			PassThroughKeys:     passThroughKeys,
-			MinMaxTokens:        minUpstreamMaxTokens,
-			DefaultMaxTokens:    defaultMaxTokens,
-			ModelMaxOutputLimit: modelMaxOutputLimit,
+			PassThroughKeys:     routing.PassThroughKeys,
+			MinMaxTokens:        routing.MinUpstreamMaxTokens,
+			DefaultMaxTokens:    routing.DefaultMaxTokens,
+			ModelMaxOutputLimit: routing.ModelMaxOutputLimit,
 		}
 	}
 	providers.BodyOptionsProvider = bodyOptionsProvider

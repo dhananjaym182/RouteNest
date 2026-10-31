@@ -1,6 +1,7 @@
 package main
 
 import (
+	"cline-go-proxy/internal/routing"
 	"cline-go-proxy/internal/zen"
 	"log"
 	"net/http"
@@ -10,6 +11,7 @@ import (
 	"cline-go-proxy/internal/adminapi"
 	"cline-go-proxy/internal/buildinfo"
 	"cline-go-proxy/internal/i18n"
+	"cline-go-proxy/internal/proxycore"
 )
 
 var adminConfig = &adminapi.Config{
@@ -17,8 +19,8 @@ var adminConfig = &adminapi.Config{
 	SetProxy: func(cfg *proxyConfigData) {
 		setProxyConfig(cfg)
 	},
-	Models:       getAllModels,
-	DefaultModel: getDefaultModel,
+	Models:       routing.AllModels,
+	DefaultModel: routing.DefaultModel,
 	SetDefaultModel: func(model string) {
 		p := accounts.LoadPool()
 		accounts.PoolMu.Lock()
@@ -33,10 +35,10 @@ var adminConfig = &adminapi.Config{
 		accounts.PoolMu.Unlock()
 		accounts.SavePool()
 	},
-	LocalIPs:           detectLocalIPs,
-	ListenHost:         func() string { return listenHost },
-	ListenPort:         func() int { return listenPort },
-	EffectiveAdminHost: effectiveAdminHost,
+	LocalIPs:           proxycore.DetectLocalIPs,
+	ListenHost:         func() string { return proxycore.ListenHost },
+	ListenPort:         func() int { return proxycore.ListenPort },
+	EffectiveAdminHost: proxycore.EffectiveAdminHost,
 	Version:            buildinfo.AppVersion,
 	Build: func() map[string]any {
 		m := map[string]any{"goVersion": runtime.Version()}
@@ -51,7 +53,7 @@ var adminConfig = &adminapi.Config{
 	ZenHeaders:      func() map[string]string { return zen.GetConfig().ZenHeaders },
 	PoolPath:        accounts.PoolPath,
 	HasPassword:     func() bool { return accounts.LoadPool().AdminPasswordHash != "" },
-	RestartListener: restartListener,
+	RestartListener: proxycore.RestartListener,
 	Translate:       func(r *http.Request, key string) string { return i18n.TAPI(r, key) },
 	Logf:            log.Printf,
 }

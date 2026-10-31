@@ -16,7 +16,7 @@ import (
 type rootModelStore struct{}
 
 func (rootModelStore) List() []domain.Model {
-	return getAllModels()
+	return routing.AllModels()
 }
 
 func (rootModelStore) Add(m domain.Model) {

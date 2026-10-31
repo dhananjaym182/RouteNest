@@ -1,4 +1,4 @@
-package main
+package proxycore
 
 import (
 	"encoding/json"
@@ -19,7 +19,7 @@ func TestAnthropicThinkingMapping(t *testing.T) {
 		{"absent→unset", "", nil},
 	}
 	for _, c := range cases {
-		req := anthropicReq{
+		req := AnthropicReq{
 			Model:     "m1",
 			MaxTokens: 100,
 			Messages:  []anthropicMsg{{Role: "user", Content: "hi"}},
@@ -27,7 +27,7 @@ func TestAnthropicThinkingMapping(t *testing.T) {
 		if c.thinking != "" {
 			req.Thinking = json.RawMessage(c.thinking)
 		}
-		out := anthropicToOpenAI(req)
+		out := AnthropicToOpenAI(req)
 		got, ok := out["reasoning_effort"]
 		if c.want == nil {
 			if ok {

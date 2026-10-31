@@ -1,6 +1,7 @@
 package main
 
 import (
+	"cline-go-proxy/internal/routing"
 	"cline-go-proxy/internal/zen"
 	"errors"
 	"log"
@@ -17,6 +18,7 @@ import (
 	"cline-go-proxy/internal/httpx"
 	"cline-go-proxy/internal/i18n"
 	"cline-go-proxy/internal/providers"
+	"cline-go-proxy/internal/proxycore"
 	"cline-go-proxy/internal/requestlog"
 )
 
@@ -113,11 +115,11 @@ var adminClineEgress = &adminapi.ClineEgress{
 func registerAdminRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/admin/", adminStaticHandler)
 	// 无需登录的接口
-	mux.HandleFunc("/admin/api/login", corsHandler(handleAdminLogin))
-	mux.HandleFunc("/admin/api/logout", corsHandler(handleAdminLogout))
+	mux.HandleFunc("/admin/api/login", proxycore.CorsHandler(handleAdminLogin))
+	mux.HandleFunc("/admin/api/logout", proxycore.CorsHandler(handleAdminLogout))
 	// 其余 API 全部需要后台鉴权（设置了密码后）
 	auth := func(h http.HandlerFunc) http.HandlerFunc {
-		return requireAdminAuth(corsHandler(h))
+		return requireAdminAuth(proxycore.CorsHandler(h))
 	}
 	mux.HandleFunc("/admin/api/admin-sessions/clear", auth(handleAdminSessionsClear))
 	mux.HandleFunc("/admin/api/accounts", auth(handleAdminAccounts))
@@ -357,7 +359,7 @@ func classifyAffinityError(err error) (int, bool) {
 	if errors.As(err, &apiErr) {
 		return apiErr.StatusCode, false
 	}
-	var accountErr *clineAccountUnavailableError
+	var accountErr *routing.ClineAccountUnavailableError
 	if errors.As(err, &accountErr) {
 		return 0, true
 	}

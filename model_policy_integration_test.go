@@ -1,6 +1,7 @@
 package main
 
 import (
+	"cline-go-proxy/internal/routing"
 	"fmt"
 	"strings"
 	"testing"
@@ -27,7 +28,7 @@ func TestBuildModelsListAppliesPolicy(t *testing.T) {
 	setProxyConfig(cfg)
 	defer setProxyConfig(defaultProxyConfig())
 
-	list := buildModelsList(false)
+	list := routing.BuildModelsList(false)
 	var ids []string
 	var entry map[string]any
 	for _, e := range list {

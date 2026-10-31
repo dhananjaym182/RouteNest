@@ -4,6 +4,7 @@ package main
 
 import (
 	"cline-go-proxy/internal/accounts"
+	"cline-go-proxy/internal/proxycore"
 	"flag"
 	"fmt"
 	"log"
@@ -30,7 +31,7 @@ func main() {
 	}
 
 	if *captureMode {
-		if err := doFullCapture(); err != nil {
+		if err := proxycore.Capture(); err != nil {
 			log.Fatalf("Capture failed: %v", err)
 		}
 		return
@@ -64,7 +65,7 @@ func main() {
 		return
 	}
 
-	if err := startProxy(*host, *port); err != nil && err != http.ErrServerClosed {
+	if err := proxycore.Start(*host, *port); err != nil && err != http.ErrServerClosed {
 		log.Fatalf("Proxy failed: %v", err)
 		os.Exit(1)
 	}
@@ -123,7 +124,7 @@ func buildAndStart(host string, port int) {
 		fmt.Println("Proxy started.")
 	}
 
-	url := fmt.Sprintf("http://%s:%d/admin/", effectiveAdminHost(host), port)
+	url := fmt.Sprintf("http://%s:%d/admin/", proxycore.EffectiveAdminHost(host), port)
 	fmt.Printf("\nAdmin panel: %s\n", url)
 
 	switch runtime.GOOS {

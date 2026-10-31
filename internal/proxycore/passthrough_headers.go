@@ -1,4 +1,4 @@
-package main
+package proxycore
 
 // Passthrough response headers (CLIProxyAPI-inspired): optionally forward a
 // curated set of upstream response headers (rate limits, request IDs,
@@ -66,7 +66,7 @@ func blockedPassthroughHeader(name string) bool {
 // the merge runs under that lock so a background keepalive tick can never
 // race the header-map mutation.
 func copyPassthroughHeaders(w http.ResponseWriter, upstream http.Header) {
-	if !getProxyConfig().PassthroughHeaders || upstream == nil {
+	if !ConfigProvider().PassthroughHeaders || upstream == nil {
 		return
 	}
 	if s, ok := w.(interface{ WithLock(func()) }); ok {

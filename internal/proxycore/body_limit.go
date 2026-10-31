@@ -1,4 +1,4 @@
-package main
+package proxycore
 
 // Client request body cap (CLIProxyAPI-inspired): ProxyConfig.
 // MaxRequestBodyBytes bounds how much a chat/completions client may upload.
@@ -11,7 +11,7 @@ import (
 
 func withBodyLimit(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if lim := getProxyConfig().MaxRequestBodyBytes; lim > 0 && r.Body != nil {
+		if lim := ConfigProvider().MaxRequestBodyBytes; lim > 0 && r.Body != nil {
 			r.Body = http.MaxBytesReader(w, r.Body, lim)
 		}
 		next(w, r)

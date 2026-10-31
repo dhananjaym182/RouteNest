@@ -1,4 +1,4 @@
-package main
+package proxycore
 
 import (
 	"bytes"
@@ -12,6 +12,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"cline-go-proxy/internal/routing"
 )
 
 var (
@@ -194,7 +196,7 @@ func sanitizeFilename(s string) string {
 	return r.Replace(s)
 }
 
-func doFullCapture() error {
+func Capture() error {
 	fmt.Println("")
 	fmt.Println("╔" + strings.Repeat("═", 70) + "╗")
 	fmt.Println("║         Cline OAuth 完整流量抓包 - 全流程记录                    ║")
@@ -438,7 +440,7 @@ func doFullCapture() error {
 	fmt.Println("  PHASE 6: 测试 Chat API 请求")
 	fmt.Println(strings.Repeat("█", 72))
 
-	// 模型动态取当前生效列表（getDefaultModel）：写死的模型 ID 会随上游每日
+	// 模型动态取当前生效列表（routing.DefaultModel）：写死的模型 ID 会随上游每日
 	// 调整而下架，导致这个可选测试每次必 404（历史硬编码 cline-free/glm-5.2
 	// 甚至不在内置表里）。
 	chatBody := fmt.Sprintf(`{
@@ -446,7 +448,7 @@ func doFullCapture() error {
 		"messages": [{"role":"user","content":"Hello, say hi"}],
 		"max_tokens": 100,
 		"stream": false
-	}`, getDefaultModel())
+	}`, routing.DefaultModel())
 
 	_, err = captureRequest(
 		"Cline Chat API Test",

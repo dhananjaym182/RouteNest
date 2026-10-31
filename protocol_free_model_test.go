@@ -3,6 +3,7 @@ package main
 import (
 	"cline-go-proxy/internal/accounts"
 	"cline-go-proxy/internal/egress"
+	"cline-go-proxy/internal/proxycore"
 	"cline-go-proxy/internal/requestlog"
 	"cline-go-proxy/internal/routing"
 	"cline-go-proxy/internal/zen"
@@ -41,21 +42,21 @@ func protocolTestServer(t *testing.T) string {
 	zen.Config = &zen.ConfigData{BaseURL: zen.APIBase, Key: "public"}
 	zen.ConfigMu.Unlock()
 
-	oldServerMux := serverMux
-	serverMu.Lock()
-	oldServer := currentServer
-	serverMu.Unlock()
+	oldServerMux := proxycore.ServerMux
+	proxycore.ServerMu.Lock()
+	oldServer := proxycore.CurrentServer
+	proxycore.ServerMu.Unlock()
 	t.Cleanup(func() {
-		serverMu.Lock()
-		server := currentServer
-		currentServer = oldServer
-		serverMu.Unlock()
+		proxycore.ServerMu.Lock()
+		server := proxycore.CurrentServer
+		proxycore.CurrentServer = oldServer
+		proxycore.ServerMu.Unlock()
 		if server != nil && server != oldServer {
 			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 			_ = server.Shutdown(ctx)
 			cancel()
 		}
-		serverMux = oldServerMux
+		proxycore.ServerMux = oldServerMux
 		zen.ConfigMu.Lock()
 		zen.Config = oldZenConfig
 		zen.ConfigMu.Unlock()
@@ -63,7 +64,7 @@ func protocolTestServer(t *testing.T) string {
 
 	serverErr := make(chan error, 1)
 	go func() {
-		serverErr <- startProxy("127.0.0.1", port)
+		serverErr <- proxycore.Start("127.0.0.1", port)
 	}()
 
 	baseURL := "http://127.0.0.1:" + strconv.Itoa(port)
@@ -137,7 +138,7 @@ func TestOpenAIChatCompletionsFreeFallsBackToDS(t *testing.T) {
 		}
 		model, _ := params["model"].(string)
 		models = append(models, model)
-		if model == freeModelPrimary {
+		if model == routing.FreeModelPrimary {
 			return &http.Response{
 				StatusCode: http.StatusTooManyRequests,
 				Body:       io.NopCloser(strings.NewReader(`{"error":"quota","message":"Try again in 1h"}`)),
@@ -187,7 +188,7 @@ func TestOpenAIChatCompletionsFreeFallsBackToDS(t *testing.T) {
 	if got, want := strings.Join(attempts, ","), "chat-glm-token,chat-ds-token,chat-glm-token"; got != want {
 		t.Fatalf("attempts = %q, want %q", got, want)
 	}
-	if got, want := strings.Join(models, ","), freeModelPrimary+","+freeModelPrimary+","+freeModelFallback; got != want {
+	if got, want := strings.Join(models, ","), routing.FreeModelPrimary+","+routing.FreeModelPrimary+","+routing.FreeModelFallback; got != want {
 		t.Fatalf("models = %q, want %q", got, want)
 	}
 }
@@ -250,7 +251,7 @@ func TestOpenAIResponsesFreeFallsBackToDSAndPreservesResponseFormat(t *testing.T
 		}
 		model, _ := params["model"].(string)
 		models = append(models, model)
-		if model == freeModelPrimary {
+		if model == routing.FreeModelPrimary {
 			return &http.Response{
 				StatusCode: http.StatusTooManyRequests,
 				Body:       io.NopCloser(strings.NewReader(`{"error":"quota","message":"Try again in 1h"}`)),
@@ -291,8 +292,8 @@ func TestOpenAIResponsesFreeFallsBackToDSAndPreservesResponseFormat(t *testing.T
 	if response["object"] != "response" || response["status"] != "completed" {
 		t.Fatalf("response envelope = %v, want completed Responses response", response)
 	}
-	if response["model"] != freeModelFallback {
-		t.Fatalf("response model = %v, want %q", response["model"], freeModelFallback)
+	if response["model"] != routing.FreeModelFallback {
+		t.Fatalf("response model = %v, want %q", response["model"], routing.FreeModelFallback)
 	}
 	if response["output_text"] != "responses fallback" {
 		t.Fatalf("output_text = %v, want responses fallback", response["output_text"])
@@ -303,7 +304,7 @@ func TestOpenAIResponsesFreeFallsBackToDSAndPreservesResponseFormat(t *testing.T
 	if got, want := strings.Join(attempts, ","), "responses-glm-token,responses-ds-token,responses-glm-token"; got != want {
 		t.Fatalf("attempts = %q, want %q", got, want)
 	}
-	if got, want := strings.Join(models, ","), freeModelPrimary+","+freeModelPrimary+","+freeModelFallback; got != want {
+	if got, want := strings.Join(models, ","), routing.FreeModelPrimary+","+routing.FreeModelPrimary+","+routing.FreeModelFallback; got != want {
 		t.Fatalf("models = %q, want %q", got, want)
 	}
 
@@ -312,8 +313,8 @@ func TestOpenAIResponsesFreeFallsBackToDSAndPreservesResponseFormat(t *testing.T
 	if len(requestlog.Logs) != 1 {
 		t.Fatalf("request log count = %d, want 1", len(requestlog.Logs))
 	}
-	if requestlog.Logs[0].Model != freeModelFallback {
-		t.Fatalf("request log model = %q, want %q", requestlog.Logs[0].Model, freeModelFallback)
+	if requestlog.Logs[0].Model != routing.FreeModelFallback {
+		t.Fatalf("request log model = %q, want %q", requestlog.Logs[0].Model, routing.FreeModelFallback)
 	}
 }
 
@@ -361,7 +362,7 @@ func TestAnthropicMessagesFreeFallsBackToDSAndPreservesResponseFormat(t *testing
 		}
 		model, _ := params["model"].(string)
 		models = append(models, model)
-		if model == freeModelPrimary {
+		if model == routing.FreeModelPrimary {
 			return &http.Response{
 				StatusCode: http.StatusTooManyRequests,
 				Body:       io.NopCloser(strings.NewReader(`{"error":"quota","message":"Try again in 1h"}`)),
@@ -402,8 +403,8 @@ func TestAnthropicMessagesFreeFallsBackToDSAndPreservesResponseFormat(t *testing
 	if response["type"] != "message" || response["role"] != "assistant" {
 		t.Fatalf("response envelope = %v, want Anthropic message", response)
 	}
-	if response["model"] != freeModelFallback {
-		t.Fatalf("response model = %v, want %q", response["model"], freeModelFallback)
+	if response["model"] != routing.FreeModelFallback {
+		t.Fatalf("response model = %v, want %q", response["model"], routing.FreeModelFallback)
 	}
 	content, ok := response["content"].([]any)
 	if !ok || len(content) != 1 {
@@ -423,7 +424,7 @@ func TestAnthropicMessagesFreeFallsBackToDSAndPreservesResponseFormat(t *testing
 	if got, want := strings.Join(attempts, ","), "anthropic-glm-token,anthropic-ds-token,anthropic-glm-token"; got != want {
 		t.Fatalf("attempts = %q, want %q", got, want)
 	}
-	if got, want := strings.Join(models, ","), freeModelPrimary+","+freeModelPrimary+","+freeModelFallback; got != want {
+	if got, want := strings.Join(models, ","), routing.FreeModelPrimary+","+routing.FreeModelPrimary+","+routing.FreeModelFallback; got != want {
 		t.Fatalf("models = %q, want %q", got, want)
 	}
 }
@@ -472,7 +473,7 @@ func TestOpenAIChatCompletionsFreeStreamFallsBackBeforeResponseHeaders(t *testin
 		}
 		model, _ := params["model"].(string)
 		models = append(models, model)
-		if model == freeModelPrimary {
+		if model == routing.FreeModelPrimary {
 			return &http.Response{
 				StatusCode: http.StatusTooManyRequests,
 				Body:       io.NopCloser(strings.NewReader(`{"error":"quota","message":"Try again in 1h"}`)),
@@ -515,7 +516,7 @@ func TestOpenAIChatCompletionsFreeStreamFallsBackBeforeResponseHeaders(t *testin
 	if got, want := strings.Join(attempts, ","), "chat-stream-glm-token,chat-stream-ds-token,chat-stream-glm-token"; got != want {
 		t.Fatalf("attempts = %q, want %q", got, want)
 	}
-	if got, want := strings.Join(models, ","), freeModelPrimary+","+freeModelPrimary+","+freeModelFallback; got != want {
+	if got, want := strings.Join(models, ","), routing.FreeModelPrimary+","+routing.FreeModelPrimary+","+routing.FreeModelFallback; got != want {
 		t.Fatalf("models = %q, want %q", got, want)
 	}
 }
@@ -607,7 +608,7 @@ func TestOpenAIChatCompletionsFreeStreamDoesNotRetryAfterResponseStarts(t *testi
 	if got, want := strings.Join(attempts, ","), first.AccessToken; got != want {
 		t.Fatalf("attempts = %q, want %q", got, want)
 	}
-	if got, want := strings.Join(models, ","), freeModelPrimary; got != want {
+	if got, want := strings.Join(models, ","), routing.FreeModelPrimary; got != want {
 		t.Fatalf("models = %q, want %q", got, want)
 	}
 }

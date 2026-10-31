@@ -1,4 +1,4 @@
-package main
+package proxycore
 
 // Tests for the passthrough-header filter and the client request body cap
 // (task #67). Both are opt-in via ProxyConfig and must be no-ops by default.
@@ -9,15 +9,18 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"cline-go-proxy/internal/config"
 )
 
 func installPassthroughConfig(t *testing.T, enabled bool) {
 	t.Helper()
-	cfg := defaultProxyConfig()
+	old := ConfigProvider
+	cfg := config.DefaultProxy()
 	cfg.PassthroughHeaders = enabled
 	cfg.Normalize()
-	setProxyConfig(cfg)
-	t.Cleanup(func() { setProxyConfig(defaultProxyConfig()) })
+	ConfigProvider = func() *config.Proxy { return cfg }
+	t.Cleanup(func() { ConfigProvider = old })
 }
 
 func TestCopyPassthroughHeadersDisabledByDefault(t *testing.T) {
@@ -81,11 +84,12 @@ func TestCopyPassthroughHeadersNilUpstream(t *testing.T) {
 }
 
 func TestWithBodyLimitRejectsOversizedBody(t *testing.T) {
-	cfg := defaultProxyConfig()
+	old := ConfigProvider
+	cfg := config.DefaultProxy()
 	cfg.MaxRequestBodyBytes = 16
 	cfg.Normalize()
-	setProxyConfig(cfg)
-	t.Cleanup(func() { setProxyConfig(defaultProxyConfig()) })
+	ConfigProvider = func() *config.Proxy { return cfg }
+	t.Cleanup(func() { ConfigProvider = old })
 
 	var readErr error
 	h := withBodyLimit(func(w http.ResponseWriter, r *http.Request) {

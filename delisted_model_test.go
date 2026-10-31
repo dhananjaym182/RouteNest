@@ -1,6 +1,7 @@
 package main
 
 import (
+	"cline-go-proxy/internal/routing"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -10,7 +11,7 @@ import (
 )
 
 // 用户显式配置的回退链不做列表过滤：列表外但实测仍可用的模型允许配置；
-// 动态派生的免费链仍按 liveModelSet 过滤下架条目。
+// 动态派生的免费链仍按 routing.LiveModelSet 过滤下架条目。
 func TestModelFallbackChainKeepsUserConfiguredOutOfList(t *testing.T) {
 	oldPool, oldPath := accounts.Pool, accounts.PoolPath
 	oldCfg := getProxyConfig()
@@ -24,7 +25,7 @@ func TestModelFallbackChainKeepsUserConfiguredOutOfList(t *testing.T) {
 	}}
 	setProxyConfig(&proxyConfigData{ModelChain: []string{"out-of-list/still-works", "cline-free/gemini-3.8-flash", "out-of-list/still-works"}})
 
-	chain := modelFallbackChain("requested-model")
+	chain := routing.ModelFallbackChain("requested-model")
 	got := strings.Join(chain, ",")
 	if !strings.Contains(got, "out-of-list/still-works") {
 		t.Errorf("user-configured out-of-list model must be kept in the chain, got: %s", got)

@@ -3,6 +3,7 @@ package main
 import (
 	"cline-go-proxy/internal/accounts"
 	"cline-go-proxy/internal/egress"
+	"cline-go-proxy/internal/proxycore"
 	"context"
 	"encoding/json"
 	"io"
@@ -89,7 +90,7 @@ func TestStreamAnthropicComboContinuesWhenEntryHitsContextLimit(t *testing.T) {
 	}
 	rec := httptest.NewRecorder()
 	reqLog := RequestLog{StartedAt: time.Now(), Protocol: "anthropic", Model: combo.ID, Stream: true}
-	streamAnthropicCombo(context.Background(), rec, params, combo, &reqLog, "ctx-session", "", nil)
+	proxycore.StreamAnthropicCombo(context.Background(), rec, params, combo, &reqLog, "ctx-session", "", nil)
 
 	out := rec.Body.String()
 	if !strings.Contains(out, "fallback-ok") {

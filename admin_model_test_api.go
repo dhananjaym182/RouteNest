@@ -11,6 +11,7 @@ package main
 // 上游失败 ≠ API 失败：一律 200 包裹 {success:true, data:{ok:false, error:...}}。
 
 import (
+	"cline-go-proxy/internal/routing"
 	"cline-go-proxy/internal/zen"
 	"context"
 	"encoding/json"
@@ -30,6 +31,7 @@ import (
 	"cline-go-proxy/internal/egress"
 	"cline-go-proxy/internal/i18n"
 	"cline-go-proxy/internal/providers"
+	"cline-go-proxy/internal/proxycore"
 )
 
 const (
@@ -237,23 +239,23 @@ func quickPoolAttempt(model string, params map[string]any, timeout time.Duration
 			break // 防呆：轮询边界不应撞同一个账号
 		}
 		tried[acc.AccountID] = true
-		resp, usedAcc, err := callClineAPIWithAccountCtx(ctx, acc, params, false)
+		resp, usedAcc, err := routing.CallClineAPIWithAccountCtx(ctx, acc, params, false)
 		if err == nil {
 			return resp, nil
 		}
 		lastErr = err
-		var acctErr *clineAccountUnavailableError
+		var acctErr *routing.ClineAccountUnavailableError
 		if errors.As(err, &acctErr) {
 			continue // token 失效等：换下一个账号
 		}
-		if isDeterministicRequestError(err) {
+		if routing.IsDeterministicRequestError(err) {
 			return nil, err // 换账号不会自愈的 payload 400
 		}
 		if apiErr, ok := err.(*egress.APIError); ok {
 			switch apiErr.StatusCode {
 			case http.StatusPaymentRequired: // 402：冷却该账号该模型后换号
 				if usedAcc != nil {
-					setModelCooldown(usedAcc, model, time.Now().Add(30*time.Minute))
+					routing.SetModelCooldown(usedAcc, model, time.Now().Add(30*time.Minute))
 				}
 				continue
 			case http.StatusTooManyRequests: // 429：模型级冷却已记录，换号
@@ -277,9 +279,9 @@ func readMiniTestUsage(resp *http.Response) (prompt, completion int64, valid boo
 		if d, ok := obj["data"].(map[string]any); ok {
 			obj = d
 		}
-		obj = normalizeOpenAIResponse(obj)
+		obj = proxycore.NormalizeOpenAIResponse(obj)
 	}
-	if u := parseTokenUsage(obj["usage"]); u.Valid {
+	if u := proxycore.ParseTokenUsage(obj["usage"]); u.Valid {
 		return u.Prompt, u.Completion, true
 	}
 	return 0, 0, false

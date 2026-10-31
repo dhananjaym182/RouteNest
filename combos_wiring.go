@@ -1,6 +1,7 @@
 package main
 
 import (
+	"cline-go-proxy/internal/routing"
 	"context"
 	"errors"
 	"net/http"
@@ -24,20 +25,20 @@ func init() {
 	combos.SaveConfig = saveProxyConfigLocked
 
 	combos.IsAccountUnavailable = func(err error) bool {
-		var e *clineAccountUnavailableError
+		var e *routing.ClineAccountUnavailableError
 		return errors.As(err, &e)
 	}
 	combos.NewUnavailableError = func(message string) error {
-		return &freeModelUnavailableError{message: message}
+		return &routing.FreeModelUnavailableError{Message: message}
 	}
 	combos.CallClineAPIWithAccount = func(ctx context.Context, acc *domain.Account, params map[string]any, stream bool) (*http.Response, *domain.Account, error) {
-		return callClineAPIWithAccountCtx(ctx, acc, params, stream)
+		return routing.CallClineAPIWithAccountCtx(ctx, acc, params, stream)
 	}
-	combos.IsDeterministicRequestError = isDeterministicRequestError
-	combos.SetModelCooldown = setModelCooldown
-	combos.TruncateEmail = truncateEmail
+	combos.IsDeterministicRequestError = routing.IsDeterministicRequestError
+	combos.SetModelCooldown = routing.SetModelCooldown
+	combos.TruncateEmail = routing.TruncateEmail
 	combos.CallFreeClineAPI = func(params map[string]any, stream bool) (*http.Response, *domain.Account, error) {
-		return callFreeClineAPI(params, stream)
+		return routing.CallFreeClineAPI(params, stream)
 	}
-	combos.WithModel = withModel
+	combos.WithModel = routing.WithModel
 }

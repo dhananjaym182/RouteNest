@@ -1,6 +1,7 @@
 package main
 
 import (
+	"cline-go-proxy/internal/routing"
 	"log"
 	"time"
 
@@ -43,7 +44,7 @@ var adminAccountOps = &adminapi.AccountOps{
 	DoRefreshAll: refreshAllAccounts,
 	Refresh:      accounts.RefreshAccountToken,
 	ClearAll:     clearAccountPool,
-	Probe:        func(acc *domain.Account) any { return testAccount(acc) },
+	Probe:        func(acc *domain.Account) any { return routing.TestAccount(acc) },
 	OpenBrowser:  accounts.OpenBrowser,
 	Now:          time.Now,
 	Translate:    i18n.TAPI,

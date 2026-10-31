@@ -6,6 +6,7 @@ package main
 // in package main until the provider extraction.
 
 import (
+	"cline-go-proxy/internal/proxycore"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -67,7 +68,7 @@ func TestCallProviderConnFailoverAndTag(t *testing.T) {
 
 	// recordUsage attributes stats to the tagged connection, not any account.
 	rl := RequestLog{Model: "x"}
-	usage := tokenUsage{Valid: true, Prompt: 3, Completion: 4, Total: 7}
+	usage := proxycore.TokenUsage{Valid: true, Prompt: 3, Completion: 4, Total: 7}
 	resp2, err := providers.Call(&CustomProvider{ID: "fp1", Name: "FailProv", BaseURL: srv.URL, ConnectionIDs: []string{c2.ID}}, params, false)
 	if err != nil {
 		t.Fatal(err)
@@ -111,7 +112,7 @@ func TestCallProviderRotatesAcrossConnections(t *testing.T) {
 			t.Errorf("dispatch %d tagged %+v, want %s", i, tag, wantID)
 		}
 		rl := RequestLog{Model: "x"}
-		recordUsage(nil, resp, &rl, "x", tokenUsage{Valid: true, Prompt: 1, Completion: 1, Total: 2})
+		recordUsage(nil, resp, &rl, "x", proxycore.TokenUsage{Valid: true, Prompt: 1, Completion: 1, Total: 2})
 		resp.Body.Close()
 	}
 	mu.Lock()

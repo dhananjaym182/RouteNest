@@ -4,6 +4,7 @@ import (
 	"cline-go-proxy/internal/accounts"
 	"cline-go-proxy/internal/egress"
 	"cline-go-proxy/internal/providers"
+	"cline-go-proxy/internal/routing"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -93,7 +94,7 @@ func TestCustomProviderServesModel(t *testing.T) {
 	})
 
 	params := map[string]any{"model": "custom-model-1", "max_tokens": 16, "messages": []any{map[string]any{"role": "user", "content": "hi"}}}
-	resp, acc, err := callClineAPI(params, false)
+	resp, acc, err := routing.CallClineAPI(params, false)
 	if err != nil {
 		t.Fatalf("expected provider success, got %v", err)
 	}
@@ -152,7 +153,7 @@ func TestCustomProviderFailureFallsBackToChain(t *testing.T) {
 	defer providers.SetCooldown("prov_test2", "z-ai/glm-5.3-flash", time.Time{})
 
 	params := map[string]any{"model": "z-ai/glm-5.3-flash", "max_tokens": 16, "messages": []any{map[string]any{"role": "user", "content": "hi"}}}
-	resp, _, err := callClineAPI(params, false)
+	resp, _, err := routing.CallClineAPI(params, false)
 	if err != nil {
 		t.Fatalf("expected fallback success, got %v", err)
 	}

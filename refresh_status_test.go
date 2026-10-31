@@ -3,6 +3,7 @@ package main
 import (
 	"cline-go-proxy/internal/accounts"
 	"cline-go-proxy/internal/egress"
+	"cline-go-proxy/internal/routing"
 	"errors"
 	"io"
 	"net/http"
@@ -95,12 +96,12 @@ func TestCallClineAPIWithAccountDoesNotExpireWhenRefreshAfter401HitsNetworkError
 	}
 	accounts.Pool = &AccountPool{Accounts: []*Account{acc}}
 
-	_, _, err := callClineAPIWithAccount(acc, map[string]any{
-		"model":    freeModelFallback,
+	_, _, err := routing.CallClineAPIWithAccount(acc, map[string]any{
+		"model":    routing.FreeModelFallback,
 		"messages": []any{map[string]any{"role": "user", "content": "hello"}},
 	}, false)
 	if err == nil {
-		t.Fatal("callClineAPIWithAccount should fail when refresh cannot reach Cline")
+		t.Fatal("routing.CallClineAPIWithAccount should fail when refresh cannot reach Cline")
 	}
 	if acc.Status == "expired" {
 		t.Fatalf("status = %q, want a recoverable state after a transient refresh failure", acc.Status)

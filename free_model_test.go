@@ -3,7 +3,9 @@ package main
 import (
 	"cline-go-proxy/internal/accounts"
 	"cline-go-proxy/internal/egress"
+	"cline-go-proxy/internal/proxycore"
 	"cline-go-proxy/internal/requestlog"
+	"cline-go-proxy/internal/routing"
 	"cline-go-proxy/internal/zen"
 	"context"
 	"encoding/json"
@@ -101,12 +103,12 @@ func TestCallClineAPIRefreshRetryReplaysRequestBody(t *testing.T) {
 	})
 
 	params := map[string]any{
-		"model":    freeModelPrimary,
+		"model":    routing.FreeModelPrimary,
 		"messages": []any{map[string]any{"role": "user", "content": "hello"}},
 	}
-	resp, _, err := callClineAPIWithAccount(account, params, false)
+	resp, _, err := routing.CallClineAPIWithAccount(account, params, false)
 	if err != nil {
-		t.Fatalf("callClineAPIWithAccount returned error: %v", err)
+		t.Fatalf("routing.CallClineAPIWithAccount returned error: %v", err)
 	}
 	resp.Body.Close()
 	if refreshCalls != 1 {
@@ -116,8 +118,8 @@ func TestCallClineAPIRefreshRetryReplaysRequestBody(t *testing.T) {
 		t.Fatalf("Cline request count = %d, want 2", len(requestBodies))
 	}
 	for index, body := range requestBodies {
-		if body["model"] != freeModelPrimary {
-			t.Fatalf("request %d model = %v, want %q", index, body["model"], freeModelPrimary)
+		if body["model"] != routing.FreeModelPrimary {
+			t.Fatalf("request %d model = %v, want %q", index, body["model"], routing.FreeModelPrimary)
 		}
 		messages, ok := body["messages"].([]any)
 		if !ok || len(messages) == 0 {
@@ -194,9 +196,9 @@ func TestCallClineAPIFreeRetriesNextGLMAccountAfterTokenRefreshFailure(t *testin
 		"model":    "free",
 		"messages": []any{map[string]any{"role": "user", "content": "hello"}},
 	}
-	resp, acc, err := callClineAPI(params, false)
+	resp, acc, err := routing.CallClineAPI(params, false)
 	if err != nil {
-		t.Fatalf("callClineAPI returned error: %v", err)
+		t.Fatalf("routing.CallClineAPI returned error: %v", err)
 	}
 	resp.Body.Close()
 	if acc != second {
@@ -208,7 +210,7 @@ func TestCallClineAPIFreeRetriesNextGLMAccountAfterTokenRefreshFailure(t *testin
 	if got, want := strings.Join(attempts, ","), "token-two"; got != want {
 		t.Fatalf("Cline attempts = %q, want %q", got, want)
 	}
-	if got, want := strings.Join(models, ","), freeModelPrimary; got != want {
+	if got, want := strings.Join(models, ","), routing.FreeModelPrimary; got != want {
 		t.Fatalf("models = %q, want %q", got, want)
 	}
 	if first.Status != "cooldown" {
@@ -273,9 +275,9 @@ func TestCallClineAPIFreeRetriesNextGLMAccountAfterTransportFailure(t *testing.T
 		"model":    "free",
 		"messages": []any{map[string]any{"role": "user", "content": "hello"}},
 	}
-	resp, acc, err := callClineAPI(params, false)
+	resp, acc, err := routing.CallClineAPI(params, false)
 	if err != nil {
-		t.Fatalf("callClineAPI returned error: %v", err)
+		t.Fatalf("routing.CallClineAPI returned error: %v", err)
 	}
 	resp.Body.Close()
 	if acc != second {
@@ -284,7 +286,7 @@ func TestCallClineAPIFreeRetriesNextGLMAccountAfterTransportFailure(t *testing.T
 	if got, want := strings.Join(attempts, ","), "token-one,token-two"; got != want {
 		t.Fatalf("Cline attempts = %q, want %q", got, want)
 	}
-	if got, want := strings.Join(models, ","), freeModelPrimary; got != want {
+	if got, want := strings.Join(models, ","), routing.FreeModelPrimary; got != want {
 		t.Fatalf("models = %q, want %q", got, want)
 	}
 	if first.Status != "cooldown" {
@@ -354,12 +356,12 @@ func TestCallClineAPIFreeRetriesNextGLMAccountAfterQuota429(t *testing.T) {
 		"model":    "free",
 		"messages": []any{map[string]any{"role": "user", "content": "hello"}},
 	}
-	resp, acc, err := callClineAPI(params, false)
+	resp, acc, err := routing.CallClineAPI(params, false)
 	if err != nil {
-		t.Fatalf("callClineAPI returned error: %v", err)
+		t.Fatalf("routing.CallClineAPI returned error: %v", err)
 	}
 	if resp == nil {
-		t.Fatal("callClineAPI returned nil response")
+		t.Fatal("routing.CallClineAPI returned nil response")
 	}
 	resp.Body.Close()
 
@@ -370,11 +372,11 @@ func TestCallClineAPIFreeRetriesNextGLMAccountAfterQuota429(t *testing.T) {
 		t.Fatalf("attempts = %q, want %q", got, want)
 	}
 	for index, model := range models {
-		if model != freeModelPrimary {
-			t.Fatalf("attempt %d model = %q, want %q", index, model, freeModelPrimary)
+		if model != routing.FreeModelPrimary {
+			t.Fatalf("attempt %d model = %q, want %q", index, model, routing.FreeModelPrimary)
 		}
 	}
-	if got, want := params["model"], freeModelPrimary; got != want {
+	if got, want := params["model"], routing.FreeModelPrimary; got != want {
 		t.Fatalf("effective model = %v, want %q", got, want)
 	}
 }
@@ -441,12 +443,12 @@ func TestCallClineAPIFreeFallsBackToDSAfterAllGLMAccountsUnavailable(t *testing.
 		"model":    "free",
 		"messages": []any{map[string]any{"role": "user", "content": "hello"}},
 	}
-	resp, acc, err := callClineAPI(params, false)
+	resp, acc, err := routing.CallClineAPI(params, false)
 	if err != nil {
-		t.Fatalf("callClineAPI returned error: %v", err)
+		t.Fatalf("routing.CallClineAPI returned error: %v", err)
 	}
 	if resp == nil {
-		t.Fatal("callClineAPI returned nil response")
+		t.Fatal("routing.CallClineAPI returned nil response")
 	}
 	resp.Body.Close()
 
@@ -481,7 +483,7 @@ func TestCallClineAPIFreeRetriesNextDSAccountAfterQuota429(t *testing.T) {
 		ExpiresAt:   time.Now().Add(time.Hour).UnixMilli(),
 		Status:      "active",
 		ModelCooldowns: map[string]time.Time{
-			freeModelPrimary: time.Now().Add(time.Hour),
+			routing.FreeModelPrimary: time.Now().Add(time.Hour),
 		},
 	}
 	second := &Account{
@@ -491,7 +493,7 @@ func TestCallClineAPIFreeRetriesNextDSAccountAfterQuota429(t *testing.T) {
 		ExpiresAt:   time.Now().Add(time.Hour).UnixMilli(),
 		Status:      "active",
 		ModelCooldowns: map[string]time.Time{
-			freeModelPrimary: time.Now().Add(time.Hour),
+			routing.FreeModelPrimary: time.Now().Add(time.Hour),
 		},
 	}
 	accounts.Pool = &AccountPool{Accounts: []*Account{first, second}}
@@ -532,12 +534,12 @@ func TestCallClineAPIFreeRetriesNextDSAccountAfterQuota429(t *testing.T) {
 		"model":    "free",
 		"messages": []any{map[string]any{"role": "user", "content": "hello"}},
 	}
-	resp, acc, err := callClineAPI(params, false)
+	resp, acc, err := routing.CallClineAPI(params, false)
 	if err != nil {
-		t.Fatalf("callClineAPI returned error: %v", err)
+		t.Fatalf("routing.CallClineAPI returned error: %v", err)
 	}
 	if resp == nil {
-		t.Fatal("callClineAPI returned nil response")
+		t.Fatal("routing.CallClineAPI returned nil response")
 	}
 	resp.Body.Close()
 
@@ -550,13 +552,13 @@ func TestCallClineAPIFreeRetriesNextDSAccountAfterQuota429(t *testing.T) {
 	if got, want := strings.Join(models, ","), "deepseek/deepseek-v4-flash,deepseek/deepseek-v4-flash"; got != want {
 		t.Fatalf("models = %q, want %q", got, want)
 	}
-	if got, want := params["model"], freeModelFallback; got != want {
+	if got, want := params["model"], routing.FreeModelFallback; got != want {
 		t.Fatalf("effective model = %v, want %q", got, want)
 	}
-	if !modelCooldownActive(first, freeModelFallback) {
+	if !routing.ModelCooldownActive(first, routing.FreeModelFallback) {
 		t.Fatal("first DS account should retain its DS cooldown")
 	}
-	if !modelCooldownActive(first, freeModelPrimary) {
+	if !routing.ModelCooldownActive(first, routing.FreeModelPrimary) {
 		t.Fatal("first DS account should retain its GLM cooldown")
 	}
 }
@@ -578,7 +580,7 @@ func TestCallClineAPIFreeReturnsToGLMAfterCooldownExpires(t *testing.T) {
 		ExpiresAt:   time.Now().Add(time.Hour).UnixMilli(),
 		Status:      "active",
 		ModelCooldowns: map[string]time.Time{
-			freeModelPrimary: time.Now().Add(time.Hour),
+			routing.FreeModelPrimary: time.Now().Add(time.Hour),
 		},
 	}
 	accounts.Pool = &AccountPool{Accounts: []*Account{account}}
@@ -604,22 +606,22 @@ func TestCallClineAPIFreeReturnsToGLMAfterCooldownExpires(t *testing.T) {
 		}, nil
 	})
 
-	firstResp, _, err := callClineAPI(map[string]any{"model": "free"}, false)
+	firstResp, _, err := routing.CallClineAPI(map[string]any{"model": "free"}, false)
 	if err != nil {
-		t.Fatalf("first callClineAPI returned error: %v", err)
+		t.Fatalf("first routing.CallClineAPI returned error: %v", err)
 	}
 	firstResp.Body.Close()
-	if got, want := models[0], freeModelFallback; got != want {
+	if got, want := models[0], routing.FreeModelFallback; got != want {
 		t.Fatalf("first effective model = %q, want %q", got, want)
 	}
 
-	account.ModelCooldowns[freeModelPrimary] = time.Now().Add(-time.Minute)
-	secondResp, _, err := callClineAPI(map[string]any{"model": "free"}, false)
+	account.ModelCooldowns[routing.FreeModelPrimary] = time.Now().Add(-time.Minute)
+	secondResp, _, err := routing.CallClineAPI(map[string]any{"model": "free"}, false)
 	if err != nil {
-		t.Fatalf("second callClineAPI returned error: %v", err)
+		t.Fatalf("second routing.CallClineAPI returned error: %v", err)
 	}
 	secondResp.Body.Close()
-	if got, want := models[1], freeModelPrimary; got != want {
+	if got, want := models[1], routing.FreeModelPrimary; got != want {
 		t.Fatalf("second effective model = %q, want %q", got, want)
 	}
 }
@@ -639,8 +641,8 @@ func TestCallClineAPIFreeKeepsModelCooldownsIndependent(t *testing.T) {
 		cooldownModel string
 		wantModel     string
 	}{
-		{name: "GLM cooldown allows DS", cooldownModel: freeModelPrimary, wantModel: freeModelFallback},
-		{name: "DS cooldown allows GLM", cooldownModel: freeModelFallback, wantModel: freeModelPrimary},
+		{name: "GLM cooldown allows DS", cooldownModel: routing.FreeModelPrimary, wantModel: routing.FreeModelFallback},
+		{name: "DS cooldown allows GLM", cooldownModel: routing.FreeModelFallback, wantModel: routing.FreeModelPrimary},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			account := &Account{
@@ -675,18 +677,18 @@ func TestCallClineAPIFreeKeepsModelCooldownsIndependent(t *testing.T) {
 				}, nil
 			})
 
-			resp, _, err := callClineAPI(map[string]any{"model": "free"}, false)
+			resp, _, err := routing.CallClineAPI(map[string]any{"model": "free"}, false)
 			if err != nil {
-				t.Fatalf("callClineAPI returned error: %v", err)
+				t.Fatalf("routing.CallClineAPI returned error: %v", err)
 			}
 			resp.Body.Close()
 			if upstreamModel != test.wantModel {
 				t.Fatalf("upstream model = %q, want %q", upstreamModel, test.wantModel)
 			}
-			if !modelCooldownActive(account, test.cooldownModel) {
+			if !routing.ModelCooldownActive(account, test.cooldownModel) {
 				t.Fatalf("cooldown for %s was lost", test.cooldownModel)
 			}
-			if modelCooldownActive(account, test.wantModel) {
+			if routing.ModelCooldownActive(account, test.wantModel) {
 				t.Fatalf("cooldown for %s unexpectedly blocked", test.wantModel)
 			}
 		})
@@ -720,7 +722,7 @@ func TestCallClineAPIFreeDoesNotPickCoolingAccount(t *testing.T) {
 		Status:         "active",
 		ModelCooldowns: map[string]time.Time{},
 	}
-	for _, model := range freeModelChain {
+	for _, model := range routing.FreeModelChain {
 		account.ModelCooldowns[model] = time.Now().Add(time.Hour)
 	}
 	accounts.Pool = &AccountPool{Accounts: []*Account{account}}
@@ -737,9 +739,9 @@ func TestCallClineAPIFreeDoesNotPickCoolingAccount(t *testing.T) {
 		}, nil
 	})
 
-	_, _, err := callClineAPI(map[string]any{"model": "free"}, false)
+	_, _, err := routing.CallClineAPI(map[string]any{"model": "free"}, false)
 	if err == nil {
-		t.Fatal("callClineAPI should fail when every GLM account is cooling")
+		t.Fatal("routing.CallClineAPI should fail when every GLM account is cooling")
 	}
 	if calls != 0 {
 		t.Fatalf("upstream calls = %d, want 0", calls)
@@ -765,7 +767,7 @@ func TestPickAccountForModelStrictPreservesStrategy(t *testing.T) {
 			cfg.Strategy = strategy
 			setProxyConfig(cfg)
 
-			firstPick := accounts.PickAccountForModelStrict(freeModelPrimary)
+			firstPick := accounts.PickAccountForModelStrict(routing.FreeModelPrimary)
 			if firstPick != first && firstPick != second {
 				t.Fatalf("first pick = %v, want an active account", firstPick)
 			}
@@ -773,7 +775,7 @@ func TestPickAccountForModelStrictPreservesStrategy(t *testing.T) {
 				t.Fatalf("fill first pick = %v, want first account", firstPick)
 			}
 			if strategy == "round_robin" {
-				secondPick := accounts.PickAccountForModelStrict(freeModelPrimary)
+				secondPick := accounts.PickAccountForModelStrict(routing.FreeModelPrimary)
 				if firstPick != first || secondPick != second {
 					t.Fatalf("round_robin picks = %v, %v, want first, second", firstPick, secondPick)
 				}
@@ -836,7 +838,7 @@ func TestCallClineAPIDirectModelsFallBackOnModelCooldown(t *testing.T) {
 			})
 
 			params := map[string]any{"model": model}
-			resp, _, err := callClineAPI(params, false)
+			resp, _, err := routing.CallClineAPI(params, false)
 			if err != nil {
 				t.Fatalf("expected fallback success, got %v", err)
 			}
@@ -903,13 +905,13 @@ func TestCallClineAPIDirectModelsNoFallbackOnServerError(t *testing.T) {
 	})
 
 	params := map[string]any{"model": model}
-	_, _, err := callClineAPI(params, false)
+	_, _, err := routing.CallClineAPI(params, false)
 	if err == nil {
 		t.Fatal("expected error after exhausting the fallback chain")
 	}
 	// 链上每个模型都被尝试过（glm → deepseek → longcat）
-	if calls != len(freeModelChain) {
-		t.Fatalf("upstream calls = %d, want %d (full fallback chain on 500)", calls, len(freeModelChain))
+	if calls != len(routing.FreeModelChain) {
+		t.Fatalf("upstream calls = %d, want %d (full fallback chain on 500)", calls, len(routing.FreeModelChain))
 	}
 	_ = upstreamModel
 }
@@ -966,12 +968,12 @@ func TestHandleResponsesFreeReturnsTooManyRequestsWhenBothPoolsUnavailable(t *te
 
 	req := httptest.NewRequest(http.MethodPost, "/v1/responses", strings.NewReader(`{"model":"free","input":"hello"}`))
 	recorder := httptest.NewRecorder()
-	handleResponses(recorder, req)
+	proxycore.HandleResponses(recorder, req)
 	if recorder.Code != http.StatusTooManyRequests {
 		t.Fatalf("response status = %d, want %d: %s", recorder.Code, http.StatusTooManyRequests, recorder.Body.String())
 	}
-	if calls != len(freeModelChain) {
-		t.Fatalf("upstream calls = %d, want one attempt per model (%d)", calls, len(freeModelChain))
+	if calls != len(routing.FreeModelChain) {
+		t.Fatalf("upstream calls = %d, want one attempt per model (%d)", calls, len(routing.FreeModelChain))
 	}
 
 	requestlog.Mu.Lock()
@@ -979,7 +981,7 @@ func TestHandleResponsesFreeReturnsTooManyRequestsWhenBothPoolsUnavailable(t *te
 	if len(requestlog.Logs) != 1 {
 		t.Fatalf("request log count = %d, want 1", len(requestlog.Logs))
 	}
-	lastModel := freeModelChain[len(freeModelChain)-1]
+	lastModel := routing.FreeModelChain[len(routing.FreeModelChain)-1]
 	if requestlog.Logs[0].Model != lastModel {
 		t.Fatalf("request log model = %q, want %q", requestlog.Logs[0].Model, lastModel)
 	}
@@ -996,7 +998,7 @@ func TestPickAccountForModelLeastUsedSpreadsUsage(t *testing.T) {
 		ExpiresAt:   time.Now().Add(time.Hour).UnixMilli(),
 		Status:      "active",
 		ModelStats: map[string]*ModelStat{
-			freeModelPrimary: {ModelID: freeModelPrimary, UsageCount: 100},
+			routing.FreeModelPrimary: {ModelID: routing.FreeModelPrimary, UsageCount: 100},
 		},
 	}
 	light := &Account{
@@ -1006,13 +1008,13 @@ func TestPickAccountForModelLeastUsedSpreadsUsage(t *testing.T) {
 		ExpiresAt:   time.Now().Add(time.Hour).UnixMilli(),
 		Status:      "active",
 		ModelStats: map[string]*ModelStat{
-			freeModelPrimary: {ModelID: freeModelPrimary, UsageCount: 2},
+			routing.FreeModelPrimary: {ModelID: routing.FreeModelPrimary, UsageCount: 2},
 		},
 	}
 	accounts.Pool = &AccountPool{Accounts: []*Account{heavy, light}}
 
 	for i := 0; i < 5; i++ {
-		acc := accounts.PickAccountForModelLeastUsed(freeModelPrimary)
+		acc := accounts.PickAccountForModelLeastUsed(routing.FreeModelPrimary)
 		if acc == nil {
 			t.Fatal("accounts.PickAccountForModelLeastUsed returned nil with eligible accounts")
 		}
@@ -1037,8 +1039,8 @@ func TestIsFreeModelEntry(t *testing.T) {
 		{Model{ID: "some-model", Cost: "pass", Source: "remote"}, false},
 	}
 	for _, c := range cases {
-		if got := isFreeModelEntry(c.m); got != c.want {
-			t.Errorf("isFreeModelEntry(%+v) = %v, want %v", c.m, got, c.want)
+		if got := routing.IsFreeModelEntry(c.m); got != c.want {
+			t.Errorf("routing.IsFreeModelEntry(%+v) = %v, want %v", c.m, got, c.want)
 		}
 	}
 }
@@ -1060,7 +1062,7 @@ func TestCallClineAPIFreePicksLeastUsedAccount(t *testing.T) {
 		ExpiresAt:   time.Now().Add(time.Hour).UnixMilli(),
 		Status:      "active",
 		ModelStats: map[string]*ModelStat{
-			freeModelPrimary: {ModelID: freeModelPrimary, UsageCount: 50},
+			routing.FreeModelPrimary: {ModelID: routing.FreeModelPrimary, UsageCount: 50},
 		},
 	}
 	second := &Account{
@@ -1086,7 +1088,7 @@ func TestCallClineAPIFreePicksLeastUsedAccount(t *testing.T) {
 	})
 
 	for i := 0; i < 3; i++ {
-		resp, _, err := callClineAPI(map[string]any{"model": "free"}, false)
+		resp, _, err := routing.CallClineAPI(map[string]any{"model": "free"}, false)
 		if err != nil || resp == nil {
 			t.Fatalf("call %d failed: %v", i+1, err)
 		}
@@ -1108,16 +1110,16 @@ func TestSortModelsByAvailabilityPrefersAvailableThenLeastUsed(t *testing.T) {
 		ExpiresAt:      time.Now().Add(time.Hour).UnixMilli(),
 		Status:         "active",
 		ModelCooldowns: map[string]time.Time{}, ModelStats: map[string]*ModelStat{
-			freeModelPrimary:  {ModelID: freeModelPrimary, UsageCount: 90},
-			freeModelFallback: {ModelID: freeModelFallback, UsageCount: 3},
+			routing.FreeModelPrimary:  {ModelID: routing.FreeModelPrimary, UsageCount: 90},
+			routing.FreeModelFallback: {ModelID: routing.FreeModelFallback, UsageCount: 3},
 		},
 	}
 	accounts.Pool = &AccountPool{Accounts: []*Account{acc}}
 
-	chain := []string{freeModelPrimary, freeModelFallback}
+	chain := []string{routing.FreeModelPrimary, routing.FreeModelFallback}
 	got := accounts.SortModelsByAvailability(chain)
-	if got[0] != freeModelFallback {
-		t.Fatalf("first model = %q, want the less-used %q", got[0], freeModelFallback)
+	if got[0] != routing.FreeModelFallback {
+		t.Fatalf("first model = %q, want the less-used %q", got[0], routing.FreeModelFallback)
 	}
 	if len(got) != 2 {
 		t.Fatalf("chain length = %d, want 2", len(got))
@@ -1149,8 +1151,8 @@ func TestHandleAnthropicStreamPreservesUpstreamModel(t *testing.T) {
 	// 模拟别名 cline-free/gemini-3.8-flash 在 fetch 时解析为实际上游模型后的 reqLog
 	reqLog := RequestLog{ID: "anthropic-stream-model", Model: "google/gemini-3.8-flash", StartedAt: time.Now()}
 
-	sw := newSSEWriter(recorder)
-	handleAnthropicStream(context.Background(), sw, upstream, nil, &reqLog, 5*time.Second, "", nil)
+	sw := proxycore.NewSSEWriter(recorder)
+	proxycore.HandleAnthropicStream(context.Background(), sw, upstream, nil, &reqLog, 5*time.Second, "", nil)
 
 	body := recorder.Body.String()
 	if !strings.Contains(body, `"model":"google/gemini-3.8-flash"`) {
@@ -1182,8 +1184,8 @@ func TestHandleAnthropicStreamFallsBackOnFirstPayloadWithoutModel(t *testing.T) 
 	}
 	reqLog := RequestLog{ID: "anthropic-stream-fallback", Model: "requested-model", StartedAt: time.Now()}
 
-	sw := newSSEWriter(recorder)
-	handleAnthropicStream(context.Background(), sw, upstream, nil, &reqLog, 5*time.Second, "", nil)
+	sw := proxycore.NewSSEWriter(recorder)
+	proxycore.HandleAnthropicStream(context.Background(), sw, upstream, nil, &reqLog, 5*time.Second, "", nil)
 
 	body := recorder.Body.String()
 	if strings.Count(body, "event: message_start") != 1 {
@@ -1215,8 +1217,8 @@ func TestHandleAnthropicStreamFlushesHeadersBeforeFirstPayload(t *testing.T) {
 	reqLog := RequestLog{ID: "anthropic-slow-first-payload", Model: "requested-model", StartedAt: time.Now()}
 	done := make(chan struct{})
 	go func() {
-		sw := newSSEWriter(recorder)
-		handleAnthropicStream(context.Background(), sw, upstream, nil, &reqLog, 5*time.Second, "", nil)
+		sw := proxycore.NewSSEWriter(recorder)
+		proxycore.HandleAnthropicStream(context.Background(), sw, upstream, nil, &reqLog, 5*time.Second, "", nil)
 		close(done)
 	}()
 

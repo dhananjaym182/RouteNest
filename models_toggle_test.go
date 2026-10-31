@@ -2,6 +2,7 @@ package main
 
 import (
 	"cline-go-proxy/internal/accounts"
+	"cline-go-proxy/internal/routing"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -80,28 +81,28 @@ func TestHandleAdminModelToggle(t *testing.T) {
 	}
 }
 
-// isModelDisabled：按 ID 判定停用状态，支持 "opencode/" 前缀别名。
+// routing.IsModelDisabled：按 ID 判定停用状态，支持 "opencode/" 前缀别名。
 func TestIsModelDisabled(t *testing.T) {
 	newToggleTestPool(t, []Model{
 		{ID: "zen/disabled-free", Provider: "opencode", Cost: "free", Status: "active", Source: "zen", Disabled: true},
 		{ID: "prov/live-model", Provider: "prov", Cost: "free", Status: "active", Source: "remote"},
 	}, "")
 
-	if !isModelDisabled("zen/disabled-free") {
+	if !routing.IsModelDisabled("zen/disabled-free") {
 		t.Error("disabled model should be reported as disabled")
 	}
-	if !isModelDisabled("opencode/zen/disabled-free") {
+	if !routing.IsModelDisabled("opencode/zen/disabled-free") {
 		t.Error("opencode/ prefixed alias of a disabled model should be reported as disabled")
 	}
-	if isModelDisabled("prov/live-model") {
+	if routing.IsModelDisabled("prov/live-model") {
 		t.Error("enabled model must not be reported as disabled")
 	}
-	if isModelDisabled("") {
+	if routing.IsModelDisabled("") {
 		t.Error("empty model id must not be reported as disabled")
 	}
 }
 
-// liveModelSet：停用模型不进「在线」集合 → 默认模型校验与回退链过滤自动跳过。
+// routing.LiveModelSet：停用模型不进「在线」集合 → 默认模型校验与回退链过滤自动跳过。
 func TestLiveModelSetExcludesDisabled(t *testing.T) {
 	newToggleTestPool(t, []Model{
 		{ID: "prov/disabled", Provider: "prov", Cost: "free", Status: "active", Source: "remote", Disabled: true},
@@ -109,7 +110,7 @@ func TestLiveModelSetExcludesDisabled(t *testing.T) {
 	}, "")
 	p := accounts.LoadPool()
 	accounts.PoolMu.Lock()
-	live := liveModelSet(p)
+	live := routing.LiveModelSet(p)
 	accounts.PoolMu.Unlock()
 	if live["prov/disabled"] {
 		t.Error("disabled model must not be in the live set")
@@ -119,7 +120,7 @@ func TestLiveModelSetExcludesDisabled(t *testing.T) {
 	}
 }
 
-// getDefaultModel：停用的默认模型跳过（含离线模式），停用模型不参与
+// routing.DefaultModel：停用的默认模型跳过（含离线模式），停用模型不参与
 // 「第一个远程免费模型」回退。
 func TestGetDefaultModelSkipsDisabled(t *testing.T) {
 	newToggleTestPool(t, []Model{
@@ -127,8 +128,8 @@ func TestGetDefaultModelSkipsDisabled(t *testing.T) {
 		{ID: "prov/live-free", Provider: "prov", Cost: "free", Status: "active", Source: "remote"},
 	}, "prov/disabled-free")
 
-	if got := getDefaultModel(); got != "prov/live-free" {
-		t.Errorf("getDefaultModel() = %q, want prov/live-free (disabled default skipped)", got)
+	if got := routing.DefaultModel(); got != "prov/live-free" {
+		t.Errorf("routing.DefaultModel() = %q, want prov/live-free (disabled default skipped)", got)
 	}
 
 	// 无默认模型时：第一个未停用的远程免费模型
@@ -136,7 +137,7 @@ func TestGetDefaultModelSkipsDisabled(t *testing.T) {
 		{ID: "prov/disabled-free", Provider: "prov", Cost: "free", Status: "active", Source: "remote", Disabled: true},
 		{ID: "prov/live-free", Provider: "prov", Cost: "free", Status: "active", Source: "remote"},
 	}, "")
-	if got := getDefaultModel(); got != "prov/live-free" {
-		t.Errorf("getDefaultModel() = %q, want prov/live-free (disabled model skipped in fallback)", got)
+	if got := routing.DefaultModel(); got != "prov/live-free" {
+		t.Errorf("routing.DefaultModel() = %q, want prov/live-free (disabled model skipped in fallback)", got)
 	}
 }

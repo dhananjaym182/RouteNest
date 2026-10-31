@@ -10,10 +10,12 @@ import (
 )
 
 var (
-	ConfigProvider = config.DefaultProxy
-	FindCombo      = func(string) (domain.ModelCombo, bool) { return domain.ModelCombo{}, false }
-	ModelsProvider = func() []domain.Model { return nil }
-	ModelDisabled  = func(string) bool { return false }
+	ConfigProvider        = config.DefaultProxy
+	FindCombo             = func(string) (domain.ModelCombo, bool) { return domain.ModelCombo{}, false }
+	ModelsProvider        = func() []domain.Model { return nil }
+	ModelDisabled         = func(string) bool { return false }
+	EnabledCombosProvider = func() []domain.ModelCombo { return nil }
+	IsContextLengthError  = func(error) bool { return false }
 )
 
 // Client-visible model policy: administrator aliases, wildcard exclusions, and

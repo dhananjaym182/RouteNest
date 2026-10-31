@@ -1,6 +1,7 @@
 package main
 
 import (
+	"cline-go-proxy/internal/routing"
 	"net/http"
 	"sort"
 	"strconv"
@@ -251,7 +252,7 @@ func dashboardOverview(hours int) map[string]any {
 		"runtime": map[string]any{
 			"strategy":     strategy,
 			"version":      buildinfo.AppVersion,
-			"defaultModel": getDefaultModel(),
+			"defaultModel": routing.DefaultModel(),
 			"onlyFree":     onlyFree,
 		},
 	}

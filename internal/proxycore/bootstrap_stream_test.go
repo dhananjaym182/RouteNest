@@ -1,4 +1,4 @@
-package main
+package proxycore
 
 // Tests for the stream bootstrap buffer (task #66): pre-content frames are
 // held per attempt and discarded on a pre-content retry, heartbeat comments

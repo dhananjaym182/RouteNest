@@ -9,6 +9,7 @@ import (
 	"cline-go-proxy/internal/accounts"
 	"cline-go-proxy/internal/combos"
 	"cline-go-proxy/internal/egress"
+	"cline-go-proxy/internal/routing"
 	"cline-go-proxy/internal/zen"
 	"encoding/json"
 	"io"
@@ -470,7 +471,7 @@ func TestBuildModelsListExposesCombos(t *testing.T) {
 	}
 	installConfig(t, cfg)
 
-	list := buildModelsList(false)
+	list := routing.BuildModelsList(false)
 	byID := map[string]map[string]any{}
 	for _, m := range list {
 		byID[m["id"].(string)] = m
@@ -655,7 +656,7 @@ func TestCallFreeClineAPIDeterministic400FailsFast(t *testing.T) {
 		return stubResp(req, http.StatusBadRequest,
 			`{"error":"Invalid input: expected string, received null","param":"tools.0.function.description"}`)
 	})
-	_, _, err := callFreeClineAPI(chatParams("free"), false)
+	_, _, err := routing.CallFreeClineAPI(chatParams("free"), false)
 	if err == nil {
 		t.Fatal("expected upstream error to surface")
 	}
@@ -667,25 +668,25 @@ func TestCallFreeClineAPIDeterministic400FailsFast(t *testing.T) {
 func TestIsDeterministicRequestErrorClassification(t *testing.T) {
 	det := egress.NewAPIError(http.StatusBadRequest,
 		`{"error":"Invalid input: expected string, received null","param":"tools.0.function.description"}`)
-	if !isDeterministicRequestError(det) {
+	if !routing.IsDeterministicRequestError(det) {
 		t.Error("invalid-input 400 must be classified deterministic")
 	}
 	ir := egress.NewAPIError(http.StatusBadRequest,
 		`{"error":{"type":"invalid_request_error","message":"bad tool schema"}}`)
-	if !isDeterministicRequestError(ir) {
+	if !routing.IsDeterministicRequestError(ir) {
 		t.Error("invalid_request_error 400 must be classified deterministic")
 	}
 	not400 := egress.NewAPIError(http.StatusInternalServerError, "Invalid input")
-	if isDeterministicRequestError(not400) {
+	if routing.IsDeterministicRequestError(not400) {
 		t.Error("only status-400 errors count as deterministic")
 	}
 	// 上下文超限 400 显式排除：必须保留 truncate+retry/continue 行为
 	cts := egress.NewAPIError(http.StatusBadRequest,
 		`prompt is too long: maximum context length exceeded`)
-	if isDeterministicRequestError(cts) {
+	if routing.IsDeterministicRequestError(cts) {
 		t.Error("context-length 400 must NOT be deterministic (truncate/retry must stay available)")
 	}
-	if isDeterministicRequestError(nil) {
+	if routing.IsDeterministicRequestError(nil) {
 		t.Error("nil error must not be deterministic")
 	}
 }

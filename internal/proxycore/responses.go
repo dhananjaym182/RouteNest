@@ -1,8 +1,9 @@
-package main
+package proxycore
 
 import (
 	"cline-go-proxy/internal/combos"
 	"cline-go-proxy/internal/compaction"
+	"cline-go-proxy/internal/domain"
 	"cline-go-proxy/internal/routing"
 	"cline-go-proxy/internal/zen"
 	"context"
@@ -59,7 +60,7 @@ func chatToResponses(chat map[string]any) map[string]any {
 // （finish_reason 或 [DONE]）才算正常结束；已输出内容后断流会补发 error
 // 事件而不是伪装成 response.completed；完全没有输出的尝试不写任何事件，
 // 由调用方决定是否重试（预提交重试）。
-func chatStreamToResponses(ctx context.Context, w http.ResponseWriter, upstream *http.Response, reqLog *RequestLog, acc *Account) streamResult {
+func chatStreamToResponses(ctx context.Context, w http.ResponseWriter, upstream *http.Response, reqLog *domain.RequestLog, acc *domain.Account) streamResult {
 	defer upstream.Body.Close()
 	// Cancelling on return releases the pump goroutine even when this attempt
 	// stops early (completed event, write failure) with lines still buffered.
@@ -69,7 +70,7 @@ func chatStreamToResponses(ctx context.Context, w http.ResponseWriter, upstream 
 	res := streamResult{}
 	s := responsesconv.NewSSEWriter(w)
 	st := &responsesconv.StreamState{}
-	var latestUsage tokenUsage
+	var latestUsage TokenUsage
 	sawTerminal := false
 	started := false
 	start := func() {
@@ -88,7 +89,7 @@ func chatStreamToResponses(ctx context.Context, w http.ResponseWriter, upstream 
 		if reqLog == nil {
 			return
 		}
-		recordUsage(acc, upstream, reqLog, reqLog.Model, latestUsage)
+		RecordUsage(acc, upstream, reqLog, reqLog.Model, latestUsage)
 		requestlog.Finalize(reqLog, latestUsage, res.firstOutputAt, startedAt, ok, reason)
 	}
 	gone := func() streamResult {
@@ -172,7 +173,7 @@ func chatStreamToResponses(ctx context.Context, w http.ResponseWriter, upstream 
 			if m, ok := obj["model"].(string); ok && m != "" {
 				s.Model = m
 			}
-			if usage := parseTokenUsage(obj["usage"]); usage.Valid {
+			if usage := ParseTokenUsage(obj["usage"]); usage.Valid {
 				latestUsage = mergeTokenUsage(latestUsage, usage)
 			}
 			if chatChunkFinishReason(obj) != "" {
@@ -201,8 +202,8 @@ func chatStreamToResponses(ctx context.Context, w http.ResponseWriter, upstream 
 	}
 }
 
-// usageToResponses 把聚合的 tokenUsage 转成 Responses usage 结构。
-func usageToResponses(u tokenUsage) map[string]any {
+// usageToResponses 把聚合的 TokenUsage 转成 Responses usage 结构。
+func usageToResponses(u TokenUsage) map[string]any {
 	return responsesconv.UsageToResponses(responsesconv.Usage{
 		Prompt: u.Prompt, Completion: u.Completion, Cached: u.Cached, Total: u.Total,
 	})
@@ -210,7 +211,7 @@ func usageToResponses(u tokenUsage) map[string]any {
 
 // ============ /v1/responses 入口 ============
 
-func handleResponses(w http.ResponseWriter, r *http.Request) {
+func HandleResponses(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "POST" {
 		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
 		return
@@ -241,17 +242,17 @@ func handleResponses(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 管理员手动停用的模型在入口直接拒绝（不进列表，也不可点名调用）
-	if model != "" && isModelDisabled(model) {
+	if model != "" && routing.IsModelDisabled(model) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{
 			"error": "model " + model + " is disabled",
 		})
 		return
 	}
 
-	reqLog := RequestLog{StartedAt: time.Now(), Protocol: "responses", Model: model, Stream: isStream}
+	reqLog := domain.RequestLog{StartedAt: time.Now(), Protocol: "responses", Model: model, Stream: isStream}
 
 	if msg := routing.FreeOnlyRejection(model); msg != "" {
-		requestlog.Finalize(&reqLog, tokenUsage{}, time.Time{}, reqLog.StartedAt, false, msg)
+		requestlog.Finalize(&reqLog, TokenUsage{}, time.Time{}, reqLog.StartedAt, false, msg)
 		writeJSON(w, http.StatusBadRequest, map[string]any{
 			"error": map[string]string{"message": msg, "type": "invalid_request_error"},
 		})
@@ -279,7 +280,7 @@ func handleResponses(w http.ResponseWriter, r *http.Request) {
 	if combo, ok := combos.FindCombo(chatModel); ok {
 		if !combo.Enabled {
 			msg := fmt.Sprintf("model combo %q is disabled", chatModel)
-			requestlog.Finalize(&reqLog, tokenUsage{}, time.Time{}, reqLog.StartedAt, false, msg)
+			requestlog.Finalize(&reqLog, TokenUsage{}, time.Time{}, reqLog.StartedAt, false, msg)
 			writeJSON(w, http.StatusBadRequest, map[string]any{
 				"error": map[string]string{"message": msg, "type": "invalid_request_error"},
 			})
@@ -296,7 +297,7 @@ func handleResponses(w http.ResponseWriter, r *http.Request) {
 		if run.Err != nil {
 			log.Printf("  responses combo %q error: %v", combo.ID, run.Err)
 			msg := combos.TraceSummary(combo, run)
-			requestlog.Finalize(&reqLog, tokenUsage{}, time.Time{}, reqLog.StartedAt, false, msg)
+			requestlog.Finalize(&reqLog, TokenUsage{}, time.Time{}, reqLog.StartedAt, false, msg)
 			writeJSON(w, clineErrorHTTPStatus(run.Err), map[string]any{
 				"error": map[string]string{"message": msg, "type": "api_error"},
 			})
@@ -310,14 +311,14 @@ func handleResponses(w http.ResponseWriter, r *http.Request) {
 		copyPassthroughHeaders(w, run.Resp.Header)
 		var raw map[string]any
 		if err := json.NewDecoder(run.Resp.Body).Decode(&raw); err != nil {
-			requestlog.Finalize(&reqLog, tokenUsage{}, time.Time{}, reqLog.StartedAt, false, "decode response: "+err.Error())
+			requestlog.Finalize(&reqLog, TokenUsage{}, time.Time{}, reqLog.StartedAt, false, "decode response: "+err.Error())
 			writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
 			return
 		}
-		out2 := normalizeOpenAIResponse(unwrapDataEnvelope(raw))
+		out2 := NormalizeOpenAIResponse(unwrapDataEnvelope(raw))
 		restoreToolCallsInResponse(out2, reqLog.ToolNames)
-		usage := parseTokenUsage(out2["usage"])
-		recordUsage(run.Acc, run.Resp, &reqLog, reqLog.Model, usage)
+		usage := ParseTokenUsage(out2["usage"])
+		RecordUsage(run.Acc, run.Resp, &reqLog, reqLog.Model, usage)
 		requestlog.Finalize(&reqLog, usage, time.Time{}, reqLog.StartedAt, true, "")
 		writeJSON(w, http.StatusOK, chatToResponses(out2))
 		return
@@ -327,7 +328,7 @@ func handleResponses(w http.ResponseWriter, r *http.Request) {
 
 	switch route {
 	case "reject":
-		requestlog.Finalize(&reqLog, tokenUsage{}, time.Time{}, reqLog.StartedAt, false, "paid zen model rejected")
+		requestlog.Finalize(&reqLog, TokenUsage{}, time.Time{}, reqLog.StartedAt, false, "paid zen model rejected")
 		writeJSON(w, http.StatusBadRequest, map[string]any{
 			"error": map[string]string{
 				"message": fmt.Sprintf("model %q is a paid opencode model; only free models are proxied", chatModel),
@@ -346,7 +347,7 @@ func handleResponses(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			// zen 故障转移到 Cline 池：先截短超长工具名（Meta 后端硬限 ≤64）
 			reqLog.ToolNames = clampParamsToolNames(chat)
-			if fbResp, fbAcc, fbErr, attempted := zenFailoverToCline(chat, isStream); attempted {
+			if fbResp, fbAcc, fbErr, attempted := routing.ZenFailoverToCline(chat, isStream); attempted {
 				if fbErr == nil {
 					log.Printf("  responses failover: serving %q via cline pool", chatModel)
 					stampUpstream(&reqLog, chat) // 归因实际服务方（provider / cline）
@@ -359,8 +360,8 @@ func handleResponses(w http.ResponseWriter, r *http.Request) {
 					}
 					defer fbResp.Body.Close()
 					if isStream {
-						serveResponsesStream(r.Context(), w, fbResp, &reqLog, fbAcc, func() (*http.Response, *Account, error) {
-							rr, ra, rerr := callClineAPI(chat, true)
+						serveResponsesStream(r.Context(), w, fbResp, &reqLog, fbAcc, func() (*http.Response, *domain.Account, error) {
+							rr, ra, rerr := routing.CallClineAPI(chat, true)
 							if rerr == nil {
 								stampUpstream(&reqLog, chat)
 							}
@@ -374,14 +375,14 @@ func handleResponses(w http.ResponseWriter, r *http.Request) {
 					copyPassthroughHeaders(w, fbResp.Header)
 					var raw map[string]any
 					if err := json.NewDecoder(fbResp.Body).Decode(&raw); err != nil {
-						requestlog.Finalize(&reqLog, tokenUsage{}, time.Time{}, reqLog.StartedAt, false, "decode response: "+err.Error())
+						requestlog.Finalize(&reqLog, TokenUsage{}, time.Time{}, reqLog.StartedAt, false, "decode response: "+err.Error())
 						writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
 						return
 					}
-					out2 := normalizeOpenAIResponse(unwrapDataEnvelope(raw))
+					out2 := NormalizeOpenAIResponse(unwrapDataEnvelope(raw))
 					restoreToolCallsInResponse(out2, reqLog.ToolNames)
-					usage := parseTokenUsage(out2["usage"])
-					recordUsage(fbAcc, fbResp, &reqLog, reqLog.Model, usage)
+					usage := ParseTokenUsage(out2["usage"])
+					RecordUsage(fbAcc, fbResp, &reqLog, reqLog.Model, usage)
 					requestlog.Finalize(&reqLog, usage, time.Time{}, reqLog.StartedAt, true, "")
 					writeJSON(w, http.StatusOK, chatToResponses(out2))
 					return
@@ -391,7 +392,7 @@ func handleResponses(w http.ResponseWriter, r *http.Request) {
 				err = fmt.Errorf("zen: %v; cline free chain: %w", err, fbErr)
 			}
 			log.Printf("  responses api error: %v", err)
-			requestlog.Finalize(&reqLog, tokenUsage{}, time.Time{}, reqLog.StartedAt, false, err.Error())
+			requestlog.Finalize(&reqLog, TokenUsage{}, time.Time{}, reqLog.StartedAt, false, err.Error())
 			writeJSON(w, http.StatusBadGateway, map[string]any{
 				"error": map[string]string{"message": err.Error(), "type": "api_error"},
 			})
@@ -400,8 +401,8 @@ func handleResponses(w http.ResponseWriter, r *http.Request) {
 		defer upResp.Body.Close()
 
 		if isStream {
-			serveResponsesStream(r.Context(), w, upResp, &reqLog, nil, func() (*http.Response, *Account, error) {
-				fbResp, fbAcc, fbErr, attempted := zenFailoverToCline(chat, true)
+			serveResponsesStream(r.Context(), w, upResp, &reqLog, nil, func() (*http.Response, *domain.Account, error) {
+				fbResp, fbAcc, fbErr, attempted := routing.ZenFailoverToCline(chat, true)
 				if !attempted {
 					return nil, nil, fmt.Errorf("no cline fallback available")
 				}
@@ -418,12 +419,12 @@ func handleResponses(w http.ResponseWriter, r *http.Request) {
 		copyPassthroughHeaders(w, upResp.Header)
 		var raw map[string]any
 		if err := json.NewDecoder(upResp.Body).Decode(&raw); err != nil {
-			requestlog.Finalize(&reqLog, tokenUsage{}, time.Time{}, reqLog.StartedAt, false, "decode response: "+err.Error())
+			requestlog.Finalize(&reqLog, TokenUsage{}, time.Time{}, reqLog.StartedAt, false, "decode response: "+err.Error())
 			writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
 			return
 		}
-		out2 := normalizeOpenAIResponse(unwrapDataEnvelope(raw))
-		usage := parseTokenUsage(out2["usage"])
+		out2 := NormalizeOpenAIResponse(unwrapDataEnvelope(raw))
+		usage := ParseTokenUsage(out2["usage"])
 		requestlog.Finalize(&reqLog, usage, time.Time{}, reqLog.StartedAt, true, "")
 		writeJSON(w, http.StatusOK, chatToResponses(out2))
 
@@ -433,11 +434,11 @@ func handleResponses(w http.ResponseWriter, r *http.Request) {
 		zm := compaction.ModelForCompaction(chatModel)
 		compaction.CompactForRequest(chat, zm, compaction.RequestSessionID(chat, r.Header), "responses")
 		reqLog.ToolNames = clampParamsToolNames(chat)
-		upResp, acc, err := callClineAPI(chat, isStream)
+		upResp, acc, err := routing.CallClineAPI(chat, isStream)
 		if err != nil && compaction.IsContextLengthError(err) {
 			if out := compaction.FallbackTruncate(chat, zm); out.Changed {
 				log.Printf("  responses %s", out.Note)
-				upResp, acc, err = callClineAPI(chat, isStream)
+				upResp, acc, err = routing.CallClineAPI(chat, isStream)
 			}
 		}
 		if effectiveModel, ok := chat["model"].(string); ok && effectiveModel != "" {
@@ -450,7 +451,7 @@ func handleResponses(w http.ResponseWriter, r *http.Request) {
 		}
 		if err != nil {
 			log.Printf("  responses api error: %v", err)
-			requestlog.Finalize(&reqLog, tokenUsage{}, time.Time{}, reqLog.StartedAt, false, err.Error())
+			requestlog.Finalize(&reqLog, TokenUsage{}, time.Time{}, reqLog.StartedAt, false, err.Error())
 			writeJSON(w, clineErrorHTTPStatus(err), map[string]any{
 				"error": map[string]string{"message": err.Error(), "type": "api_error"},
 			})
@@ -463,8 +464,8 @@ func handleResponses(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if isStream {
-			serveResponsesStream(r.Context(), w, upResp, &reqLog, acc, func() (*http.Response, *Account, error) {
-				rr, ra, rerr := callClineAPI(chat, true)
+			serveResponsesStream(r.Context(), w, upResp, &reqLog, acc, func() (*http.Response, *domain.Account, error) {
+				rr, ra, rerr := routing.CallClineAPI(chat, true)
 				if rerr == nil {
 					stampUpstream(&reqLog, chat)
 				}
@@ -478,16 +479,16 @@ func handleResponses(w http.ResponseWriter, r *http.Request) {
 		copyPassthroughHeaders(w, upResp.Header)
 		var raw map[string]any
 		if err := json.NewDecoder(upResp.Body).Decode(&raw); err != nil {
-			requestlog.Finalize(&reqLog, tokenUsage{}, time.Time{}, reqLog.StartedAt, false, "decode response: "+err.Error())
+			requestlog.Finalize(&reqLog, TokenUsage{}, time.Time{}, reqLog.StartedAt, false, "decode response: "+err.Error())
 			writeJSON(w, http.StatusInternalServerError, map[string]any{
 				"error": map[string]string{"message": err.Error(), "type": "parse_error"},
 			})
 			return
 		}
-		out2 := normalizeOpenAIResponse(unwrapDataEnvelope(raw))
+		out2 := NormalizeOpenAIResponse(unwrapDataEnvelope(raw))
 		restoreToolCallsInResponse(out2, reqLog.ToolNames)
-		usage := parseTokenUsage(out2["usage"])
-		recordUsage(acc, upResp, &reqLog, reqLog.Model, usage)
+		usage := ParseTokenUsage(out2["usage"])
+		RecordUsage(acc, upResp, &reqLog, reqLog.Model, usage)
 		requestlog.Finalize(&reqLog, usage, time.Time{}, reqLog.StartedAt, true, "")
 		writeJSON(w, http.StatusOK, chatToResponses(out2))
 	}

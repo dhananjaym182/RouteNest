@@ -1,6 +1,7 @@
 package main
 
 import (
+	"cline-go-proxy/internal/routing"
 	"errors"
 	"io"
 	"net/http"
@@ -144,7 +145,7 @@ func TestErrorRuleStopPreventsAccountAndModelFallback(t *testing.T) {
 		}, nil
 	})
 
-	_, _, err := callClineAPI(map[string]any{"model": "stop/model", "messages": []any{}}, false)
+	_, _, err := routing.CallClineAPI(map[string]any{"model": "stop/model", "messages": []any{}}, false)
 	if err == nil {
 		t.Fatal("stop rule must surface the provider error")
 	}
