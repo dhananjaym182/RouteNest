@@ -1,6 +1,7 @@
 package platform
 
 import (
+	"fmt"
 	"log"
 	"os"
 	"path/filepath"
@@ -75,6 +76,8 @@ func MigrateLegacyDataFilesOnce(dir string, legacyDirs func() []string) {
 var (
 	testDataDirOnce sync.Once
 	testDataDir     string
+	userConfigDir   = os.UserConfigDir
+	isTesting       = testing.Testing
 )
 
 // TestIsolatedDataDir lazily creates a temporary directory used by go test so
@@ -91,6 +94,35 @@ func TestIsolatedDataDir() string {
 	return testDataDir
 }
 
+func createDataDir(dir string) error {
+	if strings.TrimSpace(dir) == "" {
+		return fmt.Errorf("empty directory path")
+	}
+	if err := os.MkdirAll(dir, 0700); err != nil {
+		return fmt.Errorf("create %s: %w", dir, err)
+	}
+	return nil
+}
+
+func panicDataDir(err error) {
+	panic("RouteNest data directory: " + err.Error())
+}
+
+func defaultDataDir() (string, error) {
+	base, err := userConfigDir()
+	if err != nil {
+		return "", fmt.Errorf("resolve user config directory: %w", err)
+	}
+	if strings.TrimSpace(base) == "" {
+		return "", fmt.Errorf("resolve user config directory: empty path")
+	}
+	dir := filepath.Join(base, "routenest")
+	if err := createDataDir(dir); err != nil {
+		return "", err
+	}
+	return dir, nil
+}
+
 // EnvDataDir returns the configured data directory, creating it if needed.
 // ROUTENEST_DATA_DIR wins; the legacy CLINE2API_DATA_DIR is still honored as a
 // fallback for existing deployments.
@@ -102,8 +134,8 @@ func EnvDataDir() string {
 	if dir == "" {
 		return ""
 	}
-	if err := os.MkdirAll(dir, 0700); err != nil {
-		log.Printf("Failed to create data dir %s: %v", dir, err)
+	if err := createDataDir(dir); err != nil {
+		panicDataDir(err)
 	}
 	return dir
 }
@@ -138,53 +170,26 @@ func resolveExistingInDir(dir, filename string) (string, bool) {
 //  1. ROUTENEST_DATA_DIR (falling back to legacy CLINE2API_DATA_DIR,
 //     migrating legacy files on first use);
 //  2. a per-test temporary directory when running under go test;
-//  3. executable directory, working directory, then ~/.routenest, with legacy
-//     names (same location, or ~/.cline2api for the home directory) migrated
-//     in place when only those exist;
-//  4. executable directory as the creation fallback.
+//  3. the OS-native user config directory + "routenest".
+//
+// Executable, working and legacy home directories are migration sources only;
+// new state is never created there by default.
 func ResolveDataPath(filename string, legacyDirs func() []string) string {
 	if dir := EnvDataDir(); dir != "" {
 		MigrateLegacyDataFilesOnce(dir, legacyDirs)
 		return filepath.Join(dir, filename)
 	}
-	if testing.Testing() {
+	if isTesting() {
 		if dir := TestIsolatedDataDir(); dir != "" {
 			return filepath.Join(dir, filename)
 		}
 	}
-	if exe, err := os.Executable(); err == nil {
-		if p, ok := resolveExistingInDir(filepath.Dir(exe), filename); ok {
-			return p
-		}
+	dir, err := defaultDataDir()
+	if err != nil {
+		panicDataDir(err)
 	}
-	if pwd, err := os.Getwd(); err == nil {
-		if p, ok := resolveExistingInDir(pwd, filename); ok {
-			return p
-		}
-	}
-	if home, err := os.UserHomeDir(); err == nil {
-		if p, ok := resolveExistingInDir(filepath.Join(home, ".routenest"), filename); ok {
-			return p
-		}
-		// Legacy home data directory from before the rename.
-		if legacy, ok := LegacyDataFileName(filename); ok {
-			src := filepath.Join(home, ".cline2api", legacy)
-			if data, err := os.ReadFile(src); err == nil {
-				dst := filepath.Join(home, ".routenest", filename)
-				if err := os.MkdirAll(filepath.Dir(dst), 0700); err == nil {
-					if err := WriteFileAtomic(dst, data, 0600); err == nil {
-						log.Printf("Migrated legacy %s from %s to %s", legacy, src, dst)
-						return dst
-					}
-				}
-			}
-		}
-	}
-	if exe, err := os.Executable(); err == nil {
-		return filepath.Join(filepath.Dir(exe), filename)
-	}
-	pwd, _ := os.Getwd()
-	return filepath.Join(pwd, filename)
+	MigrateLegacyDataFilesOnce(dir, legacyDirs)
+	return filepath.Join(dir, filename)
 }
 
 // CurrentDataDir returns the directory where new data files will be created.
@@ -192,11 +197,16 @@ func CurrentDataDir() string {
 	if dir := EnvDataDir(); dir != "" {
 		return dir
 	}
-	if exe, err := os.Executable(); err == nil {
-		return filepath.Dir(exe)
+	if isTesting() {
+		if dir := TestIsolatedDataDir(); dir != "" {
+			return dir
+		}
 	}
-	pwd, _ := os.Getwd()
-	return pwd
+	dir, err := defaultDataDir()
+	if err != nil {
+		panicDataDir(err)
+	}
+	return dir
 }
 
 // LegacyDataCandidates returns de-duplicated absolute paths that may contain

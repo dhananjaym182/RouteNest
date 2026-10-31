@@ -1,10 +1,63 @@
 package platform
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
+	"strings"
+	"sync"
 	"testing"
 )
+
+func stubDataPathRuntime(t *testing.T, configDir string, configErr error) {
+	t.Helper()
+	oldUserConfigDir, oldIsTesting := userConfigDir, isTesting
+	userConfigDir = func() (string, error) { return configDir, configErr }
+	isTesting = func() bool { return false }
+	migrateOnce = sync.Once{}
+	t.Cleanup(func() {
+		userConfigDir, isTesting = oldUserConfigDir, oldIsTesting
+		migrateOnce = sync.Once{}
+	})
+}
+
+func TestResolveDataPathDefaultsToUserConfigDir(t *testing.T) {
+	base := t.TempDir()
+	stubDataPathRuntime(t, base, nil)
+	t.Setenv(DataDirEnv, "")
+	t.Setenv(LegacyDataDirEnv, "")
+
+	got := ResolveDataPath(".routenest-accounts.json", func() []string { return nil })
+	want := filepath.Join(base, "routenest", ".routenest-accounts.json")
+	if got != want {
+		t.Fatalf("ResolveDataPath = %q, want %q", got, want)
+	}
+}
+
+func TestCurrentDataDirDefaultsToUserConfigDir(t *testing.T) {
+	base := t.TempDir()
+	stubDataPathRuntime(t, base, nil)
+	t.Setenv(DataDirEnv, "")
+	t.Setenv(LegacyDataDirEnv, "")
+
+	if got, want := CurrentDataDir(), filepath.Join(base, "routenest"); got != want {
+		t.Fatalf("CurrentDataDir = %q, want %q", got, want)
+	}
+}
+
+func TestResolveDataPathFailsWhenUserConfigDirUnavailable(t *testing.T) {
+	stubDataPathRuntime(t, "", errors.New("config home unavailable"))
+	t.Setenv(DataDirEnv, "")
+	t.Setenv(LegacyDataDirEnv, "")
+
+	defer func() {
+		got := recover()
+		if got == nil || !strings.Contains(got.(string), "RouteNest data directory") || !strings.Contains(got.(string), "config home unavailable") {
+			t.Fatalf("panic = %v, want actionable RouteNest data-directory error", got)
+		}
+	}()
+	_ = ResolveDataPath(".routenest-accounts.json", nil)
+}
 
 // TestResolveDataPathLegacyEnvFallback ROUTENEST_DATA_DIR 未设置时，
 // 旧的 CLINE2API_DATA_DIR 仍然生效（现有部署兼容）。
