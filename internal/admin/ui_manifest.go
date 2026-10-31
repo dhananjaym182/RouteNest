@@ -16,3 +16,49 @@ var adminUIJSAssets = []string{
 	"ui/js/09_init.js",
 	"ui/js/10_quota.js",
 }
+
+// adminUIBodyParts lists the page body fragments in document order. Concatenated,
+// they are the <body> markup. Tab panels are pages/*, overlays and drawers are
+// dialogs/*. Plain HTML only; scripts live in adminUIJSAssets.
+var adminUIBodyParts = []string{
+	"ui/html/shell.html",
+	"ui/html/pages/dashboard.html",
+	"ui/html/pages/accounts.html",
+	"ui/html/pages/logs.html",
+	"ui/html/pages/security.html",
+	"ui/html/pages/routing.html",
+	"ui/html/pages/combos.html",
+	"ui/html/dialogs/combo_editor.html",
+	"ui/html/dialogs/provider_detail.html",
+	"ui/html/pages/upstreams.html",
+	"ui/html/pages/providers.html",
+	"ui/html/dialogs/provider_save_bar.html",
+	"ui/html/dialogs/diff.html",
+	"ui/html/dialogs/provider_editor.html",
+	"ui/html/pages/quickstart.html",
+	"ui/html/pages/quota.html",
+	"ui/html/pages/about.html",
+	"ui/html/dialogs/toast.html",
+	"ui/html/dialogs/login.html",
+	"ui/html/dialogs/model_sync.html",
+}
+
+// adminUICSSLayers lists the stylesheet layers in cascade order. Later layers win
+// over earlier ones, so the order is part of the styling. Each layer is a
+// contiguous slice of the original stylesheet.
+var adminUICSSLayers = []string{
+	"ui/css/00_base.css",
+	"ui/css/10_pages_dashboard.css",
+	"ui/css/20_layout.css",
+	"ui/css/30_components.css",
+	"ui/css/40_pages_models.css",
+	"ui/css/41_pages_combos.css",
+	"ui/css/42_pages_providers_import.css",
+	"ui/css/43_pages_provider_cards.css",
+	"ui/css/44_pages_provider_detail.css",
+	"ui/css/50_components_a11y.css",
+	"ui/css/60_responsive.css",
+	"ui/css/70_pages_overview_logs_health.css",
+	"ui/css/80_waves.css",
+	"ui/css/90_connection_import.css",
+}

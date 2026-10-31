@@ -50,3 +50,55 @@ func TestAdminHTMLAssemblesScriptsInManifestOrder(t *testing.T) {
 		last = idx
 	}
 }
+
+// Every body fragment must be listed exactly once, exist in the embed, and every
+// embedded HTML fragment must be listed.
+func TestAdminUIBodyManifestMatchesEmbeddedFragments(t *testing.T) {
+	seen := map[string]bool{}
+	for _, name := range adminUIBodyParts {
+		if seen[name] {
+			t.Errorf("body manifest lists %s more than once", name)
+		}
+		seen[name] = true
+		if _, err := adminUIFS.ReadFile(name); err != nil {
+			t.Errorf("body fragment %s is not embedded: %v", name, err)
+		}
+	}
+	var files []string
+	for _, pat := range []string{"ui/html/*.html", "ui/html/pages/*.html", "ui/html/dialogs/*.html"} {
+		m, err := fs.Glob(adminUIFS, pat)
+		if err != nil {
+			t.Fatal(err)
+		}
+		files = append(files, m...)
+	}
+	for _, f := range files {
+		if !seen[f] {
+			t.Errorf("embedded fragment %s is not in the body manifest", f)
+		}
+	}
+}
+
+// Stylesheet layers: every layer listed exactly once in order, every embedded CSS
+// file listed. The cascade depends on this order.
+func TestAdminUICSSManifestMatchesEmbeddedLayers(t *testing.T) {
+	seen := map[string]bool{}
+	for _, name := range adminUICSSLayers {
+		if seen[name] {
+			t.Errorf("css manifest lists %s more than once", name)
+		}
+		seen[name] = true
+		if _, err := adminUIFS.ReadFile(name); err != nil {
+			t.Errorf("css layer %s is not embedded: %v", name, err)
+		}
+	}
+	files, err := fs.Glob(adminUIFS, "ui/css/*.css")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range files {
+		if !seen[f] {
+			t.Errorf("embedded stylesheet %s is not in the css manifest", f)
+		}
+	}
+}

@@ -1,0 +1,20 @@
+<div id="tab-providers" class="tab-panel" style="display:none">
+  <div class="page-header">
+    <div>
+      <div class="large-title">自定义 Provider</div>
+      <div class="large-subtitle">接入任意 OpenAI 兼容上游（OpenRouter / Groq / Cerebras / Gemini / vLLM 等），含设备码登录连接；模型命中时优先走该上游，失败按回退链降级，最终兜底 Cline 池</div>
+    </div>
+  </div>
+  <div class="section">
+    <div class="section-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg><span>Provider 列表</span>
+      <span class="title-tools">
+        <button class="btn btn-sm" onclick="loadProviderPresets()">从预设添加 Provider</button>
+        <button class="btn btn-sm btn-primary" onclick="showProviderEditor()">＋ 添加 Provider</button>
+      </span>
+    </div>
+    <div id="providerSyncBanner" class="sync-banner" aria-live="polite"></div>
+    <div class="section-body">
+      <div id="providersList"></div>
+    </div>
+  </div>
+

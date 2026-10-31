@@ -1,0 +1,58 @@
+<div id="tab-logs" class="tab-panel" style="display:none">
+  <div class="page-header">
+    <div>
+      <div class="large-title">请求日志</div>
+      <div class="large-subtitle">查看每次请求的 Token 消耗、缓存、耗时与流式速度</div>
+    </div>
+    <div class="action-row">
+      <button class="btn btn-sm btn-primary" id="logFollowBtn" onclick="toggleLogFollow(this)" title="自动跟随新日志">跟随新日志</button>
+      <button class="btn btn-sm" onclick="loadRequestLogs(true)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>刷新</button>
+      <span class="toolbar-sep" aria-hidden="true"></span>
+      <button class="btn btn-sm" onclick="downloadLogs(this)" title="下载当前筛选结果">下载</button>
+      <button class="btn btn-sm" onclick="downloadErrorLogs(this)" title="仅下载失败请求">下载错误日志</button>
+      <span class="toolbar-sep" aria-hidden="true"></span>
+      <button class="btn btn-sm" onclick="toggleLogFullscreen(this)" title="全屏">全屏</button>
+      <button class="btn btn-sm btn-danger" onclick="clearRequestLogs(this)" title="清空全部日志">清空</button>
+    </div>
+  </div>
+  <div class="log-toolbar">
+    <div class="log-chips" id="logFilterChips" role="group" aria-label="快捷筛选"></div>
+    <div class="log-filters">
+      <select id="logFilterProtocol" onchange="onLogProtoFilterChange()" aria-label="协议筛选"><option value="">全部协议</option></select>
+      <input type="search" id="logSearch" placeholder="搜索模型 / 账号 / 请求 ID…" oninput="onLogSearchInput()">
+    </div>
+  </div>
+  <div class="log-resume-bar" id="logResumeBar" hidden>
+    <span class="log-resume-dot" aria-hidden="true"></span>
+    <span id="logResumeText"></span>
+    <button class="btn btn-sm btn-primary" onclick="resumeLogFollow()">恢复跟随</button>
+  </div>
+  <div class="section">
+    <div class="section-body flush log-sheet">
+      <table class="log-table">
+        <thead>
+          <tr><th>时间</th><th>账号</th><th>协议</th><th>模型</th><th>输入</th><th>输出</th><th>缓存</th><th>总</th><th>耗时</th><th>TTFT</th><th>tok/s</th><th>状态</th><th>操作</th></tr>
+        </thead>
+        <tbody id="logTableBody">
+          <tr><td colspan="13"><div class="sk-stack"><span class="skeleton"></span><span class="skeleton w70"></span><span class="skeleton w45"></span></div></td></tr>
+        </tbody>
+      </table>
+      <div id="logCards" class="log-cards"></div>
+    </div>
+  </div>
+  <div id="logLoadMore" class="load-more" style="display:none">
+    <button class="btn btn-primary" onclick="loadRequestLogs(false)">加载更多</button>
+  </div>
+  <div id="logDetailModal" class="overlay-modal" onclick="if(event.target===this)closeLogDetail()">
+    <div class="modal-card modal-card-col w760" role="dialog" aria-modal="true" aria-label="请求详情">
+      <div class="modal-title">请求详情 <span class="mono" id="logDetailId"></span><button type="button" class="modal-x" onclick="closeLogDetail()" aria-label="关闭弹窗" title="关闭">&times;</button></div>
+      <div class="modal-sub" id="logDetailSub"></div>
+      <div class="log-detail-body" id="logDetailBody"></div>
+      <div class="modal-actions">
+        <button class="btn btn-sm" onclick="copyLogDetailJson(this)">复制 JSON</button>
+        <button class="btn btn-sm" onclick="closeLogDetail()">关闭弹窗</button>
+      </div>
+    </div>
+  </div>
+</div>
+

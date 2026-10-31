@@ -1,0 +1,30 @@
+/* ===== 导入 Token 弹窗（连接池：手动 / 批量） ===== */
+.conn-imp-head .modal-sub{margin-bottom:0}
+.conn-imp-head,.conn-imp-tabs,.conn-imp-foot{flex:0 0 auto}
+.conn-imp-tabs{padding:0;margin-top:var(--sp-3)}
+.conn-imp-body{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:var(--sp-4) 0 var(--sp-1)}
+.conn-imp-body .tab-content{padding:0}
+.conn-imp-body textarea{min-height:132px}
+.conn-imp-secret{display:flex;align-items:center;gap:var(--sp-2)}
+.conn-imp-secret input{flex:1;min-width:0}
+.conn-imp-reveal{flex:0 0 auto;white-space:nowrap}
+.conn-imp-custom{margin-top:var(--sp-2)}
+.conn-imp-fileline{display:flex;align-items:center;gap:var(--sp-2);margin-top:var(--sp-2);flex-wrap:wrap}
+.conn-imp-preview{margin-top:var(--sp-2);font-size:var(--fs-sm);line-height:1.6;color:var(--text2)}
+.conn-imp-preview.err{color:var(--red)}
+.conn-imp-invalid{display:block;margin-top:2px;font-size:var(--fs-xs);color:var(--text3)}
+.conn-imp-result{margin-top:var(--sp-3)}
+.conn-imp-result:empty{display:none}
+.conn-imp-sum{display:flex;align-items:center;gap:6px;font-size:var(--fs-base);font-weight:600;color:var(--text)}
+.conn-imp-sum svg{width:14px;height:14px;flex-shrink:0}
+.conn-imp-sum.ok{color:var(--green)}
+.conn-imp-sum.warn{color:var(--yellow)}
+.conn-imp-sum.bad{color:var(--red)}
+.conn-imp-fails{margin:8px 0 0;padding:0;list-style:none;max-height:160px;overflow-y:auto;font-size:var(--fs-sm);color:var(--text2);border-top:1px solid var(--border2)}
+.conn-imp-fails li{display:flex;align-items:baseline;gap:8px;padding:6px 0;border-bottom:1px solid var(--border2);flex-wrap:wrap}
+.conn-imp-idx{color:var(--text3);flex:0 0 auto}
+.conn-imp-err{color:var(--red);min-width:0;word-break:break-word}
+.conn-imp-foot{flex-wrap:wrap}
+@media (max-width:560px){
+  .conn-imp-foot .btn{flex:1 1 auto}
+}

@@ -2,7 +2,7 @@
 // Usage: node tools/i18n_deadkeys.js
 const fs = require('fs');
 const dir = __dirname + '/../internal/admin/ui';
-const body = fs.readFileSync(dir + '/body.html', 'utf8');
+const body = require('./admin_ui_body').adminBody(__dirname + '/..');
 const jsFiles = fs.readdirSync(dir + '/js').map(f => fs.readFileSync(dir + '/js/' + f, 'utf8'));
 const core = jsFiles[jsFiles.findIndex(s => s.includes('const I18N'))];
 const m = core.match(/const I18N\s*=\s*\{([\s\S]*?)\n\};/);

@@ -13,7 +13,7 @@ import (
 	"embed"
 )
 
-//go:embed ui/head.html ui/styles.css ui/body.html ui/js/*.js
+//go:embed ui/head.html ui/css/*.css ui/html/*.html ui/html/pages/*.html ui/html/dialogs/*.html ui/js/*.js
 var adminUIFS embed.FS
 
 var adminHTML string
@@ -31,9 +31,13 @@ func buildAdminHTML() string {
 	}
 	write("ui/head.html")
 	buf.WriteString("<style>\n")
-	write("ui/styles.css")
+	for _, layer := range adminUICSSLayers {
+		write(layer)
+	}
 	buf.WriteString("</style>\n")
-	write("ui/body.html")
+	for _, part := range adminUIBodyParts {
+		write(part)
+	}
 	buf.WriteString("<script>\n")
 	names, err := adminUIJSNames()
 	if err != nil {

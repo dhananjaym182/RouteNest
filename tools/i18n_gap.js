@@ -6,7 +6,7 @@ const keys = new Set();
 const kre = /^\s*'((?:[^'\\]|\\.)*)'\s*:/gm;
 let k;
 while ((k = kre.exec(m[1]))) keys.add(k[1]);
-const body = fs.readFileSync("internal/admin/ui/body.html", "utf8");
+const body = require("./admin_ui_body").adminBody(process.cwd());
 const zh = /[\u4e00-\u9fff]/;
 const gaps = [];
 const seen = new Set();

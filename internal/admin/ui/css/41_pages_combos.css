@@ -1,0 +1,76 @@
+/* ===== 模型组合（Combo） ===== */
+.combo-check{display:inline-flex;align-items:center;gap:8px;font-size:14px;color:var(--text);cursor:pointer;padding:10px 0}
+.combo-preview-box{margin-top:14px;border:1px solid var(--border2);border-radius:10px;padding:12px;background:var(--surface2)}
+.combo-preview-title{font-size:12px;font-weight:600;color:var(--text2);margin-bottom:8px}
+.combo-preview{font-size:13px;color:var(--text);line-height:1.9;word-break:break-word}
+.combo-preview .step{display:inline-block;padding:2px 8px;border-radius:6px;background:var(--surface);border:1px solid var(--border2);font-family:ui-monospace,monospace;font-size:12px}
+.combo-preview .arrow{color:var(--text3);margin:0 6px}
+.combo-entry{display:flex;align-items:center;gap:8px;padding:8px 10px;border:1px solid var(--border2);border-radius:8px;background:var(--surface);margin-bottom:8px;flex-wrap:wrap}
+.combo-entry.disabled-entry{opacity:0.6}
+/* 拖拽排序：手柄抓取/拖动/落点指示（与 nav-item.drop-target 同款 inset 指示线） */
+.combo-entry-grip{flex-shrink:0;width:20px;height:26px;display:inline-flex;align-items:center;justify-content:center;cursor:grab;color:var(--text3);font-size:13px;line-height:1;border-radius:6px;user-select:none;-webkit-user-select:none}
+.combo-entry-grip:hover{color:var(--text);background:var(--surface2)}
+.combo-entry-grip:active{cursor:grabbing}
+.combo-dragging{opacity:0.45;border-style:dashed}
+.combo-entry.drop-before{box-shadow:inset 0 2px 0 var(--accent)}
+.combo-entry.drop-after{box-shadow:inset 0 -2px 0 var(--accent)}
+/* 优先级序号：首条（最先尝试）高亮为强调色 */
+.combo-entry-idx{flex-shrink:0;width:22px;height:22px;border-radius:50%;background:var(--surface2);border:1px solid var(--border2);display:inline-flex;align-items:center;justify-content:center;font-size:11px;color:var(--text2);font-variant-numeric:tabular-nums;transition:background 0.15s var(--ease),color 0.15s var(--ease),border-color 0.15s var(--ease)}
+.combo-entry:first-child .combo-entry-idx{background:var(--accent-soft);border-color:transparent;color:var(--accent)}
+/* 相对拖动点最近的一次 2px inset 指示（配合 JS 逐行更新序号与预览） */
+.combo-entry .combo-drag-hint{display:none}
+.combo-entry-select{flex:1;min-width:200px}
+.combo-entry-select select{padding:7px 10px;font-size:13px;font-family:ui-monospace,monospace}
+.combo-entry-source{flex-shrink:0;display:inline-flex;align-items:center}
+.combo-entry-source select{width:auto;min-width:104px;padding:7px 10px;font-size:12px}
+.combo-entry-badges{display:flex;align-items:center;gap:4px;flex-wrap:wrap}
+.combo-entry-actions{display:flex;align-items:center;gap:4px;margin-left:auto;flex-shrink:0}
+.combo-entry-actions .btn{padding:3px 9px;font-size:12px}
+.combo-empty-entries{font-size:13px;color:var(--text3);padding:8px 2px}
+.combos-list{border:1px solid var(--border2);border-radius:var(--radius-sm);overflow:hidden}
+.combos-list .row-count{font-size:12px;color:var(--text2);white-space:nowrap}
+
+/* ===== 组合：多选模型选择器弹窗（样式对齐 #modelMetaEditor） ===== */
+.combo-picker-list{max-height:min(340px,46vh);overflow:auto;overscroll-behavior:contain;border:1px solid var(--border2);border-radius:10px;background:var(--surface);margin-top:10px}
+.combo-pick-group{position:sticky;top:0;z-index:1;padding:6px 10px;font-size:11px;font-weight:600;color:var(--text3);background:var(--surface2);border-bottom:1px solid var(--border2)}
+.combo-pick-row{display:flex;align-items:center;gap:8px;padding:7px 10px;border-bottom:1px solid var(--border2);cursor:pointer;font-size:13px}
+.combo-pick-row:last-child{border-bottom:none}
+.combo-pick-row:hover{background:var(--surface2)}
+.combo-pick-row input[type="checkbox"]{width:16px;height:16px;accent-color:var(--accent);flex-shrink:0;cursor:pointer;margin:0}
+.combo-pick-row.combo-pick-used{cursor:default}
+.combo-pick-row.combo-pick-used .combo-pick-id{color:var(--text3)}
+.combo-pick-id{font-family:ui-monospace,'SF Mono','Cascadia Code','Consolas',monospace;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1 1 auto;min-width:0}
+.combo-pick-rank{flex-shrink:0;min-width:18px;height:18px;border-radius:9px;background:var(--accent);color:var(--on-accent);font-size:11px;font-weight:700;display:inline-flex;align-items:center;justify-content:center;padding:0 5px;font-variant-numeric:tabular-nums}
+
+/* 导入预览：操作过滤 + 分组表头 + 逐行判定依据 */
+.import-filter-row{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+.import-act-filter.active{border-color:var(--accent);color:var(--accent);background:var(--accent-soft);font-weight:600}
+/* 计费筛选 chip（免费/付费）与操作 chip 同语言；分隔线把「按操作」与「按计费」两组隔开 */
+.import-tier-filter.active{border-color:var(--accent);color:var(--accent);background:var(--accent-soft);font-weight:600}
+.import-tier-filter .imp-dot{margin-right:0}
+.imp-fsep{width:1px;height:22px;background:var(--border2);margin:0 4px;flex-shrink:0}
+/* 批次摘要条：可扫读的统计片段（新增突出、免费=绿 dot、付费=琥珀 dot） */
+.imp-stats{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin:2px 0 4px}
+.imp-stat{display:inline-flex;align-items:center;gap:5px;color:var(--text2);font-size:12px;white-space:nowrap}
+.imp-stat b{font-size:15px;font-weight:700;color:var(--text);font-variant-numeric:tabular-nums}
+.imp-stat .imp-sub{font-size:10.5px;color:var(--text3);font-weight:400;white-space:nowrap}
+.imp-stats .imp-free .imp-sub,.imp-stats .imp-pass .imp-sub{color:inherit;opacity:.75}
+/* 兼容保留：.imp-scope-note / .imp-basis 已无引用（预览弹窗的说明段落已移除），规则保留以免影响旧缓存页面。 */
+.imp-scope-note{color:var(--text3)}
+.imp-stat.imp-add{color:var(--accent)}
+.imp-stat.imp-add b{color:var(--accent);font-size:17px}
+.imp-stat.imp-free{color:var(--green)}
+.imp-stat.imp-free b{color:var(--green)}
+.imp-stat.imp-pass{color:var(--yellow)}
+.imp-stat.imp-pass b{color:var(--yellow)}
+.imp-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.imp-free .imp-dot{background:var(--green)}
+.imp-pass .imp-dot{background:var(--yellow)}
+.imp-sep{width:1px;height:16px;background:var(--border2);flex-shrink:0}
+/* 兼容保留（无引用）：摘要条下方的判定说明段落已移除，见下方 .imp-basis 规则 */
+.imp-basis{font-size:11px;color:var(--text3);display:flex;gap:4px;align-items:baseline;flex-wrap:wrap}
+.import-group-head{position:sticky;top:0;z-index:2;display:flex;align-items:center;gap:8px;padding:6px 10px;font-size:11px;font-weight:700;color:var(--text2);background:var(--surface2);border-bottom:1px solid var(--border2)}
+.import-group-count{font-variant-numeric:tabular-nums;color:var(--text3);font-weight:600}
+.import-group-tiers{margin-left:auto;font-weight:400;color:var(--text3);font-variant-numeric:tabular-nums}
+.import-basis{font-size:11px;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:220px}
+

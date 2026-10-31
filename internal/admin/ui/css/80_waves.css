@@ -1,0 +1,129 @@
+/* ===== §UIR Wave：评审优化追加（a11y / 反馈 / 层级 / 图标 / 字体） ===== */
+/* 品牌展示字体：仅用于标题字与大数字（本地字体栈，无外链） */
+.large-title{font-family:var(--font-display);letter-spacing:0}
+.brand-name,.login-card h2{font-family:var(--font-display);font-weight:700}
+.dash-count b{font-family:var(--font-display);font-weight:800}
+/* 行内 SVG 图标助手（stroke=currentColor 与表头图标同风格） */
+.ui-ic{width:14px;height:14px;flex-shrink:0;display:inline-block;vertical-align:-2px}
+.btn .ui-ic{width:15px;height:15px}
+/* 保存反馈统一：「✓ 已保存 / ✗ 失败」行内提示（颜色令牌取自状态色） */
+.save-result{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:500;vertical-align:middle}
+.save-result svg{width:13px;height:13px;flex-shrink:0}
+.save-result.ok{color:var(--green)}
+.save-result.err{color:var(--red)}
+/* 轻量工具类：收敛 body.html / JS 里的重复内联样式（静态值才进类，动态计算样式保持行内） */
+.f1{flex:1}.f2{flex:2}.f-14{flex:1.4}.f-16{flex:1.6}
+.mt-2{margin-top:2px}.mt-4{margin-top:4px}.mt-6{margin-top:6px}.mt-8{margin-top:8px}.mt-10{margin-top:10px}.mt-12{margin-top:12px}.mt-14{margin-top:14px}.mt-16{margin-top:16px}
+.mb-8{margin-bottom:8px}
+.ml-8{margin-left:8px}
+.note-sm{font-size:12px}
+.w-260{max-width:260px}
+.ic-sm{width:14px;height:14px;flex-shrink:0}
+.mt-1{margin-top:1px}
+.mt-3{margin-top:3px}
+.ml-2{margin-left:2px}
+.hint-sm{font-size:12px;color:var(--text3)}
+.hint-mut{font-size:12px;color:var(--text2)}
+.mono-plain{font-family:ui-monospace,'SF Mono','Cascadia Code','Consolas',monospace}
+.lnk-a{color:var(--accent);cursor:pointer;text-decoration:none}
+.lnk-a:hover{text-decoration:underline}
+.about-kv{color:var(--text3);display:inline-block;width:80px}
+.page-sub-title{font-size:13px;color:var(--text2);margin-top:2px}
+.inline-code{background:var(--surface2);padding:1px 5px;border-radius:3px;font-size:12px;font-family:ui-monospace,'SF Mono','Cascadia Code','Consolas',monospace}
+.txt-strong{font-weight:600;color:var(--text)}
+.step-item{display:flex;gap:12px;align-items:flex-start}
+.desc-lead{color:var(--text2);margin-bottom:16px}
+.about-para{font-size:13px;color:var(--text2);line-height:1.8}
+/* 仪表盘层级：hero=第一梯队；池容量降为轻量子条（去卡片阴影与重底色） */
+.pool-hero{background:transparent;border:1px solid var(--border2);border-radius:var(--radius-sm);padding:var(--sp-3) var(--sp-4) var(--sp-4);box-shadow:none}
+.pool-hero-top{margin-bottom:10px}
+.pool-hero-title{font-size:var(--fs-sm);font-weight:600;color:var(--text2)}
+.pool-hero-title svg{width:14px;height:14px}
+.pool-chips{margin-top:10px}
+/* Token 用量合并条：累计组在前（主导），今日组以通栏小标分隔、视觉为次 */
+.tiles-subhead{grid-column:1/-1;display:flex;align-items:center;gap:8px;font-size:var(--fs-xs);font-weight:600;color:var(--text3);padding:6px 2px 0;border-top:1px dashed var(--border2);margin-top:2px}
+.tiles-subhead .dot{width:6px;height:6px;border-radius:50%;background:var(--yellow);flex-shrink:0}
+.tile.secondary .tile-num{font-size:19px}
+@media (max-width:760px){
+  .tiles-subhead{margin-top:4px}
+}
+.hint-xs{font-size:11px;color:var(--text3)}
+/* 上下文小徽章（免费/付费/cost）：压缩到 11px 下限但不低于可读底线 */
+.tag-xs{font-size:11px;padding:1px 6px;margin:0}
+/* 账号表格顶栏 / 搜索框 / 分页条（静态样式收进类，启停仍由 JS 控制 display） */
+.row-toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:10px 16px;border-bottom:1px solid var(--border2)}
+.search-input{flex:1;max-width:320px;min-width:0;padding:7px 12px;border-radius:8px;border:1px solid var(--border2);background:var(--surface2);color:var(--text);font-size:13px}
+.row-bulk{display:flex;gap:6px;flex-wrap:wrap;margin-left:auto}
+.pager-bar{display:none;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px;padding:10px 16px;border-top:1px solid var(--border2)}
+.w-220{max-width:220px}
+.w-full{width:100%}
+.ws-nowrap{white-space:nowrap}
+.row-mid{align-items:center}
+.row-end{justify-content:flex-end}
+.dim-note{font-size:11px;color:var(--text3);font-weight:400}
+.small-t2{font-size:13px;color:var(--text2)}
+.hint-md{font-size:13px;color:var(--text3)}
+.adv-wrap{margin:2px 0 10px}
+.adv-lnk{font-size:11px;color:var(--text3);text-decoration:underline}
+.adv-body{display:none;margin-top:6px}
+.grp-count{font-weight:400;font-size:11px;color:var(--text3)}
+.about-brand{font-size:20px;font-weight:700;color:var(--text)}
+.about-links{display:flex;flex-direction:column;gap:10px;font-size:14px}
+.btn-block{width:100%;margin-top:14px}
+.login-err{color:var(--red);font-size:13px;margin-top:12px}
+.confirm-msg{font-size:14px;margin-bottom:16px;white-space:pre-wrap}
+.oauth-url{color:var(--accent);cursor:pointer}
+.sync-banner{display:none;align-items:center;gap:10px;padding:8px 12px;margin:0 0 10px;border:1px solid var(--border2);border-radius:var(--radius);background:var(--surface2)}
+.combo-check input{width:16px;height:16px;accent-color:var(--accent);cursor:pointer}
+.grp-meta{font-size:12px;color:var(--text3);white-space:nowrap}
+/* JS 渲染的静态单元格样式（此前散落内联；循环内计算的动态样式仍保持行内） */
+.td-center{text-align:center}
+.td-nowrap{white-space:nowrap}
+.row-alt{background:var(--surface2)}
+.mut{color:var(--text3)}
+.hint-red{font-size:11px;color:var(--red)}
+.hint-red-ic .ui-ic{width:12px;height:12px;vertical-align:-2px}
+.pager-nav{display:flex;gap:6px;align-items:center}
+.empty-state .empty-hint{font-size:var(--fs-base);color:var(--text2);margin-bottom:2px}
+.empty-state .empty-cta{margin-top:12px}
+/* body.html 静态内联样式收敛（第二批：OAuth/登录/弹窗/关于页等固定布局） */
+.oauth-line{display:flex;align-items:center;gap:12px}
+.gap-row{display:flex;gap:8px}
+.gap-row-mid{display:flex;gap:8px;align-items:center}
+.load-more{display:none;text-align:center;padding:16px}
+.picker-scroll{margin-top:10px;max-height:min(52vh,480px)}
+.mb-6{margin-bottom:6px}
+.login-row{display:flex;align-items:center;gap:10px;margin:10px 0}
+.conn-code{font-size:26px;font-weight:700;letter-spacing:2px;color:var(--text);background:var(--bg);border:1px solid var(--border2);border-radius:8px;padding:10px 16px}
+.conn-url{font-size:12px;color:var(--accent);word-break:break-all}
+.modal-foot{display:flex;justify-content:flex-end;gap:8px;margin-top:14px}
+.stack-col{display:flex;flex-direction:column;gap:16px}
+.quickstart-links{display:flex;gap:10px;flex-wrap:wrap;font-size:13px}
+.p-16{padding:16px}
+.about-head{display:flex;align-items:center;gap:16px;margin-bottom:16px}
+/* 最后一收敛批（combo 测试/状态色与紧凑行按钮） */
+.warn-soft{border-color:var(--yellow) !important;color:var(--yellow) !important}
+.acc-strong{color:var(--accent);font-weight:600}
+.warn-txt{color:var(--yellow)}
+.green-xs{color:var(--green);font-size:11px}
+.acc-xs{color:var(--accent);font-size:11px}
+.btn-xs{padding:2px 6px !important}
+.row-inline{display:inline-flex;gap:6px;align-items:center;flex-shrink:0}
+.pl-32{padding-left:32px}
+.th-left{text-align:left}
+.float-note{float:right;padding:1px 8px;font-size:11px}
+.prov-flow-row{display:flex;align-items:center;gap:8px;padding:7px 10px;border-bottom:1px solid var(--border2);font-size:12px}
+.dim-op{opacity:.6}
+/* 收尾：补齐此批引用但缺失的类 */
+.toast-msg{color:var(--text)}
+.header-key{font-size:12px;font-family:ui-monospace,'SF Mono','Cascadia Code','Consolas',monospace}
+.header-val{font-size:12px;font-family:ui-monospace,'SF Mono','Cascadia Code','Consolas',monospace}
+.dash-col{display:flex;flex-direction:column}
+.save-banner{background:var(--green-soft);border:1px solid var(--green);border-radius:var(--radius-sm);padding:14px}
+.ta-bulk{font-size:12px;border:1px solid var(--border2);border-radius:8px;padding:8px;background:var(--surface);color:var(--text)}
+.p3-thin{padding:3px 0}
+.red-txt{color:var(--red)}
+.green-txt{color:var(--green)}
+.sync-title{margin:0 0 10px;font-size:18px}
+.sync-body{font-size:13px;max-height:320px;overflow-y:auto;color:var(--text);line-height:1.6}
+

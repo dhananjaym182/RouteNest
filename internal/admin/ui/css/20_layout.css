@@ -1,0 +1,33 @@
+/* ===== 分段控件（语言 / 主题） ===== */
+.seg{display:flex;gap:3px;background:var(--surface2);border:1px solid var(--border2);border-radius:var(--radius-pill);padding:3px}
+.seg button{flex:1;display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:5px 12px;border:none;border-radius:var(--radius-pill);background:transparent;color:var(--text2);font-size:var(--fs-xs);font-weight:600;cursor:pointer;transition:all 0.15s var(--ease)}
+.seg button:hover{color:var(--text)}
+.seg button.active{background:var(--surface);color:var(--accent);box-shadow:var(--shadow-sm)}
+.theme-switch button{padding:6px 0}
+.theme-switch svg{width:14px;height:14px}
+
+/* ===== 侧栏收起（html[data-nav="collapsed"]，窄屏媒体查询优先） ===== */
+html[data-nav="collapsed"] .layout{--nav-w:64px}
+html[data-nav="collapsed"] .sidebar-header{flex-direction:column;align-items:center;padding:14px 8px;gap:8px}
+html[data-nav="collapsed"] .sidebar-header .brand{flex:none;justify-content:center}
+html[data-nav="collapsed"] .brand-text,
+html[data-nav="collapsed"] .nav-section-label,
+html[data-nav="collapsed"] .nav-item .nav-label{display:none}
+html[data-nav="collapsed"] .nav-section{padding:10px 8px 4px}
+html[data-nav="collapsed"] .nav-item{justify-content:center;padding:9px 0;gap:0}
+/* 收起态：分区之间以分隔线代替分组标题（对齐控制台 nav-group-divider） */
+html[data-nav="collapsed"] .nav-section+.nav-section{border-top:1px solid var(--border2);margin:6px 14px 0;padding-top:10px}
+/* 固定项在轨道态与其余条目同一几何：去掉底边线与多余外边距 */
+html[data-nav="collapsed"] .nav-pinned{border-bottom:none;margin-bottom:2px}
+/* 悬浮边缘收起/展开钮（控制台 sidebar-toggle-floating 等价）：位于侧栏之外，
+   避开 .sidebar 的 overflow:hidden 裁切，并随 --nav-w 宽度动画同步滑动 */
+.nav-edge-toggle{position:fixed;top:56px;left:calc(var(--nav-w,260px) - 12px);z-index:80;width:24px;height:24px;padding:0;border-radius:50%;background:var(--surface);border:1px solid var(--border2);box-shadow:var(--shadow-sm);color:var(--text3);display:inline-flex;align-items:center;justify-content:center;cursor:pointer;transition:left .22s var(--ease),color .15s var(--ease),background .15s var(--ease)}
+.nav-edge-toggle:hover{color:var(--accent);background:var(--surface2)}
+.nav-edge-toggle svg{width:12px;height:12px;transition:transform .22s var(--ease)}
+html[data-nav="collapsed"] .nav-edge-toggle svg{transform:rotate(180deg)}
+/* 轨道提示：收起态悬停图标时浮出条目名称（控制台 nav-tooltip 等价） */
+.nav-rail-tip{position:fixed;z-index:10150;display:none;pointer-events:none;background:var(--surface);border:1px solid var(--border2);border-radius:6px;padding:4px 10px;font-size:12px;font-weight:500;color:var(--text);box-shadow:var(--shadow-md);white-space:nowrap}
+.nav-rail-tip.show{display:block}
+@media (min-width:761px){.nav-collapse-btn{display:none}}
+@media (max-width:760px){.nav-edge-toggle{display:none!important}.nav-rail-tip,.nav-rail-tip.show{display:none!important}}
+

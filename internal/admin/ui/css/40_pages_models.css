@@ -1,0 +1,64 @@
+/* ===== 页内子导航（设置页顶部导航栏，划分功能子页） ===== */
+.page-subtabs{margin:-14px 0 20px;border-radius:12px;padding:4px}
+.page-subtab svg{width:15px;height:15px}
+
+/* ===== 模型管理：工具栏 / 统计条 / 行列表 ===== */
+.model-stats-bar{display:flex;flex-wrap:wrap;align-items:center;gap:6px 16px;padding:0 2px 12px;font-size:12px;color:var(--text2)}
+.model-stats-bar b{font-variant-numeric:tabular-nums;color:var(--text);font-weight:600}
+.model-stats-bar .dot{width:7px;height:7px;border-radius:50%;display:inline-block;margin-right:5px;vertical-align:1px}
+.model-stats-bar .dot.g{background:var(--green)}
+.model-stats-bar .dot.y{background:var(--yellow)}
+.model-stats-bar .dot.r{background:var(--red)}
+.model-toolbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:12px}
+.model-toolbar input[type="text"]{flex:2;min-width:180px;padding:8px 12px;font-size:13px}
+.model-toolbar select{flex:1;min-width:120px;width:auto;padding:8px 10px;font-size:13px}
+/* 工具栏「更多」溢出菜单：低频批量操作收进下拉，保留常用筛选/同步的一键直达 */
+.toolbar-more{position:relative;display:inline-flex}
+.toolbar-more-menu{display:none;position:absolute;top:calc(100% + 6px);right:0;z-index:var(--z-menu);min-width:150px;background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius-sm);box-shadow:var(--shadow-lg);padding:6px;flex-direction:column;gap:4px}
+.toolbar-more.open .toolbar-more-menu{display:flex}
+.toolbar-more-menu .btn{width:100%;justify-content:flex-start}
+/* 内联编辑卡片：与弹窗编辑器同一视觉体系（圆角/层高/阴影/内边距取自令牌） */
+.inline-editor{margin-top:var(--sp-4);border:1px solid var(--border2);border-radius:var(--radius);padding:var(--sp-5);background:var(--surface);box-shadow:var(--shadow-sm)}
+.inline-editor-title{display:flex;align-items:center;gap:var(--sp-2);font-size:var(--fs-lg);font-weight:600;margin-bottom:var(--sp-3);color:var(--text)}
+/* 设置分组小标题：按关注点拆分字段（连接 / 调优 / 故障转移 / 压缩等） */
+.form-group-label{font-size:var(--fs-base);font-weight:600;color:var(--text2);margin:var(--sp-3) 0 var(--sp-2)}
+.form-group-label:first-child{margin-top:0}
+.model-list{border:1px solid var(--border2);border-radius:var(--radius-sm);overflow:hidden}
+.model-list .model-group{margin:0}
+.model-list .model-group + .model-group{border-top:1px solid var(--border2)}
+.model-list .model-group-head{padding:9px 14px;margin:0;font-size:13px}
+.model-list .model-group-body{margin:0}
+/* ===== 模型管理：单级分组（主来源 = 提供商） ===== */
+/* 组头即主提供商：模型行直接平铺在其下方，与列头同一起点（不再为二级厂商留缩进） */
+.model-group-src-head{font-weight:700;color:var(--text)}
+.model-group-label{min-width:0;overflow-wrap:anywhere}
+.model-list .model-group-src > .model-group-body{border-top:1px solid var(--border2)}
+/* 二级厂商分组已停用：渲染不再产出 .model-group-vendor，以下样式仅作兼容保留 */
+.model-list .model-group-body .model-group-body{margin:2px 0 4px 14px}
+.model-group-vendor .model-group-head{font-weight:600}
+.model-row{display:grid;grid-template-columns:44px minmax(0,1fr) 84px 84px 110px 126px;align-items:center;gap:10px;padding:8px 14px;border-bottom:1px solid var(--border2);background:var(--surface);transition:background 0.15s var(--ease)}
+.model-row:last-child{border-bottom:none}
+.model-row:hover{background:var(--surface2)}
+.model-row.disabled-row .model-row-id{color:var(--text3)}
+.model-row-id{font-size:13px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%}
+.model-row-cell{font-size:12px;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-variant-numeric:tabular-nums}
+.model-row-test{font-size:11px;color:var(--text2);min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.model-untested{color:var(--text3)}
+.model-col-head{display:grid;grid-template-columns:44px minmax(0,1fr) 84px 84px 110px 126px;align-items:center;gap:10px;padding:6px 14px;background:var(--surface2);border-bottom:1px solid var(--border);font-size:11px;font-weight:600;color:var(--text3);letter-spacing:.03em;text-transform:uppercase;border-radius:var(--radius-sm) var(--radius-sm) 0 0}
+.model-col-head .model-col-actions{text-align:right}
+.model-col-sort{all:unset;cursor:pointer;display:inline-flex;align-items:center;gap:4px;font:inherit;color:inherit;padding:2px 6px;border-radius:6px}
+.model-col-sort:hover{color:var(--accent);background:var(--accent-soft)}
+.model-col-sort.active{color:var(--accent)}
+.model-col-arrow{font-size:11px}
+.model-group-fail{font-size:11px;color:var(--red);margin-left:2px;white-space:nowrap}
+.model-row-actions{display:flex;align-items:center;gap:4px;flex-shrink:0;justify-content:flex-end}
+.model-row-main{min-width:0;display:flex;flex-direction:column;align-items:flex-start;gap:3px}
+.model-row-tags{display:flex;align-items:center;gap:4px;flex-wrap:wrap;min-width:0}
+.model-group-actions{margin-left:auto;display:flex;gap:4px;align-items:center}
+.model-group-actions .btn{padding:3px 10px;font-size:11px}
+.model-source-badge{background:var(--surface2);color:var(--text2);border-color:var(--border2)}
+.model-source-badge.zen{background:var(--accent-soft);color:var(--accent);border-color:transparent}
+.model-source-badge.custom{background:var(--green-soft);color:var(--green);border-color:transparent}
+.model-source-badge.provider{background:var(--yellow-soft);color:var(--yellow);border-color:transparent}
+.model-source-badge.remote{background:var(--surface2);color:var(--text2)}
+

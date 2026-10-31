@@ -1,0 +1,70 @@
+/* ===== 表格内滚容器：thead sticky 真正可用（参照 .log-sheet 方案—— 不能依赖
+   .main 滚动：.section{overflow:hidden} 会截断相对 .main 的 sticky） ===== */
+.table-sheet{position:relative;max-height:min(70vh,780px);min-height:80px;overflow:auto;overscroll-behavior:contain}
+.table-sheet .action-table thead th{position:sticky;top:0;z-index:2;background:var(--surface);box-shadow:0 1px 0 var(--border)}
+.model-subtable{width:100%}
+td.stats-embed{padding:0}
+
+/* ===== Toggle 开关 ===== */
+.switch{position:relative;display:inline-block;width:34px;height:20px;flex-shrink:0}
+.switch input{opacity:0;width:0;height:0;position:absolute}
+.switch .slider{position:absolute;inset:0;background:var(--switch-off);border-radius:20px;transition:all 0.18s var(--ease);cursor:pointer}
+.switch .slider:before{content:"";position:absolute;width:16px;height:16px;left:2px;top:2px;background:var(--switch-knob);border-radius:50%;transition:all 0.18s var(--ease);box-shadow:0 1px 3px rgba(0,0,0,0.25)}
+.switch input:checked + .slider{background:var(--green)}
+.switch input:checked + .slider:before{transform:translateX(14px)}
+.switch input:disabled + .slider{opacity:0.5;cursor:wait}
+
+/* ===== 交互 / 无障碍 / 一致性完善 ===== */
+/* 键盘焦点环（表单控件已在 :focus 处理，避免双重描边） */
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+input:focus-visible,textarea:focus-visible,select:focus-visible{outline:none}
+.switch input:focus-visible + .slider{box-shadow:var(--ring)}
+/* 工具栏控件统一高度，避免按钮 / 下拉 / 输入高低不齐 */
+.model-toolbar input:not([type="checkbox"]),.model-toolbar select,.model-toolbar .btn,.model-toolbar .sync-btn{min-height:var(--control-h)}
+.model-toolbar .field{min-width:0}
+/* 长文本稳健性：避免超长 URL / 模型 ID 撑破布局 */
+.section-desc,.combo-preview,.log-attempts li,.log-req-model{overflow-wrap:break-word}
+/* 弹层：统一遮罩模糊与阴影：登录 / 模型同步浮层 */
+#loginOverlay{position:fixed;inset:0;z-index:var(--z-login);background:var(--overlay-bg);backdrop-filter:saturate(150%) blur(6px);-webkit-backdrop-filter:saturate(150%) blur(6px);display:none;align-items:center;justify-content:center}
+.login-card{width:min(360px,calc(100vw - 40px));padding:32px;background:var(--surface);border-radius:14px;border:1px solid var(--border2);text-align:center;box-shadow:var(--shadow-lg)}
+.login-card h2{margin:0 0 6px;font-size:20px;color:var(--text)}
+.login-card p{margin:0 0 22px;color:var(--text2);font-size:13px}
+#modelSyncOverlay{position:fixed;inset:0;z-index:var(--z-sync);background:var(--overlay-bg);display:none;align-items:center;justify-content:center;backdrop-filter:saturate(150%) blur(6px);-webkit-backdrop-filter:saturate(150%) blur(6px)}
+#modelSyncModal{border-radius:var(--radius);box-shadow:var(--shadow-lg);width:min(480px,calc(100vw - 40px));padding:24px;background:var(--surface);border:1px solid var(--border2)}
+
+/* 状态徽章：停用 = 中性灰（与 活跃/冷却/过期 同一视觉体系），不再借用日志红/绿 */
+.status.disabled{background:var(--surface2);color:var(--text3)}
+.status-dot.disabled{background:var(--text3)}
+/* 主题化滚动条 / 选区 / 关于页大图标 */
+::-webkit-scrollbar{width:10px;height:10px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:8px;border:2px solid transparent;background-clip:content-box}
+::-webkit-scrollbar-thumb:hover{background:var(--text3);background-clip:content-box}
+*{scrollbar-width:thin;scrollbar-color:var(--border) transparent}
+::selection{background:var(--accent-soft);color:var(--text)}
+.app-logo-lg{width:56px;height:56px;border-radius:14px;background:linear-gradient(135deg,var(--accent),var(--accent2));display:flex;align-items:center;justify-content:center;flex-shrink:0;color:var(--on-accent)}
+.app-logo-lg svg{width:28px;height:28px}
+/* 危险操作区：红描边 + 说明，与普通设置区一眼区分 */
+.section.danger-zone{border-color:var(--red)}
+/* 空 / 加载状态统一由 .empty / .empty-state 定义（见 Misc / 空态区块） */
+/* 子标签 / 标签页横向滚动更顺滑 */
+.subtabs,.tabs{-webkit-overflow-scrolling:touch;scrollbar-width:thin}
+/* 尊重「减少动效」偏好 */
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{transition-duration:0.01ms !important;animation-duration:0.01ms !important;animation-iteration-count:1 !important}
+}
+
+@media (max-width:760px){
+  .model-row{display:flex;flex-wrap:wrap;gap:8px;padding:10px 12px}
+  .model-row-main{flex-basis:calc(100% - 44px)}
+  .model-row-test,.model-row-cell{order:3}
+  .model-col-head{display:none} /* 窄屏行回落为卡片流，表头与列对不上，隐藏 */
+  .model-toolbar input[type="text"]{flex-basis:100%}
+  .model-toolbar select{flex:1 1 40%}
+  .model-group-actions{width:100%;margin-left:0;justify-content:flex-end}
+}
+
+/* action row */
+.action-row{display:flex;gap:8px;flex-wrap:wrap}
+.toolbar-sep{width:1px;align-self:stretch;margin:4px 3px;background:var(--border);flex-shrink:0}
+

@@ -1,0 +1,84 @@
+<div id="modelSyncOverlay">
+  <div id="modelSyncModal"></div>
+</div>
+
+      <div id="modelMetaEditor" class="overlay-modal">
+        <div class="modal-card w500">
+        <div class="form-row">
+          <div class="field"><label>模型 ID</label><input type="text" id="mmId" disabled class="mono-plain"></div>
+          <div class="field"><label>上下文窗口 (token)</label><input type="number" id="mmCtx" value="200000" min="1000" max="2000000"></div>
+          <div class="field"><label>最大输出 (token)</label><input type="number" id="mmOut" value="32768" min="256" max="200000"></div>
+        </div>
+        <div class="form-row">
+          <div class="field"><label>层级（免费/付费）</label><select id="mmTier"><option value="auto">自动</option><option value="free">免费</option><option value="pass">付费</option></select></div>
+          <div class="field f-16"><label>&nbsp;</label><div id="mmTierNote" class="hint-sm"></div></div>
+        </div>
+        <div class="form-actions mt-10">
+          <button class="btn btn-sm btn-primary" onclick="saveModelMeta(this)">保存</button>
+          <button class="btn btn-sm" onclick="hideModelMetaEditor()">取消</button>
+        </div>
+        </div>
+      </div>
+      <div id="confirmModal" class="overlay-modal overlay-top" onclick="if(event.target===this)resolveConfirm(false)">
+        <div class="modal-card w420" role="alertdialog" aria-modal="true" aria-labelledby="confirmMsg">
+          <div id="confirmMsg" class="confirm-msg"></div>
+          <div class="modal-actions">
+            <button class="btn btn-sm" onclick="resolveConfirm(false)">取消</button>
+            <button class="btn btn-sm btn-danger" onclick="resolveConfirm(true)">确认</button>
+          </div>
+        </div>
+      </div>
+      <!-- 组合编辑：从模型目录多选并追加（也支持一键替换整组条目） -->
+      <div id="comboModelPicker" class="overlay-modal overlay-top" onclick="if(event.target===this)closeComboModelPicker()">
+        <div class="modal-card modal-card-col w560" role="dialog" aria-modal="true" aria-label="选择模型">
+          <div class="modal-title">选择模型</div>
+          <div class="modal-sub">勾选多个模型；确认后按勾选顺序追加到组合，勾选顺序即尝试优先级。</div>
+          <div class="modal-search-row">
+            <input type="text" id="comboPickerSearch" placeholder="搜索模型 / Provider..." aria-label="搜索模型" oninput="renderComboPickerList()" onkeydown="if(event.key==='Escape')closeComboModelPicker()">
+            <button class="btn btn-sm" onclick="comboPickerSelectAllShown()">全选</button>
+            <button class="btn btn-sm" onclick="comboPickerClear()">清空</button>
+          </div>
+          <div id="comboPickerList" class="combo-picker-list"><div class="sk-stack"><span class="skeleton"></span><span class="skeleton w70"></span><span class="skeleton w45"></span></div></div>
+          <div class="modal-actions">
+            <span id="comboPickerCount" class="mr-auto hint-mut"></span>
+            <button class="btn btn-sm" onclick="closeComboModelPicker()">取消</button>
+            <button id="comboPickerReplaceBtn" class="btn btn-sm" style="display:none" onclick="comboPickerConfirm(true)">替换整表</button>
+            <button class="btn btn-sm btn-primary" onclick="comboPickerConfirm(false)">确认追加</button>
+          </div>
+        </div>
+      </div>
+      <!-- Provider 编辑器：/providers/models 拉取到的模型多选弹窗（视觉对齐 #comboModelPicker） -->
+      <div id="provPickerModal" class="overlay-modal overlay-top" onclick="if(event.target===this)closeProvModelPicker()">
+        <div class="modal-card modal-card-col w760" role="dialog" aria-modal="true" aria-label="选择模型">
+          <div class="modal-title">选择模型</div>
+          <div class="modal-sub">来自上游 /models 接口（与导入预览共用同一批次），按免费 / 付费分组；数字为全部可拉取模型口径。确认后写入模型列表，仍需手动保存。Provider 中已有的模型预勾选且不可再选。失败时先检查 Base URL 与 API Key。</div>
+          <div class="modal-search-row">
+            <input type="text" id="provPickerSearch" placeholder="搜索模型..." aria-label="搜索模型" oninput="renderProvPickerList()" onkeydown="if(event.key==='Escape')closeProvModelPicker()">
+            <button class="btn btn-sm" onclick="provPickerSelectAllShown()">全选</button>
+            <button class="btn btn-sm" onclick="provPickerClear()">清空</button>
+          </div>
+          <div id="provPickerList" class="combo-picker-list"><div class="sk-stack"><span class="skeleton"></span><span class="skeleton w70"></span><span class="skeleton w45"></span></div></div>
+          <div class="modal-actions">
+            <span id="provPickerCount" class="mr-auto hint-mut"></span>
+            <button class="btn btn-sm" onclick="closeProvModelPicker()">取消</button>
+            <button class="btn btn-sm btn-primary" onclick="provPickerConfirm()">确认添加</button>
+          </div>
+        </div>
+      </div>
+      <!-- 组合连通性测试弹窗：逐条目结果 + 行内启停/移除（工作副本，保存更改后经既存 /combos/save 落盘） -->
+      <div id="comboTestModal" class="overlay-modal" onclick="if(event.target===this)closeComboTest()">
+        <div class="modal-card modal-card-col w620" role="dialog" aria-modal="true" aria-label="组合测试">
+          <div class="modal-headrow">
+            <span class="modal-title">组合测试</span>
+            <span id="comboTestSummary" class="model-source-badge zen" style="display:none"></span>
+            <span id="comboTestId" class="mono hint-sm"></span>
+          </div>
+          <div class="modal-sub">按优先级逐条探测；可在结果中直接启停/移除条目，保存更改后才实际落盘，取消即放弃修改。</div>
+          <div id="comboTestList" class="combo-picker-list"><div class="sk-stack"><span class="skeleton"></span><span class="skeleton w70"></span><span class="skeleton w45"></span></div></div>
+          <div class="modal-actions">
+            <span id="comboTestResult" class="mr-auto hint-mut"></span>
+            <button class="btn btn-sm" onclick="closeComboTest()">取消</button>
+            <button id="comboTestSaveBtn" class="btn btn-sm btn-primary" style="display:none" onclick="comboTestSave(this)">保存更改</button>
+          </div>
+        </div>
+      </div>

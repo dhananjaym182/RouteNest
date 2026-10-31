@@ -1,0 +1,56 @@
+<div id="comboEditorOverlay" class="drawer-overlay" onclick="hideComboEditor()"></div>
+<aside id="comboEditor" class="drawer" role="dialog" aria-modal="true" aria-labelledby="comboEditorTitle">
+  <div class="drawer-header">
+    <div class="drawer-title" id="comboEditorTitle">新建组合</div>
+    <button type="button" class="drawer-close" onclick="hideComboEditor()" aria-label="关闭"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+  </div>
+  <div class="drawer-body">
+    <div class="drawer-group">
+      <div class="form-group-label">基本信息</div>
+      <div class="form-row">
+        <div class="field"><label>组合 ID *</label><input type="text" id="comboId" placeholder="premium-coding" class="mono-plain"></div>
+        <div class="field"><label>名称 *</label><input type="text" id="comboName" placeholder="Premium Coding"></div>
+      </div>
+      <div class="form-row">
+        <div class="field f2"><label>描述</label><input type="text" id="comboDesc" placeholder="可选"></div>
+        <div class="field"><label>分类</label><input type="text" id="comboCategory" placeholder="coding（可选）"></div>
+      </div>
+      <div class="form-row">
+        <div class="field">
+          <label>启用</label>
+          <select id="comboEnabled"><option value="true">启用</option><option value="false">停用</option></select>
+        </div>
+        <div class="field row-end">
+          <label>紧急回退</label>
+          <label class="combo-check"><input type="checkbox" id="comboEmergency" > <span>允许跳出组合回退</span></label>
+        </div>
+      </div>
+      <div class="field-hint">开启「紧急回退」后，仅当组合内所有条目都失败时，才允许继续回退到配置的全局回退链 / 内置免费链；关闭则组合内失败即结束。</div>
+      <div class="field-hint"><a href="#" onclick="hideComboEditor();switchTab('routing');return false" class="lnk-a">全局回退链与账号轮询策略在「路由与模型」页管理 →</a></div>
+    </div>
+    <div class="drawer-group">
+      <div class="form-group-label">模型条目（按优先级从上到下）</div>
+      <div class="field-hint">顺序即优先级：第 1 个最优先尝试（1st tried → 2nd → …），拖动行首 ⠿ 手柄或用 ↑↓ 按钮调整顺序。</div>
+      <div id="comboEntries"></div>
+      <div class="form-actions">
+        <button class="btn btn-sm btn-primary" onclick="openComboModelPicker()">⊕ 多选添加模型</button>
+        <button class="btn btn-sm" onclick="addComboEntry()">＋ 添加条目</button>
+        <span class="hint-sm">从模型目录勾选多个模型，确认后按勾选顺序追加。</span>
+      </div>
+    </div>
+    <div class="drawer-group">
+      <div class="form-group-label">优先级预览</div>
+      <div class="combo-preview-box">
+        <div id="comboPreview" class="combo-preview">（暂无启用的条目）</div>
+        <div class="hint-xs mt-6">仅显示已启用的条目，停用的条目会被跳过。</div>
+      </div>
+    </div>
+  </div>
+  <div class="drawer-footer">
+    <button class="btn btn-sm btn-success" onclick="saveCombo()">保存组合</button>
+    <button class="btn btn-sm" onclick="hideComboEditor()">取消</button>
+    <span id="comboSaveResult" class="note-sm ml-8"></span>
+  </div>
+</aside>
+
+<!-- 供应商详情抽屉（只读 master-detail；body 级浮层，不随标签页隐藏；无保存条） -->

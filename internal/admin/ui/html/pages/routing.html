@@ -1,0 +1,177 @@
+<div id="tab-routing" class="tab-panel" style="display:none">
+  <div class="page-header">
+    <div>
+      <div class="large-title">路由与模型</div>
+      <div class="large-subtitle">默认模型、轮询策略、回退链、调优参数与可用模型</div>
+    </div>
+  </div>
+
+  <div class="subtabs page-subtabs" data-page="routing">
+    <div class="subtab active" data-sub="config">路由配置</div>
+    <div class="subtab" data-sub="tuning">调优参数</div>
+    <div class="subtab" data-sub="models">模型管理</div>
+  </div>
+
+  <div class="page-subpage" data-subpage="config">
+  <div class="section">
+    <div class="section-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>路由基础</div>
+    <div class="section-body">
+      <div class="form-row">
+        <div class="field"><label>默认模型</label><select id="settingDefModel" onchange="updateConfig()"><option value="">加载中...</option></select></div>
+        <div class="field">
+          <label>轮询策略</label>
+          <select id="settingStrategy" onchange="updateConfig()">
+            <option value="round_robin">轮询 (round_robin)</option>
+            <option value="weighted_round_robin">加权轮询 (weighted_round_robin)</option>
+            <option value="fill">填满 (fill)</option>
+            <option value="random">随机 (random)</option>
+            <option value="quality">质量优先 (quality)</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="field">
+          <label>回退模型链</label>
+          <input type="text" id="settingModelChain" placeholder="z-ai/glm-5.3-flash, deepseek/deepseek-v4-flash, cline-free/longcat-2.0, free" oninput="this.dataset.dirty='1'" onchange="updateConfig()">
+          <div class="hint-sm mt-4">逗号分隔模型 ID，可用 free 表示内置免费回退链；留空则自动回退到内置免费链。允许填写不在上方列表里的模型 ID（列表外的模型实测仍可用时可直接填入，同步列表只是参考）；失效条目由冷却与故障转移自动跳过</div>
+          <div class="field-hint mt-2"><a href="#" onclick="switchTab('combos');return false" class="lnk-a">组合的回退顺序与紧急回退在「模型组合」页管理 →</a></div>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="field">
+          <label>只显示免费模型</label>
+          <select id="settingOnlyFree" onchange="updateConfig()">
+            <option value="false">关闭（返回全部模型）</option>
+            <option value="true">开启（/models 仅返回免费模型）</option>
+          </select>
+          <div class="hint-sm mt-4">影响 /models、/v1/models 对客户端返回的模型列表，不影响管理页模型管理</div>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="field"><label>引擎版本</label><input type="text" id="settingVersion" disabled></div>
+        <div class="field"><label>账号文件</label><input type="text" id="settingPoolPath" disabled></div>
+      </div>
+      <div class="form-group-label">策略与回退一览</div>
+      <div class="field-hint">本页「轮询策略」= 从 Cline 账号池取号的方式（quality 同时参与自定义 Provider 评分排序）；全局「回退模型链」是组合失败的最终兜底。其余两处策略选择器在别的页面：</div>
+      <div class="field-hint mt-2"><a href="#" onclick="switchTab('upstreams');return false" class="lnk-a">上游服务页：opencode / Cline 出口代理策略 = 多个出口代理地址之间的选择 →</a></div>
+      <div class="field-hint mt-2"><a href="#" onclick="switchTab('combos');return false" class="lnk-a">模型组合页：组合条目顺序与紧急回退 →</a></div>
+    </div>
+  </div>
+  </div>
+
+  <div class="page-subpage" data-subpage="tuning" style="display:none">
+  <div class="section">
+    <div class="section-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg><span>调优参数</span></div>
+    <div class="section-desc">回退轮次、流式心跳/引导缓冲、会话亲和与请求体上限等运行期开关；留空或 0 表示沿用内置默认。保存后即刻生效（写入运行配置并持久化）。</div>
+    <div class="section-body">
+      <div class="form-group-label">回退与冷却</div>
+      <div class="form-row">
+        <div class="field"><label>最大回退轮次（0=单轮）</label><input type="number" id="tunRetryRounds" min="0" max="100" placeholder="0"></div>
+        <div class="field"><label>每轮账号上限（0=不限）</label><input type="number" id="tunRetryCreds" min="0" max="10000" placeholder="0"></div>
+        <div class="field"><label>轮间隔上限(秒)</label><input type="number" id="tunRetryInterval" min="0" max="600" placeholder="0"></div>
+        <div class="field"><label>瞬时错误冷却(秒，-1=关闭)</label><input type="number" id="tunRetryCooldown" min="-1" max="3600" placeholder="0"></div>
+        <div class="field"><label>故障转移模型上限（0=内置3）</label><input type="number" id="tunRetryFailover" min="0" max="100" placeholder="0"></div>
+      </div>
+      <div class="form-group-label">流式与心跳</div>
+      <div class="form-row">
+        <div class="field"><label>SSE 心跳间隔(秒，0=15，-1=关闭)</label><input type="number" id="tunKeepalive" min="-1" max="3600" placeholder="0"></div>
+        <div class="field"><label>首包前重试次数（0=1）</label><input type="number" id="tunBootstrapRetries" min="0" max="5" placeholder="0"></div>
+        <div class="field"><label>首内容超时(秒，0=关闭)</label><input type="number" id="tunFirstContentTimeout" min="0" max="600" placeholder="0"></div>
+        <div class="field"><label>非流式占位心跳(秒，0=关闭)</label><input type="number" id="tunNonstreamKeepalive" min="0" max="300" placeholder="0"></div>
+      </div>
+      <div class="form-row">
+        <div class="field"><label>首 token 前抑制心跳</label>
+          <select id="tunSuppressKeepalive"><option value="false">关闭（静默期发心跳）</option><option value="true">开启（严格引导缓冲）</option></select>
+        </div>
+        <div class="field"><label>会话亲和（同一对话绑定账号）</label>
+          <select id="tunAffinityEnabled"><option value="false">关闭</option><option value="true">开启</option></select>
+        </div>
+        <div class="field"><label>亲和绑定 TTL(秒)</label><input type="number" id="tunAffinityTTL" min="60" max="604800" placeholder="3600"></div>
+      </div>
+      <div class="form-group-label">请求体与响应头</div>
+      <div class="form-row">
+        <div class="field"><label>请求体上限(MB，0=不限)</label><input type="number" id="tunMaxBodyMB" min="0" max="4096" placeholder="0"></div>
+        <div class="field"><label>透传上游响应头（安全白名单外剔除）</label>
+          <select id="tunPassthrough"><option value="false">关闭</option><option value="true">开启</option></select>
+        </div>
+      </div>
+      <div class="form-group-label">模型别名 / 排除 / 错误规则</div>
+      <div class="field">
+        <label>模型别名（请求名 -> 实际模型，可选限定 Provider）</label>
+        <div id="tunAliasesEditor" class="structured-editor"></div>
+        <div class="se-foot"><button type="button" class="btn btn-sm" onclick="addAliasRow()">+ 添加别名</button><span id="aliasDupWarn" class="se-warn" hidden></span></div>
+      </div>
+      <div class="field">
+        <label>错误规则（命中上游错误后执行的调度动作，按顺序匹配）</label>
+        <div id="tunErrorRulesEditor" class="structured-editor"></div>
+        <div class="se-foot"><button type="button" class="btn btn-sm" onclick="addErrorRuleRow()">+ 添加规则</button></div>
+      </div>
+      <div class="field">
+        <label>排除模型（逗号分隔，支持 * 通配；对全部来源生效）</label>
+        <input type="text" id="tunExcluded" placeholder="gpt-4-*, *-preview" class="mono-plain" oninput="updateExcludedMatchCounts()">
+        <div class="se-foot">
+          <button type="button" class="btn btn-sm" onclick="toggleExcludedPicker()" id="excludedPickerBtn">选择模型</button>
+          <span id="excludedMatchCounts" class="excluded-matches"></span>
+        </div>
+        <div id="excludedPicker" class="excluded-picker" hidden>
+          <input type="search" id="excludedPickerSearch" placeholder="搜索模型…" oninput="renderExcludedPicker()">
+          <div id="excludedPickerList" class="excluded-picker-list"></div>
+        </div>
+      </div>
+      <datalist id="modelIdList"></datalist>
+      <div class="form-actions">
+        <button class="btn btn-primary" onclick="saveTuning(this)">保存调优参数</button>
+        <span class="hint-sm">非法别名/规则会整次拒绝并提示，不会部分生效</span>
+        <span id="tunSaveResult" class="ml-8" aria-live="polite"></span>
+      </div>
+    </div>
+  </div>
+  </div>
+
+  <div class="page-subpage" data-subpage="models" style="display:none">
+  <div class="section">
+    <div class="section-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="9" x2="15" y2="9"/><line x1="9" y1="15" x2="15" y2="15"/></svg><span>模型管理</span>
+      <span class="title-tools">
+        <span><span>上次同步</span>: <span id="modelSyncTime">-</span></span>
+      </span>
+    </div>
+    <div class="section-desc">模型按 Provider 添加并自动归属：在 Provider 编辑器中使用「选择模型」「手动输入模型 ID」或「导入预览」即可添加。本页用于启用 / 停用、调整计费与上下文窗口、筛选和批量操作。停用的模型不会出现在客户端模型列表（/v1/models）中，直接请求也会被拒绝。</div>
+    <div class="section-body">
+      <div id="modelStatsBar" class="model-stats-bar"></div>
+      <div class="model-toolbar">
+        <input type="text" id="modelSearch" placeholder="搜索模型 ID..." aria-label="搜索模型" oninput="onModelFilterChange('search', this.value)">
+        <select id="modelFilterProvider" onchange="onModelFilterChange('provider', this.value)"><option value="">全部来源</option></select>
+        <select id="modelFilterCost" onchange="onModelFilterChange('cost', this.value)">
+          <option value="">全部计费</option>
+          <option value="free">免费</option>
+          <option value="pass">付费</option>
+        </select>
+        <select id="modelFilterStatus" onchange="onModelFilterChange('status', this.value)">
+          <option value="">全部状态</option>
+          <option value="enabled">已启用</option>
+          <option value="disabled">已停用</option>
+          <option value="failed">测试失败</option>
+          <option value="delisted">已下架</option>
+        </select>
+        <button class="btn btn-sm" onclick="switchTab('providers')" title="在 Provider 编辑器中添加模型，自动归属该 Provider">添加模型 → Provider 页</button>
+        <!-- 低频批量操作收入「更多」，避免工具栏两行铺满；保留筛选 / 同步一键直达 -->
+        <div class="toolbar-more" id="modelBulkMore">
+          <button class="btn btn-sm" onclick="toggleToolbarMore(event)" aria-haspopup="true" aria-expanded="false" id="toolbarMoreBtn">更多操作 ▾</button>
+          <div class="toolbar-more-menu">
+            <button class="btn btn-sm" onclick="setAllModelGroups(true)">展开全部</button>
+            <button class="btn btn-sm" onclick="setAllModelGroups(false)">折叠全部</button>
+            <button class="btn btn-sm" id="bulkEnableFreeBtn" onclick="bulkModelToggle('free')">启用全部免费</button>
+            <button class="btn btn-sm" id="bulkDisablePaidBtn" onclick="bulkModelToggle('paid')">停用全部付费</button>
+            <button class="btn btn-sm" id="bulkEnableFilteredBtn" onclick="bulkToggleFiltered(false)">启用当前筛选</button>
+            <button class="btn btn-sm" id="bulkDisableFilteredBtn" onclick="bulkToggleFiltered(true)">停用当前筛选</button>
+          </div>
+        </div>
+        <button class="sync-btn" id="syncModelsBtn" onclick="syncModels()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="ic-sm"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg><span>从 Cline 同步模型</span></button>
+        <button class="sync-btn" id="syncOcModelsBtn" onclick="syncOcModels()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="ic-sm"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg><span>从 opencode 同步模型</span></button>
+      </div>
+      <div id="modelsList" class="model-list"><div class="sk-stack"><span class="skeleton"></span><span class="skeleton w70"></span><span class="skeleton w45"></span><span class="skeleton w70"></span></div></div>
+    </div>
+  </div>
+  </div>
+
+</div>

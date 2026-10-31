@@ -1,0 +1,30 @@
+/* ===== 供应商详情抽屉（只读，宽版） ===== */
+.drawer.drawer-wide{width:min(720px,100vw)}
+.detail-back{margin-bottom:10px;font-size:var(--fs-sm)}
+#provDetail .drawer-title{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.detail-back .lnk-a{display:inline-flex;align-items:center;color:var(--text2);text-decoration:none}
+.detail-back .lnk-a:hover{color:var(--accent)}
+.detail-kv{display:grid;grid-template-columns:auto 1fr;gap:8px 16px;align-items:baseline;font-size:13px}
+.detail-k{color:var(--text3);font-size:12px;white-space:nowrap}
+.detail-v{color:var(--text);min-width:0;overflow-wrap:anywhere}
+.detail-clip{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.detail-meta{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.detail-err{font-size:12px;color:var(--red);background:var(--red-soft);border-radius:var(--radius-xs);padding:6px 10px;margin-top:6px;overflow-wrap:anywhere}
+.detail-actions{display:flex;align-items:center;gap:8px;margin-bottom:10px}
+.detail-conn-row{display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid var(--border2);font-size:12px;min-width:0}
+.detail-conn-row:last-child{border-bottom:none}
+.detail-conn-row .status{flex-shrink:0}
+.detail-conn-row .conn-expiry{margin:0}
+.model-chips-all{max-height:220px;overflow-y:auto}
+/* 已下架子节：与联动连接同一行语言；id 尽量不截断可点标题 */
+.delist-sub{margin-top:10px}
+.model-tag.delisted-chip{border-color:var(--red);color:var(--text);background:var(--red-soft);display:inline-flex;align-items:center;gap:4px}
+.model-tag.delisted-chip .delisted-badge{margin-left:0}
+.delist-inline-x{display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:4px;color:var(--red);flex-shrink:0}
+.delist-inline-x:hover{background:var(--red-soft);color:var(--red)}
+.delist-inline-x svg{width:12px;height:12px}
+.delist-sub .form-group-label{font-size:var(--fs-sm);font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.4px;margin:0 0 var(--sp-3);padding-bottom:6px;border-bottom:1px solid var(--border2)}
+.delist-row .mono{flex:1 1 auto;min-width:0}
+.delist-remove{margin-left:auto;flex-shrink:0}
+/* .form-actions 已有全局定义，此处无需重复 */
+

@@ -1,0 +1,86 @@
+<div id="tab-quickstart" class="tab-panel" style="display:none">
+  <div class="page-header">
+    <div>
+      <div class="large-title">快速开始</div>
+      <div class="large-subtitle">三步接入：添加账号 → 生成密钥 → 配置客户端</div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">接入步骤</div>
+    <div class="section-body">
+      <div class="stack-col">
+        <div class="step-item">
+          <div class="step-dot">1</div>
+          <div>
+            <div class="txt-strong">添加 Cline 账号</div>
+            <div class="page-sub-title">在「账号与连接」页展开「登录与导入」分区，通过 OAuth 登录或手动输入 refreshToken 添加账号。支持批量导入。</div>
+            <button class="btn btn-sm mt-6" onclick="switchTab('accounts')">前往账号与连接</button>
+          </div>
+        </div>
+        <div class="step-item">
+          <div class="step-dot">2</div>
+          <div>
+            <div class="txt-strong">生成 API Key</div>
+            <div class="page-sub-title">前往「密钥与安全」页面生成密钥。如不配置任何密钥，代理允许匿名访问。</div>
+            <button class="btn btn-sm mt-6" onclick="switchTab('security')">前往密钥与安全</button>
+          </div>
+        </div>
+        <div class="step-item">
+          <div class="step-dot">3</div>
+          <div>
+            <div class="txt-strong">配置客户端</div>
+            <div class="page-sub-title">按下方客户端示例填入 Base URL 与密钥即可。</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">客户端配置示例</div>
+    <div class="section-desc">Base URL 中的端口与监听地址以「关于」页 API 地址为准；多 Provider 同名模型可用 <code>模型@Provider名</code> 钉选来源（失败只报错、不悄悄换源）。</div>
+    <div class="section-body">
+      <div class="quickstart-grid">
+        <div class="quickstart-card">
+          <div class="quickstart-card-title">Claude Code（Anthropic 协议）</div>
+          <pre class="quickstart-code">export ANTHROPIC_BASE_URL="http://127.0.0.1:3457"
+export ANTHROPIC_API_KEY="&lt;your-api-key&gt;"
+claude --model cline-free/glm-5.2</pre>
+        </div>
+        <div class="quickstart-card">
+          <div class="quickstart-card-title">Cline / Roo Code（VS Code 插件）</div>
+          <pre class="quickstart-code">API Provider: Anthropic
+Base URL:  http://127.0.0.1:3457
+API Key:   &lt;your-api-key&gt;
+Model:     cline-free/glm-5.2</pre>
+        </div>
+        <div class="quickstart-card">
+          <div class="quickstart-card-title">通用 OpenAI 兼容客户端</div>
+          <pre class="quickstart-code">Base URL: http://127.0.0.1:3457/v1
+API Key:  &lt;your-api-key&gt;
+Model:    cline-free/glm-5.2</pre>
+        </div>
+        <div class="quickstart-card">
+          <div class="quickstart-card-title">curl 冒烟测试</div>
+          <pre class="quickstart-code">curl -s http://127.0.0.1:3457/v1/chat/completions \
+  -H "x-api-key: &lt;your-api-key&gt;" -H "Content-Type: application/json" \
+  -d '{"model":"cline-free/glm-5.2","messages":[{"role":"user","content":"hi"}]}'</pre>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">下一步</div>
+    <div class="section-body">
+      <div class="quickstart-links">
+        <button class="btn btn-sm" onclick="switchTab('upstreams')">接入更多免费上游（OpenCode / Zen）</button>
+        <button class="btn btn-sm" onclick="switchTab('providers')">添加自定义 Provider</button>
+        <button class="btn btn-sm" onclick="switchTab('combos')">配置模型组合自动换源</button>
+        <button class="btn btn-sm" onclick="switchTab('quota')">查看配额与预算</button>
+      </div>
+    </div>
+  </div>
+</div>
+
