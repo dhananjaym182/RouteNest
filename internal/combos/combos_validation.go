@@ -125,7 +125,7 @@ func ValidateCombo(c domain.ModelCombo, existing []domain.ModelCombo) error {
 		if err := validateComboEntryPin(en, m); err != nil {
 			return err
 		}
-		if !en.Disabled && !routing.ModelDisabled(m) {
+		if !en.Disabled && !routing.IsModelDisabled(m) {
 			enabledCount++
 		}
 	}

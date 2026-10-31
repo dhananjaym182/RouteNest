@@ -345,7 +345,7 @@ func RunCombo(params map[string]any, combo domain.ModelCombo, stream bool, sessi
 				Source: strings.TrimSpace(entry.Source), Provider: strings.TrimSpace(entry.Provider)})
 			continue
 		}
-		if routing.ModelDisabled(m) {
+		if routing.IsModelDisabled(m) {
 			trace = append(trace, domain.AttemptLog{Model: m, Order: order, Outcome: "skipped", Reason: "model disabled by admin",
 				Source: strings.TrimSpace(entry.Source), Provider: strings.TrimSpace(entry.Provider)})
 			continue

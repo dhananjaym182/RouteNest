@@ -149,7 +149,7 @@ func AliasListingEntries() []map[string]any {
 		if ExcludedForListing(a.Alias) || ExcludedForListing(a.Target) {
 			continue
 		}
-		if ModelDisabled(a.Target) {
+		if IsModelDisabled(a.Target) {
 			continue
 		}
 		out = append(out, map[string]any{

@@ -10,7 +10,6 @@ import (
 	"sync"
 
 	"routenest/internal/accounts"
-	"routenest/internal/admin"
 	"routenest/internal/buildinfo"
 	"routenest/internal/combos"
 	"routenest/internal/compaction"
@@ -48,9 +47,9 @@ func Configure() {
 func configure() {
 	combos.ConfigMu = &config.Mu
 	combos.Config = config.Held
-	combos.GetConfig = admin.GetProxyConfig
+	combos.GetConfig = config.Live
 	combos.EnsureConfig = config.Held
-	combos.SaveConfig = admin.SaveProxyConfigLocked
+	combos.SaveConfig = config.SaveLocked
 	combos.CallClineAPIWithAccount = func(ctx context.Context, acc *domain.Account, params map[string]any, stream bool) (*http.Response, *domain.Account, error) {
 		return routing.CallClineAPIWithAccountCtx(ctx, acc, params, stream)
 	}
@@ -67,13 +66,12 @@ func configure() {
 		return proxycore.AnthropicToOpenAI(req), nil
 	}
 
-	egress.ConfigProvider = admin.GetProxyConfig
+	egress.ConfigProvider = config.Live
 	requestlog.Path = platform.ResolveDataPath(requestlogstore.FileName, nil)
 	zen.IsModelGoneError = routing.IsModelGoneError
 	zen.MarkModelGone = routing.MarkModelGone
-	routing.ConfigProvider = admin.GetProxyConfig
+	routing.ConfigProvider = config.Live
 	routing.ModelsProvider = routing.AllModels
-	routing.ModelDisabled = routing.IsModelDisabled
 	routing.SetComboCatalog(combos.RoutingCombos{})
 
 	buildinfo.HTTPClient = egress.Client
@@ -92,7 +90,7 @@ func configure() {
 	}
 	providers.BodyOptionsProvider = bodyOptionsProvider
 	zen.BodyOptionsProvider = bodyOptionsProvider
-	providers.ConfigProvider = admin.GetProxyConfig
+	providers.ConfigProvider = config.Live
 	providers.RequestLogsSnapshot = func() []domain.RequestLog {
 		requestlog.Mu.Lock()
 		defer requestlog.Mu.Unlock()
@@ -107,8 +105,7 @@ func configure() {
 	}
 	providers.SetFreeModelIDs(freeIDs)
 
-	proxycore.ConfigProvider = admin.GetProxyConfig
-	proxycore.RegisterAdminRoutes = admin.RegisterRoutes
+	proxycore.ConfigProvider = config.Live
 	proxycore.RecordUsage = RecordUsage
 }
 

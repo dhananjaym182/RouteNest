@@ -64,7 +64,7 @@ func protocolTestServer(t *testing.T) string {
 
 	serverErr := make(chan error, 1)
 	go func() {
-		serverErr <- proxycore.Start("127.0.0.1", port)
+		serverErr <- proxycore.Start("127.0.0.1", port, admin.RegisterRoutes)
 	}()
 
 	baseURL := "http://127.0.0.1:" + strconv.Itoa(port)

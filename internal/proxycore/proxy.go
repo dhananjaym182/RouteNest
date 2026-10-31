@@ -39,9 +39,8 @@ import (
 
 // Root-owned live state seams, wired once from root composition.
 var (
-	ConfigProvider      = func() *config.Proxy { return config.DefaultProxy() }
-	RegisterAdminRoutes = func(*http.ServeMux) {}
-	RecordUsage         = func(*domain.Account, *http.Response, *domain.RequestLog, string, TokenUsage) {}
+	ConfigProvider = func() *config.Proxy { return config.DefaultProxy() }
+	RecordUsage    = func(*domain.Account, *http.Response, *domain.RequestLog, string, TokenUsage) {}
 )
 
 const (
@@ -254,7 +253,9 @@ type chatRequest struct {
 // IsFreeModelEntry 判断模型是否免费（/models 过滤用）：
 // Cost 直接标记 free，或 zen 来源且命中免费判定（种子白名单兜底）。
 
-func Start(host string, port int) error {
+// Start serves the proxy on host:port. registerAdmin adds the admin console routes
+// to the mux; the caller supplies it so proxycore does not depend on admin.
+func Start(host string, port int, registerAdmin func(*http.ServeMux)) error {
 	log.Printf("Data directory: %s (set %s to override)", platform.CurrentDataDir(), platform.DataDirEnv)
 	p := accounts.LoadPool()
 	requestlog.Load()
@@ -299,7 +300,9 @@ func Start(host string, port int) error {
 	mux.HandleFunc("/health", CorsHandler(health.Handler))
 
 	// Admin API (frontend + REST)
-	RegisterAdminRoutes(mux)
+	if registerAdmin != nil {
+		registerAdmin(mux)
+	}
 
 	apiKeyHandler := (&httpapi.APIKeyAuth{
 		Keys: func() []string { return accounts.LoadPool().Keys },

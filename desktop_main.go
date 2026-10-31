@@ -10,15 +10,17 @@ import (
 	"net/http"
 	"os"
 	"routenest/internal/accounts"
+	"routenest/internal/admin"
 	"routenest/internal/app"
 	"strconv"
 	"time"
+
+	"routenest/internal/proxycore"
 
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
 	"github.com/wailsapp/wails/v2/pkg/options/windows"
-	"routenest/internal/proxycore"
 )
 
 const defaultDesktopPort = 3457
@@ -32,7 +34,7 @@ func main() {
 
 	proxyErr := make(chan error, 1)
 	go func() {
-		proxyErr <- proxycore.Start(*host, *port)
+		proxyErr <- proxycore.Start(*host, *port, admin.RegisterRoutes)
 	}()
 
 	if err := waitForEmbeddedProxy(*port, 15*time.Second, proxyErr); err != nil {

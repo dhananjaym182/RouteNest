@@ -3,7 +3,6 @@ package app
 import (
 	"testing"
 
-	"routenest/internal/proxycore"
 	"routenest/internal/routing"
 )
 
@@ -15,7 +14,7 @@ func TestConfigureIsIdempotent(t *testing.T) {
 	if configureCalls != 1 {
 		t.Fatalf("configure ran %d times, want 1", configureCalls)
 	}
-	if routing.ConfigProvider == nil || !routing.HasComboCatalog() || proxycore.RegisterAdminRoutes == nil {
+	if routing.ConfigProvider == nil || !routing.HasComboCatalog() {
 		t.Fatal("composition hooks were not installed")
 	}
 }

@@ -56,7 +56,7 @@ func protocolTestServer(t *testing.T) string {
 	})
 
 	serverErr := make(chan error, 1)
-	go func() { serverErr <- Start("127.0.0.1", port) }()
+	go func() { serverErr <- Start("127.0.0.1", port, nil) }()
 
 	baseURL := "http://127.0.0.1:" + strconv.Itoa(port)
 	client := &http.Client{Transport: &http.Transport{}, Timeout: 2 * time.Second}

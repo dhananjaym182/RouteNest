@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"routenest/internal/accounts"
+	"routenest/internal/admin"
 	"routenest/internal/app"
 	"routenest/internal/proxycore"
 	"runtime"
@@ -67,7 +68,7 @@ func main() {
 		return
 	}
 
-	if err := proxycore.Start(*host, *port); err != nil && err != http.ErrServerClosed {
+	if err := proxycore.Start(*host, *port, admin.RegisterRoutes); err != nil && err != http.ErrServerClosed {
 		log.Fatalf("Proxy failed: %v", err)
 		os.Exit(1)
 	}
