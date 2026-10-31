@@ -218,8 +218,11 @@ func CurrentDataDir() string {
 }
 
 // LegacyDataCandidates returns de-duplicated absolute paths that may contain
-// data files from an older installation: exe directory, working directory,
-// the current home data directory and the legacy ~/.cline2api directory.
+// data files from an older installation: the executable directory, the working
+// directory, ~/.routenest and ~/.cline2api. This matches the documented sources
+// in README. The OS config directory is deliberately not a source: when
+// ROUTENEST_DATA_DIR selects another directory, copying from the config directory
+// would duplicate live credentials into it.
 func LegacyDataCandidates(legacyDirs func() []string) []string {
 	if legacyDirs != nil {
 		return legacyDirs()
@@ -233,9 +236,6 @@ func LegacyDataCandidates(legacyDirs func() []string) []string {
 	}
 	if home, err := os.UserHomeDir(); err == nil {
 		dirs = append(dirs, filepath.Join(home, ".routenest"), filepath.Join(home, ".cline2api"))
-	}
-	if base, err := userConfigDir(); err == nil && strings.TrimSpace(base) != "" {
-		dirs = append(dirs, filepath.Join(base, "routenest"))
 	}
 	seen := make(map[string]bool, len(dirs))
 	out := dirs[:0]
