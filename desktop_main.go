@@ -10,7 +10,7 @@ import (
 	"net/http"
 	"os"
 	"routenest/internal/accounts"
-	_ "routenest/internal/app"
+	"routenest/internal/app"
 	"strconv"
 	"time"
 
@@ -24,6 +24,7 @@ import (
 const defaultDesktopPort = 3457
 
 func main() {
+	app.Configure()
 	selfCheck := flag.Bool("selfcheck", false, "Start embedded proxy, wait for /health, and exit")
 	port := flag.Int("port", configuredDesktopPort(), "Proxy server port")
 	host := flag.String("host", configuredDesktopHost(), "Proxy server listen host (0.0.0.0 = all interfaces)")

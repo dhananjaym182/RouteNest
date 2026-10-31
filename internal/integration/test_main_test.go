@@ -3,7 +3,7 @@ package integration
 import (
 	"os"
 	"path/filepath"
-	_ "routenest/internal/app"
+	"routenest/internal/app"
 	"testing"
 
 	"routenest/internal/accounts"
@@ -13,6 +13,7 @@ import (
 // TestMain 把池文件与请求日志重定向到临时目录：
 // 单元测试绝不读写用户真实的 .cline-accounts.json。
 func TestMain(m *testing.M) {
+	app.Configure()
 	tmp, err := os.MkdirTemp("", "cline-proxy-test-*")
 	if err != nil {
 		panic(err)

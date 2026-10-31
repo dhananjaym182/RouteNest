@@ -8,6 +8,7 @@ import (
 	"errors"
 	"net/http"
 	"strings"
+	"sync"
 
 	"routenest/internal/accounts"
 	"routenest/internal/admin"
@@ -28,7 +29,24 @@ import (
 	"routenest/internal/zen"
 )
 
-func init() {
+// configureOnce guards Configure so repeated calls cannot re-register anything.
+var configureOnce sync.Once
+
+// configureCalls counts configure runs; tests use it to prove idempotence.
+var configureCalls int
+
+// Configure wires the composition root: it installs every cross-package hook
+// that the packages expose as variables. It is idempotent and must run before
+// any server or test that depends on the wiring. Entry points call it explicitly
+// rather than relying on import side effects.
+func Configure() {
+	configureOnce.Do(func() {
+		configureCalls++
+		configure()
+	})
+}
+
+func configure() {
 	combos.ConfigMu = &admin.ConfigMu
 	combos.Config = func() *config.Proxy { return admin.Config }
 	combos.GetConfig = admin.GetProxyConfig

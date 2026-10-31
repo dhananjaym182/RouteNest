@@ -4,9 +4,10 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"os"
 	"path/filepath"
 	"routenest/internal/accounts"
-	_ "routenest/internal/app"
+	"routenest/internal/app"
 	"routenest/internal/egress"
 	"routenest/internal/routing"
 	"strings"
@@ -166,4 +167,11 @@ func TestRefreshAccountTokenExpiresWhenWorkOSAlsoRejects(t *testing.T) {
 	if acc.Status != "expired" {
 		t.Fatalf("status = %q, want expired when the token is truly revoked", acc.Status)
 	}
+}
+
+// TestMain installs the composition root before any test runs. The wiring is
+// no longer applied by importing the package.
+func TestMain(m *testing.M) {
+	app.Configure()
+	os.Exit(m.Run())
 }

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -11,7 +12,7 @@ import (
 
 	"routenest/internal/accounts"
 	"routenest/internal/admin"
-	_ "routenest/internal/app"
+	"routenest/internal/app"
 	"routenest/internal/domain"
 	"routenest/internal/egress"
 	"routenest/internal/platform"
@@ -102,3 +103,10 @@ func readReqModel(req *http.Request) string {
 }
 
 const okCompletion = `{"id":"ok","object":"chat.completion","choices":[{"index":0,"message":{"role":"assistant","content":"ok"},"finish_reason":"stop"}],"usage":{"prompt_tokens":1,"completion_tokens":1,"total_tokens":2}}`
+
+// TestMain installs the composition root before any test runs. The wiring is
+// no longer applied by importing the package.
+func TestMain(m *testing.M) {
+	app.Configure()
+	os.Exit(m.Run())
+}
