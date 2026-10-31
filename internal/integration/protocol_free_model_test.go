@@ -71,8 +71,8 @@ func protocolTestServer(t *testing.T) string {
 	baseURL := "http://127.0.0.1:" + strconv.Itoa(port)
 	client := &http.Client{Transport: &http.Transport{}, Timeout: 2 * time.Second}
 	// 整套测试运行时进程压力大，服务器可能启动超过 2s：deadline 给足余量，
-	// 避免把服务器启动慢误判为路由失败（flaky）。
-	deadline := time.Now().Add(10 * time.Second)
+	// 避免把服务器启动慢误判为路由失败（flaky）。30s：并行全量运行时 10s 不足以启动。
+	deadline := time.Now().Add(30 * time.Second)
 	for {
 		resp, requestErr := client.Get(baseURL + "/health")
 		if requestErr == nil {

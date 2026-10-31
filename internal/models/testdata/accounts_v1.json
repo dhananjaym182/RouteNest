@@ -1,0 +1,16 @@
+{
+  "accounts": [],
+  "currentIdx": 0,
+  "keys": ["fixture-client-key"],
+  "models": [
+    {"id": "remote/alpha", "provider": "cline", "cost": "pass", "status": "active", "source": "remote", "context": 200000, "output": 8192, "metaLocked": true},
+    {"id": "remote/gone", "provider": "cline", "cost": "free", "status": "active", "source": "remote", "delisted": true},
+    {"id": "zen/free", "provider": "opencode", "cost": "free", "status": "active", "source": "zen", "tierSignal": "allowlist", "tierDecidedAt": 1700000000},
+    {"id": "seed/legacy", "provider": "opencode", "cost": "free", "status": "active", "source": "seed"},
+    {"id": "provider/one", "provider": "Alpha", "cost": "pass", "status": "active", "source": "provider", "thinkingLevels": ["low", "high"]},
+    {"id": "custom/one", "provider": "custom", "cost": "pass", "status": "active", "custom": true, "inputModalities": ["text", "image"]},
+    {"id": "custom/off", "provider": "custom", "cost": "pass", "status": "active", "custom": true, "disabled": true}
+  ],
+  "defaultModel": "remote/alpha",
+  "listenHost": "127.0.0.1"
+}
