@@ -1,7 +1,7 @@
 // List I18N dict keys whose zh text appears nowhere outside the dict block itself.
 // Usage: node tools/i18n_deadkeys.js
 const fs = require('fs');
-const dir = __dirname + '/../adminui';
+const dir = __dirname + '/../internal/admin/ui';
 const body = fs.readFileSync(dir + '/body.html', 'utf8');
 const jsFiles = fs.readdirSync(dir + '/js').map(f => fs.readFileSync(dir + '/js/' + f, 'utf8'));
 const core = jsFiles[jsFiles.findIndex(s => s.includes('const I18N'))];

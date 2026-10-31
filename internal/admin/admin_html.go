@@ -36,14 +36,23 @@ func buildAdminHTML() string {
 	buf.WriteString("</style>\n")
 	write("ui/body.html")
 	buf.WriteString("<script>\n")
-	names, err := fs.Glob(adminUIFS, "ui/js/*.js")
+	names, err := adminUIJSNames()
 	if err != nil {
 		panic("admin ui js glob: " + err.Error())
 	}
-	sort.Strings(names)
 	for _, n := range names {
 		write(n)
 	}
 	buf.WriteString("</script>\n</body>\n</html>")
 	return buf.String()
+}
+
+// adminUIJSNames returns the embedded admin JS asset paths in assembly order.
+func adminUIJSNames() ([]string, error) {
+	names, err := fs.Glob(adminUIFS, "ui/js/*.js")
+	if err != nil {
+		return nil, err
+	}
+	sort.Strings(names)
+	return names, nil
 }
