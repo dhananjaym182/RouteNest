@@ -12,7 +12,7 @@ services:
     environment:
       - PORT=3457
       - CLINE_PROXY_HOST=0.0.0.0
-      - CLINE2API_DATA_DIR=/app/data
+      - ROUTENEST_DATA_DIR=/app/data
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3457/health"]
       interval: 30s

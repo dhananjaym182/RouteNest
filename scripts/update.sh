@@ -54,10 +54,11 @@ fi
 
 if [ "$TESTS" = 1 ]; then
   say "Running tests"
-  # go test isolation is built into resolveDataPath (see test_isolation_guard_test.go):
-  # with no CLINE2API_DATA_DIR set, every data file redirects to a throwaway temp dir,
-  # so fixtures never overwrite the real .cline-*.json in the repo root.
-  # Do NOT set CLINE2API_DATA_DIR here: an explicit dir wins over the guard AND triggers
+  # go test isolation is built into platform.ResolveDataPath
+  # (see internal/integration/test_isolation_guard_test.go):
+  # with no ROUTENEST_DATA_DIR or legacy CLINE2API_DATA_DIR set, every data file
+  # redirects to a throwaway temp dir, so fixtures never overwrite real state.
+  # Do NOT set either data-dir variable here: an explicit dir wins over the guard AND triggers
   # migrateLegacyDataFiles, copying live accounts/providers (real tokens) into the test
   # directory — which made the protocol free-model fallback tests fail against real data.
   go test ./...

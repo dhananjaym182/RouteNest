@@ -14,7 +14,7 @@ The complete MIT license text and copyright notice are retained in [LICENSE](LIC
 
 ## ExtremeRouter provider registry
 
-The provider preset definitions shipped in `internal/providerreg/presets/` include 93 entries derived from the ExtremeRouter provider registry: preset IDs, display names, base URLs, seed model IDs, notes, and catalog-fetcher hints.
+The provider preset definitions shipped in `internal/providerreg/imported.json` include 90 entries derived from the ExtremeRouter provider registry: preset IDs, display names, base URLs, seed model IDs, notes, and catalog-fetcher hints.
 
 - License: MIT
 - Copyright (c) 2024-2026 Raden Salman Alfaridzi (ExtremeRouter, originally 9Router by decolua)
@@ -44,4 +44,3 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
-

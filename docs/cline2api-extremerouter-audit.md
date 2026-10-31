@@ -1,5 +1,11 @@
 # Cline2API ↔ ExtremeRouter Audit
 
+> Historical snapshot: file paths and line numbers in this audit refer to the
+> pre-restructure Cline2API tree at the commit recorded below. In current
+> RouteNest, the corresponding owners are `internal/routing/`,
+> `internal/proxycore/`, `internal/providers/`, `internal/combos/`,
+> `internal/zen/`, and `internal/admin/`.
+
 **Date:** 2026-10-23
 **Scope:** Read-only source-code audit — model registry, model discovery, access-tier
 classification, routing, fallback, protocol compatibility.

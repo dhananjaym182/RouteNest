@@ -22,7 +22,7 @@ It provides provider presets, account management, model discovery, ordered fallb
 ## What RouteNest provides
 
 - **Multi-account routing** — select and rotate configured accounts, with cooldowns and retryable-error handling.
-- **Provider catalog** — 110 provider preset definitions, plus support for custom OpenAI-compatible endpoints. Availability and protocol support vary by provider.
+- **Provider catalog** — 109 provider preset definitions, plus support for custom OpenAI-compatible endpoints. Availability and protocol support vary by provider.
 - **Multiple API formats** — OpenAI Chat Completions, supported Responses API functionality, and Anthropic Messages endpoints.
 - **Model combos** — define ordered model lists with fallback on eligible upstream failures.
 - **Model discovery** — synchronize supported model catalogs, configure custom model IDs, and select a default model.
@@ -178,13 +178,13 @@ Add any OpenAI-compatible endpoint as a custom provider with its own base URL, k
 
 ## Provider coverage
 
-The shipped registry contains **110 provider preset definitions**:
+The shipped registry contains **109 provider preset definitions**:
 
 | Source | Count | Notes |
 | --- | --- | --- |
-| Built-in presets | 17 | OpenRouter, Groq, Cerebras, Google AI Studio, Mistral, Together AI, DeepSeek, OpenAI, vLLM, Ollama, Kilo Code, GitHub Copilot, Qwen Chat, Kimi for Coding, CodeBuddy CN/Intl, WorkBuddy |
-| Imported presets | 93 | Derived from the ExtremeRouter provider registry; includes free, free-tier, API-key-with-free-tier and local-runtime entries |
-| **Total** | **110** | **35 marked `freeTier` as a provider-level hint** |
+| RouteNest-maintained presets | 19 | OpenRouter, Groq, Cerebras, Google AI Studio, Mistral, Together AI, DeepSeek, OpenAI, vLLM, Ollama, Qoder CN/Intl, Kilo Code, GitHub Copilot, Qwen Chat, Kimi for Coding, CodeBuddy CN/Intl, WorkBuddy |
+| ExtremeRouter-derived imports | 90 | Includes free, free-tier, API-key-with-free-tier and local-runtime entries |
+| **Total** | **109** | **34 marked `freeTier` as a provider-level hint** |
 
 `freeTier` and `kind` are display/grouping hints from the registry, not per-model access entitlements. Presets include seed model IDs and, where defined, a catalog fetcher. A registry entry does not establish that the service is currently reachable, that an account is entitled to a model, or that provider-specific features work.
 
@@ -298,25 +298,29 @@ Development packages are only needed to compile. Release users need the correspo
 ## Project layout
 
 ```
-main.go, desktop_main.go   CLI and desktop entry points (package main, root)
-proxy.go, responses.go     HTTP routes, protocol bridging, SSE
-combos.go, providers.go    model combos, presets and provider dispatch
-admin*.go                  admin REST API
-adminui/                   embedded admin console
-internal/                  config, protocol adapters, upstream clients, storage
+main.go, desktop_main.go   thin CLI and desktop entry points
+internal/app/              service composition shared by both entry points
+internal/proxycore/        HTTP routes, protocol bridging, Responses and SSE
+internal/routing/          model discovery, policy and upstream invocation
+internal/providers/, zen/  provider registry and OpenCode Zen integration
+internal/egress/           shared HTTP transport, proxy and retry policy
+internal/combos/           named model combinations and fallback execution
+internal/compaction/       context management and compaction
+internal/admin/            admin API plus embedded UI in internal/admin/ui/
+internal/accounts/, connections/, requestlog/, store/   persistent state
 desktop/                   Wails shell and build scripts
-docs/                      design documents and provider-registry audits
-scripts/                   update.sh, docker-smoke.sh
-Dockerfile, docker-compose.yml
+docs/, scripts/            reference documents and operational scripts
 ```
 
-The repository's Go source at the root compiles as a single `package main`; all reusable logic lives in `internal/`.
+The Go module path is `routenest`. The repository root intentionally contains
+only the two `package main` entry points; application composition and all
+implementation code live under `internal/`.
 
 ## Attribution and license
 
 RouteNest is an independent fork of [Cline2API](https://github.com/luawei1/cline2api), originally created by luawei1, and is distributed under the MIT License. The upstream copyright notice is retained in [LICENSE](LICENSE).
 
-The 93 imported provider preset definitions are derived from the ExtremeRouter provider registry, which is MIT-licensed. The corresponding copyright and license notice is preserved in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+The 90 imported provider preset definitions are derived from the ExtremeRouter provider registry, which is MIT-licensed. The corresponding copyright and license notice is preserved in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 RouteNest is not affiliated with or endorsed by Cline, OpenCode, Qoder, or any provider listed in the catalog. Use it only with accounts and credentials you are authorized to use, and comply with each provider's terms of service. Provider names and trademarks belong to their owners.
 

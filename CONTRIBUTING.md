@@ -2,6 +2,8 @@
 
 The repository root contains only the CLI and desktop entry points. Service
 composition lives in `internal/app`; implementation lives under `internal/`.
+The Go module path is `routenest`, so repository-local imports use
+`routenest/internal/...`.
 Keep the dependency direction:
 
 ```
@@ -15,6 +17,24 @@ Rule of thumb: stores persist state and never call upstream APIs; device flows
 return results and the caller persists them; converters never write HTTP
 responses; dispatch owns retries and the SSE writer.
 
+## Repository map
+
+| Path | Responsibility |
+| --- | --- |
+| `main.go`, `desktop_main.go` | Thin CLI and desktop entry points only |
+| `internal/app/` | One-time composition of package seams shared by both entry points |
+| `internal/proxycore/` | HTTP endpoints, OpenAI/Anthropic/Responses bridging, SSE and capture |
+| `internal/routing/` | Model catalog views, policy, Cline calls and cross-upstream fallback |
+| `internal/providers/`, `internal/zen/`, `internal/egress/` | Provider dispatch, OpenCode Zen and outbound transport policy |
+| `internal/combos/`, `internal/compaction/` | Named fallback combinations and context management |
+| `internal/admin/` | Admin routes and embedded assets under `internal/admin/ui/` |
+| `internal/accounts/`, `internal/connections/`, `internal/requestlog/`, `internal/store/` | Runtime state and persistence |
+| `internal/integration/` | Cross-package integration tests that intentionally do not belong to one service package |
+
+Put new behavior in its owning package rather than adding implementation to an
+entry point. Cross-package dependencies are wired in `internal/app`; do not
+reintroduce compatibility wrappers in the repository root.
+
 ## Embedded presets vs runtime providers
 
 There are two different provider paths:
@@ -25,7 +45,7 @@ There are two different provider paths:
 - **Imported preset catalog** lives in `internal/providerreg/imported.json`.
   It is the single-file replacement for the former generated Go map and is
   also embedded and validated at build time.
-- **Runtime custom providers** are stored in `.cline-providers.json` under the
+- **Runtime custom providers** are stored in `.routenest-providers.json` under the
   data directory and take effect without a rebuild (see the admin UI).
 
 A provider-level `kind`/`freeTier` flag is metadata used by the admin UI. It is
@@ -63,7 +83,7 @@ validated at save time and are not embedded into the binary.
 2. Reuse an existing strategy (`rfc8628`, `statepoll`, `qoder`, `kilo`) where
    possible; add a new strategy only when the exchange semantics differ.
 3. Return a `deviceflow.Result`. `deviceflow` must not import the connections
-   store. The root caller persists the connection and refreshes tokens.
+   store. The calling service persists the connection and refreshes tokens.
 4. Cover initiate, pending, approved, denied, expired, and refresh paths with
    `httptest` upstreams in `internal/deviceflow/deviceflow_test.go`.
 
@@ -117,21 +137,23 @@ Run the full gates from the repository root:
 gofmt -l .
 go build ./...
 go vet ./...
-env -u CLINE2API_DATA_DIR go test ./...
+env -u ROUTENEST_DATA_DIR -u CLINE2API_DATA_DIR go test ./... -count=1
 go list ./...
 go build -o /tmp/routenest .
 ```
 
-- Tests must use temporary data directories (`CLINE2API_DATA_DIR` or the
-  existing test isolation helpers) and must never touch the real data directory.
+- Tests must use temporary data directories (`ROUTENEST_DATA_DIR`; the legacy
+  `CLINE2API_DATA_DIR` remains supported) or the existing test isolation
+  helpers, and must never touch the real data directory.
 - Registry changes need validation/parity tests.
 - Protocol changes need streaming and tool-call regression coverage.
 - Store/config changes must prove temporary data never lands in production
   paths.
-- If a change touches `adminui/`, concatenate the JS and run `node --check`.
+- If a change touches `internal/admin/ui/`, concatenate the JS and run
+  `node --check`.
 - Desktop builds (`-tags "desktop production"`) need GTK/WebKit system
   libraries; they may be verified in CI when the local environment lacks them.
 
-Do not run smoke tests against the live `:3477` server. Use a scratch port and a
-fresh `CLINE2API_DATA_DIR`, record the PID you start, and terminate only that
+Do not run smoke tests against a live RouteNest server. Use a scratch port and a
+fresh `ROUTENEST_DATA_DIR`, record the PID you start, and terminate only that
 process.
