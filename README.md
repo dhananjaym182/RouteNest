@@ -243,7 +243,16 @@ Priority is application proxy pool → environment proxy (`HTTPS_PROXY`) → dir
 
 ## Data and upgrades
 
-State is looked up in the executable directory, then the working directory, then `~/.routenest/`. Set `ROUTENEST_DATA_DIR` to fix all data files to one directory (the legacy `CLINE2API_DATA_DIR` variable is still honored when `ROUTENEST_DATA_DIR` is unset).
+By default, RouteNest stores state in the operating system's per-user config
+directory:
+
+- Linux: `$XDG_CONFIG_HOME/routenest`, normally `~/.config/routenest`
+- macOS: `~/Library/Application Support/routenest`
+- Windows: `%AppData%\routenest`
+
+Set `ROUTENEST_DATA_DIR` to use an explicit directory, such as a mounted Docker
+volume. The legacy `CLINE2API_DATA_DIR` variable remains a lower-priority
+compatibility override.
 
 | File | Purpose |
 | --- | --- |
@@ -257,9 +266,19 @@ State is looked up in the executable directory, then the working directory, then
 | `.routenest-proxy.json` | Cline egress proxy pool |
 | `.routenest-zen.json` | OpenCode Zen configuration and egress pool |
 | `.routenest-request-logs.json` | Request logs |
+| `capture-logs/` | Interactive OAuth capture output; may contain authorization traffic |
 | `override.md` | Optional system-prompt override, read from the working directory |
 
-When the data directory is resolved to a new location, legacy `.cline-*` data files found next to the executable or in the working directory or in `~/.cline2api/` are copied into it under the new `.routenest-*` names on first use if the destination files do not already exist. This keeps existing deployments upgrading in place; the legacy `CLINE2API_DATA_DIR` environment variable is also still honored when `ROUTENEST_DATA_DIR` is unset.
+On first use, RouteNest copies missing current `.routenest-*` files and legacy
+`.cline-*` files from the executable directory, working directory,
+`~/.routenest/`, and `~/.cline2api/` into the selected data directory. Existing
+destination files always win, migration is idempotent, and source files are
+preserved as recovery backups.
+
+On Unix-like systems the data and capture directories are restricted to `0700`
+and known state files to `0600`. RouteNest fails startup with an actionable
+error if it cannot create a safe default config directory; it no longer falls
+back to writing secrets beside the executable.
 
 > The data files contain plaintext refresh tokens, provider keys and generated API keys. Back them up securely and never publish them or commit them to Git.
 

@@ -35,6 +35,20 @@ Put new behavior in its owning package rather than adding implementation to an
 entry point. Cross-package dependencies are wired in `internal/app`; do not
 reintroduce compatibility wrappers in the repository root.
 
+## State and secret handling
+
+- Resolve persisted state through `internal/platform`; never default to the
+  executable or working directory.
+- `ROUTENEST_DATA_DIR` is the explicit deployment override. Without it,
+  RouteNest uses `os.UserConfigDir()/routenest`.
+- Create state directories with `0700` and credential/state files with `0600`
+  on Unix-like systems.
+- Migration copies and verifies old files; it must never overwrite the selected
+  destination or delete recovery sources automatically.
+- Capture logs can contain authorization headers and bodies. Keep them under
+  the selected data directory and never print captured secret values in error
+  logs.
+
 ## Embedded presets vs runtime providers
 
 There are two different provider paths:

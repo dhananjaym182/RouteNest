@@ -59,7 +59,7 @@ if [ "$TESTS" = 1 ]; then
   # with no ROUTENEST_DATA_DIR or legacy CLINE2API_DATA_DIR set, every data file
   # redirects to a throwaway temp dir, so fixtures never overwrite real state.
   # Do NOT set either data-dir variable here: an explicit dir wins over the guard AND triggers
-  # migrateLegacyDataFiles, copying live accounts/providers (real tokens) into the test
+  # MigrateDataFiles, copying live accounts/providers (real tokens) into the test
   # directory — which made the protocol free-model fallback tests fail against real data.
   go test ./...
 fi

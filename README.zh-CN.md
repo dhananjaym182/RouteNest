@@ -240,7 +240,14 @@ Cline 文档说明：Cline API 不支持免费模型，免费模型仅限 Cline 
 
 ## 数据与升级
 
-数据按以下顺序查找：可执行文件目录、工作目录、`~/.routenest/`。设置 `ROUTENEST_DATA_DIR` 可把所有数据文件固定到一个目录（`ROUTENEST_DATA_DIR` 未设置时仍兼容旧的 `CLINE2API_DATA_DIR`）。
+RouteNest 默认把状态存放在操作系统的用户配置目录：
+
+- Linux：`$XDG_CONFIG_HOME/routenest`，通常为 `~/.config/routenest`
+- macOS：`~/Library/Application Support/routenest`
+- Windows：`%AppData%\routenest`
+
+设置 `ROUTENEST_DATA_DIR` 可指定目录（例如 Docker 挂载卷）。旧的
+`CLINE2API_DATA_DIR` 仍作为低优先级兼容变量。
 
 | 文件 | 用途 |
 | --- | --- |
@@ -254,9 +261,16 @@ Cline 文档说明：Cline API 不支持免费模型，免费模型仅限 Cline 
 | `.routenest-proxy.json` | Cline 出口代理池 |
 | `.routenest-zen.json` | OpenCode Zen 配置与出口代理池 |
 | `.routenest-request-logs.json` | 请求日志 |
+| `capture-logs/` | 交互式 OAuth 抓包输出，可能包含授权流量 |
 | `override.md` | 可选的 System Prompt 覆盖，从工作目录读取 |
 
-数据目录首次使用时，会把可执行文件目录、工作目录或 `~/.cline2api/` 中的旧 `.cline-*` 数据文件以新的 `.routenest-*` 名称复制进去（前提是目标文件尚不存在），旧部署可原地升级；`ROUTENEST_DATA_DIR` 未设置时仍兼容旧的 `CLINE2API_DATA_DIR` 环境变量。
+首次使用时，RouteNest 会把可执行文件目录、工作目录、`~/.routenest/`
+与 `~/.cline2api/` 中缺失的当前 `.routenest-*` 文件和旧 `.cline-*`
+文件复制到所选目录。已存在的目标文件优先；迁移可重复执行，源文件保留作恢复备份。
+
+在类 Unix 系统上，数据目录和抓包目录权限为 `0700`，已知状态文件为
+`0600`。如果无法创建安全的默认配置目录，RouteNest 会以明确错误停止启动，
+不再回退到可执行文件旁写入凭据。
 
 > 数据文件包含明文 refreshToken、服务商密钥与生成的 API 密钥。请安全备份，不要公开，也不要提交到 Git。
 
