@@ -3,7 +3,6 @@ package proxycore
 import (
 	"encoding/json"
 	"fmt"
-	"log"
 	"net"
 	"net/http"
 	"os/exec"
@@ -20,7 +19,6 @@ import (
 	anthropicconv "routenest/internal/protocol/anthropic"
 	"routenest/internal/protocol/openaichat"
 	"routenest/internal/providers"
-	"routenest/internal/requestlog"
 )
 
 // Root-owned live state seams, wired once from root composition.
@@ -467,42 +465,6 @@ func mergeTokenUsage(current, next TokenUsage) TokenUsage {
 
 func hasFirstOutput(obj map[string]any) bool {
 	return openaichat.HasFirstOutput(obj)
-}
-
-func handleNonStreamResponse(w http.ResponseWriter, upstream *http.Response, acc *domain.Account, reqLog *domain.RequestLog) {
-	copyPassthroughHeaders(w, upstream.Header)
-	var raw map[string]any
-	if err := json.NewDecoder(upstream.Body).Decode(&raw); err != nil {
-		requestlog.Finalize(reqLog, TokenUsage{}, time.Time{}, reqLog.StartedAt, false, "decode response: "+err.Error())
-		writeJSON(w, http.StatusInternalServerError, map[string]any{
-			"error": map[string]string{"message": err.Error(), "type": "parse_error"},
-		})
-		return
-	}
-
-	// Some Cline responses wrap in {data: {...}}
-	out := raw
-	if data, ok := raw["data"]; ok {
-		if d, ok := data.(map[string]any); ok {
-			out = d
-		}
-	}
-
-	out = NormalizeOpenAIResponse(out)
-	restoreToolCallsInResponse(out, reqLog.ToolNames)
-	usage := ParseTokenUsage(out["usage"])
-	RecordUsage(acc, upstream, reqLog, reqLog.Model, usage)
-	requestlog.Finalize(reqLog, usage, time.Time{}, reqLog.StartedAt, true, "")
-
-	if msg, ok := getNested(out, "choices", 0, "message").(map[string]any); ok {
-		tc, _ := msg["tool_calls"].([]any)
-		content, _ := msg["content"].(string)
-		log.Printf("  nonstream finish=%v tool_calls=%d content_len=%d",
-			getNested(out, "choices", 0, "finish_reason"),
-			len(tc), len(content))
-	}
-
-	writeJSON(w, http.StatusOK, out)
 }
 
 // Anthropic Messages API support
