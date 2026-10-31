@@ -2,6 +2,7 @@ package main
 
 import (
 	"cline-go-proxy/internal/accounts"
+	"cline-go-proxy/internal/admin"
 	"cline-go-proxy/internal/egress"
 	"cline-go-proxy/internal/zen"
 	"encoding/json"
@@ -48,16 +49,16 @@ func cmMockUpstream(t *testing.T, jsonBody, sseBody string) func() {
 func cmInstallPool(t *testing.T) {
 	t.Helper()
 	oldPool := accounts.Pool
-	oldConfig := getProxyConfig()
+	oldConfig := admin.GetProxyConfig()
 	t.Cleanup(func() {
 		accounts.Pool = oldPool
-		setProxyConfig(oldConfig)
+		admin.SetProxyConfig(oldConfig)
 	})
 	account := &Account{AccountID: "cm-test", Email: "cm@test.com", AccessToken: "cm-token", ExpiresAt: time.Now().Add(time.Hour).UnixMilli(), Status: "active"}
 	accounts.Pool = &AccountPool{Accounts: []*Account{account}}
-	config := defaultProxyConfig()
+	config := admin.DefaultProxyConfig()
 	config.Strategy = "fill"
-	setProxyConfig(config)
+	admin.SetProxyConfig(config)
 }
 
 func TestContextManagementCountTokens(t *testing.T) {

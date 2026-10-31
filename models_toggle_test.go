@@ -2,6 +2,7 @@ package main
 
 import (
 	"cline-go-proxy/internal/accounts"
+	"cline-go-proxy/internal/admin"
 	"cline-go-proxy/internal/routing"
 	"net/http"
 	"net/http/httptest"
@@ -19,7 +20,7 @@ func newToggleTestPool(t *testing.T, models []Model, defaultModel string) {
 	accounts.Pool = &AccountPool{Accounts: []*Account{}, Keys: []string{}, Models: models, DefaultModel: defaultModel}
 }
 
-// handleAdminModelToggle：批量启停模型；停用当前默认模型时清空默认；
+// admin.HandleAdminModelToggle：批量启停模型；停用当前默认模型时清空默认；
 // 未知模型 404，空 ids 400，非 POST 405。
 func TestHandleAdminModelToggle(t *testing.T) {
 	newToggleTestPool(t, []Model{
@@ -31,7 +32,7 @@ func TestHandleAdminModelToggle(t *testing.T) {
 	post := func(body string) *httptest.ResponseRecorder {
 		req := httptest.NewRequest(http.MethodPost, "/admin/api/models/toggle", strings.NewReader(body))
 		rec := httptest.NewRecorder()
-		handleAdminModelToggle(rec, req)
+		admin.HandleAdminModelToggle(rec, req)
 		return rec
 	}
 
@@ -75,7 +76,7 @@ func TestHandleAdminModelToggle(t *testing.T) {
 	// 非 POST → 405
 	req := httptest.NewRequest(http.MethodGet, "/admin/api/models/toggle", nil)
 	rec := httptest.NewRecorder()
-	handleAdminModelToggle(rec, req)
+	admin.HandleAdminModelToggle(rec, req)
 	if rec.Code != http.StatusMethodNotAllowed {
 		t.Errorf("GET: status = %d, want 405", rec.Code)
 	}

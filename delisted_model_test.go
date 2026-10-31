@@ -1,6 +1,7 @@
 package main
 
 import (
+	"cline-go-proxy/internal/admin"
 	"cline-go-proxy/internal/routing"
 	"path/filepath"
 	"strings"
@@ -14,16 +15,16 @@ import (
 // 动态派生的免费链仍按 routing.LiveModelSet 过滤下架条目。
 func TestModelFallbackChainKeepsUserConfiguredOutOfList(t *testing.T) {
 	oldPool, oldPath := accounts.Pool, accounts.PoolPath
-	oldCfg := getProxyConfig()
+	oldCfg := admin.GetProxyConfig()
 	t.Cleanup(func() {
 		accounts.Pool, accounts.PoolPath = oldPool, oldPath
-		setProxyConfig(oldCfg)
+		admin.SetProxyConfig(oldCfg)
 	})
 	accounts.PoolPath = filepath.Join(t.TempDir(), ".cline-accounts.json")
 	accounts.Pool = &AccountPool{Accounts: []*Account{}, Keys: []string{}, Models: []Model{
 		{ID: "cline-free/gemini-3.8-flash", Source: "remote", Cost: "free", Status: "active"},
 	}}
-	setProxyConfig(&proxyConfigData{ModelChain: []string{"out-of-list/still-works", "cline-free/gemini-3.8-flash", "out-of-list/still-works"}})
+	admin.SetProxyConfig(&admin.ProxyConfig{ModelChain: []string{"out-of-list/still-works", "cline-free/gemini-3.8-flash", "out-of-list/still-works"}})
 
 	chain := routing.ModelFallbackChain("requested-model")
 	got := strings.Join(chain, ",")

@@ -7,6 +7,7 @@ package main
 // 绝不重开」。
 
 import (
+	"cline-go-proxy/internal/admin"
 	"cline-go-proxy/internal/egress"
 	"encoding/json"
 	"io"
@@ -52,7 +53,7 @@ func comboPost(t *testing.T, url, body string) (int, string) {
 // 组合在 /v1/chat/completions 上：首个条目成功，不试第二个条目。
 func TestComboChatEndToEndFirstSucceeds(t *testing.T) {
 	installPool(t, nil)
-	cfg := defaultProxyConfig()
+	cfg := admin.DefaultProxyConfig()
 	cfg.Combos = []ModelCombo{{ID: "c", Name: "C", Enabled: true,
 		Entries: []ComboEntry{{Model: "combo-a"}, {Model: "combo-b"}}}}
 	installConfig(t, cfg)
@@ -74,7 +75,7 @@ func TestComboChatEndToEndFirstSucceeds(t *testing.T) {
 // 组合：首个条目上游 5xx（可重试）→ 第二个条目成功，客户端看到 200。
 func TestComboChatEndToEndFallback(t *testing.T) {
 	installPool(t, nil)
-	cfg := defaultProxyConfig()
+	cfg := admin.DefaultProxyConfig()
 	cfg.Combos = []ModelCombo{{ID: "c", Name: "C", Enabled: true,
 		Entries: []ComboEntry{{Model: "combo-a"}, {Model: "combo-b"}}}}
 	installConfig(t, cfg)
@@ -99,7 +100,7 @@ func TestComboChatEndToEndFallback(t *testing.T) {
 // 停用的组合：不进 /v1/models，且直接请求得到明确的客户端错误。
 func TestComboChatDisabledRejected(t *testing.T) {
 	installPool(t, nil)
-	cfg := defaultProxyConfig()
+	cfg := admin.DefaultProxyConfig()
 	cfg.Combos = []ModelCombo{{ID: "c-off", Name: "Off", Enabled: false,
 		Entries: []ComboEntry{{Model: "combo-a"}}}}
 	installConfig(t, cfg)
@@ -118,7 +119,7 @@ func TestComboChatDisabledRejected(t *testing.T) {
 // /v1/models 暴露启用组合、隐藏停用组合。
 func TestComboModelsExposedViaHTTP(t *testing.T) {
 	installPool(t, nil)
-	cfg := defaultProxyConfig()
+	cfg := admin.DefaultProxyConfig()
 	cfg.Combos = []ModelCombo{
 		{ID: "c-on", Name: "On", Enabled: true, Entries: []ComboEntry{{Model: "combo-a"}}},
 		{ID: "c-off", Name: "Off", Enabled: false, Entries: []ComboEntry{{Model: "combo-a"}}},
@@ -161,7 +162,7 @@ func TestComboModelsExposedViaHTTP(t *testing.T) {
 // /v1/responses 组合：非流式，首个条目成功。
 func TestComboResponsesEndToEnd(t *testing.T) {
 	installPool(t, nil)
-	cfg := defaultProxyConfig()
+	cfg := admin.DefaultProxyConfig()
 	cfg.Combos = []ModelCombo{{ID: "c", Name: "C", Enabled: true,
 		Entries: []ComboEntry{{Model: "combo-a"}, {Model: "combo-b"}}}}
 	installConfig(t, cfg)
@@ -183,7 +184,7 @@ func TestComboResponsesEndToEnd(t *testing.T) {
 // 客户端在一次 HTTP 响应内拿到成功的完整流，只有一次 message_start，无 error 事件。
 func TestComboAnthropicStreamFallbackBeforeContent(t *testing.T) {
 	installPool(t, nil)
-	cfg := defaultProxyConfig()
+	cfg := admin.DefaultProxyConfig()
 	cfg.Combos = []ModelCombo{{ID: "c", Name: "C", Enabled: true,
 		Entries: []ComboEntry{{Model: "combo-a"}, {Model: "combo-b"}}}}
 	installConfig(t, cfg)
@@ -224,7 +225,7 @@ func TestComboAnthropicStreamFallbackBeforeContent(t *testing.T) {
 // Anthropic 流式组合：首个条目已交付内容 → 绝不重开到第二个条目。
 func TestComboAnthropicStreamNoRestartAfterContent(t *testing.T) {
 	installPool(t, nil)
-	cfg := defaultProxyConfig()
+	cfg := admin.DefaultProxyConfig()
 	cfg.Combos = []ModelCombo{{ID: "c", Name: "C", Enabled: true,
 		Entries: []ComboEntry{{Model: "combo-a"}, {Model: "combo-b"}}}}
 	installConfig(t, cfg)
@@ -255,7 +256,7 @@ func TestComboAnthropicStreamNoRestartAfterContent(t *testing.T) {
 // 复用既有响应处理链路）。
 func TestComboChatPreservesToolCalls(t *testing.T) {
 	installPool(t, nil)
-	cfg := defaultProxyConfig()
+	cfg := admin.DefaultProxyConfig()
 	cfg.Combos = []ModelCombo{{ID: "c", Name: "C", Enabled: true,
 		Entries: []ComboEntry{{Model: "combo-a"}, {Model: "combo-b"}}}}
 	installConfig(t, cfg)

@@ -2,6 +2,7 @@ package main
 
 import (
 	"cline-go-proxy/internal/accounts"
+	"cline-go-proxy/internal/admin"
 	"cline-go-proxy/internal/egress"
 	"cline-go-proxy/internal/providers"
 	"cline-go-proxy/internal/routing"
@@ -42,11 +43,11 @@ func TestProviderTransportFollowsHTTPClientReplacement(t *testing.T) {
 // 自定义 provider 命中时优先走 provider 上游。
 func TestCustomProviderServesModel(t *testing.T) {
 	oldPool := accounts.Pool
-	oldConfig := getProxyConfig()
+	oldConfig := admin.GetProxyConfig()
 	oldTransport := egress.Client.Transport
 	t.Cleanup(func() {
 		accounts.Pool = oldPool
-		setProxyConfig(oldConfig)
+		admin.SetProxyConfig(oldConfig)
 		egress.Client.Transport = oldTransport
 		_ = providers.Delete("prov_test1")
 	})
@@ -55,7 +56,7 @@ func TestCustomProviderServesModel(t *testing.T) {
 		AccountID: "a", Email: "a@x.com", AccessToken: "t",
 		ExpiresAt: time.Now().Add(time.Hour).UnixMilli(), Status: "active",
 	}}}
-	setProxyConfig(defaultProxyConfig())
+	admin.SetProxyConfig(admin.DefaultProxyConfig())
 
 	upstreamModel := ""
 	providerCalls := 0
@@ -113,11 +114,11 @@ func TestCustomProviderServesModel(t *testing.T) {
 // provider 失败（冷却）后自动降级到回退链 → cline 池，客户端无感知。
 func TestCustomProviderFailureFallsBackToChain(t *testing.T) {
 	oldPool := accounts.Pool
-	oldConfig := getProxyConfig()
+	oldConfig := admin.GetProxyConfig()
 	oldTransport := egress.Client.Transport
 	t.Cleanup(func() {
 		accounts.Pool = oldPool
-		setProxyConfig(oldConfig)
+		admin.SetProxyConfig(oldConfig)
 		egress.Client.Transport = oldTransport
 		_ = providers.Delete("prov_test2")
 	})
@@ -126,7 +127,7 @@ func TestCustomProviderFailureFallsBackToChain(t *testing.T) {
 		AccountID: "a", Email: "a@x.com", AccessToken: "t",
 		ExpiresAt: time.Now().Add(time.Hour).UnixMilli(), Status: "active",
 	}}}
-	setProxyConfig(defaultProxyConfig())
+	admin.SetProxyConfig(admin.DefaultProxyConfig())
 
 	egress.Client.Transport = freeModelRoundTripper(func(req *http.Request) (*http.Response, error) {
 		if req.URL.Host == "provider.test" {

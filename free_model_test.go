@@ -2,6 +2,7 @@ package main
 
 import (
 	"cline-go-proxy/internal/accounts"
+	"cline-go-proxy/internal/admin"
 	"cline-go-proxy/internal/egress"
 	"cline-go-proxy/internal/proxycore"
 	"cline-go-proxy/internal/requestlog"
@@ -44,10 +45,10 @@ func (r *flushSignalRecorder) Flush() {
 }
 
 func TestCallClineAPIRefreshRetryReplaysRequestBody(t *testing.T) {
-	oldConfig := getProxyConfig()
+	oldConfig := admin.GetProxyConfig()
 	oldTransport := egress.Client.Transport
 	t.Cleanup(func() {
-		setProxyConfig(oldConfig)
+		admin.SetProxyConfig(oldConfig)
 		egress.Client.Transport = oldTransport
 	})
 
@@ -59,7 +60,7 @@ func TestCallClineAPIRefreshRetryReplaysRequestBody(t *testing.T) {
 		ExpiresAt:    time.Now().Add(time.Hour).UnixMilli(),
 		Status:       "active",
 	}
-	setProxyConfig(defaultProxyConfig())
+	admin.SetProxyConfig(admin.DefaultProxyConfig())
 
 	var requestBodies []map[string]any
 	refreshCalls := 0
@@ -130,11 +131,11 @@ func TestCallClineAPIRefreshRetryReplaysRequestBody(t *testing.T) {
 
 func TestCallClineAPIFreeRetriesNextGLMAccountAfterTokenRefreshFailure(t *testing.T) {
 	oldPool := accounts.Pool
-	oldConfig := getProxyConfig()
+	oldConfig := admin.GetProxyConfig()
 	oldTransport := egress.Client.Transport
 	t.Cleanup(func() {
 		accounts.Pool = oldPool
-		setProxyConfig(oldConfig)
+		admin.SetProxyConfig(oldConfig)
 		egress.Client.Transport = oldTransport
 	})
 
@@ -153,7 +154,7 @@ func TestCallClineAPIFreeRetriesNextGLMAccountAfterTokenRefreshFailure(t *testin
 		Status:      "active",
 	}
 	accounts.Pool = &AccountPool{Accounts: []*Account{first, second}}
-	setProxyConfig(defaultProxyConfig())
+	admin.SetProxyConfig(admin.DefaultProxyConfig())
 
 	var paths []string
 	var attempts []string
@@ -220,11 +221,11 @@ func TestCallClineAPIFreeRetriesNextGLMAccountAfterTokenRefreshFailure(t *testin
 
 func TestCallClineAPIFreeRetriesNextGLMAccountAfterTransportFailure(t *testing.T) {
 	oldPool := accounts.Pool
-	oldConfig := getProxyConfig()
+	oldConfig := admin.GetProxyConfig()
 	oldTransport := egress.Client.Transport
 	t.Cleanup(func() {
 		accounts.Pool = oldPool
-		setProxyConfig(oldConfig)
+		admin.SetProxyConfig(oldConfig)
 		egress.Client.Transport = oldTransport
 	})
 
@@ -243,7 +244,7 @@ func TestCallClineAPIFreeRetriesNextGLMAccountAfterTransportFailure(t *testing.T
 		Status:      "active",
 	}
 	accounts.Pool = &AccountPool{Accounts: []*Account{first, second}}
-	setProxyConfig(defaultProxyConfig())
+	admin.SetProxyConfig(admin.DefaultProxyConfig())
 
 	var attempts []string
 	var models []string
@@ -296,11 +297,11 @@ func TestCallClineAPIFreeRetriesNextGLMAccountAfterTransportFailure(t *testing.T
 
 func TestCallClineAPIFreeRetriesNextGLMAccountAfterQuota429(t *testing.T) {
 	oldPool := accounts.Pool
-	oldConfig := getProxyConfig()
+	oldConfig := admin.GetProxyConfig()
 	oldTransport := egress.Client.Transport
 	t.Cleanup(func() {
 		accounts.Pool = oldPool
-		setProxyConfig(oldConfig)
+		admin.SetProxyConfig(oldConfig)
 		egress.Client.Transport = oldTransport
 	})
 
@@ -319,7 +320,7 @@ func TestCallClineAPIFreeRetriesNextGLMAccountAfterQuota429(t *testing.T) {
 		Status:      "active",
 	}
 	accounts.Pool = &AccountPool{Accounts: []*Account{first, second}}
-	setProxyConfig(defaultProxyConfig())
+	admin.SetProxyConfig(admin.DefaultProxyConfig())
 
 	var attempts []string
 	var models []string
@@ -383,11 +384,11 @@ func TestCallClineAPIFreeRetriesNextGLMAccountAfterQuota429(t *testing.T) {
 
 func TestCallClineAPIFreeFallsBackToDSAfterAllGLMAccountsUnavailable(t *testing.T) {
 	oldPool := accounts.Pool
-	oldConfig := getProxyConfig()
+	oldConfig := admin.GetProxyConfig()
 	oldTransport := egress.Client.Transport
 	t.Cleanup(func() {
 		accounts.Pool = oldPool
-		setProxyConfig(oldConfig)
+		admin.SetProxyConfig(oldConfig)
 		egress.Client.Transport = oldTransport
 	})
 
@@ -406,7 +407,7 @@ func TestCallClineAPIFreeFallsBackToDSAfterAllGLMAccountsUnavailable(t *testing.
 		Status:      "active",
 	}
 	accounts.Pool = &AccountPool{Accounts: []*Account{first, second}}
-	setProxyConfig(defaultProxyConfig())
+	admin.SetProxyConfig(admin.DefaultProxyConfig())
 
 	var attempts []string
 	var models []string
@@ -468,11 +469,11 @@ func TestCallClineAPIFreeFallsBackToDSAfterAllGLMAccountsUnavailable(t *testing.
 
 func TestCallClineAPIFreeRetriesNextDSAccountAfterQuota429(t *testing.T) {
 	oldPool := accounts.Pool
-	oldConfig := getProxyConfig()
+	oldConfig := admin.GetProxyConfig()
 	oldTransport := egress.Client.Transport
 	t.Cleanup(func() {
 		accounts.Pool = oldPool
-		setProxyConfig(oldConfig)
+		admin.SetProxyConfig(oldConfig)
 		egress.Client.Transport = oldTransport
 	})
 
@@ -497,7 +498,7 @@ func TestCallClineAPIFreeRetriesNextDSAccountAfterQuota429(t *testing.T) {
 		},
 	}
 	accounts.Pool = &AccountPool{Accounts: []*Account{first, second}}
-	setProxyConfig(defaultProxyConfig())
+	admin.SetProxyConfig(admin.DefaultProxyConfig())
 
 	var attempts []string
 	var models []string
@@ -565,11 +566,11 @@ func TestCallClineAPIFreeRetriesNextDSAccountAfterQuota429(t *testing.T) {
 
 func TestCallClineAPIFreeReturnsToGLMAfterCooldownExpires(t *testing.T) {
 	oldPool := accounts.Pool
-	oldConfig := getProxyConfig()
+	oldConfig := admin.GetProxyConfig()
 	oldTransport := egress.Client.Transport
 	t.Cleanup(func() {
 		accounts.Pool = oldPool
-		setProxyConfig(oldConfig)
+		admin.SetProxyConfig(oldConfig)
 		egress.Client.Transport = oldTransport
 	})
 
@@ -584,7 +585,7 @@ func TestCallClineAPIFreeReturnsToGLMAfterCooldownExpires(t *testing.T) {
 		},
 	}
 	accounts.Pool = &AccountPool{Accounts: []*Account{account}}
-	setProxyConfig(defaultProxyConfig())
+	admin.SetProxyConfig(admin.DefaultProxyConfig())
 
 	var models []string
 	egress.Client.Transport = freeModelRoundTripper(func(req *http.Request) (*http.Response, error) {
@@ -628,11 +629,11 @@ func TestCallClineAPIFreeReturnsToGLMAfterCooldownExpires(t *testing.T) {
 
 func TestCallClineAPIFreeKeepsModelCooldownsIndependent(t *testing.T) {
 	oldPool := accounts.Pool
-	oldConfig := getProxyConfig()
+	oldConfig := admin.GetProxyConfig()
 	oldTransport := egress.Client.Transport
 	t.Cleanup(func() {
 		accounts.Pool = oldPool
-		setProxyConfig(oldConfig)
+		admin.SetProxyConfig(oldConfig)
 		egress.Client.Transport = oldTransport
 	})
 
@@ -656,7 +657,7 @@ func TestCallClineAPIFreeKeepsModelCooldownsIndependent(t *testing.T) {
 				},
 			}
 			accounts.Pool = &AccountPool{Accounts: []*Account{account}}
-			setProxyConfig(defaultProxyConfig())
+			admin.SetProxyConfig(admin.DefaultProxyConfig())
 
 			var upstreamModel string
 			egress.Client.Transport = freeModelRoundTripper(func(req *http.Request) (*http.Response, error) {
@@ -697,7 +698,7 @@ func TestCallClineAPIFreeKeepsModelCooldownsIndependent(t *testing.T) {
 
 func TestCallClineAPIFreeDoesNotPickCoolingAccount(t *testing.T) {
 	oldPool := accounts.Pool
-	oldConfig := getProxyConfig()
+	oldConfig := admin.GetProxyConfig()
 	oldTransport := egress.Client.Transport
 	// 本用例只验证 Cline 账号挑选：zen 故障转移如今能真正应答，必须关掉才能
 	// 让"全部冷却"如预期地失败。
@@ -707,7 +708,7 @@ func TestCallClineAPIFreeDoesNotPickCoolingAccount(t *testing.T) {
 	zen.ConfigMu.Unlock()
 	t.Cleanup(func() {
 		accounts.Pool = oldPool
-		setProxyConfig(oldConfig)
+		admin.SetProxyConfig(oldConfig)
 		egress.Client.Transport = oldTransport
 		zen.ConfigMu.Lock()
 		zen.Config = oldZen
@@ -726,7 +727,7 @@ func TestCallClineAPIFreeDoesNotPickCoolingAccount(t *testing.T) {
 		account.ModelCooldowns[model] = time.Now().Add(time.Hour)
 	}
 	accounts.Pool = &AccountPool{Accounts: []*Account{account}}
-	setProxyConfig(defaultProxyConfig())
+	admin.SetProxyConfig(admin.DefaultProxyConfig())
 
 	calls := 0
 	egress.Client.Transport = freeModelRoundTripper(func(req *http.Request) (*http.Response, error) {
@@ -750,10 +751,10 @@ func TestCallClineAPIFreeDoesNotPickCoolingAccount(t *testing.T) {
 
 func TestPickAccountForModelStrictPreservesStrategy(t *testing.T) {
 	oldPool := accounts.Pool
-	oldConfig := getProxyConfig()
+	oldConfig := admin.GetProxyConfig()
 	t.Cleanup(func() {
 		accounts.Pool = oldPool
-		setProxyConfig(oldConfig)
+		admin.SetProxyConfig(oldConfig)
 	})
 
 	first := &Account{AccountID: "first", Status: "active"}
@@ -763,9 +764,9 @@ func TestPickAccountForModelStrictPreservesStrategy(t *testing.T) {
 	for _, strategy := range []string{"fill", "round_robin", "random"} {
 		t.Run(strategy, func(t *testing.T) {
 			accounts.Pool.CurrentIdx = 0
-			cfg := defaultProxyConfig()
+			cfg := admin.DefaultProxyConfig()
 			cfg.Strategy = strategy
-			setProxyConfig(cfg)
+			admin.SetProxyConfig(cfg)
 
 			firstPick := accounts.PickAccountForModelStrict(routing.FreeModelPrimary)
 			if firstPick != first && firstPick != second {
@@ -787,11 +788,11 @@ func TestPickAccountForModelStrictPreservesStrategy(t *testing.T) {
 // 显式模型请求在 429（模型冷却）时应沿 free 链自动降级到下一个可用模型。
 func TestCallClineAPIDirectModelsFallBackOnModelCooldown(t *testing.T) {
 	oldPool := accounts.Pool
-	oldConfig := getProxyConfig()
+	oldConfig := admin.GetProxyConfig()
 	oldTransport := egress.Client.Transport
 	t.Cleanup(func() {
 		accounts.Pool = oldPool
-		setProxyConfig(oldConfig)
+		admin.SetProxyConfig(oldConfig)
 		egress.Client.Transport = oldTransport
 	})
 
@@ -805,7 +806,7 @@ func TestCallClineAPIDirectModelsFallBackOnModelCooldown(t *testing.T) {
 				Status:      "active",
 			}
 			accounts.Pool = &AccountPool{Accounts: []*Account{account}}
-			setProxyConfig(defaultProxyConfig())
+			admin.SetProxyConfig(admin.DefaultProxyConfig())
 
 			var attempted []string
 			egress.Client.Transport = freeModelRoundTripper(func(req *http.Request) (*http.Response, error) {
@@ -864,11 +865,11 @@ func TestCallClineAPIDirectModelsFallBackOnModelCooldown(t *testing.T) {
 // 非冷却类上游错误（如 500）会先试完整条回退链，全部失败后才报错。
 func TestCallClineAPIDirectModelsNoFallbackOnServerError(t *testing.T) {
 	oldPool := accounts.Pool
-	oldConfig := getProxyConfig()
+	oldConfig := admin.GetProxyConfig()
 	oldTransport := egress.Client.Transport
 	t.Cleanup(func() {
 		accounts.Pool = oldPool
-		setProxyConfig(oldConfig)
+		admin.SetProxyConfig(oldConfig)
 		egress.Client.Transport = oldTransport
 	})
 
@@ -881,7 +882,7 @@ func TestCallClineAPIDirectModelsNoFallbackOnServerError(t *testing.T) {
 		Status:      "active",
 	}
 	accounts.Pool = &AccountPool{Accounts: []*Account{account}}
-	setProxyConfig(defaultProxyConfig())
+	admin.SetProxyConfig(admin.DefaultProxyConfig())
 
 	calls := 0
 	var upstreamModel string
@@ -918,7 +919,7 @@ func TestCallClineAPIDirectModelsNoFallbackOnServerError(t *testing.T) {
 
 func TestHandleResponsesFreeReturnsTooManyRequestsWhenBothPoolsUnavailable(t *testing.T) {
 	oldPool := accounts.Pool
-	oldConfig := getProxyConfig()
+	oldConfig := admin.GetProxyConfig()
 	oldTransport := egress.Client.Transport
 	oldZenCfg := zen.GetConfig()
 	requestlog.Mu.Lock()
@@ -927,7 +928,7 @@ func TestHandleResponsesFreeReturnsTooManyRequestsWhenBothPoolsUnavailable(t *te
 	requestlog.Mu.Unlock()
 	t.Cleanup(func() {
 		accounts.Pool = oldPool
-		setProxyConfig(oldConfig)
+		admin.SetProxyConfig(oldConfig)
 		egress.Client.Transport = oldTransport
 		zen.ConfigMu.Lock()
 		zen.Config = oldZenCfg
@@ -953,7 +954,7 @@ func TestHandleResponsesFreeReturnsTooManyRequestsWhenBothPoolsUnavailable(t *te
 		Status:      "active",
 	}
 	accounts.Pool = &AccountPool{Accounts: []*Account{account}}
-	setProxyConfig(defaultProxyConfig())
+	admin.SetProxyConfig(admin.DefaultProxyConfig())
 
 	calls := 0
 	egress.Client.Transport = freeModelRoundTripper(func(req *http.Request) (*http.Response, error) {
@@ -1047,11 +1048,11 @@ func TestIsFreeModelEntry(t *testing.T) {
 
 func TestCallClineAPIFreePicksLeastUsedAccount(t *testing.T) {
 	oldPool := accounts.Pool
-	oldConfig := getProxyConfig()
+	oldConfig := admin.GetProxyConfig()
 	oldTransport := egress.Client.Transport
 	t.Cleanup(func() {
 		accounts.Pool = oldPool
-		setProxyConfig(oldConfig)
+		admin.SetProxyConfig(oldConfig)
 		egress.Client.Transport = oldTransport
 	})
 
@@ -1073,7 +1074,7 @@ func TestCallClineAPIFreePicksLeastUsedAccount(t *testing.T) {
 		Status:      "active",
 	}
 	accounts.Pool = &AccountPool{Accounts: []*Account{first, second}}
-	setProxyConfig(defaultProxyConfig())
+	admin.SetProxyConfig(admin.DefaultProxyConfig())
 
 	var chosen []string
 	egress.Client.Transport = freeModelRoundTripper(func(req *http.Request) (*http.Response, error) {
@@ -1242,19 +1243,19 @@ func TestHandleAnthropicStreamFlushesHeadersBeforeFirstPayload(t *testing.T) {
 }
 
 func TestOnlyFreeConfigRoundTrip(t *testing.T) {
-	oldConfig := getProxyConfig()
-	t.Cleanup(func() { setProxyConfig(oldConfig) })
+	oldConfig := admin.GetProxyConfig()
+	t.Cleanup(func() { admin.SetProxyConfig(oldConfig) })
 
-	setProxyConfig(defaultProxyConfig())
-	if getProxyConfig().OnlyFree {
+	admin.SetProxyConfig(admin.DefaultProxyConfig())
+	if admin.GetProxyConfig().OnlyFree {
 		t.Fatal("default OnlyFree = true, want false")
 	}
 
 	on := true
-	cfg := getProxyConfig()
+	cfg := admin.GetProxyConfig()
 	cfg.OnlyFree = on
-	setProxyConfig(cfg)
-	if !getProxyConfig().OnlyFree {
-		t.Fatal("OnlyFree not persisted after setProxyConfig")
+	admin.SetProxyConfig(cfg)
+	if !admin.GetProxyConfig().OnlyFree {
+		t.Fatal("OnlyFree not persisted after admin.SetProxyConfig")
 	}
 }

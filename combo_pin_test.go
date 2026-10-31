@@ -5,6 +5,7 @@ package main
 // 同一模型不同固定不被去重、combos.ValidateCombo 拒绝非法固定，以及空固定行为不变。
 
 import (
+	"cline-go-proxy/internal/admin"
 	"cline-go-proxy/internal/combos"
 	"cline-go-proxy/internal/providers"
 	"cline-go-proxy/internal/zen"
@@ -105,7 +106,7 @@ func TestEntryRouteKind(t *testing.T) {
 // 两个 provider 暴露同一模型 ID，条目固定到优先级较低的那家时必须命中它。
 func TestRunComboPinsProvider(t *testing.T) {
 	installPool(t, nil)
-	installConfig(t, defaultProxyConfig())
+	installConfig(t, admin.DefaultProxyConfig())
 	installProviders(t,
 		&CustomProvider{ID: "prov_pin1", Name: "P1", BaseURL: "http://p1.test/v1",
 			APIKey: "sk", ModelIDs: []string{"m-r"}, Enabled: true, Priority: 1},
@@ -139,7 +140,7 @@ func TestRunComboPinsProvider(t *testing.T) {
 // 同一模型固定到两家不同 provider → 两条目都不被去重；首条失败后第二条仍被尝试。
 func TestRunComboSameModelDifferentPinsNotDeduped(t *testing.T) {
 	installPool(t, nil)
-	installConfig(t, defaultProxyConfig())
+	installConfig(t, admin.DefaultProxyConfig())
 	installProviders(t,
 		&CustomProvider{ID: "prov_dd1", Name: "P1", BaseURL: "http://d1.test/v1",
 			APIKey: "sk", ModelIDs: []string{"m-r"}, Enabled: true, Priority: 1},
@@ -176,7 +177,7 @@ func TestRunComboSameModelDifferentPinsNotDeduped(t *testing.T) {
 // 注意：成功条目会立即短路返回，故去重只能在首条失败、循环继续时才可观察。
 func TestRunComboSameModelSamePinDeduped(t *testing.T) {
 	installPool(t, nil)
-	installConfig(t, defaultProxyConfig())
+	installConfig(t, admin.DefaultProxyConfig())
 	installProviders(t,
 		&CustomProvider{ID: "prov_sd", Name: "P1", BaseURL: "http://s1.test/v1",
 			APIKey: "sk", ModelIDs: []string{"m-r"}, Enabled: true, Priority: 1},
@@ -329,7 +330,7 @@ func TestEntryRouteKindZenPinWinsOverClineCollision(t *testing.T) {
 // 而应作为可重试跳过，继续尝试下一个条目。
 func TestRunComboPinnedProvider401DoesNotAbort(t *testing.T) {
 	installPool(t, []Model{{ID: "m-ok", Cost: "free", Status: "active", Source: "remote"}})
-	installConfig(t, defaultProxyConfig())
+	installConfig(t, admin.DefaultProxyConfig())
 	installProviders(t,
 		&CustomProvider{ID: "prov_badkey", Name: "P-bad", BaseURL: "http://bad.test/v1",
 			APIKey: "rotated", ModelIDs: []string{"m-auth"}, Enabled: true, Priority: 1},
@@ -366,7 +367,7 @@ func TestRunComboPinnedProvider401DoesNotAbort(t *testing.T) {
 // LOW 修复：skipped 轨迹行也要带固定信息，便于后台展示被跳过的固定条目。
 func TestRunComboSkippedTraceCarriesPin(t *testing.T) {
 	installPool(t, nil)
-	installConfig(t, defaultProxyConfig())
+	installConfig(t, admin.DefaultProxyConfig())
 	installProviders(t) // 隔离 provider registry：不安装任何 provider
 	installTransport(t, func(req *http.Request) *http.Response {
 		return stubResp(req, http.StatusOK, okCompletion)

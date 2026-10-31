@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 
+	"cline-go-proxy/internal/admin"
 	"cline-go-proxy/internal/combos"
 	"cline-go-proxy/internal/config"
 	"cline-go-proxy/internal/domain"
@@ -13,16 +14,16 @@ import (
 
 // init wires the combos package to root-owned config, dispatch and error state.
 func init() {
-	combos.ConfigMu = &proxyConfigMu
-	combos.Config = func() *config.Proxy { return proxyConfig }
-	combos.GetConfig = getProxyConfig
+	combos.ConfigMu = &admin.ConfigMu
+	combos.Config = func() *config.Proxy { return admin.Config }
+	combos.GetConfig = admin.GetProxyConfig
 	combos.EnsureConfig = func() *config.Proxy {
-		if proxyConfig == nil {
-			proxyConfig = defaultProxyConfig()
+		if admin.Config == nil {
+			admin.Config = admin.DefaultProxyConfig()
 		}
-		return proxyConfig
+		return admin.Config
 	}
-	combos.SaveConfig = saveProxyConfigLocked
+	combos.SaveConfig = admin.SaveProxyConfigLocked
 
 	combos.IsAccountUnavailable = func(err error) bool {
 		var e *routing.ClineAccountUnavailableError

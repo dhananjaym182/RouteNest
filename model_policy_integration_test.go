@@ -1,6 +1,7 @@
 package main
 
 import (
+	"cline-go-proxy/internal/admin"
 	"cline-go-proxy/internal/routing"
 	"fmt"
 	"strings"
@@ -22,11 +23,11 @@ func TestBuildModelsListAppliesPolicy(t *testing.T) {
 		Model{ID: "gpt-4-mini"},
 	)()
 
-	cfg := defaultProxyConfig()
+	cfg := admin.DefaultProxyConfig()
 	cfg.ExcludedModels = []string{"gpt-4-*"}
 	cfg.ModelAliases = []config.ModelAlias{{Alias: "fast", Target: "gpt-5"}}
-	setProxyConfig(cfg)
-	defer setProxyConfig(defaultProxyConfig())
+	admin.SetProxyConfig(cfg)
+	defer admin.SetProxyConfig(admin.DefaultProxyConfig())
 
 	list := routing.BuildModelsList(false)
 	var ids []string

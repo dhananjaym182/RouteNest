@@ -1,12 +1,12 @@
-package main
+package admin
 
 // 管理后台「模型可用性测试」API 三个入口共用一个小型 best-effort 测试器：
 //
 //	EP3 POST /admin/api/models/test  {model}                    → 任一模型单测
 //	EP4 POST /admin/api/combos/test  {id, model?}               → 逐条目测组合
-//	    （/admin/api/providers/models 见文件尾 handleProviderModels —— EP2）
+//	    （/admin/api/providers/models 见文件尾 HandleProviderModels —— EP2）
 //
-// quickModelTest 是共享入口（EP3/EP4 内核）：max_tokens=16 + 单条 "hi" user 消息，
+// QuickModelTest 是共享入口（EP3/EP4 内核）：max_tokens=16 + 单条 "hi" user 消息，
 // 复用既有路由判定（provider 冷却/预算表是只读，测试旁路粘性会话与日志）。
 // 上游失败 ≠ API 失败：一律 200 包裹 {success:true, data:{ok:false, error:...}}。
 
@@ -30,13 +30,14 @@ import (
 	"cline-go-proxy/internal/connections"
 	"cline-go-proxy/internal/egress"
 	"cline-go-proxy/internal/i18n"
+	"cline-go-proxy/internal/platform"
 	"cline-go-proxy/internal/providers"
 	"cline-go-proxy/internal/proxycore"
 )
 
 const (
-	// quickTestPoolTimeout 组合条目测试里 Cline 账号池路径的 ctx 超时（EP4 要求 ~20s）。
-	quickTestPoolTimeout = 20 * time.Second
+	// QuickTestPoolTimeout 组合条目测试里 Cline 账号池路径的 ctx 超时（EP4 要求 ~20s）。
+	QuickTestPoolTimeout = 20 * time.Second
 	// quickTestProviderTimeoutSec EP4 里 provider 路径的兜底超时秒数（providers.Call 用
 	// provider.TimeoutSec 建独立 client，不接 ctx；测试时夹紧到 20s）。
 	quickTestProviderTimeoutSec = 20
@@ -80,14 +81,14 @@ func quickTestLock(model string) *sync.Mutex {
 
 // ---- 共享测试器 ---------------------------------------------------------
 
-// quickModelTest 任一模型的 best-effort 小补全测试（EP3 入口；EP4 明细见
-// runQuickModelTest）。路由：自定义 provider → zen（免费）→ Cline 账号池，
+// QuickModelTest 任一模型的 best-effort 小补全测试（EP3 入口；EP4 明细见
+// RunQuickModelTest）。路由：自定义 provider → zen（免费）→ Cline 账号池，
 // 与 combos.CallSingleModel 的派发语义一致。
-func quickModelTest(model string, forcedProvider *CustomProvider) map[string]any {
-	return runQuickModelTest(model, forcedProvider, "", 0)
+func QuickModelTest(model string, forcedProvider *CustomProvider) map[string]any {
+	return RunQuickModelTest(model, forcedProvider, "", 0)
 }
 
-// runQuickModelTest quickModelTest 的展开形式：
+// RunQuickModelTest QuickModelTest 的展开形式：
 //   - forcedProvider 非空 → 只测这一家 provider（EP4 source=provider）。
 //   - pinSource "provider" → 只走 forcedProvider；"cline" → 只走账号池；
 //     "zen" → 只走 zen；"" 自动（provider → zen → 池，combos.CallSingleModel 语义）。
@@ -95,7 +96,7 @@ func quickModelTest(model string, forcedProvider *CustomProvider) map[string]any
 //
 // 返回 map 键：ok / upstream("provider"|"opencode"|"cline") / model / durationMs /
 // error? / inputTokens? / outputTokens?。上游失败也返回（ok=false），不 panic。
-func runQuickModelTest(model string, forcedProvider *CustomProvider, pinSource string, poolTimeout time.Duration) map[string]any {
+func RunQuickModelTest(model string, forcedProvider *CustomProvider, pinSource string, poolTimeout time.Duration) map[string]any {
 	model = strings.TrimSpace(model)
 	start := time.Now()
 	result := map[string]any{"ok": false, "model": model}
@@ -104,7 +105,7 @@ func runQuickModelTest(model string, forcedProvider *CustomProvider, pinSource s
 		result["durationMs"] = time.Since(start).Milliseconds()
 		result["ok"] = errMsg == ""
 		if errMsg != "" {
-			result["error"] = truncate(errMsg, 300)
+			result["error"] = platform.Truncate(errMsg, 300)
 		}
 	}
 	recordSuccess := func(upstream string, resp *http.Response) {
@@ -290,9 +291,9 @@ func readMiniTestUsage(resp *http.Response) (prompt, completion int64, valid boo
 // ---- EP3：单模型测试 ----------------------------------------------------
 
 // POST /admin/api/models/test  body: {model}
-// data: quickModelTest 结果（ok / upstream / model / durationMs / error? /
+// data: QuickModelTest 结果（ok / upstream / model / durationMs / error? /
 // inputTokens? / outputTokens?）。上游失败仍是 200 + ok:false。
-func handleAdminModelTest(w http.ResponseWriter, r *http.Request) {
+func HandleAdminModelTest(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "POST" {
 		writeAPI(w, http.StatusMethodNotAllowed, apiResponse{Error: i18n.TAPI(r, "method_not_allowed")})
 		return
@@ -309,14 +310,14 @@ func handleAdminModelTest(w http.ResponseWriter, r *http.Request) {
 		writeAPI(w, http.StatusBadRequest, apiResponse{Error: i18n.TAPI(r, "model_id_required")})
 		return
 	}
-	writeAPI(w, http.StatusOK, apiResponse{Success: true, Data: quickModelTest(model, nil)})
+	writeAPI(w, http.StatusOK, apiResponse{Success: true, Data: QuickModelTest(model, nil)})
 }
 
 // ---- EP4：组合测试 ------------------------------------------------------
 
-// findEnabledProviderByName 仅在存在「启用中」且 Name 匹配（去空白、大小写
+// FindEnabledProviderByName 仅在存在「启用中」且 Name 匹配（去空白、大小写
 // 不敏感）的 provider 时返回其副本；供组合条目 source=provider 测试用。
-func findEnabledProviderByName(name string) *CustomProvider {
+func FindEnabledProviderByName(name string) *CustomProvider {
 	name = strings.TrimSpace(name)
 	if name == "" {
 		return nil
@@ -336,7 +337,7 @@ func comboEntryTest(entry ComboEntry) map[string]any {
 	switch strings.TrimSpace(entry.Source) {
 	case "provider":
 		name := strings.TrimSpace(entry.Provider)
-		p := findEnabledProviderByName(name)
+		p := FindEnabledProviderByName(name)
 		if p == nil {
 			return map[string]any{
 				"ok": false, "model": m, "upstream": zen.UpstreamProvider, "durationMs": 0,
@@ -347,17 +348,17 @@ func comboEntryTest(entry ComboEntry) map[string]any {
 		if cp.TimeoutSec <= 0 || cp.TimeoutSec > quickTestProviderTimeoutSec {
 			cp.TimeoutSec = quickTestProviderTimeoutSec // 测试专用超时夹紧
 		}
-		return runQuickModelTest(m, &cp, "provider", quickTestPoolTimeout)
+		return RunQuickModelTest(m, &cp, "provider", QuickTestPoolTimeout)
 	case "cline":
-		return runQuickModelTest(m, nil, "cline", quickTestPoolTimeout)
+		return RunQuickModelTest(m, nil, "cline", QuickTestPoolTimeout)
 	case "zen":
-		return runQuickModelTest(m, nil, "zen", quickTestPoolTimeout)
+		return RunQuickModelTest(m, nil, "zen", QuickTestPoolTimeout)
 	default:
-		return quickModelTest(m, nil)
+		return QuickModelTest(m, nil)
 	}
 }
 
-// comboTestResult 把 quickModelTest 的结果包上条目元数据（source/固定 provider）。
+// comboTestResult 把 QuickModelTest 的结果包上条目元数据（source/固定 provider）。
 func comboTestResult(entry ComboEntry) map[string]any {
 	out := comboEntryTest(entry)
 	out["source"] = strings.TrimSpace(entry.Source)
@@ -371,7 +372,7 @@ func comboTestResult(entry ComboEntry) map[string]any {
 // data: {comboId, results:[{model, source, ok, durationMs, upstream, error?,
 // inputTokens?, outputTokens?}], allOk}。禁用条目跳过；model 给定时只测
 // 匹配该模型的第一条可用条目。测试不改动组合（纯读）。
-func handleComboTest(w http.ResponseWriter, r *http.Request) {
+func HandleComboTest(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "POST" {
 		writeAPI(w, http.StatusMethodNotAllowed, apiResponse{Error: i18n.TAPI(r, "method_not_allowed")})
 		return
@@ -480,10 +481,10 @@ func discoverOpenAIModels(baseURL, apiKey string, headers map[string]string) ([]
 			if st2, b2, e2 := fetch(fb + "/models"); e2 == "" && st2 == http.StatusOK {
 				status, body = st2, b2
 			} else {
-				return nil, fmt.Sprintf("HTTP %d: %s", status, truncate(strings.TrimSpace(string(body)), 300))
+				return nil, fmt.Sprintf("HTTP %d: %s", status, platform.Truncate(strings.TrimSpace(string(body)), 300))
 			}
 		} else {
-			return nil, fmt.Sprintf("HTTP %d: %s", status, truncate(strings.TrimSpace(string(body)), 300))
+			return nil, fmt.Sprintf("HTTP %d: %s", status, platform.Truncate(strings.TrimSpace(string(body)), 300))
 		}
 	}
 
@@ -496,7 +497,7 @@ func discoverOpenAIModels(baseURL, apiKey string, headers map[string]string) ([]
 		} `json:"models"`
 	}
 	if err := json.Unmarshal(body, &payload); err != nil {
-		return nil, fmt.Sprintf("unexpected response format: %s", truncate(strings.TrimSpace(string(body)), 300))
+		return nil, fmt.Sprintf("unexpected response format: %s", platform.Truncate(strings.TrimSpace(string(body)), 300))
 	}
 	seen := map[string]bool{}
 	var ids []string
@@ -525,7 +526,7 @@ func discoverOpenAIModels(baseURL, apiKey string, headers map[string]string) ([]
 // 发现 provider 的模型列表（GET {baseURL}/models）。data 成功：
 // {models:[{id:"..."}], count:N}；失败：{error:"...", models:[]}（200 包裹）。
 // 纯探测，不写任何状态。
-func handleProviderModels(w http.ResponseWriter, r *http.Request) {
+func HandleProviderModels(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "POST" {
 		writeAPI(w, http.StatusMethodNotAllowed, apiResponse{Error: i18n.TAPI(r, "method_not_allowed")})
 		return

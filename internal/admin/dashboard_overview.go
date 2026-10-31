@@ -1,4 +1,4 @@
-package main
+package admin
 
 import (
 	"cline-go-proxy/internal/routing"
@@ -225,7 +225,7 @@ func dashboardOverview(hours int) map[string]any {
 
 	strategy := "round_robin"
 	onlyFree := false
-	cfg := getProxyConfig()
+	cfg := GetProxyConfig()
 	if cfg != nil {
 		strategy = cfg.Strategy
 		onlyFree = cfg.OnlyFree

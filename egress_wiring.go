@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"cline-go-proxy/internal/accounts"
+	"cline-go-proxy/internal/admin"
 	"cline-go-proxy/internal/buildinfo"
 	"cline-go-proxy/internal/combos"
 	"cline-go-proxy/internal/connections"
@@ -21,12 +22,12 @@ import (
 // injects its stable client into all outbound consumers.
 func init() {
 	egress.DataPathResolver = func(name string) string { return resolveDataPath(name) }
-	egress.ConfigProvider = getProxyConfig
+	egress.ConfigProvider = admin.GetProxyConfig
 	requestlog.Path = resolveDataPath(requestlogstore.FileName)
 	zen.DataPathResolver = func(name string) string { return resolveDataPath(name) }
 	zen.IsModelGoneError = routing.IsModelGoneError
 	zen.MarkModelGone = routing.MarkModelGone
-	routing.ConfigProvider = getProxyConfig
+	routing.ConfigProvider = admin.GetProxyConfig
 	routing.FindCombo = combos.FindCombo
 	routing.ModelsProvider = routing.AllModels
 	routing.ModelDisabled = routing.IsModelDisabled
@@ -48,7 +49,7 @@ func init() {
 	}
 	providers.BodyOptionsProvider = bodyOptionsProvider
 	zen.BodyOptionsProvider = bodyOptionsProvider
-	providers.ConfigProvider = getProxyConfig
+	providers.ConfigProvider = admin.GetProxyConfig
 	providers.RequestLogsSnapshot = func() []RequestLog {
 		requestlog.Mu.Lock()
 		defer requestlog.Mu.Unlock()

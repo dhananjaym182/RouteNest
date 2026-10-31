@@ -2,6 +2,7 @@ package main
 
 import (
 	"cline-go-proxy/internal/accounts"
+	"cline-go-proxy/internal/admin"
 	"cline-go-proxy/internal/egress"
 	"cline-go-proxy/internal/proxycore"
 	"context"
@@ -21,11 +22,11 @@ import (
 func TestStreamAnthropicComboContinuesWhenEntryHitsContextLimit(t *testing.T) {
 	t.Setenv(dataDirEnv, t.TempDir())
 	oldPool := accounts.Pool
-	oldConfig := getProxyConfig()
+	oldConfig := admin.GetProxyConfig()
 	oldTransport := egress.Client.Transport
 	t.Cleanup(func() {
 		accounts.Pool = oldPool
-		setProxyConfig(oldConfig)
+		admin.SetProxyConfig(oldConfig)
 		egress.Client.Transport = oldTransport
 		resetRoutingState()
 	})
@@ -38,9 +39,9 @@ func TestStreamAnthropicComboContinuesWhenEntryHitsContextLimit(t *testing.T) {
 		Status:      "active",
 	}
 	accounts.Pool = &AccountPool{Accounts: []*Account{acc}}
-	cfg := defaultProxyConfig()
+	cfg := admin.DefaultProxyConfig()
 	cfg.OnlyFree = false
-	setProxyConfig(cfg)
+	admin.SetProxyConfig(cfg)
 
 	const longModel = "combo-entry-long-context"
 	const shortModel = "combo-entry-short-context"

@@ -1,4 +1,4 @@
-package main
+package admin
 
 import (
 	"cline-go-proxy/internal/routing"
@@ -17,12 +17,15 @@ import (
 	"cline-go-proxy/internal/egress"
 	"cline-go-proxy/internal/httpx"
 	"cline-go-proxy/internal/i18n"
+	"cline-go-proxy/internal/platform"
 	"cline-go-proxy/internal/providers"
 	"cline-go-proxy/internal/proxycore"
 	"cline-go-proxy/internal/requestlog"
 )
 
-type apiResponse = httpx.Response
+type APIResponse = httpx.Response
+
+type apiResponse = APIResponse
 
 func writeAPI(w http.ResponseWriter, status int, resp apiResponse) {
 	httpx.WriteAPI(w, status, resp)
@@ -80,8 +83,8 @@ var adminKeys = &adminapi.KeyManager{
 
 var adminMonitoring = &adminapi.Monitoring{
 	Accounts:      func() []*Account { return accounts.LoadPool().Accounts },
-	Strategy:      func() string { return getProxyConfig().Strategy },
-	ModelChain:    func() []string { return getProxyConfig().ModelChain },
+	Strategy:      func() string { return GetProxyConfig().Strategy },
+	ModelChain:    func() []string { return GetProxyConfig().ModelChain },
 	Version:       func() string { return buildinfo.AppVersion },
 	StartedAt:     func() time.Time { return buildinfo.ServerStartedAt },
 	OpencodeToday: func() any { return requestlog.OpenCodeUsageToday() },
@@ -112,7 +115,7 @@ var adminClineEgress = &adminapi.ClineEgress{
 	Translate:     func(r *http.Request, key string) string { return i18n.TAPI(r, key) },
 }
 
-func registerAdminRoutes(mux *http.ServeMux) {
+func RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/admin/", adminStaticHandler)
 	// 无需登录的接口
 	mux.HandleFunc("/admin/api/login", proxycore.CorsHandler(handleAdminLogin))
@@ -150,15 +153,15 @@ func registerAdminRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/admin/api/models/delete", auth(handleAdminModelDelete))
 	mux.HandleFunc("/admin/api/models/context", auth(handleAdminModelContext))
 	mux.HandleFunc("/admin/api/models/capabilities", auth(handleAdminModelCapabilities))
-	mux.HandleFunc("/admin/api/models/toggle", auth(handleAdminModelToggle))
-	mux.HandleFunc("/admin/api/models/test", auth(handleAdminModelTest))
+	mux.HandleFunc("/admin/api/models/toggle", auth(HandleAdminModelToggle))
+	mux.HandleFunc("/admin/api/models/test", auth(HandleAdminModelTest))
 	mux.HandleFunc("/admin/api/config", auth(handleAdminConfig))
 	mux.HandleFunc("/admin/api/config/update", auth(handleAdminUpdateConfig))
 	mux.HandleFunc("/admin/api/providers", auth(providers.HandleList))
 	mux.HandleFunc("/admin/api/providers/save", auth(providers.HandleSave))
 	mux.HandleFunc("/admin/api/providers/delete", auth(providers.HandleDelete))
 	mux.HandleFunc("/admin/api/providers/test", auth(providers.HandleTest))
-	mux.HandleFunc("/admin/api/providers/models", auth(handleProviderModels))
+	mux.HandleFunc("/admin/api/providers/models", auth(HandleProviderModels))
 	mux.HandleFunc("/admin/api/providers/presets", auth(providers.HandlePresets))
 	mux.HandleFunc("/admin/api/providers/recheck", auth(adminSync.ProviderRecheck))
 	mux.HandleFunc("/admin/api/providers/sync-status", auth(adminSync.ProviderStatus))
@@ -180,7 +183,7 @@ func registerAdminRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/admin/api/combos/delete", auth(handleComboDelete))
 	mux.HandleFunc("/admin/api/combos/toggle", auth(handleComboToggle))
 	mux.HandleFunc("/admin/api/combos/clone", auth(handleComboClone))
-	mux.HandleFunc("/admin/api/combos/test", auth(handleComboTest))
+	mux.HandleFunc("/admin/api/combos/test", auth(HandleComboTest))
 	mux.HandleFunc("/admin/api/password", auth(handleAdminPassword))
 	mux.HandleFunc("/admin/api/request-logs", auth(handleAdminRequestLogs))
 	mux.HandleFunc("/admin/api/request-logs/clear", auth(requestlog.HandleClear))
@@ -336,16 +339,16 @@ func handleAdminAccountTest(w http.ResponseWriter, r *http.Request) {
 
 // Global proxy config (mutable via API, persisted to .routenest-config.json)
 var (
-	proxyConfig   = loadProxyConfigFromDisk()
-	proxyConfigMu sync.Mutex
+	Config   = LoadProxyConfigFromDisk()
+	ConfigMu sync.Mutex
 )
 
-type proxyConfigData = config.Proxy
+type ProxyConfig = config.Proxy
 
 // init 注入 accounts 包需要的根状态：代理配置读取器与 Cline 错误分类器
 // （具体错误类型仍定义在 egress，accounts 只消费分类结果）。
 func init() {
-	accounts.SetProxyConfigProvider(getProxyConfig)
+	accounts.SetProxyConfigProvider(GetProxyConfig)
 	accounts.SetAffinityErrorClassifier(classifyAffinityError)
 }
 
@@ -366,41 +369,41 @@ func classifyAffinityError(err error) (int, bool) {
 	return 0, false
 }
 
-func defaultProxyConfig() *proxyConfigData {
+func DefaultProxyConfig() *ProxyConfig {
 	return config.DefaultProxy()
 }
 
 const proxyConfigPath = config.ProxyPath
 
-// loadProxyConfigFromDisk 启动时加载持久化的代理配置（轮询策略/请求头），
+// LoadProxyConfigFromDisk 启动时加载持久化的代理配置（轮询策略/请求头），
 // 文件不存在或损坏时回退默认值（损坏文件改名备份，不静默覆盖）。
-func loadProxyConfigFromDisk() *proxyConfigData {
-	path := resolveDataPath(proxyConfigPath)
+func LoadProxyConfigFromDisk() *ProxyConfig {
+	path := platform.ResolveDataPath(proxyConfigPath, nil)
 	cfg, err := config.LoadProxy(path)
 	if err != nil {
-		backupCorruptFile(path, err)
+		platform.BackupCorruptFile(path, err)
 	}
 	return cfg
 }
 
-// saveProxyConfigLocked 落盘当前配置（调用方需持有 proxyConfigMu）。
-func saveProxyConfigLocked() {
-	if err := config.SaveProxy(resolveDataPath(proxyConfigPath), proxyConfig); err != nil {
+// SaveProxyConfigLocked 落盘当前配置（调用方需持有 ConfigMu）。
+func SaveProxyConfigLocked() {
+	if err := config.SaveProxy(platform.ResolveDataPath(proxyConfigPath, nil), Config); err != nil {
 		log.Printf("proxy config save failed: %v", err)
 	}
 }
 
-func getProxyConfig() *proxyConfigData {
-	proxyConfigMu.Lock()
-	defer proxyConfigMu.Unlock()
-	return proxyConfig
+func GetProxyConfig() *ProxyConfig {
+	ConfigMu.Lock()
+	defer ConfigMu.Unlock()
+	return Config
 }
 
-func setProxyConfig(c *proxyConfigData) {
-	proxyConfigMu.Lock()
-	defer proxyConfigMu.Unlock()
-	proxyConfig = c
-	saveProxyConfigLocked()
+func SetProxyConfig(c *ProxyConfig) {
+	ConfigMu.Lock()
+	defer ConfigMu.Unlock()
+	Config = c
+	SaveProxyConfigLocked()
 }
 
 // GET /admin/api/keys
@@ -460,7 +463,7 @@ func handleAdminModelCapabilities(w http.ResponseWriter, r *http.Request) {
 // POST /admin/api/models/toggle  body: { ids: [...], disabled }
 // 启用/停用模型（单个或批量）：停用后不进客户端模型列表、直接请求被拒绝、
 // 默认模型与回退链自动跳过；同步保留该标记。停用当前默认模型时清空默认。
-func handleAdminModelToggle(w http.ResponseWriter, r *http.Request) {
+func HandleAdminModelToggle(w http.ResponseWriter, r *http.Request) {
 	adminModels.Toggle(w, r)
 }
 

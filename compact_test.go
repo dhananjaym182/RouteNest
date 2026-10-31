@@ -2,6 +2,7 @@ package main
 
 import (
 	"cline-go-proxy/internal/accounts"
+	"cline-go-proxy/internal/admin"
 	"cline-go-proxy/internal/compaction"
 	"cline-go-proxy/internal/egress"
 	"cline-go-proxy/internal/zen"
@@ -20,22 +21,22 @@ func TestMaybeCompactFallsBackToClineSummary(t *testing.T) {
 	resetZenTestState(t)
 
 	oldPool := accounts.Pool
-	oldConfig := getProxyConfig()
+	oldConfig := admin.GetProxyConfig()
 	oldTransport := egress.Client.Transport
 	oldZenClient := zen.HTTPClient
 	t.Cleanup(func() {
 		accounts.Pool = oldPool
-		setProxyConfig(oldConfig)
+		admin.SetProxyConfig(oldConfig)
 		egress.Client.Transport = oldTransport
 		zen.TransportMu.Lock()
 		zen.HTTPClient = oldZenClient
 		zen.TransportMu.Unlock()
 	})
 
-	cfg := defaultProxyConfig()
+	cfg := admin.DefaultProxyConfig()
 	cfg.ModelChain = []string{"summary-free"}
 	cfg.OnlyFree = false
-	setProxyConfig(cfg)
+	admin.SetProxyConfig(cfg)
 
 	accounts.Pool = &AccountPool{Accounts: []*Account{{
 		AccountID:   "summary-account",

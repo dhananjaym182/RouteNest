@@ -7,6 +7,7 @@ package main
 
 import (
 	"cline-go-proxy/internal/accounts"
+	"cline-go-proxy/internal/admin"
 	"cline-go-proxy/internal/combos"
 	"cline-go-proxy/internal/egress"
 	"cline-go-proxy/internal/routing"
@@ -39,12 +40,12 @@ func installPool(t *testing.T, models []Model, accs ...*Account) {
 	accounts.Pool = &AccountPool{Accounts: accs, Models: models}
 }
 
-func installConfig(t *testing.T, cfg *proxyConfigData) {
+func installConfig(t *testing.T, cfg *admin.ProxyConfig) {
 	t.Helper()
 	t.Setenv(dataDirEnv, t.TempDir()) // 配置落盘隔离到临时目录
-	old := getProxyConfig()
-	t.Cleanup(func() { setProxyConfig(old) })
-	setProxyConfig(cfg)
+	old := admin.GetProxyConfig()
+	t.Cleanup(func() { admin.SetProxyConfig(old) })
+	admin.SetProxyConfig(cfg)
 }
 
 func installTransport(t *testing.T, fn func(req *http.Request) *http.Response) {
@@ -142,18 +143,18 @@ func TestComboValidate(t *testing.T) {
 func TestComboPersistenceAndReload(t *testing.T) {
 	installPool(t, []Model{{ID: "m-a", Cost: "free", Status: "active", Source: "remote"}})
 	t.Setenv(dataDirEnv, t.TempDir())
-	old := getProxyConfig()
-	t.Cleanup(func() { setProxyConfig(old) })
+	old := admin.GetProxyConfig()
+	t.Cleanup(func() { admin.SetProxyConfig(old) })
 
-	proxyConfigMu.Lock()
-	proxyConfig.Combos = nil
-	proxyConfigMu.Unlock()
-	saveProxyConfigLocked()
+	admin.ConfigMu.Lock()
+	admin.Config.Combos = nil
+	admin.ConfigMu.Unlock()
+	admin.SaveProxyConfigLocked()
 
 	if _, err := combos.UpsertCombo(ModelCombo{ID: "c1", Name: "C1", Enabled: true, Entries: []ComboEntry{{Model: "m-a"}}}); err != nil {
 		t.Fatalf("upsert: %v", err)
 	}
-	loaded := loadProxyConfigFromDisk()
+	loaded := admin.LoadProxyConfigFromDisk()
 	if len(loaded.Combos) != 1 || loaded.Combos[0].ID != "c1" {
 		t.Fatalf("reload got %+v, want combo c1", loaded.Combos)
 	}
@@ -165,7 +166,7 @@ func TestComboPersistenceAndReload(t *testing.T) {
 	if !combos.DeleteCombo("c1") {
 		t.Fatal("combos.DeleteCombo returned false")
 	}
-	if got := loadProxyConfigFromDisk(); len(got.Combos) != 0 {
+	if got := admin.LoadProxyConfigFromDisk(); len(got.Combos) != 0 {
 		t.Fatalf("after delete reload got %+v", got.Combos)
 	}
 }
@@ -174,7 +175,7 @@ func TestComboPersistenceAndReload(t *testing.T) {
 
 func TestRunComboFirstEntrySucceeds(t *testing.T) {
 	installPool(t, nil)
-	installConfig(t, defaultProxyConfig())
+	installConfig(t, admin.DefaultProxyConfig())
 	var seen []string
 	installTransport(t, func(req *http.Request) *http.Response {
 		seen = append(seen, readReqModel(req))
@@ -197,7 +198,7 @@ func TestRunComboFirstEntrySucceeds(t *testing.T) {
 
 func TestRunComboRetryableFallback(t *testing.T) {
 	installPool(t, nil)
-	installConfig(t, defaultProxyConfig())
+	installConfig(t, admin.DefaultProxyConfig())
 	installTransport(t, func(req *http.Request) *http.Response {
 		if readReqModel(req) == "combo-a" {
 			return stubResp(req, http.StatusInternalServerError, `{"error":"boom"}`)
@@ -236,7 +237,7 @@ func TestRunComboRetryableFallback(t *testing.T) {
 
 func TestRunComboPermanentErrorStops(t *testing.T) {
 	installPool(t, nil)
-	installConfig(t, defaultProxyConfig())
+	installConfig(t, admin.DefaultProxyConfig())
 	var seen []string
 	installTransport(t, func(req *http.Request) *http.Response {
 		seen = append(seen, readReqModel(req))
@@ -261,7 +262,7 @@ func TestRunComboPreservesConfiguredOrder(t *testing.T) {
 		"combo-b": {UsageCount: 0},
 	}
 	installPool(t, nil, acc)
-	installConfig(t, defaultProxyConfig())
+	installConfig(t, admin.DefaultProxyConfig())
 	var seen []string
 	installTransport(t, func(req *http.Request) *http.Response {
 		seen = append(seen, readReqModel(req))
@@ -284,7 +285,7 @@ func TestRunComboSkipsDisabledEntries(t *testing.T) {
 	installPool(t, []Model{
 		{ID: "combo-b", Cost: "free", Status: "active", Source: "remote", Disabled: true},
 	})
-	installConfig(t, defaultProxyConfig())
+	installConfig(t, admin.DefaultProxyConfig())
 	installTransport(t, func(req *http.Request) *http.Response {
 		return stubResp(req, http.StatusOK, okCompletion)
 	})
@@ -314,7 +315,7 @@ func TestRunComboSkipsDisabledEntries(t *testing.T) {
 
 func TestRunComboDoesNotInvokeGlobalChainByDefault(t *testing.T) {
 	installPool(t, []Model{{ID: "combo-free", Cost: "free", Status: "active", Source: "remote"}})
-	cfg := defaultProxyConfig()
+	cfg := admin.DefaultProxyConfig()
 	cfg.ModelChain = []string{"combo-free"} // 全局回退链存在，但组合默认不得使用
 	installConfig(t, cfg)
 	var seen []string
@@ -339,7 +340,7 @@ func TestRunComboDoesNotInvokeGlobalChainByDefault(t *testing.T) {
 
 func TestRunComboEmergencyFallbackOptIn(t *testing.T) {
 	installPool(t, []Model{{ID: "combo-free", Cost: "free", Status: "active", Source: "remote"}})
-	cfg := defaultProxyConfig()
+	cfg := admin.DefaultProxyConfig()
 	cfg.ModelChain = []string{"combo-free"}
 	installConfig(t, cfg)
 	installTransport(t, func(req *http.Request) *http.Response {
@@ -368,7 +369,7 @@ func TestComboEntryUsesProviderPath(t *testing.T) {
 		ID: "prov_combo1", Name: "P1", BaseURL: "http://prov1.test/v1",
 		APIKey: "sk", ModelIDs: []string{"prov-x"}, Enabled: true, Priority: 10,
 	})
-	installConfig(t, defaultProxyConfig())
+	installConfig(t, admin.DefaultProxyConfig())
 
 	providerCalls, clineCalls := 0, 0
 	installTransport(t, func(req *http.Request) *http.Response {
@@ -400,7 +401,7 @@ func TestComboSpansSourcesFallback(t *testing.T) {
 		ID: "prov_combo2", Name: "P2", BaseURL: "http://prov2.test/v1",
 		APIKey: "sk", ModelIDs: []string{"prov-x"}, Enabled: true, Priority: 10,
 	})
-	installConfig(t, defaultProxyConfig())
+	installConfig(t, admin.DefaultProxyConfig())
 
 	providerCalls := 0
 	installTransport(t, func(req *http.Request) *http.Response {
@@ -438,7 +439,7 @@ func TestComboSameModelProviderRedundancy(t *testing.T) {
 		&CustomProvider{ID: "prov_r2", Name: "R2", BaseURL: "http://r2.test/v1",
 			APIKey: "sk", ModelIDs: []string{"m-r"}, Enabled: true, Priority: 2},
 	)
-	installConfig(t, defaultProxyConfig())
+	installConfig(t, admin.DefaultProxyConfig())
 
 	installTransport(t, func(req *http.Request) *http.Response {
 		if req.URL.Host == "r1.test" {
@@ -464,7 +465,7 @@ func TestBuildModelsListExposesCombos(t *testing.T) {
 		{ID: "m-a", Cost: "free", Status: "active", Source: "remote"},
 		{ID: "m-b", Cost: "free", Status: "active", Source: "remote", Disabled: true},
 	})
-	cfg := defaultProxyConfig()
+	cfg := admin.DefaultProxyConfig()
 	cfg.Combos = []ModelCombo{
 		{ID: "c-on", Name: "On", Enabled: true, Entries: []ComboEntry{{Model: "m-a"}}},
 		{ID: "c-off", Name: "Off", Enabled: false, Entries: []ComboEntry{{Model: "m-a"}}},
@@ -496,7 +497,7 @@ func TestBuildModelsListExposesCombos(t *testing.T) {
 
 func TestComboDisabledResolution(t *testing.T) {
 	installPool(t, nil)
-	cfg := defaultProxyConfig()
+	cfg := admin.DefaultProxyConfig()
 	cfg.Combos = []ModelCombo{{ID: "c-off", Name: "Off", Enabled: false, Entries: []ComboEntry{{Model: "m-a"}}}}
 	installConfig(t, cfg)
 
@@ -513,8 +514,8 @@ func TestComboDisabledResolution(t *testing.T) {
 func TestComboConcurrentConfigAccess(t *testing.T) {
 	installPool(t, []Model{{ID: "m-a", Cost: "free", Status: "active", Source: "remote"}})
 	t.Setenv(dataDirEnv, t.TempDir())
-	old := getProxyConfig()
-	t.Cleanup(func() { setProxyConfig(old) })
+	old := admin.GetProxyConfig()
+	t.Cleanup(func() { admin.SetProxyConfig(old) })
 
 	var wg sync.WaitGroup
 	for i := 0; i < 8; i++ {
@@ -599,8 +600,8 @@ func TestComboValidateRejectsEnabledComboWithOnlyDisabledModel(t *testing.T) {
 func TestComboCloneTruncatesLongID(t *testing.T) {
 	installPool(t, []Model{{ID: "m-a", Cost: "free", Status: "active", Source: "remote"}})
 	t.Setenv(dataDirEnv, t.TempDir())
-	old := getProxyConfig()
-	t.Cleanup(func() { setProxyConfig(old) })
+	old := admin.GetProxyConfig()
+	t.Cleanup(func() { admin.SetProxyConfig(old) })
 
 	longID := strings.Repeat("a", combos.IDMaxLen) // 64 字符
 	if len(longID) != combos.IDMaxLen {
@@ -626,7 +627,7 @@ func TestComboCloneTruncatesLongID(t *testing.T) {
 func TestCallSingleModelDeterministic400StopsAccountLoop(t *testing.T) {
 	acc1, acc2 := comboTestAccount("acc-1"), comboTestAccount("acc-2")
 	installPool(t, []Model{{ID: "combo-a", Cost: "free", Status: "active", Source: "remote"}}, acc1, acc2)
-	installConfig(t, defaultProxyConfig())
+	installConfig(t, admin.DefaultProxyConfig())
 	attempts := 0
 	installTransport(t, func(req *http.Request) *http.Response {
 		attempts++
@@ -647,7 +648,7 @@ func TestCallFreeClineAPIDeterministic400FailsFast(t *testing.T) {
 		{ID: "free-a", Cost: "free", Status: "active", Source: "remote"},
 		{ID: "free-b", Cost: "free", Status: "active", Source: "remote"},
 	}, comboTestAccount("free-1"), comboTestAccount("free-2"))
-	cfg := defaultProxyConfig()
+	cfg := admin.DefaultProxyConfig()
 	cfg.ModelChain = []string{"free-a", "free-b"}
 	installConfig(t, cfg)
 	attempts := 0
@@ -694,7 +695,7 @@ func TestIsDeterministicRequestErrorClassification(t *testing.T) {
 // 对照组：上下文超限 400 仍走「截断后继续下一个条目」路径，不能被快速失败误伤。
 func TestRunComboContextLength400ContinuesToNextEntry(t *testing.T) {
 	installPool(t, nil)
-	installConfig(t, defaultProxyConfig())
+	installConfig(t, admin.DefaultProxyConfig())
 	installTransport(t, func(req *http.Request) *http.Response {
 		if readReqModel(req) == "combo-a" {
 			return stubResp(req, http.StatusBadRequest, `{"error":"request context length exceeded"}`)

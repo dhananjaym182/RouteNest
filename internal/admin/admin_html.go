@@ -1,7 +1,7 @@
-package main
+package admin
 
 // ============================================================================
-// 管理面板单页装配：adminui/ 静态资源在 init 时拼成完整 HTML（head.html +
+// 管理面板单页装配：ui/ 静态资源在 init 时拼成完整 HTML（head.html +
 // <style>styles.css + body.html + 按文件名序拼接的 js/NN_*.js + 收尾标签），
 // /admin/ 原样输出且 no-cache。JS 文件共享全局作用域，文件名前缀即拼接顺序；
 // 每个资产文件保持 ≤ 1000 行，超限时按 // ==== 段落横幅继续拆分。
@@ -14,7 +14,7 @@ import (
 	"sort"
 )
 
-//go:embed adminui/head.html adminui/styles.css adminui/body.html adminui/js/*.js
+//go:embed ui/head.html ui/styles.css ui/body.html ui/js/*.js
 var adminUIFS embed.FS
 
 var adminHTML string
@@ -30,13 +30,13 @@ func buildAdminHTML() string {
 		}
 		buf.Write(b)
 	}
-	write("adminui/head.html")
+	write("ui/head.html")
 	buf.WriteString("<style>\n")
-	write("adminui/styles.css")
+	write("ui/styles.css")
 	buf.WriteString("</style>\n")
-	write("adminui/body.html")
+	write("ui/body.html")
 	buf.WriteString("<script>\n")
-	names, err := fs.Glob(adminUIFS, "adminui/js/*.js")
+	names, err := fs.Glob(adminUIFS, "ui/js/*.js")
 	if err != nil {
 		panic("admin ui js glob: " + err.Error())
 	}

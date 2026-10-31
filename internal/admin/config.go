@@ -1,4 +1,4 @@
-package main
+package admin
 
 import (
 	"cline-go-proxy/internal/routing"
@@ -15,9 +15,9 @@ import (
 )
 
 var adminConfig = &adminapi.Config{
-	Proxy: getProxyConfig,
-	SetProxy: func(cfg *proxyConfigData) {
-		setProxyConfig(cfg)
+	Proxy: GetProxyConfig,
+	SetProxy: func(cfg *ProxyConfig) {
+		SetProxyConfig(cfg)
 	},
 	Models:       routing.AllModels,
 	DefaultModel: routing.DefaultModel,

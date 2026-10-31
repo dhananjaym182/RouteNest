@@ -1,6 +1,7 @@
 package main
 
 import (
+	"cline-go-proxy/internal/admin"
 	"cline-go-proxy/internal/routing"
 	"errors"
 	"io"
@@ -18,11 +19,11 @@ import (
 
 func installRuleConfig(t *testing.T, rules ...config.RequestErrorRule) {
 	t.Helper()
-	cfg := defaultProxyConfig()
+	cfg := admin.DefaultProxyConfig()
 	cfg.RequestErrorRules = rules
 	cfg.Normalize()
-	setProxyConfig(cfg)
-	t.Cleanup(func() { setProxyConfig(defaultProxyConfig()) })
+	admin.SetProxyConfig(cfg)
+	t.Cleanup(func() { admin.SetProxyConfig(admin.DefaultProxyConfig()) })
 }
 
 func TestErrorRuleStopsAndCooldownsProviderLoop(t *testing.T) {

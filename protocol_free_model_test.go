@@ -2,6 +2,7 @@ package main
 
 import (
 	"cline-go-proxy/internal/accounts"
+	"cline-go-proxy/internal/admin"
 	"cline-go-proxy/internal/egress"
 	"cline-go-proxy/internal/proxycore"
 	"cline-go-proxy/internal/requestlog"
@@ -96,11 +97,11 @@ func protocolTestServer(t *testing.T) string {
 
 func TestOpenAIChatCompletionsFreeFallsBackToDS(t *testing.T) {
 	oldPool := accounts.Pool
-	oldConfig := getProxyConfig()
+	oldConfig := admin.GetProxyConfig()
 	oldTransport := egress.Client.Transport
 	t.Cleanup(func() {
 		accounts.Pool = oldPool
-		setProxyConfig(oldConfig)
+		admin.SetProxyConfig(oldConfig)
 		egress.Client.Transport = oldTransport
 	})
 
@@ -119,9 +120,9 @@ func TestOpenAIChatCompletionsFreeFallsBackToDS(t *testing.T) {
 		Status:      "active",
 	}
 	accounts.Pool = &AccountPool{Accounts: []*Account{first, second}}
-	config := defaultProxyConfig()
+	config := admin.DefaultProxyConfig()
 	config.Strategy = "fill"
-	setProxyConfig(config)
+	admin.SetProxyConfig(config)
 
 	var attempts []string
 	var models []string
@@ -195,7 +196,7 @@ func TestOpenAIChatCompletionsFreeFallsBackToDS(t *testing.T) {
 
 func TestOpenAIResponsesFreeFallsBackToDSAndPreservesResponseFormat(t *testing.T) {
 	oldPool := accounts.Pool
-	oldConfig := getProxyConfig()
+	oldConfig := admin.GetProxyConfig()
 	oldTransport := egress.Client.Transport
 	oldLogData, oldLogErr := os.ReadFile(requestlog.Path)
 	requestlog.Mu.Lock()
@@ -205,7 +206,7 @@ func TestOpenAIResponsesFreeFallsBackToDSAndPreservesResponseFormat(t *testing.T
 	_ = os.Remove(requestlog.Path)
 	t.Cleanup(func() {
 		accounts.Pool = oldPool
-		setProxyConfig(oldConfig)
+		admin.SetProxyConfig(oldConfig)
 		egress.Client.Transport = oldTransport
 		requestlog.Mu.Lock()
 		requestlog.Logs = oldLogs
@@ -232,9 +233,9 @@ func TestOpenAIResponsesFreeFallsBackToDSAndPreservesResponseFormat(t *testing.T
 		Status:      "active",
 	}
 	accounts.Pool = &AccountPool{Accounts: []*Account{first, second}}
-	config := defaultProxyConfig()
+	config := admin.DefaultProxyConfig()
 	config.Strategy = "fill"
-	setProxyConfig(config)
+	admin.SetProxyConfig(config)
 
 	var attempts []string
 	var models []string
@@ -320,11 +321,11 @@ func TestOpenAIResponsesFreeFallsBackToDSAndPreservesResponseFormat(t *testing.T
 
 func TestAnthropicMessagesFreeFallsBackToDSAndPreservesResponseFormat(t *testing.T) {
 	oldPool := accounts.Pool
-	oldConfig := getProxyConfig()
+	oldConfig := admin.GetProxyConfig()
 	oldTransport := egress.Client.Transport
 	t.Cleanup(func() {
 		accounts.Pool = oldPool
-		setProxyConfig(oldConfig)
+		admin.SetProxyConfig(oldConfig)
 		egress.Client.Transport = oldTransport
 	})
 
@@ -343,9 +344,9 @@ func TestAnthropicMessagesFreeFallsBackToDSAndPreservesResponseFormat(t *testing
 		Status:      "active",
 	}
 	accounts.Pool = &AccountPool{Accounts: []*Account{first, second}}
-	config := defaultProxyConfig()
+	config := admin.DefaultProxyConfig()
 	config.Strategy = "fill"
-	setProxyConfig(config)
+	admin.SetProxyConfig(config)
 
 	var attempts []string
 	var models []string
@@ -431,11 +432,11 @@ func TestAnthropicMessagesFreeFallsBackToDSAndPreservesResponseFormat(t *testing
 
 func TestOpenAIChatCompletionsFreeStreamFallsBackBeforeResponseHeaders(t *testing.T) {
 	oldPool := accounts.Pool
-	oldConfig := getProxyConfig()
+	oldConfig := admin.GetProxyConfig()
 	oldTransport := egress.Client.Transport
 	t.Cleanup(func() {
 		accounts.Pool = oldPool
-		setProxyConfig(oldConfig)
+		admin.SetProxyConfig(oldConfig)
 		egress.Client.Transport = oldTransport
 	})
 
@@ -454,9 +455,9 @@ func TestOpenAIChatCompletionsFreeStreamFallsBackBeforeResponseHeaders(t *testin
 		Status:      "active",
 	}
 	accounts.Pool = &AccountPool{Accounts: []*Account{first, second}}
-	config := defaultProxyConfig()
+	config := admin.DefaultProxyConfig()
 	config.Strategy = "fill"
-	setProxyConfig(config)
+	admin.SetProxyConfig(config)
 
 	var attempts []string
 	var models []string
@@ -523,11 +524,11 @@ func TestOpenAIChatCompletionsFreeStreamFallsBackBeforeResponseHeaders(t *testin
 
 func TestOpenAIChatCompletionsFreeStreamDoesNotRetryAfterResponseStarts(t *testing.T) {
 	oldPool := accounts.Pool
-	oldConfig := getProxyConfig()
+	oldConfig := admin.GetProxyConfig()
 	oldTransport := egress.Client.Transport
 	t.Cleanup(func() {
 		accounts.Pool = oldPool
-		setProxyConfig(oldConfig)
+		admin.SetProxyConfig(oldConfig)
 		egress.Client.Transport = oldTransport
 	})
 
@@ -546,9 +547,9 @@ func TestOpenAIChatCompletionsFreeStreamDoesNotRetryAfterResponseStarts(t *testi
 		Status:      "active",
 	}
 	accounts.Pool = &AccountPool{Accounts: []*Account{first, second}}
-	config := defaultProxyConfig()
+	config := admin.DefaultProxyConfig()
 	config.Strategy = "fill"
-	setProxyConfig(config)
+	admin.SetProxyConfig(config)
 
 	var attempts []string
 	var models []string
