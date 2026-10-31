@@ -12,9 +12,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
-	"io"
 	"log"
 	"net/http"
 	"strconv"
@@ -24,7 +22,6 @@ import (
 
 	"routenest/internal/deviceflow"
 	"routenest/internal/domain"
-	"routenest/internal/httpx"
 	"routenest/internal/platform"
 	connectionstore "routenest/internal/store/connections"
 )
@@ -392,66 +389,6 @@ func ConnectionBearer(conn *Connection, spec deviceFlowSpec) string {
 	return conn.AccessToken // 兑换失败让上游 401 → reauth 标记兜底
 }
 
-// ---------- admin handlers ----------
-
-func HandleConnectionsList(w http.ResponseWriter, r *http.Request) {
-	LoadConnections()
-	ConnectionsMu.Lock()
-	out := make([]Connection, 0, len(connections))
-	for _, c := range connections {
-		cp := *c
-		cp.AccessToken = "" // 列表不外泄 token
-		out = append(out, cp)
-	}
-	ConnectionsMu.Unlock()
-	flows := make([]string, 0, len(ProviderDeviceFlows))
-	for p := range ProviderDeviceFlows {
-		flows = append(flows, p)
-	}
-	httpx.WriteAPI(w, http.StatusOK, httpx.Response{Success: true, Data: map[string]any{"connections": out, "flows": flows}})
-}
-
-// POST /admin/api/connections/login/start  body: {provider}
-func HandleConnectionLoginStart(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		Provider string `json:"provider"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		httpx.WriteAPI(w, http.StatusBadRequest, httpx.Response{Error: "invalid_json"})
-		return
-	}
-	sess, err := startProviderDeviceLogin(strings.TrimSpace(req.Provider))
-	if err != nil {
-		httpx.WriteAPI(w, http.StatusOK, httpx.Response{Success: true, Data: map[string]any{"error": err.Error()}})
-		return
-	}
-	httpx.WriteAPI(w, http.StatusOK, httpx.Response{Success: true, Data: map[string]any{
-		"sessionId": sess.ID, "userCode": sess.UserCode, "authUrl": sess.AuthURL,
-	}})
-}
-
-// GET /admin/api/connections/login/status?sessionId=x
-func HandleConnectionLoginStatus(w http.ResponseWriter, r *http.Request) {
-	id := r.URL.Query().Get("sessionId")
-	providerLoginMu.Lock()
-	sess, ok := providerLoginSessions[id]
-	var out map[string]any
-	if ok {
-		out = map[string]any{"done": sess.Done, "success": sess.Success, "error": sess.Error, "userCode": sess.UserCode, "authUrl": sess.AuthURL}
-		if sess.Connection != nil {
-			cp := *sess.Connection
-			cp.AccessToken = ""
-			out["connection"] = cp
-		}
-	}
-	providerLoginMu.Unlock()
-	if !ok {
-		httpx.WriteAPI(w, http.StatusNotFound, httpx.Response{Error: "session not found"})
-		return
-	}
-	httpx.WriteAPI(w, http.StatusOK, httpx.Response{Success: true, Data: out})
-}
-
 // ImportConnectionToken 单条粘贴 token 的共享语义（单条导入与批量导入共用）：
 // trim 后校验，走 provider+email（无 email 时 token 指纹）去重，落 orgId。
 func ImportConnectionToken(provider, accessToken, email, orgID string) (*Connection, error) {
@@ -473,153 +410,4 @@ func ImportConnectionToken(provider, accessToken, email, orgID string) (*Connect
 		ConnectionsMu.Unlock()
 	}
 	return conn, nil
-}
-
-// POST /admin/api/connections/import  body: {provider, accessToken, email?, orgId?}
-// 粘贴 token 路径（Kilo 这类无 refresh 的上游同样适用），复用去重与状态语义。
-func HandleConnectionImport(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		Provider    string `json:"provider"`
-		AccessToken string `json:"accessToken"`
-		Email       string `json:"email"`
-		OrgID       string `json:"orgId"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		httpx.WriteAPI(w, http.StatusBadRequest, httpx.Response{Error: "provider and accessToken required"})
-		return
-	}
-	conn, err := ImportConnectionToken(req.Provider, req.AccessToken, req.Email, req.OrgID)
-	if err != nil {
-		httpx.WriteAPI(w, http.StatusBadRequest, httpx.Response{Error: err.Error()})
-		return
-	}
-	cp := *conn
-	cp.AccessToken = ""
-	httpx.WriteAPI(w, http.StatusOK, httpx.Response{Success: true, Data: map[string]any{"connection": cp}})
-}
-
-// connectionImportBatchItem 批量导入的单项输入（token 只在请求内出现，绝不出现在响应）。
-type connectionImportBatchItem struct {
-	Provider    string `json:"provider"`
-	AccessToken string `json:"accessToken"`
-	Email       string `json:"email"`
-	OrgID       string `json:"orgId"`
-}
-
-// connectionImportBatchResult 单项结果：保留输入顺序与原 index，失败不中断整批。
-type connectionImportBatchResult struct {
-	Index    int    `json:"index"`
-	OK       bool   `json:"ok"`
-	ID       string `json:"id,omitempty"`
-	Provider string `json:"provider"`
-	Email    string `json:"email,omitempty"`
-	Error    string `json:"error,omitempty"`
-}
-
-// POST /admin/api/connections/import-batch  body: {items:[{provider, accessToken, email?, orgId?}]}
-// 管理端「导入 Token」弹窗的批量 tab：逐项复用 ImportConnectionToken，返回逐项结果。
-func HandleConnectionImportBatch(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		Items []connectionImportBatchItem `json:"items"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || len(req.Items) == 0 {
-		httpx.WriteAPI(w, http.StatusBadRequest, httpx.Response{Error: "items required"})
-		return
-	}
-	if len(req.Items) > 500 {
-		httpx.WriteAPI(w, http.StatusBadRequest, httpx.Response{Error: "too many items (max 500)"})
-		return
-	}
-	results := make([]connectionImportBatchResult, 0, len(req.Items))
-	imported, failed := 0, 0
-	for i, item := range req.Items {
-		res := connectionImportBatchResult{Index: i, Provider: strings.TrimSpace(item.Provider)}
-		conn, err := ImportConnectionToken(item.Provider, item.AccessToken, item.Email, item.OrgID)
-		if err != nil {
-			res.Error = err.Error()
-			failed++
-		} else {
-			res.OK, res.ID, res.Provider, res.Email = true, conn.ID, conn.Provider, conn.Email
-			imported++
-		}
-		results = append(results, res)
-	}
-	httpx.WriteAPI(w, http.StatusOK, httpx.Response{Success: true, Data: map[string]any{
-		"total": len(req.Items), "imported": imported, "failed": failed, "results": results,
-	}})
-}
-
-// POST /admin/api/connections/delete  body: {id}
-func HandleConnectionDelete(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		ID string `json:"id"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		httpx.WriteAPI(w, http.StatusBadRequest, httpx.Response{Error: "invalid_json"})
-		return
-	}
-	if !RemoveConnection(req.ID) {
-		httpx.WriteAPI(w, http.StatusNotFound, httpx.Response{Error: "connection not found"})
-		return
-	}
-	httpx.WriteAPI(w, http.StatusOK, httpx.Response{Success: true})
-}
-
-// POST /admin/api/connections/test  body: {id}
-// bearer + 动态头探测 ModelsTestURL；同时把 401/403 反馈到 reauth 标记。
-func HandleConnectionTest(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		ID string `json:"id"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		httpx.WriteAPI(w, http.StatusBadRequest, httpx.Response{Error: "invalid_json"})
-		return
-	}
-	LoadConnections()
-	ConnectionsMu.Lock()
-	var conn *Connection
-	for _, c := range connections {
-		if c.ID == req.ID {
-			cp := *c
-			conn = &cp
-			break
-		}
-	}
-	ConnectionsMu.Unlock()
-	if conn == nil {
-		httpx.WriteAPI(w, http.StatusNotFound, httpx.Response{Error: "connection not found"})
-		return
-	}
-	spec, ok := ProviderDeviceFlows[conn.Provider]
-	if !ok || spec.ModelsTestURL == "" {
-		httpx.WriteAPI(w, http.StatusOK, httpx.Response{Success: true, Data: map[string]any{"ok": false, "error": "no test endpoint for provider " + conn.Provider}})
-		return
-	}
-	if conn.ExpiresAt > 0 && time.Now().UnixMilli() >= conn.ExpiresAt && conn.RefreshToken == "" {
-		MarkConnectionReauth(conn.ID)
-		httpx.WriteAPI(w, http.StatusOK, httpx.Response{Success: true, Data: map[string]any{"ok": false, "error": "token expired; please re-login"}})
-		return
-	}
-	hreq, _ := http.NewRequest(http.MethodGet, spec.ModelsTestURL, nil)
-	hreq.Header.Set("Authorization", "Bearer "+ConnectionBearer(conn, spec))
-	if spec.UserAgent != "" {
-		hreq.Header.Set("User-Agent", spec.UserAgent)
-	}
-	if spec.OrgHeader != "" && conn.ProviderSpecificData["orgId"] != "" {
-		hreq.Header.Set(spec.OrgHeader, conn.ProviderSpecificData["orgId"])
-	}
-	resp, err := OAuthHTTPClient(20 * time.Second).Do(hreq)
-	if err != nil {
-		httpx.WriteAPI(w, http.StatusOK, httpx.Response{Success: true, Data: map[string]any{"ok": false, "error": err.Error()}})
-		return
-	}
-	defer resp.Body.Close()
-	body, _ := io.ReadAll(io.LimitReader(resp.Body, 64<<10))
-	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
-		MarkConnectionReauth(conn.ID)
-	}
-	httpx.WriteAPI(w, http.StatusOK, httpx.Response{Success: true, Data: map[string]any{
-		"ok": resp.StatusCode == http.StatusOK, "status": resp.StatusCode,
-		"body": platform.Truncate(strings.TrimSpace(string(body)), 240),
-	}})
 }

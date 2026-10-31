@@ -13,7 +13,6 @@ import (
 	"routenest/internal/adminapi"
 	"routenest/internal/buildinfo"
 	"routenest/internal/config"
-	"routenest/internal/connections"
 	"routenest/internal/egress"
 	"routenest/internal/httpx"
 	"routenest/internal/i18n"
@@ -223,13 +222,13 @@ func registerProvidersRoutes(mux *http.ServeMux, auth authWrap) {
 
 // registerConnectionsRoutes registers the provider login connections.
 func registerConnectionsRoutes(mux *http.ServeMux, auth authWrap) {
-	mux.HandleFunc("/admin/api/connections", auth(connections.HandleConnectionsList))
-	mux.HandleFunc("/admin/api/connections/login/start", auth(connections.HandleConnectionLoginStart))
-	mux.HandleFunc("/admin/api/connections/login/status", auth(connections.HandleConnectionLoginStatus))
-	mux.HandleFunc("/admin/api/connections/import", auth(connections.HandleConnectionImport))
-	mux.HandleFunc("/admin/api/connections/import-batch", auth(connections.HandleConnectionImportBatch))
-	mux.HandleFunc("/admin/api/connections/delete", auth(connections.HandleConnectionDelete))
-	mux.HandleFunc("/admin/api/connections/test", auth(connections.HandleConnectionTest))
+	mux.HandleFunc("/admin/api/connections", auth(handleConnectionsList))
+	mux.HandleFunc("/admin/api/connections/login/start", auth(handleConnectionLoginStart))
+	mux.HandleFunc("/admin/api/connections/login/status", auth(handleConnectionLoginStatus))
+	mux.HandleFunc("/admin/api/connections/import", auth(handleConnectionImport))
+	mux.HandleFunc("/admin/api/connections/import-batch", auth(handleConnectionImportBatch))
+	mux.HandleFunc("/admin/api/connections/delete", auth(handleConnectionDelete))
+	mux.HandleFunc("/admin/api/connections/test", auth(handleConnectionTest))
 }
 
 // registerCombosRoutes registers the named model combinations.
