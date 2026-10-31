@@ -20,14 +20,12 @@ import (
 	"net/http"
 	"routenest/internal/routing"
 	"routenest/internal/zen"
-	"sort"
 	"strings"
 	"sync"
 	"time"
 
 	"routenest/internal/accounts"
 	"routenest/internal/combos"
-	"routenest/internal/connections"
 	"routenest/internal/egress"
 	"routenest/internal/i18n"
 	"routenest/internal/platform"
@@ -43,8 +41,6 @@ const (
 	quickTestProviderTimeoutSec = 20
 	// quickTestMaxAccounts 一次测试最多尝试的账号数（轮询换号上限，避免测试烧池）。
 	quickTestMaxAccounts = 2
-	// quickTestModelsTimeout /admin/api/providers/models 上游探测超时。
-	quickTestModelsTimeout = 15 * time.Second
 )
 
 // miniTestParams 一条安全预算测试请求体（与 handleProviderTest 同口径）。
@@ -426,106 +422,10 @@ func HandleComboTest(w http.ResponseWriter, r *http.Request) {
 
 // ---- EP2：provider 模型发现（/admin/api/providers/models）--------------
 
-// discoverOpenAIModels 拉取 OpenAI 兼容 {baseURL}/models（首个 404 时再试一次
-// {baseURL}/v1/models），返回去重排序的模型 ID；失败时返回可解析错误串
-// （HTTP 状态 + 截断 body ≤300 字符，或请求异常原因）。
-func discoverOpenAIModels(baseURL, apiKey string, headers map[string]string) ([]string, string) {
-	client := &http.Client{Transport: egress.Client.Transport, Timeout: quickTestModelsTimeout}
-	tryURLs := []string{strings.TrimRight(baseURL, "/") + "/models"}
-
-	fetch := func(rawURL string) (int, []byte, string) {
-		req, err := http.NewRequest("GET", rawURL, nil)
-		if err != nil {
-			return 0, nil, fmt.Sprintf("create request: %v", err)
-		}
-		if apiKey != "" {
-			req.Header.Set("Authorization", "Bearer "+apiKey)
-		}
-		req.Header.Set("Accept", "application/json")
-		for k, v := range headers {
-			k = strings.TrimSpace(k)
-			if k == "" {
-				continue
-			}
-			if strings.TrimSpace(v) == "" {
-				req.Header.Del(k)
-				continue
-			}
-			req.Header.Set(k, v)
-		}
-		resp, err := client.Do(req)
-		if err != nil {
-			return 0, nil, fmt.Sprintf("request failed: %v", err)
-		}
-		defer resp.Body.Close()
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, 64<<10))
-		return resp.StatusCode, body, ""
-	}
-
-	status, body, reqErr := fetch(tryURLs[0])
-	if reqErr != "" {
-		return nil, reqErr
-	}
-	probeOK := status == http.StatusOK
-	if status == http.StatusNotFound {
-		// 一些 baseURL 不含 /v1（如 https://host）：补一次 /v1/models
-		altStatus, altBody, altErr := fetch(strings.TrimRight(baseURL, "/") + "/v1/models")
-		if altErr == "" && altStatus == http.StatusOK {
-			status, body = altStatus, altBody
-			probeOK = true
-		}
-	}
-	if !probeOK {
-		// 目录端点与 baseURL 不同的预设（如 kilo gateway/models）：回退一次 ModelsFetcher URL
-		if fb := providers.FetcherBaseForBase(baseURL); fb != "" {
-			if st2, b2, e2 := fetch(fb + "/models"); e2 == "" && st2 == http.StatusOK {
-				status, body = st2, b2
-			} else {
-				return nil, fmt.Sprintf("HTTP %d: %s", status, platform.Truncate(strings.TrimSpace(string(body)), 300))
-			}
-		} else {
-			return nil, fmt.Sprintf("HTTP %d: %s", status, platform.Truncate(strings.TrimSpace(string(body)), 300))
-		}
-	}
-
-	var payload struct {
-		Data []struct {
-			ID string `json:"id"`
-		} `json:"data"`
-		Models []struct {
-			ID string `json:"id"`
-		} `json:"models"`
-	}
-	if err := json.Unmarshal(body, &payload); err != nil {
-		return nil, fmt.Sprintf("unexpected response format: %s", platform.Truncate(strings.TrimSpace(string(body)), 300))
-	}
-	seen := map[string]bool{}
-	var ids []string
-	collect := func(list []struct {
-		ID string `json:"id"`
-	}) {
-		for _, it := range list {
-			id := strings.TrimSpace(it.ID)
-			if id == "" || seen[id] {
-				continue
-			}
-			seen[id] = true
-			ids = append(ids, id)
-		}
-	}
-	collect(payload.Data)
-	collect(payload.Models)
-	if len(ids) == 0 {
-		return nil, "upstream returned no models"
-	}
-	sort.Strings(ids)
-	return ids, ""
-}
-
 // POST /admin/api/providers/models  body: {id} 或 {baseURL, apiKey?, headers?}
 // 发现 provider 的模型列表（GET {baseURL}/models）。data 成功：
 // {models:[{id:"..."}], count:N}；失败：{error:"...", models:[]}（200 包裹）。
-// 纯探测，不写任何状态。
+// 纯探测，不写任何状态。发现逻辑在 providers.DiscoverModels（唯一入口）。
 func HandleProviderModels(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "POST" {
 		writeAPI(w, http.StatusMethodNotAllowed, apiResponse{Error: i18n.TAPI(r, "method_not_allowed")})
@@ -542,75 +442,60 @@ func HandleProviderModels(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Request values override the stored provider; a non-nil header map replaces
+	// the stored headers, and empty header values delete headers.
 	baseURL := strings.TrimSpace(strings.TrimRight(req.BaseURL, "/"))
+	overrides := providers.DiscoveryOverrides{BaseURL: baseURL, APIKey: strings.TrimSpace(req.APIKey), Headers: req.Headers}
+	prov := providers.CustomProvider{BaseURL: baseURL, APIKey: strings.TrimSpace(req.APIKey), Headers: req.Headers}
+	found := false
 	if req.ID != "" {
 		if p := providers.Find(req.ID); p != nil {
-			// The qoder catalog is COSY-signed with the bound account's
-			// identity — a bearer/GET {baseURL}/models probe is meaningless.
-			// Route the qoder branch through its own discovery and return.
-			if providers.Protocol(p) == "qoder" {
-				entries, discErr := providers.DiscoverQoderModels(p)
-				if discErr != nil {
-					writeAPI(w, http.StatusOK, apiResponse{Success: true, Data: map[string]any{
-						"error":  discErr.Error(),
-						"models": []any{},
-					}})
-					return
-				}
-				out := make([]map[string]string, 0, len(entries))
-				for _, e := range entries {
-					out = append(out, map[string]string{"id": e.ID})
-				}
-				writeAPI(w, http.StatusOK, apiResponse{Success: true, Data: map[string]any{
-					"models": out,
-					"count":  len(out),
-				}})
-				return
-			}
-			if baseURL == "" {
-				baseURL = strings.TrimRight(p.BaseURL, "/")
-			}
-			if req.APIKey == "" {
-				req.APIKey = p.APIKey
-			}
-			if req.Headers == nil {
-				req.Headers = p.Headers
-			}
-			// Providers bound to connections also use a connection ticket for discovery.
-			if conn := connections.PickConnectionForProvider(p); conn != nil {
-				if spec, ok := connections.ProviderDeviceFlows[conn.Provider]; ok {
-					req.APIKey = connections.ConnectionBearer(conn, spec)
-				}
-			}
+			found = true
+			prov = *p
 		}
-		if baseURL == "" {
+	}
+	if found {
+		if prov.BaseURL == "" && overrides.BaseURL == "" {
 			writeAPI(w, http.StatusNotFound, apiResponse{Error: "provider not found"})
 			return
 		}
+	} else {
+		// A draft carries its own values; keep its header map so empty values
+		// still delete headers.
+		overrides = providers.DiscoveryOverrides{Headers: req.Headers}
+		if baseURL == "" {
+			writeAPI(w, http.StatusBadRequest, apiResponse{Error: "id or baseURL is required"})
+			return
+		}
 	}
-	if baseURL == "" {
-		writeAPI(w, http.StatusBadRequest, apiResponse{Error: "id or baseURL is required"})
-		return
-	}
-	if !strings.HasPrefix(baseURL, "http://") && !strings.HasPrefix(baseURL, "https://") {
+	if effective := strings.TrimSpace(strings.TrimRight(firstNonEmpty(overrides.BaseURL, prov.BaseURL), "/")); !strings.HasPrefix(effective, "http://") && !strings.HasPrefix(effective, "https://") {
 		writeAPI(w, http.StatusBadRequest, apiResponse{Error: "baseURL must start with http:// or https://"})
 		return
 	}
 
-	ids, errMsg := discoverOpenAIModels(baseURL, strings.TrimSpace(req.APIKey), req.Headers)
-	if errMsg != "" {
+	entries, err := providers.DiscoverModels(prov, overrides)
+	if err != nil {
 		writeAPI(w, http.StatusOK, apiResponse{Success: true, Data: map[string]any{
-			"error":  errMsg,
+			"error":  err.Error(),
 			"models": []any{},
 		}})
 		return
 	}
-	out := make([]map[string]string, 0, len(ids))
-	for _, id := range ids {
-		out = append(out, map[string]string{"id": id})
+	out := make([]map[string]string, 0, len(entries))
+	for _, e := range entries {
+		out = append(out, map[string]string{"id": e.ID})
 	}
 	writeAPI(w, http.StatusOK, apiResponse{Success: true, Data: map[string]any{
 		"models": out,
-		"count":  len(ids),
+		"count":  len(out),
 	}})
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, v := range values {
+		if v != "" {
+			return v
+		}
+	}
+	return ""
 }

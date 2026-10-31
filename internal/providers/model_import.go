@@ -8,7 +8,6 @@ package providers
 // ============================================================================
 
 import (
-	"context"
 	"crypto/rand"
 	"encoding/json"
 	"fmt"
@@ -20,10 +19,8 @@ import (
 	"time"
 
 	"routenest/internal/accounts"
-	"routenest/internal/connections"
 	"routenest/internal/httpx"
 	"routenest/internal/modelcatalog"
-	"routenest/internal/upstream/qoder"
 )
 
 // Tier signals (stored in Model.TierSignal; admin UI shows why a model is free
@@ -49,63 +46,6 @@ func freeWord(s string) bool { return modelcatalog.FreeWord(s) }
 // Explicit free markers rank above explicit non-zero pricing.
 func classifyUpstreamModel(e upstreamModelEntry, providerFree bool) (tier, signal string) {
 	return modelcatalog.Classify(e, providerFree, freeModelIDAllowlist())
-}
-
-// discoverModelEntries 拉取 {baseURL}/models（404 时补试 /v1/models，再回退预设
-// ModelsFetcher 目录端点），解析 id + 定价 + 标签。
-func discoverModelEntries(baseURL, apiKey string, headers map[string]string) ([]upstreamModelEntry, error) {
-	return modelcatalog.Discover(
-		connections.OAuthHTTPClient(15*time.Second),
-		baseURL, apiKey, headers,
-		FetcherBaseForBase(baseURL),
-	)
-}
-
-// FetcherBaseForBase 按规范化 baseURL 匹配预设的 ModelsFetcher 目录端点。
-func FetcherBaseForBase(baseURL string) string {
-	return modelcatalog.FetcherBaseFor(baseURL)
-}
-
-// discoverProviderModelEntries picks the catalog path for a provider: the
-// OpenAI-shaped one for everything else, and the signed Qoder catalog for
-// providers whose preset declares the qoder protocol.
-func discoverProviderModelEntries(p *CustomProvider, apiKey string, headers map[string]string) ([]upstreamModelEntry, error) {
-	if Protocol(p) == "qoder" {
-		return DiscoverQoderModels(p)
-	}
-	return discoverModelEntries(p.BaseURL, apiKey, headers)
-}
-
-// DiscoverQoderModels reads the Qoder catalog. It cannot go through the
-// OpenAI-shaped discovery path: the catalog lives at /algo/api/v2/model/list
-// and every request has to be COSY-signed with the bound account's user id, so
-// it needs the connection rather than a bearer key.
-func DiscoverQoderModels(p *CustomProvider) ([]upstreamModelEntry, error) {
-	conn := connections.PickConnectionForProvider(p)
-	if conn == nil {
-		return nil, fmt.Errorf("connection unavailable (expired or reauth required)")
-	}
-	token := conn.AccessToken
-	if spec, hasSpec := connections.ProviderDeviceFlows[conn.Provider]; hasSpec {
-		token = connections.ConnectionBearer(conn, spec)
-	}
-	ids, err := qoder.Models(context.Background(), connections.OAuthHTTPClient(15*time.Second), qoder.Creds{
-		UserID:    conn.ProviderSpecificData["userId"],
-		AuthToken: token,
-		Email:     conn.Email,
-		MachineID: conn.ProviderSpecificData["machineId"],
-		BaseURL:   p.BaseURL,
-	})
-	if err != nil {
-		return nil, err
-	}
-	out := make([]upstreamModelEntry, 0, len(ids))
-	for _, id := range ids {
-		// Namespace entries under qoder/ so they cannot collide with model ids
-		// from other providers (Chat strips the prefix before dispatch).
-		out = append(out, upstreamModelEntry{ID: "qoder/" + id})
-	}
-	return out, nil
 }
 
 // ---------- 预览批次 ----------
@@ -200,7 +140,7 @@ func HandleImportPreview(w http.ResponseWriter, r *http.Request) {
 	}
 	// Protocol-aware discovery: a qoder provider catalog is COSY-signed and
 	// lives at /algo/api/v2/model/list, not {baseURL}/models.
-	entries, err := discoverProviderModelEntries(prov, prov.APIKey, prov.Headers)
+	entries, err := DiscoverModels(*prov, DiscoveryOverrides{})
 	if err != nil {
 		httpx.WriteAPI(w, http.StatusOK, httpx.Response{Success: true, Data: map[string]any{"error": err.Error()}})
 		return

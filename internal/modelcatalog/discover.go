@@ -2,6 +2,7 @@ package modelcatalog
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -13,7 +14,12 @@ import (
 	"routenest/internal/providerreg"
 )
 
-const maxCatalogBody = 2 << 20
+// MaxCatalogBody bounds one catalogue response. The admin probe previously read
+// 64 KiB; the unified limit is larger so long catalogues are not truncated.
+const MaxCatalogBody = 2 << 20
+
+// errorSnippetLimit bounds upstream body text placed in error messages.
+const errorSnippetLimit = 300
 
 // ParseModels decodes an OpenAI- or OpenRouter-shaped model list. It accepts
 // {"data":[...]}, {"models":[...]}, or both, de-duplicates IDs, and rejects an
@@ -24,7 +30,7 @@ func ParseModels(body []byte) ([]Entry, error) {
 		Models []map[string]any `json:"models"`
 	}
 	if err := json.Unmarshal(body, &payload); err != nil {
-		return nil, fmt.Errorf("unexpected response format")
+		return nil, ErrUnexpectedFormat
 	}
 	var out []Entry
 	seen := map[string]bool{}
@@ -89,7 +95,7 @@ func ParseModels(body []byte) ([]Entry, error) {
 		}
 	}
 	if len(out) == 0 {
-		return nil, fmt.Errorf("upstream returned no models")
+		return nil, ErrNoModels
 	}
 	return out, nil
 }
@@ -140,70 +146,141 @@ func firstNum(vals ...any) *float64 {
 	return nil
 }
 
-// Discover fetches {baseURL}/models, retrying /v1/models on 404 and then the
-// preset catalog endpoint when fetcherBase is non-empty. The caller owns the
-// HTTP client and its transport policy.
-func Discover(client *http.Client, baseURL, apiKey string, headers map[string]string, fetcherBase string) ([]Entry, error) {
-	baseURL = strings.TrimRight(baseURL, "/")
-	if baseURL == "" {
+// Request describes one catalogue read. The unified path serves every caller:
+// admin probes, import previews and periodic rechecks.
+type Request struct {
+	// Client performs the HTTP calls; the caller owns its transport and timeout.
+	Client *http.Client
+	// BaseURL is the provider base URL. Its /models list is tried first.
+	BaseURL string
+	// APIKey is sent as a Bearer token when non-empty.
+	APIKey string
+	// Headers are sent on every request. An empty value deletes the header,
+	// including a default such as Authorization.
+	Headers map[string]string
+	// FetcherBase is an optional preset catalogue base, tried only when the
+	// primary read fails.
+	FetcherBase string
+}
+
+// ErrNoModels is returned when a catalogue read succeeds but lists no model.
+var ErrNoModels = errors.New("upstream returned no models")
+
+// ErrUnexpectedFormat is returned when a catalogue body has no model list.
+var ErrUnexpectedFormat = errors.New("unexpected response format")
+
+// Discover reads the model catalogue. It tries BaseURL/models and retries
+// /v1/models on 404. If that read fails for any reason, it tries FetcherBase
+// the same way. When both fail, the primary error is returned, because it
+// describes the endpoint the operator configured. Error text never contains the
+// API key or long header values.
+func Discover(req Request) ([]Entry, error) {
+	base := strings.TrimRight(strings.TrimSpace(req.BaseURL), "/")
+	if base == "" {
 		return nil, fmt.Errorf("baseURL is empty")
 	}
-	fetch := func(u string) (int, []byte, error) {
-		req, err := http.NewRequest(http.MethodGet, u, nil)
-		if err != nil {
-			return 0, nil, err
-		}
-		req.Header.Set("Accept", "application/json")
-		if apiKey != "" {
-			req.Header.Set("Authorization", "Bearer "+apiKey)
-		}
-		for k, v := range headers {
-			if strings.TrimSpace(v) != "" {
-				req.Header.Set(strings.TrimSpace(k), v)
-			}
-		}
-		resp, err := client.Do(req)
-		if err != nil {
-			return 0, nil, err
-		}
-		defer resp.Body.Close()
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, maxCatalogBody))
-		return resp.StatusCode, body, nil
+	entries, primaryErr := listFrom(req, base)
+	if primaryErr == nil {
+		return entries, nil
 	}
-	tryBase := func(b string) ([]Entry, error) {
-		status, body, err := fetch(b + "/models")
-		if err != nil {
-			return nil, fmt.Errorf("request failed: %v", err)
-		}
-		if status == http.StatusNotFound {
-			s2, b2, e2 := fetch(b + "/v1/models")
-			if e2 == nil && s2 == http.StatusOK {
-				status, body = s2, b2
-			}
-		}
-		if status != http.StatusOK {
-			return nil, fmt.Errorf("HTTP %d: %s", status, platform.Truncate(strings.TrimSpace(string(body)), 200))
-		}
-		return ParseModels(body)
-	}
-	bases := []string{baseURL}
-	if fetcherBase != "" && fetcherBase != baseURL {
-		bases = append(bases, fetcherBase)
-	}
-	var entries []Entry
-	var lastErr error
-	for _, b := range bases {
-		entries, lastErr = tryBase(b)
-		if lastErr == nil {
-			break
+	if fb := strings.TrimRight(strings.TrimSpace(req.FetcherBase), "/"); fb != "" && fb != base {
+		if fallback, err := listFrom(req, fb); err == nil {
+			return fallback, nil
 		}
 	}
-	if lastErr != nil {
-		return nil, lastErr
+	return nil, errors.New(redact(primaryErr.Error(), secretsOf(req)...))
+}
+
+// listFrom reads one base and parses its model list.
+func listFrom(req Request, base string) ([]Entry, error) {
+	status, body, err := fetchCatalog(req, base+"/models")
+	if err != nil {
+		return nil, fmt.Errorf("request failed: %v", err)
+	}
+	if status == http.StatusNotFound {
+		if s2, b2, e2 := fetchCatalog(req, base+"/v1/models"); e2 == nil && s2 == http.StatusOK {
+			status, body = s2, b2
+		}
+	}
+	if status != http.StatusOK {
+		return nil, fmt.Errorf("HTTP %d: %s", status, snippet(body))
+	}
+	entries, err := ParseModels(body)
+	if err != nil {
+		if errors.Is(err, ErrUnexpectedFormat) {
+			return nil, fmt.Errorf("%w: %s", ErrUnexpectedFormat, snippet(body))
+		}
+		return nil, err
 	}
 	sort.Slice(entries, func(i, j int) bool { return entries[i].ID < entries[j].ID })
 	return entries, nil
 }
+
+// fetchCatalog performs one GET with the request's auth and headers.
+func fetchCatalog(req Request, rawURL string) (int, []byte, error) {
+	httpReq, err := http.NewRequest(http.MethodGet, rawURL, nil)
+	if err != nil {
+		return 0, nil, err
+	}
+	httpReq.Header.Set("Accept", "application/json")
+	if req.APIKey != "" {
+		httpReq.Header.Set("Authorization", "Bearer "+req.APIKey)
+	}
+	for k, v := range req.Headers {
+		k = strings.TrimSpace(k)
+		if k == "" {
+			continue
+		}
+		if strings.TrimSpace(v) == "" {
+			httpReq.Header.Del(k)
+			continue
+		}
+		httpReq.Header.Set(k, v)
+	}
+	resp, err := req.Client.Do(httpReq)
+	if err != nil {
+		return 0, nil, err
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, MaxCatalogBody))
+	return resp.StatusCode, body, nil
+}
+
+// snippet returns a trimmed prefix of an upstream body for error text.
+func snippet(body []byte) string {
+	return platform.Truncate(strings.TrimSpace(string(body)), errorSnippetLimit)
+}
+
+// secretsOf lists values that must not appear in error text: the API key and
+// long header values (short values would match ordinary words and digits).
+func secretsOf(req Request) []string {
+	var out []string
+	if len(req.APIKey) >= 4 {
+		out = append(out, req.APIKey)
+	}
+	for _, v := range req.Headers {
+		if len(v) >= 8 {
+			out = append(out, v)
+		}
+	}
+	return out
+}
+
+// Redact replaces each secret in s with a fixed mask. Empty secrets are ignored.
+func Redact(s string, secrets ...string) string {
+	return redact(s, secrets...)
+}
+
+func redact(s string, secrets ...string) string {
+	for _, sec := range secrets {
+		if sec != "" {
+			s = strings.ReplaceAll(s, sec, redactedMask)
+		}
+	}
+	return s
+}
+
+const redactedMask = "***"
 
 // FetcherBaseFor returns a preset's catalog base URL for this provider baseURL.
 // Only fetcher URLs ending in /models are trusted; other formats are ignored

@@ -87,7 +87,7 @@ func TestDiscoverModelEntriesParsing(t *testing.T) {
 		w.Write([]byte(`{"data":[{"id":"a/b","pricing":{"prompt":"0","completion":"0"}},{"id":"c/d","pricing":{"prompt":"2.5","completion":"10"}},{"id":"e/f"},{"id":"name/one","name":"Model (Free)","pricing":{"prompt":"1","completion":"2"}},{"id":"fee/x","pricing":{"prompt":"0","completion":"0","request":"0.001"}}],"models":[{"id":"dup/x"},{"id":"dup/x"},{"id":"tag/y","tags":["free"]},{"id":"a/b"},{"id":"flag/z","free":true},{"id":"mode/w","mode":"free"}]}`))
 	}))
 	defer srv.Close()
-	entries, err := discoverModelEntries(srv.URL, "k123", nil)
+	entries, err := DiscoverModels(CustomProvider{BaseURL: srv.URL, APIKey: "k123"}, DiscoveryOverrides{})
 	if err != nil {
 		t.Fatal(err)
 	}

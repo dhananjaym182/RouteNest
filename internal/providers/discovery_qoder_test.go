@@ -79,7 +79,7 @@ func TestQoderSignedDiscoveryCharacterization(t *testing.T) {
 		t.Fatalf("Protocol = %q, want qoder", got)
 	}
 
-	entries, err := discoverProviderModelEntries(p, "", nil)
+	entries, err := DiscoverModels(*p, DiscoveryOverrides{})
 	if err != nil {
 		t.Fatalf("discover: %v", err)
 	}

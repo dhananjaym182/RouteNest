@@ -145,7 +145,7 @@ func TestDiscoverSendsAuthAndParses(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	entries, err := Discover(srv.Client(), srv.URL, "key-1", map[string]string{"X-Custom": "yes"}, "")
+	entries, err := Discover(Request{Client: srv.Client(), BaseURL: srv.URL, APIKey: "key-1", Headers: map[string]string{"X-Custom": "yes"}})
 	if err != nil {
 		t.Fatalf("discover: %v", err)
 	}
@@ -169,7 +169,7 @@ func TestDiscoverRetriesV1On404(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	entries, err := Discover(srv.Client(), srv.URL, "", nil, "")
+	entries, err := Discover(Request{Client: srv.Client(), BaseURL: srv.URL})
 	if err != nil {
 		t.Fatalf("discover: %v", err)
 	}
@@ -193,7 +193,7 @@ func TestDiscoverFallsBackToFetcherBase(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	entries, err := Discover(srv.Client(), srv.URL, "", nil, srv.URL+"/catalog")
+	entries, err := Discover(Request{Client: srv.Client(), BaseURL: srv.URL, FetcherBase: srv.URL + "/catalog"})
 	if err != nil {
 		t.Fatalf("discover: %v", err)
 	}
@@ -206,18 +206,20 @@ func TestDiscoverFallsBackToFetcherBase(t *testing.T) {
 }
 
 func TestDiscoverErrors(t *testing.T) {
-	if _, err := Discover(http.DefaultClient, "", "", nil, ""); err == nil || !strings.Contains(err.Error(), "empty") {
+	if _, err := Discover(Request{Client: http.DefaultClient, BaseURL: ""}); err == nil || !strings.Contains(err.Error(), "empty") {
 		t.Errorf("empty base err = %v", err)
 	}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, strings.Repeat("x", 500), http.StatusForbidden)
 	}))
 	defer srv.Close()
-	_, err := Discover(srv.Client(), srv.URL, "", nil, "")
+	_, err := Discover(Request{Client: srv.Client(), BaseURL: srv.URL})
 	if err == nil || !strings.Contains(err.Error(), "HTTP 403") {
 		t.Fatalf("err = %v", err)
 	}
-	if len(err.Error()) > 260 {
+	// Phase 3: error snippets are bounded at 300 characters (was 200 in the generic
+	// path and 300 in the admin probe). "HTTP 403: " adds 10 characters.
+	if len(err.Error()) > 320 {
 		t.Errorf("error body not truncated: %d chars", len(err.Error()))
 	}
 }

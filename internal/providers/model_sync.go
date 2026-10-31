@@ -20,7 +20,6 @@ import (
 	"time"
 
 	"routenest/internal/accounts"
-	"routenest/internal/connections"
 	"routenest/internal/modelcatalog"
 	"routenest/internal/platform"
 	"routenest/internal/store/syncstate"
@@ -75,50 +74,12 @@ func saveProviderRecheckStateLocked() {
 	}
 }
 
-// recheckCreds 检测用的只读凭据，与 Call 的连接注入逻辑同源：
-// APIKey/自定义头 + 绑定连接时的连接 token（含刷新/兑换）与动态组织头。
-// 绑定了连接但连接不可用（过期/需重登）返回 ok=false，跳过本轮检测。
-func recheckCreds(p *CustomProvider) (apiKey string, headers map[string]string, ok bool) {
-	headers = map[string]string{}
-	for k, v := range p.Headers {
-		if v != "" {
-			headers[k] = v
-		}
-	}
-	apiKey = p.APIKey
-	if ids := connections.ProviderConnIDs(p); len(ids) == 0 {
-		return apiKey, headers, true
-	}
-	// Any pooled connection works for catalog reads; the picker rotates.
-	conn := connections.PickConnectionForProvider(p)
-	if conn == nil {
-		return "", nil, false
-	}
-	if spec, hasSpec := connections.ProviderDeviceFlows[conn.Provider]; hasSpec {
-		apiKey = connections.ConnectionBearer(conn, spec)
-		if spec.OrgHeader != "" {
-			if oid := conn.ProviderSpecificData["orgId"]; oid != "" {
-				headers[spec.OrgHeader] = oid
-			}
-		}
-	} else {
-		apiKey = conn.AccessToken
-	}
-	return apiKey, headers, true
-}
-
 // recheckProviderModels 对单个 provider 检测一轮：下架标记 + 新模型入队。
 // 返回本轮展示状态副本。上游失败只记 error，不动缺失计数与标记。
 func recheckProviderModels(p CustomProvider) providerRecheckState {
 	LoadRecheckState()
 	st := providerRecheckState{}
-	apiKey, headers, ok := recheckCreds(&p)
-	if !ok {
-		st.LastError = "connection unavailable (expired or reauth required)"
-		setProviderRecheckState(p.ID, st)
-		return st
-	}
-	entries, err := discoverProviderModelEntries(&p, apiKey, headers)
+	entries, err := DiscoverModels(p, DiscoveryOverrides{})
 	if err != nil {
 		st.LastError = err.Error()
 		setProviderRecheckState(p.ID, st)

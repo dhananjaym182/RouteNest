@@ -2,6 +2,7 @@ package admin_test
 
 import (
 	"net/http"
+	"strings"
 	"testing"
 
 	"routenest/internal/admin"
@@ -26,5 +27,28 @@ func TestProviderModelsEmptyHeaderDeletesDefault(t *testing.T) {
 	}
 	if sawHeader || gotAuth != "" {
 		t.Fatalf("Authorization = %q (present=%v), want deleted", gotAuth, sawHeader)
+	}
+}
+
+// The probe's error envelope is preserved (200 with error and an empty models
+// list), and the typed key is masked when the upstream echoes it.
+func TestProviderModelsErrorEnvelopeIsRedacted(t *testing.T) {
+	installConfig(t, admin.DefaultProxyConfig())
+	const key = "sk-typed-probe-key"
+	installTransport(t, func(req *http.Request) *http.Response {
+		return stubResp(req, http.StatusUnauthorized, "denied for "+key)
+	})
+	code, resp := postAdminJSON(t, admin.HandleProviderModels,
+		`{"baseURL":"http://m.test/v1","apiKey":"`+key+`"}`)
+	if code != 200 || !resp.Success {
+		t.Fatalf("status=%d success=%v", code, resp.Success)
+	}
+	d := dataMap(t, resp)
+	msg, _ := d["error"].(string)
+	if strings.Contains(msg, key) || !strings.Contains(msg, "HTTP 401") {
+		t.Fatalf("error = %q, want HTTP 401 with the key masked", msg)
+	}
+	if models, _ := d["models"].([]any); len(models) != 0 {
+		t.Fatalf("models = %v, want empty", models)
 	}
 }

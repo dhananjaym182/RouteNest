@@ -11,8 +11,11 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strconv"
 	"strings"
 	"testing"
+
+	"routenest/internal/providerreg"
 )
 
 func readFixture(t *testing.T, name string) string {
@@ -44,7 +47,7 @@ func TestFetcherFixtureBynaraCapturedPayload(t *testing.T) {
 	srv := serveModels(t, readFixture(t, "bynara-v1-models.json"))
 	defer srv.Close()
 
-	entries, err := Discover(srv.Client(), srv.URL, "", nil, "")
+	entries, err := Discover(Request{Client: srv.Client(), BaseURL: srv.URL})
 	if err != nil {
 		t.Fatalf("discover: %v", err)
 	}
@@ -67,7 +70,7 @@ func TestFetcherFixtureInxoraGenericIgnoresAccessFlags(t *testing.T) {
 	srv := serveModels(t, body)
 	defer srv.Close()
 
-	entries, err := Discover(srv.Client(), srv.URL, "", nil, "")
+	entries, err := Discover(Request{Client: srv.Client(), BaseURL: srv.URL})
 	if err != nil {
 		t.Fatalf("discover: %v", err)
 	}
@@ -88,7 +91,7 @@ func TestFetcherFixtureAgentrouterPricingUnsupported(t *testing.T) {
 	srv := serveModels(t, body)
 	defer srv.Close()
 
-	_, err := Discover(srv.Client(), srv.URL, "", nil, "")
+	_, err := Discover(Request{Client: srv.Client(), BaseURL: srv.URL})
 	if err == nil || err.Error() != "upstream returned no models" {
 		t.Fatalf("err = %v, want \"upstream returned no models\"", err)
 	}
@@ -101,7 +104,7 @@ func TestFetcherFixtureMimoCatalogUnsupported(t *testing.T) {
 	srv := serveModels(t, body)
 	defer srv.Close()
 
-	_, err := Discover(srv.Client(), srv.URL, "", nil, "")
+	_, err := Discover(Request{Client: srv.Client(), BaseURL: srv.URL})
 	if err == nil || err.Error() != "upstream returned no models" {
 		t.Fatalf("err = %v, want \"upstream returned no models\"", err)
 	}
@@ -117,7 +120,7 @@ func TestDiscoverTransportErrorTriesFetcherBase(t *testing.T) {
 	catalog := serveModels(t, `{"data":[{"id":"from-catalog"}]}`)
 	defer catalog.Close()
 
-	entries, err := Discover(http.DefaultClient, deadURL, "", nil, catalog.URL)
+	entries, err := Discover(Request{Client: http.DefaultClient, BaseURL: deadURL, FetcherBase: catalog.URL})
 	if err != nil {
 		t.Fatalf("discover: %v", err)
 	}
@@ -126,10 +129,10 @@ func TestDiscoverTransportErrorTriesFetcherBase(t *testing.T) {
 	}
 }
 
-// Current behaviour: when both the primary and the catalogue fail, the error
-// returned is the catalogue's. The admin probe returned the primary's status
-// instead. The unified path returns the primary error (see Phase 3 decision).
-func TestDiscoverBothFailReturnsFetcherErrorCurrently(t *testing.T) {
+// Phase 3 decision: when the primary and the catalogue both fail, the primary
+// error is returned. The admin probe already reported the configured endpoint's
+// status; import and recheck now report the same thing.
+func TestDiscoverBothFailReturnsPrimaryError(t *testing.T) {
 	primary := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "primary down", http.StatusInternalServerError)
 	}))
@@ -139,8 +142,111 @@ func TestDiscoverBothFailReturnsFetcherErrorCurrently(t *testing.T) {
 	}))
 	defer catalog.Close()
 
-	_, err := Discover(primary.Client(), primary.URL, "", nil, catalog.URL)
-	if err == nil || !strings.Contains(err.Error(), "502") {
-		t.Fatalf("err = %v, want the catalogue's HTTP 502 currently", err)
+	_, err := Discover(Request{Client: primary.Client(), BaseURL: primary.URL, FetcherBase: catalog.URL})
+	if err == nil || !strings.Contains(err.Error(), "HTTP 500") || strings.Contains(err.Error(), "502") {
+		t.Fatalf("err = %v, want the primary's HTTP 500", err)
+	}
+}
+
+// Phase 3: error text never echoes the API key, even when the upstream body does.
+func TestDiscoverRedactsAPIKeyInErrors(t *testing.T) {
+	const key = "sk-live-secret-123"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "bad key "+key, http.StatusUnauthorized)
+	}))
+	defer srv.Close()
+
+	_, err := Discover(Request{Client: srv.Client(), BaseURL: srv.URL, APIKey: key})
+	if err == nil {
+		t.Fatal("expected an error")
+	}
+	if strings.Contains(err.Error(), key) {
+		t.Fatalf("error leaks the API key: %v", err)
+	}
+	if !strings.Contains(err.Error(), "HTTP 401") || !strings.Contains(err.Error(), redactedMask) {
+		t.Fatalf("err = %v, want status and mask", err)
+	}
+}
+
+// Phase 3: a long custom header value is redacted from upstream error text too.
+func TestDiscoverRedactsLongHeaderValues(t *testing.T) {
+	const token = "org-token-abcdefgh"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "echo "+token, http.StatusForbidden)
+	}))
+	defer srv.Close()
+
+	_, err := Discover(Request{Client: srv.Client(), BaseURL: srv.URL, Headers: map[string]string{"X-Org-Token": token}})
+	if err == nil || strings.Contains(err.Error(), token) {
+		t.Fatalf("err = %v, want the header value masked", err)
+	}
+}
+
+// Phase 3: an empty header value deletes the header the request would carry,
+// including Authorization (the admin probe's existing semantics).
+func TestDiscoverEmptyHeaderDeletesDefault(t *testing.T) {
+	var sawAuth bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, sawAuth = r.Header["Authorization"]
+		w.Write([]byte(`{"data":[{"id":"x"}]}`))
+	}))
+	defer srv.Close()
+
+	if _, err := Discover(Request{Client: srv.Client(), BaseURL: srv.URL, APIKey: "sk-k1", Headers: map[string]string{"Authorization": ""}}); err != nil {
+		t.Fatalf("discover: %v", err)
+	}
+	if sawAuth {
+		t.Fatal("Authorization was sent despite the empty header override")
+	}
+}
+
+// Phase 3: the unified cap admits catalogues larger than the admin's former
+// 64 KiB limit. The body is 200 KiB of ids.
+func TestDiscoverLargeCatalogueWithinCap(t *testing.T) {
+	var b strings.Builder
+	b.WriteString(`{"data":[`)
+	for i := 0; i < 4000; i++ {
+		if i > 0 {
+			b.WriteByte(',')
+		}
+		b.WriteString(`{"id":"provider/model-with-a-long-name-`)
+		b.WriteString(strconv.Itoa(i))
+		b.WriteString(`"}`)
+	}
+	b.WriteString(`]}`)
+	if b.Len() <= 64<<10 || b.Len() >= MaxCatalogBody {
+		t.Fatalf("fixture size %d must sit between 64KiB and the cap", b.Len())
+	}
+	srv := serveModels(t, b.String())
+	defer srv.Close()
+	entries, err := Discover(Request{Client: srv.Client(), BaseURL: srv.URL})
+	if err != nil || len(entries) != 4000 {
+		t.Fatalf("entries = %d, err = %v", len(entries), err)
+	}
+}
+
+// Entries with a non-string id are skipped rather than failing the whole list.
+func TestParseModelsSkipsNonStringIDs(t *testing.T) {
+	entries, err := ParseModels([]byte(`{"data":[{"id":42},{"id":"ok"}]}`))
+	if err != nil || len(entries) != 1 || entries[0].ID != "ok" {
+		t.Fatalf("entries = %+v, err = %v", entries, err)
+	}
+}
+
+// Every catalogue fetcher type used by a built-in preset has an executable strategy.
+func TestEveryPresetFetcherTypeHasStrategy(t *testing.T) {
+	for _, p := range providerreg.Builtin().All() {
+		if p.ModelsFetcher == nil {
+			continue
+		}
+		if _, ok := StrategyFor(p.ModelsFetcher.Type); !ok {
+			t.Errorf("preset %s: fetcher type %q has no strategy", p.ID, p.ModelsFetcher.Type)
+		}
+	}
+	if s, _ := StrategyFor("bynara"); s.Status != StatusVerified {
+		t.Errorf("bynara status = %s, want verified (captured fixture)", s.Status)
+	}
+	if s, _ := StrategyFor("agentrouter"); s.Status != StatusUnsupported {
+		t.Errorf("agentrouter status = %s, want unsupported", s.Status)
 	}
 }
