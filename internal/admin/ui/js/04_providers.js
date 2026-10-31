@@ -203,7 +203,7 @@ function provMiniHealthHTML(p) {
   else if (daily > 0 && dailyUsed / daily >= 0.7 || rpm > 0 && rpmUsed / rpm >= 0.7 || tok > 0 && tokUsed / tok >= 0.7 || h.rate !== undefined && h.rate < 0.5) { tone = 'warn'; label = '接近上限'; }
   let html = '<span class="pmini tone-' + tone + '"><span class="pmini-dot" aria-hidden="true"></span>' + t(label) + '</span>';
   if (rpm > 0) html += ' <span class="pmini-rpm mono" title="' + escAttr(t('每分钟已用 ') + rpmUsed + '/' + rpm) + '">RPM ' + rpmUsed + '/' + rpm + '</span>';
-  if (cool) html += ' <button type="button" class="chip warn cooldown-chip" onclick="event.stopPropagation();resetProviderCooldown(\'' + escAttr(p.id) + '\', \'\', this)" title="' + escAttr(t('点击清除该 Provider 全部冷却')) + '">' + uiIcon('hourglass') + ' ' + cool + ' · ' + fmtLeft(h.recoveryAt) + '</button>';
+  if (cool) html += ' <button type="button" class="chip warn cooldown-chip" onclick="event.stopPropagation();providersResetCooldown(\'' + escAttr(p.id) + '\', \'\', this)" title="' + escAttr(t('点击清除该 Provider 全部冷却')) + '">' + uiIcon('hourglass') + ' ' + cool + ' · ' + fmtLeft(h.recoveryAt) + '</button>';
   return html;
 }
 
@@ -494,11 +494,11 @@ function renderProvCooldownBar(list) {
         '<span class="pcb-name">' + esc(r.name) + '</span>' +
         '<span class="mono pcb-model">' + esc(r.model) + '</span>' +
         '<span class="pcb-left">' + fmtLeft(r.until) + '</span>' +
-        '<button class="btn btn-sm" onclick="resetProviderCooldown(\'' + escAttr(r.id) + '\', \'' + escAttr(r.model) + '\', this)">' + t('重置') + '</button>' +
+        '<button class="btn btn-sm" onclick="providersResetCooldown(\'' + escAttr(r.id) + '\', \'' + escAttr(r.model) + '\', this)">' + t('重置') + '</button>' +
       '</div>').join('') + '</div>';
 }
 
-async function resetProviderCooldown(id, model, btn) {
+async function providersResetCooldown(id, model, btn) {
   const orig = btn ? btn.innerHTML : '';
   if (btn) { btn.disabled = true; btn.innerHTML = '<span class="loading"></span>'; }
   try {

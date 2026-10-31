@@ -5,13 +5,12 @@ package admin
 // <style>styles.css + body.html + 按文件名序拼接的 js/NN_*.js + 收尾标签），
 // /admin/ 原样输出且 no-cache。JS 文件共享全局作用域，文件名前缀即拼接顺序；
 // 每个资产文件保持 ≤ 1000 行，超限时按 // ==== 段落横幅继续拆分。
+// 拼接顺序由 ui_manifest.go 的显式清单决定（不再依赖文件名排序）。
 // ============================================================================
 
 import (
 	"bytes"
 	"embed"
-	"io/fs"
-	"sort"
 )
 
 //go:embed ui/head.html ui/styles.css ui/body.html ui/js/*.js
@@ -47,12 +46,9 @@ func buildAdminHTML() string {
 	return buf.String()
 }
 
-// adminUIJSNames returns the embedded admin JS asset paths in assembly order.
+// adminUIJSNames returns the admin JS asset paths in assembly order: the manifest.
 func adminUIJSNames() ([]string, error) {
-	names, err := fs.Glob(adminUIFS, "ui/js/*.js")
-	if err != nil {
-		return nil, err
-	}
-	sort.Strings(names)
-	return names, nil
+	out := make([]string, len(adminUIJSAssets))
+	copy(out, adminUIJSAssets)
+	return out, nil
 }

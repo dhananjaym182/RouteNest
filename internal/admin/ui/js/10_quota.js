@@ -65,10 +65,10 @@ function renderQuotaCard(p, health) {
     const rows = cds.map(c =>
       '<div class="quota-cd-row"><span class="mono" title="' + escAttr(c.model) + '">' + esc(c.model) + '</span>' +
       '<span class="quota-cd-time">' + esc(formatCooldown(c.until)) + '</span>' +
-      '<button class="btn btn-sm" onclick="resetProviderCooldown(\'' + escAttr(p.id) + '\',\'' + escAttr(c.model) + '\',this)">' + esc(t('重置')) + '</button></div>'
+      '<button class="btn btn-sm" onclick="quotaResetCooldown(\'' + escAttr(p.id) + '\',\'' + escAttr(c.model) + '\',this)">' + esc(t('重置')) + '</button></div>'
     ).join('');
     cdHtml = '<div class="quota-cd-list">' + rows + '</div>' +
-      '<button class="btn btn-sm" onclick="resetProviderCooldown(\'' + escAttr(p.id) + '\',\'\',this)">' + esc(t('重置全部冷却')) + '</button>';
+      '<button class="btn btn-sm" onclick="quotaResetCooldown(\'' + escAttr(p.id) + '\',\'\',this)">' + esc(t('重置全部冷却')) + '</button>';
   }
   // Token 配额：有上限才显示重置说明；窗口（limits.tokenWindow，缺省 monthly）决定文案与计量表标签
   // quotaMeter 的 limit=0 分支已按「未设预算」语言呈现
@@ -119,7 +119,7 @@ function renderQuota() {
   listEl.innerHTML = provs.map(p => renderQuotaCard(p, health[p.id])).join('');
 }
 
-async function resetProviderCooldown(id, model, btn) {
+async function quotaResetCooldown(id, model, btn) {
   if (btn) btn.disabled = true;
   try {
     const d = await api('POST', '/providers/cooldown-reset', { id: id, model: model || '' });

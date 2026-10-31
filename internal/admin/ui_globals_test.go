@@ -10,10 +10,7 @@ import (
 // knownDuplicateGlobals lists top-level JS function names that are already
 // declared more than once in the shared admin script scope. Each entry must be
 // removed by the owning UI refactor (plan Phase 9); no new entries are allowed.
-var knownDuplicateGlobals = map[string]bool{
-	// 04_providers.js and 10_quota.js declare this with different refresh behavior.
-	"resetProviderCooldown": true,
-}
+var knownDuplicateGlobals = map[string]bool{}
 
 var topLevelFuncRe = regexp.MustCompile(`(?m)^(?:async )?function ([A-Za-z_$][A-Za-z0-9_$]*)\s*\(`)
 
