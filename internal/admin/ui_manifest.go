@@ -5,16 +5,23 @@ package admin
 // earlier one. A new JS file must be added here; the manifest test rejects files
 // that are present but not listed, and listed names that do not exist.
 var adminUIJSAssets = []string{
-	"ui/js/01_core.js",
-	"ui/js/02_accounts.js",
-	"ui/js/03_settings.js",
-	"ui/js/04_providers.js",
-	"ui/js/05_combos.js",
-	"ui/js/06_models.js",
-	"ui/js/07_logs.js",
-	"ui/js/08_dashboard.js",
-	"ui/js/09_init.js",
-	"ui/js/10_quota.js",
+	"ui/js/01_i18n.js",
+	"ui/js/02_nav.js",
+	"ui/js/03_shell.js",
+	"ui/js/04_accounts.js",
+	"ui/js/05_settings.js",
+	"ui/js/06_providers_custom.js",
+	"ui/js/07_providers_detail.js",
+	"ui/js/08_providers_detect.js",
+	"ui/js/09_providers_pickers.js",
+	"ui/js/10_providers_import.js",
+	"ui/js/11_connections.js",
+	"ui/js/12_combos.js",
+	"ui/js/13_models.js",
+	"ui/js/14_logs.js",
+	"ui/js/15_dashboard.js",
+	"ui/js/16_init.js",
+	"ui/js/17_quota.js",
 }
 
 // adminUIBodyParts lists the page body fragments in document order. Concatenated,

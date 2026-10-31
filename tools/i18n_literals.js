@@ -17,8 +17,8 @@ for (const f of process.argv.slice(2)) {
       const idx = code.indexOf(lit);
       const before = code.slice(Math.max(0, idx - 6), idx);
       if (/t\($/.test(before)) continue;
-      // dictionary definition lines in 01_core.js: key: 'value' pattern with en value after
-      if (f.endsWith("01_core.js")) continue;
+      // dictionary definition lines in 01_i18n.js: key: 'value' pattern with en value after
+      if (f.endsWith("01_i18n.js")) continue;
       console.log(f + ":" + (i + 1) + ": " + lit.slice(0, 100));
     }
   });

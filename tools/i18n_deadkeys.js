@@ -12,7 +12,7 @@ const keys = [];
 let k;
 while ((k = keyRe.exec(m[1]))) keys.push({ key: k[1].replace(/\\'/g, "'"), idx: k.index + m.index });
 const others = [body, ...jsFiles.filter(s => s !== core)];
-// keys can also be used inside 01_core.js outside the dict block itself
+// keys can also be used inside 01_i18n.js outside the dict block itself
 const coreRest = core.replace(m[1], '');
 others.push(coreRest);
 const ctxOf = (key) => {

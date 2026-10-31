@@ -1,5 +1,5 @@
 const fs = require("fs");
-const core = fs.readFileSync("internal/admin/ui/js/01_core.js", "utf8");
+const core = fs.readFileSync("internal/admin/ui/js/01_i18n.js", "utf8");
 const m = core.match(/const I18N\s*=\s*\{([\s\S]*?)\n\};/);
 if (!m) { console.log("NO I18N BLOCK"); process.exit(1); }
 const keys = new Set();
