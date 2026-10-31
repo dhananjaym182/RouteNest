@@ -2,8 +2,6 @@ package requestlog
 
 import (
 	"encoding/json"
-	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
@@ -29,17 +27,7 @@ func TestRequestLogsClear(t *testing.T) {
 		Path = oldPath
 	}()
 
-	rec := httptest.NewRecorder()
-	HandleClear(rec, httptest.NewRequest(http.MethodGet, "/admin/api/request-logs/clear", nil))
-	if rec.Code != http.StatusMethodNotAllowed {
-		t.Fatalf("GET status = %d, want 405", rec.Code)
-	}
-
-	rec = httptest.NewRecorder()
-	HandleClear(rec, httptest.NewRequest(http.MethodPost, "/admin/api/request-logs/clear", nil))
-	if rec.Code != http.StatusOK {
-		t.Fatalf("POST status = %d, want 200 (%s)", rec.Code, rec.Body.String())
-	}
+	Clear()
 
 	Mu.Lock()
 	n := len(Logs)

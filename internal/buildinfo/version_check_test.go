@@ -1,7 +1,6 @@
 package buildinfo
 
 import (
-	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"sync/atomic"
@@ -95,30 +94,14 @@ func TestVersionSemverCompare(t *testing.T) {
 	}
 }
 
-func TestVersionCheckHandlerPayload(t *testing.T) {
+func TestCurrentVersionStatusPayload(t *testing.T) {
 	var hits int32
 	srv := releaseServer(`{"tag_name":"v1.3.0","html_url":"h","published_at":"2026-01-01T00:00:00Z"}`, 200, &hits)
 	defer srv.Close()
 	defer resetVersionState(t, srv.URL)()
 
-	rec := httptest.NewRecorder()
-	HandleAdminVersionCheck(rec, httptest.NewRequest("GET", "/admin/api/version-check", nil))
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status %d body %s", rec.Code, rec.Body.String())
-	}
-	var resp struct {
-		Success bool `json:"success"`
-		Data    struct {
-			Current         string `json:"current"`
-			Latest          string `json:"latest"`
-			UpdateAvailable bool   `json:"updateAvailable"`
-			ReleaseURL      string `json:"releaseURL"`
-		} `json:"data"`
-	}
-	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
-		t.Fatal(err)
-	}
-	if !resp.Success || resp.Data.Current != "v1.0.0" || resp.Data.Latest != "v1.3.0" || !resp.Data.UpdateAvailable || resp.Data.ReleaseURL != "h" {
-		t.Fatalf("payload mismatch: %+v", resp)
+	st := CurrentVersionStatus(false)
+	if st.Current != "v1.0.0" || st.Latest != "v1.3.0" || !st.UpdateAvailable || st.ReleaseURL != "h" || st.Error != "" {
+		t.Fatalf("status mismatch: %+v", st)
 	}
 }

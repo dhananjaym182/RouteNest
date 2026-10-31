@@ -8,8 +8,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-
-	"routenest/internal/httpx"
 )
 
 // GitHub Release 更新检查：结果缓存 6 小时，?force=1 强制刷新。
@@ -137,20 +135,30 @@ func versionNewer(current, latest string) bool {
 	return false
 }
 
-func HandleAdminVersionCheck(w http.ResponseWriter, r *http.Request) {
-	versionState.refresh(r.URL.Query().Get("force") == "1")
+// VersionStatus is the cached release check, ready for the admin console.
+type VersionStatus struct {
+	Current         string
+	Latest          string
+	ReleaseURL      string
+	PublishedAt     string
+	CheckedAtMillis int64
+	UpdateAvailable bool
+	Error           string
+}
+
+// CurrentVersionStatus refreshes the cached release check when force is set or
+// the cache is stale, and reports it.
+func CurrentVersionStatus(force bool) VersionStatus {
+	versionState.refresh(force)
 	versionState.mu.Lock()
 	defer versionState.mu.Unlock()
-	data := map[string]any{
-		"current":         AppVersion,
-		"latest":          versionState.latest,
-		"releaseURL":      versionState.htmlURL,
-		"publishedAt":     versionState.published,
-		"checkedAt":       versionState.checkedAt.UnixMilli(),
-		"updateAvailable": versionState.latest != "" && versionNewer(AppVersion, versionState.latest),
+	return VersionStatus{
+		Current:         AppVersion,
+		Latest:          versionState.latest,
+		ReleaseURL:      versionState.htmlURL,
+		PublishedAt:     versionState.published,
+		CheckedAtMillis: versionState.checkedAt.UnixMilli(),
+		UpdateAvailable: versionState.latest != "" && versionNewer(AppVersion, versionState.latest),
+		Error:           versionState.err,
 	}
-	if versionState.err != "" {
-		data["error"] = versionState.err
-	}
-	httpx.WriteAPI(w, http.StatusOK, httpx.Response{Success: true, Data: data})
 }

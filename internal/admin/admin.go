@@ -246,8 +246,8 @@ func registerObservabilityRoutes(mux *http.ServeMux, auth authWrap) {
 	mux.HandleFunc("/admin/api/stats", auth(handleAdminStats))
 	mux.HandleFunc("/admin/api/dashboard/overview", auth(handleDashboardOverview))
 	mux.HandleFunc("/admin/api/request-logs", auth(handleAdminRequestLogs))
-	mux.HandleFunc("/admin/api/request-logs/clear", auth(requestlog.HandleClear))
-	mux.HandleFunc("/admin/api/version-check", auth(buildinfo.HandleAdminVersionCheck))
+	mux.HandleFunc("/admin/api/request-logs/clear", auth(handleRequestLogsClear))
+	mux.HandleFunc("/admin/api/version-check", auth(handleAdminVersionCheck))
 }
 
 // registerMiscRoutes registers the miscellaneous admin actions.

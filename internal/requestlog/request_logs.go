@@ -4,14 +4,11 @@ import (
 	"encoding/base64"
 	"fmt"
 	"log"
-	"net/http"
 	"sort"
 	"sync"
 	"time"
 
 	"routenest/internal/domain"
-	"routenest/internal/httpx"
-	"routenest/internal/i18n"
 	"routenest/internal/platform"
 	"routenest/internal/protocol/openaichat"
 	"routenest/internal/providers"
@@ -81,17 +78,13 @@ func saveRequestLogsLocked() {
 }
 
 // POST /admin/api/request-logs/clear — drop all persisted request logs.
-func HandleClear(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		httpx.WriteAPI(w, http.StatusMethodNotAllowed, httpx.Response{Error: i18n.TAPI(r, "method_not_allowed")})
-		return
-	}
+// Clear removes every stored request log and persists the empty list.
+func Clear() {
 	Mu.Lock()
 	Logs = nil
 	saveRequestLogsLocked()
 	Mu.Unlock()
 	log.Printf("admin: request logs cleared")
-	httpx.WriteAPI(w, http.StatusOK, httpx.Response{Success: true})
 }
 
 func appendRequestLog(entry requestLog) {
