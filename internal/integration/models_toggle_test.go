@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"routenest/internal/accounts"
 	"routenest/internal/admin"
+	"routenest/internal/models"
 	"routenest/internal/routing"
 	"strings"
 	"testing"
@@ -109,10 +110,8 @@ func TestLiveModelSetExcludesDisabled(t *testing.T) {
 		{ID: "prov/disabled", Provider: "prov", Cost: "free", Status: "active", Source: "remote", Disabled: true},
 		{ID: "prov/live", Provider: "prov", Cost: "free", Status: "active", Source: "remote"},
 	}, "")
-	p := accounts.LoadPool()
-	accounts.PoolMu.Lock()
-	live := routing.LiveModelSet(p)
-	accounts.PoolMu.Unlock()
+	var live map[string]bool
+	models.View(func(p *AccountPool) { live = routing.LiveModelSet(p.Models) })
 	if live["prov/disabled"] {
 		t.Error("disabled model must not be in the live set")
 	}

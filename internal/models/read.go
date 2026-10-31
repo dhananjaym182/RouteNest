@@ -44,3 +44,13 @@ func Read(fn func(list []domain.Model)) {
 	defer accounts.PoolMu.Unlock()
 	fn(accounts.Pool.Models)
 }
+
+// View runs fn with the live pool under the pool lock, for readers that need
+// pool-level fields such as the default model. fn must not keep the pointer, must
+// not write to the pool, and must not call into this package.
+func View(fn func(p *domain.AccountPool)) {
+	accounts.LoadPool()
+	accounts.PoolMu.Lock()
+	defer accounts.PoolMu.Unlock()
+	fn(accounts.Pool)
+}

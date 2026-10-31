@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"routenest/internal/accounts"
+	"routenest/internal/domain"
 	"routenest/internal/httpx"
 	"routenest/internal/modelcatalog"
 	"routenest/internal/models"
@@ -71,14 +72,12 @@ func newImportBatchID() string {
 // buildImportBatch 对条目分类并对比当前池，产出仅内存的待批准批次。
 func buildImportBatch(p CustomProvider, entries []upstreamModelEntry) *importBatch {
 	batch := &importBatch{ID: newImportBatchID(), ProviderID: p.ID, ProviderName: p.Name, CreatedAt: time.Now()}
-	accounts.LoadPool() // ensure the pool is loaded before locking
-	accounts.PoolMu.Lock()
-	existing := make(map[string]modelcatalog.Existing, len(accounts.Pool.Models))
-	for i := range accounts.Pool.Models {
-		m := &accounts.Pool.Models[i]
-		existing[m.ID] = modelcatalog.Existing{Source: m.Source, TierSignal: m.TierSignal, Cost: m.Cost}
-	}
-	accounts.PoolMu.Unlock()
+	existing := make(map[string]modelcatalog.Existing)
+	models.Read(func(list []domain.Model) {
+		for _, m := range list {
+			existing[m.ID] = modelcatalog.Existing{Source: m.Source, TierSignal: m.TierSignal, Cost: m.Cost}
+		}
+	})
 	batch.Items, batch.Stats = modelcatalog.BuildImportItems(entries, p.Free, existing, freeModelIDAllowlist())
 	importsMu.Lock()
 	for id, old := range pendingImports {

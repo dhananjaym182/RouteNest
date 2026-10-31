@@ -119,14 +119,20 @@ var builtinModels = []domain.Model{
 //   - 已同步远程模型：Cline 远程（Source=remote）+ opencode 同步（Source=zen）+ 用户自定义
 //   - 未同步 / 离线：内置 fallback（Cline + zen 种子表）+ 用户自定义
 func AllModels() []domain.Model {
-	p := accounts.LoadPool()
-	accounts.PoolMu.Lock()
-	defer accounts.PoolMu.Unlock()
+	var result []domain.Model
+	models.Read(func(list []domain.Model) {
+		result = allModelsFrom(list)
+	})
+	return result
+}
+
+// allModelsFrom computes AllModels for a list read under the pool lock.
+func allModelsFrom(list []domain.Model) []domain.Model {
 
 	var custom []domain.Model
 	var remote []domain.Model
 	var zenModels []domain.Model
-	for _, m := range p.Models {
+	for _, m := range list {
 		switch m.Source {
 		case "remote":
 			remote = append(remote, m)
@@ -221,10 +227,15 @@ func BuildModelsList(onlyFree bool) []map[string]any {
 // DefaultModel 返回用户设置的默认模型；未设置时优先回退到第一个远程 free 模型，
 // 否则用内置 fallback。
 func DefaultModel() string {
-	p := accounts.LoadPool()
-	accounts.PoolMu.Lock()
-	defer accounts.PoolMu.Unlock()
+	var result string
+	models.View(func(p *domain.AccountPool) {
+		result = defaultModelFrom(p)
+	})
+	return result
+}
 
+// defaultModelFrom resolves the default model for a pool read under the lock.
+func defaultModelFrom(p *domain.AccountPool) string {
 	if p.DefaultModel != "" {
 		defaultDisabled := false
 		for _, m := range p.Models {
@@ -233,7 +244,7 @@ func DefaultModel() string {
 				break
 			}
 		}
-		if !defaultDisabled && (!RemoteModelsActive() || LiveModelSet(p)[p.DefaultModel]) {
+		if !defaultDisabled && (!RemoteModelsActive() || LiveModelSet(p.Models)[p.DefaultModel]) {
 			return p.DefaultModel
 		}
 	}
@@ -661,12 +672,12 @@ func defaultFreeChain() []string {
 
 // LiveModelSet 返回当前仍然「在线」的模型 ID 集合：池内全部模型（远程同步
 // remote / opencode zen 同步 / 管理员自定义，已手动停用的除外）+ 启用中自定义
-// provider 声明的模型。
-// 调用方须持有 accounts.PoolMu；providers 走独立的 providersMu，仓库内不存在反向持锁路径。
-func LiveModelSet(p *domain.AccountPool) map[string]bool {
-	live := make(map[string]bool, len(p.Models))
+// provider 声明的模型。list 是调用方在池锁内取得的模型列表；provider 列表
+// 自有锁，此处不额外持池锁。
+func LiveModelSet(list []domain.Model) map[string]bool {
+	live := make(map[string]bool, len(list))
 	disabled := make(map[string]bool)
-	for _, m := range p.Models {
+	for _, m := range list {
 		if m.Disabled {
 			disabled[m.ID] = true
 			continue
@@ -714,10 +725,8 @@ func filterStaleModels(chain []string) []string {
 	if len(chain) == 0 || !RemoteModelsActive() {
 		return chain
 	}
-	p := accounts.LoadPool()
-	accounts.PoolMu.Lock()
-	live := LiveModelSet(p)
-	accounts.PoolMu.Unlock()
+	var live map[string]bool
+	models.Read(func(list []domain.Model) { live = LiveModelSet(list) })
 	out, dropped := dispatch.FilterLive(chain, true, live)
 	if len(dropped) == 0 {
 		return out
