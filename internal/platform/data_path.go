@@ -106,8 +106,8 @@ func createDataDir(dir string) error {
 	if strings.TrimSpace(dir) == "" {
 		return fmt.Errorf("empty directory path")
 	}
-	if err := os.MkdirAll(dir, 0700); err != nil {
-		return fmt.Errorf("create %s: %w", dir, err)
+	if err := SecureDataPermissions(dir); err != nil {
+		return fmt.Errorf("secure %s: %w", dir, err)
 	}
 	return nil
 }

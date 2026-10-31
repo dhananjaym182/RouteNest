@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -198,5 +199,58 @@ func TestMigrateDataFilesDoesNotOverwriteCurrentDestination(t *testing.T) {
 	got, err := os.ReadFile(filepath.Join(dst, name))
 	if err != nil || string(got) != "destination" {
 		t.Fatalf("destination = %q, err %v; existing data must win", got, err)
+	}
+}
+
+func TestEnsurePrivateDirTightensExistingMode(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows permissions use ACLs rather than Unix mode bits")
+	}
+	dir := filepath.Join(t.TempDir(), "routenest")
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(dir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := EnsurePrivateDir(dir); err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Stat(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := info.Mode().Perm(); got != 0700 {
+		t.Fatalf("directory mode = %04o, want 0700", got)
+	}
+}
+
+func TestSecureDataPermissionsTightensKnownFilesOnly(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows permissions use ACLs rather than Unix mode bits")
+	}
+	dir := t.TempDir()
+	state := filepath.Join(dir, ".routenest-accounts.json")
+	unrelated := filepath.Join(dir, "notes.txt")
+	for _, path := range []string{state, unrelated} {
+		if err := os.WriteFile(path, []byte("test"), 0644); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chmod(path, 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if err := SecureDataPermissions(dir); err != nil {
+		t.Fatal(err)
+	}
+	stateInfo, _ := os.Stat(state)
+	otherInfo, _ := os.Stat(unrelated)
+	if got := stateInfo.Mode().Perm(); got != 0600 {
+		t.Fatalf("state mode = %04o, want 0600", got)
+	}
+	if got := otherInfo.Mode().Perm(); got != 0644 {
+		t.Fatalf("unrelated mode = %04o, want unchanged 0644", got)
 	}
 }
