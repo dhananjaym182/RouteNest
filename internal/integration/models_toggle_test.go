@@ -18,7 +18,7 @@ func newToggleTestPool(t *testing.T, models []Model, defaultModel string) {
 	oldPool, oldPath := accounts.Pool, accounts.PoolPath
 	t.Cleanup(func() { accounts.Pool, accounts.PoolPath = oldPool, oldPath })
 	accounts.PoolPath = filepath.Join(t.TempDir(), ".cline-accounts.json")
-	accounts.Pool = &AccountPool{Accounts: []*Account{}, Keys: []string{}, Models: models, DefaultModel: defaultModel}
+	setTestPool(&AccountPool{Accounts: []*Account{}, Keys: []string{}, Models: models, DefaultModel: defaultModel})
 }
 
 // admin.HandleAdminModelToggle：批量启停模型；停用当前默认模型时清空默认；

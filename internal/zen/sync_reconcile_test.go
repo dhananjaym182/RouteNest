@@ -28,6 +28,12 @@ func installZenSync(t *testing.T, catalogue string, start []domain.Model) {
 	t.Helper()
 	oldClient := HTTPClient
 	HTTPClient = &http.Client{Transport: zenCatalogueTransport{body: catalogue}}
+	// SyncModels marks zen as remote-enabled and records its result. Restore both,
+	// so later tests see the state they started with.
+	RemoteEnabledMu.Lock()
+	oldRemote := RemoteEnabled
+	RemoteEnabledMu.Unlock()
+	oldLast := LastModelSync()
 	ConfigMu.Lock()
 	oldCfg := Config
 	Config = &ConfigData{BaseURL: "https://zen.test/v1", Key: "public"}
@@ -41,6 +47,10 @@ func installZenSync(t *testing.T, catalogue string, start []domain.Model) {
 	accounts.PoolMu.Unlock()
 
 	t.Cleanup(func() {
+		RemoteEnabledMu.Lock()
+		RemoteEnabled = oldRemote
+		RemoteEnabledMu.Unlock()
+		SetLastModelSync(oldLast)
 		HTTPClient = oldClient
 		ConfigMu.Lock()
 		Config = oldCfg

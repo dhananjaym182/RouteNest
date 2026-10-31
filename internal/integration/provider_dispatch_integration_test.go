@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
-	"routenest/internal/accounts"
 	"routenest/internal/admin"
 	"routenest/internal/egress"
 	"routenest/internal/providers"
@@ -42,20 +41,20 @@ func TestProviderTransportFollowsHTTPClientReplacement(t *testing.T) {
 
 // 自定义 provider 命中时优先走 provider 上游。
 func TestCustomProviderServesModel(t *testing.T) {
-	oldPool := accounts.Pool
+	oldPool := getTestPool()
 	oldConfig := admin.GetProxyConfig()
 	oldTransport := egress.Client.Transport
 	t.Cleanup(func() {
-		accounts.Pool = oldPool
+		setTestPool(oldPool)
 		admin.SetProxyConfig(oldConfig)
 		egress.Client.Transport = oldTransport
 		_ = providers.Delete("prov_test1")
 	})
 
-	accounts.Pool = &AccountPool{Accounts: []*Account{{
+	setTestPool(&AccountPool{Accounts: []*Account{{
 		AccountID: "a", Email: "a@x.com", AccessToken: "t",
 		ExpiresAt: time.Now().Add(time.Hour).UnixMilli(), Status: "active",
-	}}}
+	}}})
 	admin.SetProxyConfig(admin.DefaultProxyConfig())
 
 	upstreamModel := ""
@@ -113,20 +112,20 @@ func TestCustomProviderServesModel(t *testing.T) {
 
 // provider 失败（冷却）后自动降级到回退链 → cline 池，客户端无感知。
 func TestCustomProviderFailureFallsBackToChain(t *testing.T) {
-	oldPool := accounts.Pool
+	oldPool := getTestPool()
 	oldConfig := admin.GetProxyConfig()
 	oldTransport := egress.Client.Transport
 	t.Cleanup(func() {
-		accounts.Pool = oldPool
+		setTestPool(oldPool)
 		admin.SetProxyConfig(oldConfig)
 		egress.Client.Transport = oldTransport
 		_ = providers.Delete("prov_test2")
 	})
 
-	accounts.Pool = &AccountPool{Accounts: []*Account{{
+	setTestPool(&AccountPool{Accounts: []*Account{{
 		AccountID: "a", Email: "a@x.com", AccessToken: "t",
 		ExpiresAt: time.Now().Add(time.Hour).UnixMilli(), Status: "active",
-	}}}
+	}}})
 	admin.SetProxyConfig(admin.DefaultProxyConfig())
 
 	egress.Client.Transport = freeModelRoundTripper(func(req *http.Request) (*http.Response, error) {

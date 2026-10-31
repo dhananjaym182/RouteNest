@@ -7,7 +7,6 @@ import (
 	"net"
 	"net/http"
 	"os"
-	"routenest/internal/accounts"
 	"routenest/internal/admin"
 	"routenest/internal/egress"
 	"routenest/internal/proxycore"
@@ -96,11 +95,11 @@ func protocolTestServer(t *testing.T) string {
 }
 
 func TestOpenAIChatCompletionsFreeFallsBackToDS(t *testing.T) {
-	oldPool := accounts.Pool
+	oldPool := getTestPool()
 	oldConfig := admin.GetProxyConfig()
 	oldTransport := egress.Client.Transport
 	t.Cleanup(func() {
-		accounts.Pool = oldPool
+		setTestPool(oldPool)
 		admin.SetProxyConfig(oldConfig)
 		egress.Client.Transport = oldTransport
 	})
@@ -119,7 +118,7 @@ func TestOpenAIChatCompletionsFreeFallsBackToDS(t *testing.T) {
 		ExpiresAt:   time.Now().Add(time.Hour).UnixMilli(),
 		Status:      "active",
 	}
-	accounts.Pool = &AccountPool{Accounts: []*Account{first, second}}
+	setTestPool(&AccountPool{Accounts: []*Account{first, second}})
 	config := admin.DefaultProxyConfig()
 	config.Strategy = "fill"
 	admin.SetProxyConfig(config)
@@ -195,7 +194,7 @@ func TestOpenAIChatCompletionsFreeFallsBackToDS(t *testing.T) {
 }
 
 func TestOpenAIResponsesFreeFallsBackToDSAndPreservesResponseFormat(t *testing.T) {
-	oldPool := accounts.Pool
+	oldPool := getTestPool()
 	oldConfig := admin.GetProxyConfig()
 	oldTransport := egress.Client.Transport
 	oldLogData, oldLogErr := os.ReadFile(requestlog.Path)
@@ -205,7 +204,7 @@ func TestOpenAIResponsesFreeFallsBackToDSAndPreservesResponseFormat(t *testing.T
 	requestlog.Mu.Unlock()
 	_ = os.Remove(requestlog.Path)
 	t.Cleanup(func() {
-		accounts.Pool = oldPool
+		setTestPool(oldPool)
 		admin.SetProxyConfig(oldConfig)
 		egress.Client.Transport = oldTransport
 		requestlog.Mu.Lock()
@@ -232,7 +231,7 @@ func TestOpenAIResponsesFreeFallsBackToDSAndPreservesResponseFormat(t *testing.T
 		ExpiresAt:   time.Now().Add(time.Hour).UnixMilli(),
 		Status:      "active",
 	}
-	accounts.Pool = &AccountPool{Accounts: []*Account{first, second}}
+	setTestPool(&AccountPool{Accounts: []*Account{first, second}})
 	config := admin.DefaultProxyConfig()
 	config.Strategy = "fill"
 	admin.SetProxyConfig(config)
@@ -320,11 +319,11 @@ func TestOpenAIResponsesFreeFallsBackToDSAndPreservesResponseFormat(t *testing.T
 }
 
 func TestAnthropicMessagesFreeFallsBackToDSAndPreservesResponseFormat(t *testing.T) {
-	oldPool := accounts.Pool
+	oldPool := getTestPool()
 	oldConfig := admin.GetProxyConfig()
 	oldTransport := egress.Client.Transport
 	t.Cleanup(func() {
-		accounts.Pool = oldPool
+		setTestPool(oldPool)
 		admin.SetProxyConfig(oldConfig)
 		egress.Client.Transport = oldTransport
 	})
@@ -343,7 +342,7 @@ func TestAnthropicMessagesFreeFallsBackToDSAndPreservesResponseFormat(t *testing
 		ExpiresAt:   time.Now().Add(time.Hour).UnixMilli(),
 		Status:      "active",
 	}
-	accounts.Pool = &AccountPool{Accounts: []*Account{first, second}}
+	setTestPool(&AccountPool{Accounts: []*Account{first, second}})
 	config := admin.DefaultProxyConfig()
 	config.Strategy = "fill"
 	admin.SetProxyConfig(config)
@@ -431,11 +430,11 @@ func TestAnthropicMessagesFreeFallsBackToDSAndPreservesResponseFormat(t *testing
 }
 
 func TestOpenAIChatCompletionsFreeStreamFallsBackBeforeResponseHeaders(t *testing.T) {
-	oldPool := accounts.Pool
+	oldPool := getTestPool()
 	oldConfig := admin.GetProxyConfig()
 	oldTransport := egress.Client.Transport
 	t.Cleanup(func() {
-		accounts.Pool = oldPool
+		setTestPool(oldPool)
 		admin.SetProxyConfig(oldConfig)
 		egress.Client.Transport = oldTransport
 	})
@@ -454,7 +453,7 @@ func TestOpenAIChatCompletionsFreeStreamFallsBackBeforeResponseHeaders(t *testin
 		ExpiresAt:   time.Now().Add(time.Hour).UnixMilli(),
 		Status:      "active",
 	}
-	accounts.Pool = &AccountPool{Accounts: []*Account{first, second}}
+	setTestPool(&AccountPool{Accounts: []*Account{first, second}})
 	config := admin.DefaultProxyConfig()
 	config.Strategy = "fill"
 	admin.SetProxyConfig(config)
@@ -523,11 +522,11 @@ func TestOpenAIChatCompletionsFreeStreamFallsBackBeforeResponseHeaders(t *testin
 }
 
 func TestOpenAIChatCompletionsFreeStreamDoesNotRetryAfterResponseStarts(t *testing.T) {
-	oldPool := accounts.Pool
+	oldPool := getTestPool()
 	oldConfig := admin.GetProxyConfig()
 	oldTransport := egress.Client.Transport
 	t.Cleanup(func() {
-		accounts.Pool = oldPool
+		setTestPool(oldPool)
 		admin.SetProxyConfig(oldConfig)
 		egress.Client.Transport = oldTransport
 	})
@@ -546,7 +545,7 @@ func TestOpenAIChatCompletionsFreeStreamDoesNotRetryAfterResponseStarts(t *testi
 		ExpiresAt:   time.Now().Add(time.Hour).UnixMilli(),
 		Status:      "active",
 	}
-	accounts.Pool = &AccountPool{Accounts: []*Account{first, second}}
+	setTestPool(&AccountPool{Accounts: []*Account{first, second}})
 	config := admin.DefaultProxyConfig()
 	config.Strategy = "fill"
 	admin.SetProxyConfig(config)

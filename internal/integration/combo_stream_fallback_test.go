@@ -6,7 +6,6 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"routenest/internal/accounts"
 	"routenest/internal/admin"
 	"routenest/internal/egress"
 	"routenest/internal/platform"
@@ -22,11 +21,11 @@ import (
 // still serve the (truncated) request.
 func TestStreamAnthropicComboContinuesWhenEntryHitsContextLimit(t *testing.T) {
 	t.Setenv(platform.DataDirEnv, t.TempDir())
-	oldPool := accounts.Pool
+	oldPool := getTestPool()
 	oldConfig := admin.GetProxyConfig()
 	oldTransport := egress.Client.Transport
 	t.Cleanup(func() {
-		accounts.Pool = oldPool
+		setTestPool(oldPool)
 		admin.SetProxyConfig(oldConfig)
 		egress.Client.Transport = oldTransport
 		resetRoutingState()
@@ -39,7 +38,7 @@ func TestStreamAnthropicComboContinuesWhenEntryHitsContextLimit(t *testing.T) {
 		ExpiresAt:   time.Now().Add(time.Hour).UnixMilli(),
 		Status:      "active",
 	}
-	accounts.Pool = &AccountPool{Accounts: []*Account{acc}}
+	setTestPool(&AccountPool{Accounts: []*Account{acc}})
 	cfg := admin.DefaultProxyConfig()
 	cfg.OnlyFree = false
 	admin.SetProxyConfig(cfg)

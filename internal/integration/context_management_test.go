@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
-	"routenest/internal/accounts"
 	"routenest/internal/admin"
 	"routenest/internal/egress"
 	"routenest/internal/zen"
@@ -48,14 +47,14 @@ func cmMockUpstream(t *testing.T, jsonBody, sseBody string) func() {
 
 func cmInstallPool(t *testing.T) {
 	t.Helper()
-	oldPool := accounts.Pool
+	oldPool := getTestPool()
 	oldConfig := admin.GetProxyConfig()
 	t.Cleanup(func() {
-		accounts.Pool = oldPool
+		setTestPool(oldPool)
 		admin.SetProxyConfig(oldConfig)
 	})
 	account := &Account{AccountID: "cm-test", Email: "cm@test.com", AccessToken: "cm-token", ExpiresAt: time.Now().Add(time.Hour).UnixMilli(), Status: "active"}
-	accounts.Pool = &AccountPool{Accounts: []*Account{account}}
+	setTestPool(&AccountPool{Accounts: []*Account{account}})
 	config := admin.DefaultProxyConfig()
 	config.Strategy = "fill"
 	admin.SetProxyConfig(config)

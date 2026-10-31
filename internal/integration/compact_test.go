@@ -3,7 +3,6 @@ package integration
 import (
 	"io"
 	"net/http"
-	"routenest/internal/accounts"
 	"routenest/internal/admin"
 	"routenest/internal/compaction"
 	"routenest/internal/egress"
@@ -21,12 +20,12 @@ func TestMaybeCompactFallsBackToClineSummary(t *testing.T) {
 	t.Setenv(platform.DataDirEnv, t.TempDir())
 	resetZenTestState(t)
 
-	oldPool := accounts.Pool
+	oldPool := getTestPool()
 	oldConfig := admin.GetProxyConfig()
 	oldTransport := egress.Client.Transport
 	oldZenClient := zen.HTTPClient
 	t.Cleanup(func() {
-		accounts.Pool = oldPool
+		setTestPool(oldPool)
 		admin.SetProxyConfig(oldConfig)
 		egress.Client.Transport = oldTransport
 		zen.TransportMu.Lock()
@@ -39,13 +38,13 @@ func TestMaybeCompactFallsBackToClineSummary(t *testing.T) {
 	cfg.OnlyFree = false
 	admin.SetProxyConfig(cfg)
 
-	accounts.Pool = &AccountPool{Accounts: []*Account{{
+	setTestPool(&AccountPool{Accounts: []*Account{{
 		AccountID:   "summary-account",
 		Email:       "summary@example.com",
 		AccessToken: "summary-token",
 		ExpiresAt:   time.Now().Add(time.Hour).UnixMilli(),
 		Status:      "active",
-	}}}
+	}}})
 
 	zenCfg := zen.DefaultConfig()
 	zenCfg.Failover = true

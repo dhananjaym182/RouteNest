@@ -130,11 +130,11 @@ func TestCallClineAPIRefreshRetryReplaysRequestBody(t *testing.T) {
 }
 
 func TestCallClineAPIFreeRetriesNextGLMAccountAfterTokenRefreshFailure(t *testing.T) {
-	oldPool := accounts.Pool
+	oldPool := getTestPool()
 	oldConfig := admin.GetProxyConfig()
 	oldTransport := egress.Client.Transport
 	t.Cleanup(func() {
-		accounts.Pool = oldPool
+		setTestPool(oldPool)
 		admin.SetProxyConfig(oldConfig)
 		egress.Client.Transport = oldTransport
 	})
@@ -153,7 +153,7 @@ func TestCallClineAPIFreeRetriesNextGLMAccountAfterTokenRefreshFailure(t *testin
 		ExpiresAt:   time.Now().Add(time.Hour).UnixMilli(),
 		Status:      "active",
 	}
-	accounts.Pool = &AccountPool{Accounts: []*Account{first, second}}
+	setTestPool(&AccountPool{Accounts: []*Account{first, second}})
 	admin.SetProxyConfig(admin.DefaultProxyConfig())
 
 	var paths []string
@@ -220,11 +220,11 @@ func TestCallClineAPIFreeRetriesNextGLMAccountAfterTokenRefreshFailure(t *testin
 }
 
 func TestCallClineAPIFreeRetriesNextGLMAccountAfterTransportFailure(t *testing.T) {
-	oldPool := accounts.Pool
+	oldPool := getTestPool()
 	oldConfig := admin.GetProxyConfig()
 	oldTransport := egress.Client.Transport
 	t.Cleanup(func() {
-		accounts.Pool = oldPool
+		setTestPool(oldPool)
 		admin.SetProxyConfig(oldConfig)
 		egress.Client.Transport = oldTransport
 	})
@@ -243,7 +243,7 @@ func TestCallClineAPIFreeRetriesNextGLMAccountAfterTransportFailure(t *testing.T
 		ExpiresAt:   time.Now().Add(time.Hour).UnixMilli(),
 		Status:      "active",
 	}
-	accounts.Pool = &AccountPool{Accounts: []*Account{first, second}}
+	setTestPool(&AccountPool{Accounts: []*Account{first, second}})
 	admin.SetProxyConfig(admin.DefaultProxyConfig())
 
 	var attempts []string
@@ -296,11 +296,11 @@ func TestCallClineAPIFreeRetriesNextGLMAccountAfterTransportFailure(t *testing.T
 }
 
 func TestCallClineAPIFreeRetriesNextGLMAccountAfterQuota429(t *testing.T) {
-	oldPool := accounts.Pool
+	oldPool := getTestPool()
 	oldConfig := admin.GetProxyConfig()
 	oldTransport := egress.Client.Transport
 	t.Cleanup(func() {
-		accounts.Pool = oldPool
+		setTestPool(oldPool)
 		admin.SetProxyConfig(oldConfig)
 		egress.Client.Transport = oldTransport
 	})
@@ -319,7 +319,7 @@ func TestCallClineAPIFreeRetriesNextGLMAccountAfterQuota429(t *testing.T) {
 		ExpiresAt:   time.Now().Add(time.Hour).UnixMilli(),
 		Status:      "active",
 	}
-	accounts.Pool = &AccountPool{Accounts: []*Account{first, second}}
+	setTestPool(&AccountPool{Accounts: []*Account{first, second}})
 	admin.SetProxyConfig(admin.DefaultProxyConfig())
 
 	var attempts []string
@@ -383,11 +383,11 @@ func TestCallClineAPIFreeRetriesNextGLMAccountAfterQuota429(t *testing.T) {
 }
 
 func TestCallClineAPIFreeFallsBackToDSAfterAllGLMAccountsUnavailable(t *testing.T) {
-	oldPool := accounts.Pool
+	oldPool := getTestPool()
 	oldConfig := admin.GetProxyConfig()
 	oldTransport := egress.Client.Transport
 	t.Cleanup(func() {
-		accounts.Pool = oldPool
+		setTestPool(oldPool)
 		admin.SetProxyConfig(oldConfig)
 		egress.Client.Transport = oldTransport
 	})
@@ -406,7 +406,7 @@ func TestCallClineAPIFreeFallsBackToDSAfterAllGLMAccountsUnavailable(t *testing.
 		ExpiresAt:   time.Now().Add(time.Hour).UnixMilli(),
 		Status:      "active",
 	}
-	accounts.Pool = &AccountPool{Accounts: []*Account{first, second}}
+	setTestPool(&AccountPool{Accounts: []*Account{first, second}})
 	admin.SetProxyConfig(admin.DefaultProxyConfig())
 
 	var attempts []string
@@ -468,11 +468,11 @@ func TestCallClineAPIFreeFallsBackToDSAfterAllGLMAccountsUnavailable(t *testing.
 }
 
 func TestCallClineAPIFreeRetriesNextDSAccountAfterQuota429(t *testing.T) {
-	oldPool := accounts.Pool
+	oldPool := getTestPool()
 	oldConfig := admin.GetProxyConfig()
 	oldTransport := egress.Client.Transport
 	t.Cleanup(func() {
-		accounts.Pool = oldPool
+		setTestPool(oldPool)
 		admin.SetProxyConfig(oldConfig)
 		egress.Client.Transport = oldTransport
 	})
@@ -497,7 +497,7 @@ func TestCallClineAPIFreeRetriesNextDSAccountAfterQuota429(t *testing.T) {
 			routing.FreeModelPrimary: time.Now().Add(time.Hour),
 		},
 	}
-	accounts.Pool = &AccountPool{Accounts: []*Account{first, second}}
+	setTestPool(&AccountPool{Accounts: []*Account{first, second}})
 	admin.SetProxyConfig(admin.DefaultProxyConfig())
 
 	var attempts []string
@@ -565,11 +565,11 @@ func TestCallClineAPIFreeRetriesNextDSAccountAfterQuota429(t *testing.T) {
 }
 
 func TestCallClineAPIFreeReturnsToGLMAfterCooldownExpires(t *testing.T) {
-	oldPool := accounts.Pool
+	oldPool := getTestPool()
 	oldConfig := admin.GetProxyConfig()
 	oldTransport := egress.Client.Transport
 	t.Cleanup(func() {
-		accounts.Pool = oldPool
+		setTestPool(oldPool)
 		admin.SetProxyConfig(oldConfig)
 		egress.Client.Transport = oldTransport
 	})
@@ -584,7 +584,7 @@ func TestCallClineAPIFreeReturnsToGLMAfterCooldownExpires(t *testing.T) {
 			routing.FreeModelPrimary: time.Now().Add(time.Hour),
 		},
 	}
-	accounts.Pool = &AccountPool{Accounts: []*Account{account}}
+	setTestPool(&AccountPool{Accounts: []*Account{account}})
 	admin.SetProxyConfig(admin.DefaultProxyConfig())
 
 	var models []string
@@ -628,11 +628,11 @@ func TestCallClineAPIFreeReturnsToGLMAfterCooldownExpires(t *testing.T) {
 }
 
 func TestCallClineAPIFreeKeepsModelCooldownsIndependent(t *testing.T) {
-	oldPool := accounts.Pool
+	oldPool := getTestPool()
 	oldConfig := admin.GetProxyConfig()
 	oldTransport := egress.Client.Transport
 	t.Cleanup(func() {
-		accounts.Pool = oldPool
+		setTestPool(oldPool)
 		admin.SetProxyConfig(oldConfig)
 		egress.Client.Transport = oldTransport
 	})
@@ -656,7 +656,7 @@ func TestCallClineAPIFreeKeepsModelCooldownsIndependent(t *testing.T) {
 					test.cooldownModel: time.Now().Add(time.Hour),
 				},
 			}
-			accounts.Pool = &AccountPool{Accounts: []*Account{account}}
+			setTestPool(&AccountPool{Accounts: []*Account{account}})
 			admin.SetProxyConfig(admin.DefaultProxyConfig())
 
 			var upstreamModel string
@@ -697,7 +697,7 @@ func TestCallClineAPIFreeKeepsModelCooldownsIndependent(t *testing.T) {
 }
 
 func TestCallClineAPIFreeDoesNotPickCoolingAccount(t *testing.T) {
-	oldPool := accounts.Pool
+	oldPool := getTestPool()
 	oldConfig := admin.GetProxyConfig()
 	oldTransport := egress.Client.Transport
 	// 本用例只验证 Cline 账号挑选：zen 故障转移如今能真正应答，必须关掉才能
@@ -707,7 +707,7 @@ func TestCallClineAPIFreeDoesNotPickCoolingAccount(t *testing.T) {
 	zen.Config = &zen.ConfigData{BaseURL: zen.APIBase, Key: "public", Enabled: false}
 	zen.ConfigMu.Unlock()
 	t.Cleanup(func() {
-		accounts.Pool = oldPool
+		setTestPool(oldPool)
 		admin.SetProxyConfig(oldConfig)
 		egress.Client.Transport = oldTransport
 		zen.ConfigMu.Lock()
@@ -726,7 +726,7 @@ func TestCallClineAPIFreeDoesNotPickCoolingAccount(t *testing.T) {
 	for _, model := range routing.FreeModelChain {
 		account.ModelCooldowns[model] = time.Now().Add(time.Hour)
 	}
-	accounts.Pool = &AccountPool{Accounts: []*Account{account}}
+	setTestPool(&AccountPool{Accounts: []*Account{account}})
 	admin.SetProxyConfig(admin.DefaultProxyConfig())
 
 	calls := 0
@@ -750,16 +750,16 @@ func TestCallClineAPIFreeDoesNotPickCoolingAccount(t *testing.T) {
 }
 
 func TestPickAccountForModelStrictPreservesStrategy(t *testing.T) {
-	oldPool := accounts.Pool
+	oldPool := getTestPool()
 	oldConfig := admin.GetProxyConfig()
 	t.Cleanup(func() {
-		accounts.Pool = oldPool
+		setTestPool(oldPool)
 		admin.SetProxyConfig(oldConfig)
 	})
 
 	first := &Account{AccountID: "first", Status: "active"}
 	second := &Account{AccountID: "second", Status: "active"}
-	accounts.Pool = &AccountPool{Accounts: []*Account{first, second}}
+	setTestPool(&AccountPool{Accounts: []*Account{first, second}})
 
 	for _, strategy := range []string{"fill", "round_robin", "random"} {
 		t.Run(strategy, func(t *testing.T) {
@@ -787,11 +787,11 @@ func TestPickAccountForModelStrictPreservesStrategy(t *testing.T) {
 
 // 显式模型请求在 429（模型冷却）时应沿 free 链自动降级到下一个可用模型。
 func TestCallClineAPIDirectModelsFallBackOnModelCooldown(t *testing.T) {
-	oldPool := accounts.Pool
+	oldPool := getTestPool()
 	oldConfig := admin.GetProxyConfig()
 	oldTransport := egress.Client.Transport
 	t.Cleanup(func() {
-		accounts.Pool = oldPool
+		setTestPool(oldPool)
 		admin.SetProxyConfig(oldConfig)
 		egress.Client.Transport = oldTransport
 	})
@@ -805,7 +805,7 @@ func TestCallClineAPIDirectModelsFallBackOnModelCooldown(t *testing.T) {
 				ExpiresAt:   time.Now().Add(time.Hour).UnixMilli(),
 				Status:      "active",
 			}
-			accounts.Pool = &AccountPool{Accounts: []*Account{account}}
+			setTestPool(&AccountPool{Accounts: []*Account{account}})
 			admin.SetProxyConfig(admin.DefaultProxyConfig())
 
 			var attempted []string
@@ -864,11 +864,11 @@ func TestCallClineAPIDirectModelsFallBackOnModelCooldown(t *testing.T) {
 
 // 非冷却类上游错误（如 500）会先试完整条回退链，全部失败后才报错。
 func TestCallClineAPIDirectModelsNoFallbackOnServerError(t *testing.T) {
-	oldPool := accounts.Pool
+	oldPool := getTestPool()
 	oldConfig := admin.GetProxyConfig()
 	oldTransport := egress.Client.Transport
 	t.Cleanup(func() {
-		accounts.Pool = oldPool
+		setTestPool(oldPool)
 		admin.SetProxyConfig(oldConfig)
 		egress.Client.Transport = oldTransport
 	})
@@ -881,7 +881,7 @@ func TestCallClineAPIDirectModelsNoFallbackOnServerError(t *testing.T) {
 		ExpiresAt:   time.Now().Add(time.Hour).UnixMilli(),
 		Status:      "active",
 	}
-	accounts.Pool = &AccountPool{Accounts: []*Account{account}}
+	setTestPool(&AccountPool{Accounts: []*Account{account}})
 	admin.SetProxyConfig(admin.DefaultProxyConfig())
 
 	calls := 0
@@ -918,7 +918,7 @@ func TestCallClineAPIDirectModelsNoFallbackOnServerError(t *testing.T) {
 }
 
 func TestHandleResponsesFreeReturnsTooManyRequestsWhenBothPoolsUnavailable(t *testing.T) {
-	oldPool := accounts.Pool
+	oldPool := getTestPool()
 	oldConfig := admin.GetProxyConfig()
 	oldTransport := egress.Client.Transport
 	oldZenCfg := zen.GetConfig()
@@ -927,7 +927,7 @@ func TestHandleResponsesFreeReturnsTooManyRequestsWhenBothPoolsUnavailable(t *te
 	requestlog.Logs = nil
 	requestlog.Mu.Unlock()
 	t.Cleanup(func() {
-		accounts.Pool = oldPool
+		setTestPool(oldPool)
 		admin.SetProxyConfig(oldConfig)
 		egress.Client.Transport = oldTransport
 		zen.ConfigMu.Lock()
@@ -953,7 +953,7 @@ func TestHandleResponsesFreeReturnsTooManyRequestsWhenBothPoolsUnavailable(t *te
 		ExpiresAt:   time.Now().Add(time.Hour).UnixMilli(),
 		Status:      "active",
 	}
-	accounts.Pool = &AccountPool{Accounts: []*Account{account}}
+	setTestPool(&AccountPool{Accounts: []*Account{account}})
 	admin.SetProxyConfig(admin.DefaultProxyConfig())
 
 	calls := 0
@@ -989,8 +989,8 @@ func TestHandleResponsesFreeReturnsTooManyRequestsWhenBothPoolsUnavailable(t *te
 }
 
 func TestPickAccountForModelLeastUsedSpreadsUsage(t *testing.T) {
-	oldPool := accounts.Pool
-	t.Cleanup(func() { accounts.Pool = oldPool })
+	oldPool := getTestPool()
+	t.Cleanup(func() { setTestPool(oldPool) })
 
 	heavy := &Account{
 		AccountID:   "heavy",
@@ -1012,7 +1012,7 @@ func TestPickAccountForModelLeastUsedSpreadsUsage(t *testing.T) {
 			routing.FreeModelPrimary: {ModelID: routing.FreeModelPrimary, UsageCount: 2},
 		},
 	}
-	accounts.Pool = &AccountPool{Accounts: []*Account{heavy, light}}
+	setTestPool(&AccountPool{Accounts: []*Account{heavy, light}})
 
 	for i := 0; i < 5; i++ {
 		acc := accounts.PickAccountForModelLeastUsed(routing.FreeModelPrimary)
@@ -1047,11 +1047,11 @@ func TestIsFreeModelEntry(t *testing.T) {
 }
 
 func TestCallClineAPIFreePicksLeastUsedAccount(t *testing.T) {
-	oldPool := accounts.Pool
+	oldPool := getTestPool()
 	oldConfig := admin.GetProxyConfig()
 	oldTransport := egress.Client.Transport
 	t.Cleanup(func() {
-		accounts.Pool = oldPool
+		setTestPool(oldPool)
 		admin.SetProxyConfig(oldConfig)
 		egress.Client.Transport = oldTransport
 	})
@@ -1073,7 +1073,7 @@ func TestCallClineAPIFreePicksLeastUsedAccount(t *testing.T) {
 		ExpiresAt:   time.Now().Add(time.Hour).UnixMilli(),
 		Status:      "active",
 	}
-	accounts.Pool = &AccountPool{Accounts: []*Account{first, second}}
+	setTestPool(&AccountPool{Accounts: []*Account{first, second}})
 	admin.SetProxyConfig(admin.DefaultProxyConfig())
 
 	var chosen []string
@@ -1101,8 +1101,8 @@ func TestCallClineAPIFreePicksLeastUsedAccount(t *testing.T) {
 }
 
 func TestSortModelsByAvailabilityPrefersAvailableThenLeastUsed(t *testing.T) {
-	oldPool := accounts.Pool
-	t.Cleanup(func() { accounts.Pool = oldPool })
+	oldPool := getTestPool()
+	t.Cleanup(func() { setTestPool(oldPool) })
 
 	acc := &Account{
 		AccountID:      "acc-one",
@@ -1115,7 +1115,7 @@ func TestSortModelsByAvailabilityPrefersAvailableThenLeastUsed(t *testing.T) {
 			routing.FreeModelFallback: {ModelID: routing.FreeModelFallback, UsageCount: 3},
 		},
 	}
-	accounts.Pool = &AccountPool{Accounts: []*Account{acc}}
+	setTestPool(&AccountPool{Accounts: []*Account{acc}})
 
 	chain := []string{routing.FreeModelPrimary, routing.FreeModelFallback}
 	got := accounts.SortModelsByAvailability(chain)

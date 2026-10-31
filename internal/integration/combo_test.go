@@ -9,7 +9,6 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
-	"routenest/internal/accounts"
 	"routenest/internal/admin"
 	"routenest/internal/combos"
 	"routenest/internal/egress"
@@ -33,12 +32,12 @@ func comboTestAccount(id string) *Account {
 
 func installPool(t *testing.T, models []Model, accs ...*Account) {
 	t.Helper()
-	old := accounts.Pool
-	t.Cleanup(func() { accounts.Pool = old })
+	old := getTestPool()
+	t.Cleanup(func() { setTestPool(old) })
 	if len(accs) == 0 {
 		accs = []*Account{comboTestAccount("acc1")}
 	}
-	accounts.Pool = &AccountPool{Accounts: accs, Models: models}
+	setTestPool(&AccountPool{Accounts: accs, Models: models})
 }
 
 func installConfig(t *testing.T, cfg *admin.ProxyConfig) {
