@@ -10,7 +10,9 @@ import (
 	"routenest/internal/combos"
 	"routenest/internal/compaction"
 	"routenest/internal/domain"
+	"routenest/internal/httpx"
 	anthropicconv "routenest/internal/protocol/anthropic"
+	"routenest/internal/protocol/openaichat"
 	"routenest/internal/requestlog"
 	"routenest/internal/routing"
 	"routenest/internal/zen"
@@ -34,13 +36,13 @@ func AnthropicToOpenAI(req AnthropicReq) map[string]any {
 }
 
 func openAIToAnthropic(openAI map[string]any) map[string]any {
-	return anthropicconv.FromOpenAI(openAI, anthropicconv.Options{NewToolUseID: genToolUseID})
+	return anthropicconv.FromOpenAI(openAI, anthropicconv.Options{NewToolUseID: openaichat.GenToolUseID})
 }
 
 func handleAnthropicMessages(w http.ResponseWriter, r *http.Request) {
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{
+		httpx.WriteJSON(w, http.StatusBadRequest, map[string]any{
 			"error": map[string]string{"message": err.Error(), "type": "parse_error"},
 		})
 		return
@@ -48,14 +50,14 @@ func handleAnthropicMessages(w http.ResponseWriter, r *http.Request) {
 
 	var req AnthropicReq
 	if err := json.Unmarshal(body, &req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{
+		httpx.WriteJSON(w, http.StatusBadRequest, map[string]any{
 			"error": map[string]string{"message": err.Error(), "type": "parse_error"},
 		})
 		return
 	}
 
 	if len(req.Messages) == 0 {
-		writeJSON(w, http.StatusBadRequest, map[string]any{
+		httpx.WriteJSON(w, http.StatusBadRequest, map[string]any{
 			"error": map[string]string{"message": "messages is required", "type": "parse_error"},
 		})
 		return
@@ -72,7 +74,7 @@ func handleAnthropicMessages(w http.ResponseWriter, r *http.Request) {
 	// Administrator model policy: alias rewrite + wildcard exclusions.
 	if resolved, reject := routing.ResolveClientModel(req.Model); reject != "" {
 		requestlog.Finalize(&reqLog, TokenUsage{}, time.Time{}, reqLog.StartedAt, false, reject)
-		writeJSON(w, http.StatusBadRequest, map[string]any{
+		httpx.WriteJSON(w, http.StatusBadRequest, map[string]any{
 			"error": map[string]string{"message": reject, "type": "invalid_request_error"},
 		})
 		return
@@ -84,7 +86,7 @@ func handleAnthropicMessages(w http.ResponseWriter, r *http.Request) {
 
 	if msg := routing.FreeOnlyRejection(req.Model); msg != "" {
 		requestlog.Finalize(&reqLog, TokenUsage{}, time.Time{}, reqLog.StartedAt, false, msg)
-		writeJSON(w, http.StatusBadRequest, map[string]any{
+		httpx.WriteJSON(w, http.StatusBadRequest, map[string]any{
 			"error": map[string]string{"message": msg, "type": "invalid_request_error"},
 		})
 		return
@@ -101,7 +103,7 @@ func handleAnthropicMessages(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			msg := err.Error()
 			requestlog.Finalize(&reqLog, TokenUsage{}, time.Time{}, reqLog.StartedAt, false, msg)
-			writeJSON(w, http.StatusBadRequest, map[string]any{"error": map[string]string{"message": msg, "type": "invalid_request_error"}})
+			httpx.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": map[string]string{"message": msg, "type": "invalid_request_error"}})
 			return
 		}
 		cmResult = res
@@ -153,7 +155,7 @@ func handleAnthropicMessages(w http.ResponseWriter, r *http.Request) {
 			requestlog.Finalize(&reqLog, TokenUsage{}, time.Time{}, reqLog.StartedAt, true, "")
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]any{
+		httpx.WriteJSON(w, http.StatusOK, map[string]any{
 			"id":                 "msg_" + fmt.Sprintf("%x", reqLog.StartedAt.UnixMilli()),
 			"type":               "message",
 			"role":               "assistant",
@@ -171,7 +173,7 @@ func handleAnthropicMessages(w http.ResponseWriter, r *http.Request) {
 	if req.Model != "" && routing.IsModelDisabled(req.Model) {
 		msg := fmt.Sprintf("model %q is disabled", req.Model)
 		requestlog.Finalize(&reqLog, TokenUsage{}, time.Time{}, reqLog.StartedAt, false, msg)
-		writeJSON(w, http.StatusBadRequest, map[string]any{
+		httpx.WriteJSON(w, http.StatusBadRequest, map[string]any{
 			"error": map[string]string{"message": msg, "type": "invalid_request_error"},
 		})
 		return
@@ -183,7 +185,7 @@ func handleAnthropicMessages(w http.ResponseWriter, r *http.Request) {
 		if !combo.Enabled {
 			msg := fmt.Sprintf("model combo %q is disabled", req.Model)
 			requestlog.Finalize(&reqLog, TokenUsage{}, time.Time{}, reqLog.StartedAt, false, msg)
-			writeJSON(w, http.StatusBadRequest, map[string]any{
+			httpx.WriteJSON(w, http.StatusBadRequest, map[string]any{
 				"error": map[string]string{"message": msg, "type": "invalid_request_error"},
 			})
 			return
@@ -207,7 +209,7 @@ func handleAnthropicMessages(w http.ResponseWriter, r *http.Request) {
 			log.Printf("  anthropic combo %q error: %v", combo.ID, run.Err)
 			msg := combos.TraceSummary(combo, run)
 			requestlog.Finalize(&reqLog, TokenUsage{}, time.Time{}, reqLog.StartedAt, false, msg)
-			writeJSON(w, clineErrorHTTPStatus(run.Err), map[string]any{
+			httpx.WriteJSON(w, clineErrorHTTPStatus(run.Err), map[string]any{
 				"error": map[string]string{"message": msg, "type": "api_error"},
 			})
 			return
@@ -217,7 +219,7 @@ func handleAnthropicMessages(w http.ResponseWriter, r *http.Request) {
 		var raw map[string]any
 		if err := json.NewDecoder(run.Resp.Body).Decode(&raw); err != nil {
 			requestlog.Finalize(&reqLog, TokenUsage{}, time.Time{}, reqLog.StartedAt, false, "decode response: "+err.Error())
-			writeJSON(w, http.StatusInternalServerError, map[string]any{
+			httpx.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 				"error": map[string]string{"message": err.Error(), "type": "parse_error"},
 			})
 			return
@@ -229,10 +231,10 @@ func handleAnthropicMessages(w http.ResponseWriter, r *http.Request) {
 		restoreToolCallsInResponse(out, reqLog.ToolNames)
 		anthropicResp := openAIToAnthropic(out)
 		compaction.ApplyCMToResponse(anthropicResp, cmResult)
-		if hasToolUseBlocks(anthropicResp["content"]) {
+		if openaichat.HasToolUseBlocks(anthropicResp["content"]) {
 			anthropicResp["stop_reason"] = "tool_use"
 		}
-		writeJSON(w, http.StatusOK, anthropicResp)
+		httpx.WriteJSON(w, http.StatusOK, anthropicResp)
 		return
 	}
 
@@ -241,7 +243,7 @@ func handleAnthropicMessages(w http.ResponseWriter, r *http.Request) {
 	case "reject":
 		msg := fmt.Sprintf("model %q is a paid opencode model; only free models are proxied", req.Model)
 		requestlog.Finalize(&reqLog, TokenUsage{}, time.Time{}, reqLog.StartedAt, false, msg)
-		writeJSON(w, http.StatusBadRequest, map[string]any{
+		httpx.WriteJSON(w, http.StatusBadRequest, map[string]any{
 			"error": map[string]string{"message": msg, "type": "invalid_request_error"},
 		})
 		return
@@ -290,7 +292,7 @@ func handleAnthropicMessages(w http.ResponseWriter, r *http.Request) {
 						var raw map[string]any
 						if err := json.NewDecoder(fbResp.Body).Decode(&raw); err != nil {
 							requestlog.Finalize(&reqLog, TokenUsage{}, time.Time{}, reqLog.StartedAt, false, "decode response: "+err.Error())
-							writeJSON(w, http.StatusInternalServerError, map[string]any{
+							httpx.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 								"error": map[string]string{"message": err.Error(), "type": "parse_error"},
 							})
 							return
@@ -302,10 +304,10 @@ func handleAnthropicMessages(w http.ResponseWriter, r *http.Request) {
 						restoreToolCallsInResponse(out2, reqLog.ToolNames)
 						anthropicResp := openAIToAnthropic(out2)
 						compaction.ApplyCMToResponse(anthropicResp, cmResult)
-						if hasToolUseBlocks(anthropicResp["content"]) {
+						if openaichat.HasToolUseBlocks(anthropicResp["content"]) {
 							anthropicResp["stop_reason"] = "tool_use"
 						}
-						writeJSON(w, http.StatusOK, anthropicResp)
+						httpx.WriteJSON(w, http.StatusOK, anthropicResp)
 					}
 					return
 				}
@@ -315,7 +317,7 @@ func handleAnthropicMessages(w http.ResponseWriter, r *http.Request) {
 			}
 			log.Printf("  anthropic api error: %v", err)
 			requestlog.Finalize(&reqLog, TokenUsage{}, time.Time{}, reqLog.StartedAt, false, err.Error())
-			writeJSON(w, http.StatusBadGateway, map[string]any{
+			httpx.WriteJSON(w, http.StatusBadGateway, map[string]any{
 				"error": map[string]string{"message": err.Error(), "type": "api_error"},
 			})
 			return
@@ -334,7 +336,7 @@ func handleAnthropicMessages(w http.ResponseWriter, r *http.Request) {
 			var raw map[string]any
 			if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {
 				requestlog.Finalize(&reqLog, TokenUsage{}, time.Time{}, reqLog.StartedAt, false, "decode response: "+err.Error())
-				writeJSON(w, http.StatusInternalServerError, map[string]any{
+				httpx.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 					"error": map[string]string{"message": err.Error(), "type": "parse_error"},
 				})
 				return
@@ -344,10 +346,10 @@ func handleAnthropicMessages(w http.ResponseWriter, r *http.Request) {
 			requestlog.Finalize(&reqLog, usage, time.Time{}, reqLog.StartedAt, true, "")
 			anthropicResp := openAIToAnthropic(out2)
 			compaction.ApplyCMToResponse(anthropicResp, cmResult)
-			if hasToolUseBlocks(anthropicResp["content"]) {
+			if openaichat.HasToolUseBlocks(anthropicResp["content"]) {
 				anthropicResp["stop_reason"] = "tool_use"
 			}
-			writeJSON(w, http.StatusOK, anthropicResp)
+			httpx.WriteJSON(w, http.StatusOK, anthropicResp)
 		}
 		return
 	}
@@ -361,7 +363,7 @@ func handleAnthropicMessages(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if activeCount == 0 && len(p.Accounts) == 0 {
-		writeJSON(w, http.StatusUnauthorized, map[string]any{
+		httpx.WriteJSON(w, http.StatusUnauthorized, map[string]any{
 			"error": map[string]string{
 				"message": "No accounts in pool",
 				"type":    "auth_error",
@@ -417,7 +419,7 @@ func handleAnthropicMessages(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Printf("  anthropic api error: %v", err)
 		requestlog.Finalize(&reqLog, TokenUsage{}, time.Time{}, reqLog.StartedAt, false, err.Error())
-		writeJSON(w, clineErrorHTTPStatus(err), map[string]any{
+		httpx.WriteJSON(w, clineErrorHTTPStatus(err), map[string]any{
 			"error": map[string]string{"message": err.Error(), "type": "api_error"},
 		})
 		return
@@ -433,7 +435,7 @@ func handleAnthropicMessages(w http.ResponseWriter, r *http.Request) {
 		var raw map[string]any
 		if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {
 			requestlog.Finalize(&reqLog, TokenUsage{}, time.Time{}, reqLog.StartedAt, false, "decode response: "+err.Error())
-			writeJSON(w, http.StatusInternalServerError, map[string]any{
+			httpx.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 				"error": map[string]string{"message": err.Error(), "type": "parse_error"},
 			})
 			return
@@ -452,10 +454,10 @@ func handleAnthropicMessages(w http.ResponseWriter, r *http.Request) {
 		anthropicResp := openAIToAnthropic(out)
 
 		compaction.ApplyCMToResponse(anthropicResp, cmResult)
-		if hasToolUseBlocks(anthropicResp["content"]) {
+		if openaichat.HasToolUseBlocks(anthropicResp["content"]) {
 			anthropicResp["stop_reason"] = "tool_use"
 		}
 
-		writeJSON(w, http.StatusOK, anthropicResp)
+		httpx.WriteJSON(w, http.StatusOK, anthropicResp)
 	}
 }

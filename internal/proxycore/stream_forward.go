@@ -77,7 +77,7 @@ func newHeartbeat() (<-chan time.Time, func()) {
 // blocks on the upstream call, so byte-level read timeouts in intermediaries
 // do not fire on long generations; JSON parsers ignore the leading whitespace.
 // The first real (non-keepalive) write commits the response and permanently
-// stops the keepalive. Cooperative writers (writeJSON, httpx.WriteAPI,
+// stops the keepalive. Cooperative writers (httpx.WriteJSON, httpx.WriteAPI,
 // copyPassthroughHeaders) hold the mutex across their whole header+status+
 // body sequence via WithLock, so the keepalive tick can never interleave
 // with a header-map mutation. Note the documented tradeoff: a space written

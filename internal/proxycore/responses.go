@@ -10,6 +10,8 @@ import (
 	"routenest/internal/combos"
 	"routenest/internal/compaction"
 	"routenest/internal/domain"
+	"routenest/internal/httpx"
+	"routenest/internal/protocol"
 	"routenest/internal/routing"
 	"routenest/internal/zen"
 	"strings"
@@ -179,9 +181,9 @@ func chatStreamToResponses(ctx context.Context, w http.ResponseWriter, upstream 
 			if chatChunkFinishReason(obj) != "" {
 				sawTerminal = true
 			}
-			delta := getNested(obj, "choices", 0, "delta")
+			delta := protocol.GetNested(obj, "choices", 0, "delta")
 			if delta == nil {
-				delta = getNested(obj, "choices", 0)
+				delta = protocol.GetNested(obj, "choices", 0)
 			}
 			if d, ok := delta.(map[string]any); ok {
 				if chatChunkHasOutput(obj) {
@@ -213,17 +215,17 @@ func usageToResponses(u TokenUsage) map[string]any {
 
 func HandleResponses(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "POST" {
-		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+		httpx.WriteJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
 		return
 	}
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		httpx.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
 	var params map[string]any
 	if err := json.Unmarshal(body, &params); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		httpx.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
 	model, _ := params["model"].(string)
@@ -232,7 +234,7 @@ func HandleResponses(w http.ResponseWriter, r *http.Request) {
 
 	// Administrator model policy: alias rewrite + wildcard exclusions.
 	if resolved, reject := routing.ResolveClientModel(model); reject != "" {
-		writeJSON(w, http.StatusBadRequest, map[string]any{
+		httpx.WriteJSON(w, http.StatusBadRequest, map[string]any{
 			"error": map[string]string{"message": reject, "type": "invalid_request_error"},
 		})
 		return
@@ -243,7 +245,7 @@ func HandleResponses(w http.ResponseWriter, r *http.Request) {
 
 	// 管理员手动停用的模型在入口直接拒绝（不进列表，也不可点名调用）
 	if model != "" && routing.IsModelDisabled(model) {
-		writeJSON(w, http.StatusBadRequest, map[string]string{
+		httpx.WriteJSON(w, http.StatusBadRequest, map[string]string{
 			"error": "model " + model + " is disabled",
 		})
 		return
@@ -253,7 +255,7 @@ func HandleResponses(w http.ResponseWriter, r *http.Request) {
 
 	if msg := routing.FreeOnlyRejection(model); msg != "" {
 		requestlog.Finalize(&reqLog, TokenUsage{}, time.Time{}, reqLog.StartedAt, false, msg)
-		writeJSON(w, http.StatusBadRequest, map[string]any{
+		httpx.WriteJSON(w, http.StatusBadRequest, map[string]any{
 			"error": map[string]string{"message": msg, "type": "invalid_request_error"},
 		})
 		return
@@ -270,7 +272,7 @@ func HandleResponses(w http.ResponseWriter, r *http.Request) {
 	chat := responsesToChat(params)
 	// 清洗畸形 tool_calls（空 function.name / 孤儿 tool 结果），避免上游 400
 	if msgs, ok := chat["messages"].([]any); ok {
-		chat["messages"] = sanitizeMessages(msgs)
+		chat["messages"] = openaichat.SanitizeMessages(msgs)
 	}
 	chatModel, _ := chat["model"].(string)
 
@@ -281,7 +283,7 @@ func HandleResponses(w http.ResponseWriter, r *http.Request) {
 		if !combo.Enabled {
 			msg := fmt.Sprintf("model combo %q is disabled", chatModel)
 			requestlog.Finalize(&reqLog, TokenUsage{}, time.Time{}, reqLog.StartedAt, false, msg)
-			writeJSON(w, http.StatusBadRequest, map[string]any{
+			httpx.WriteJSON(w, http.StatusBadRequest, map[string]any{
 				"error": map[string]string{"message": msg, "type": "invalid_request_error"},
 			})
 			return
@@ -298,7 +300,7 @@ func HandleResponses(w http.ResponseWriter, r *http.Request) {
 			log.Printf("  responses combo %q error: %v", combo.ID, run.Err)
 			msg := combos.TraceSummary(combo, run)
 			requestlog.Finalize(&reqLog, TokenUsage{}, time.Time{}, reqLog.StartedAt, false, msg)
-			writeJSON(w, clineErrorHTTPStatus(run.Err), map[string]any{
+			httpx.WriteJSON(w, clineErrorHTTPStatus(run.Err), map[string]any{
 				"error": map[string]string{"message": msg, "type": "api_error"},
 			})
 			return
@@ -312,7 +314,7 @@ func HandleResponses(w http.ResponseWriter, r *http.Request) {
 		var raw map[string]any
 		if err := json.NewDecoder(run.Resp.Body).Decode(&raw); err != nil {
 			requestlog.Finalize(&reqLog, TokenUsage{}, time.Time{}, reqLog.StartedAt, false, "decode response: "+err.Error())
-			writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
+			httpx.WriteJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
 			return
 		}
 		out2 := NormalizeOpenAIResponse(unwrapDataEnvelope(raw))
@@ -320,7 +322,7 @@ func HandleResponses(w http.ResponseWriter, r *http.Request) {
 		usage := ParseTokenUsage(out2["usage"])
 		RecordUsage(run.Acc, run.Resp, &reqLog, reqLog.Model, usage)
 		requestlog.Finalize(&reqLog, usage, time.Time{}, reqLog.StartedAt, true, "")
-		writeJSON(w, http.StatusOK, chatToResponses(out2))
+		httpx.WriteJSON(w, http.StatusOK, chatToResponses(out2))
 		return
 	}
 
@@ -329,7 +331,7 @@ func HandleResponses(w http.ResponseWriter, r *http.Request) {
 	switch route {
 	case "reject":
 		requestlog.Finalize(&reqLog, TokenUsage{}, time.Time{}, reqLog.StartedAt, false, "paid zen model rejected")
-		writeJSON(w, http.StatusBadRequest, map[string]any{
+		httpx.WriteJSON(w, http.StatusBadRequest, map[string]any{
 			"error": map[string]string{
 				"message": fmt.Sprintf("model %q is a paid opencode model; only free models are proxied", chatModel),
 				"type":    "invalid_request_error",
@@ -376,7 +378,7 @@ func HandleResponses(w http.ResponseWriter, r *http.Request) {
 					var raw map[string]any
 					if err := json.NewDecoder(fbResp.Body).Decode(&raw); err != nil {
 						requestlog.Finalize(&reqLog, TokenUsage{}, time.Time{}, reqLog.StartedAt, false, "decode response: "+err.Error())
-						writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
+						httpx.WriteJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
 						return
 					}
 					out2 := NormalizeOpenAIResponse(unwrapDataEnvelope(raw))
@@ -384,7 +386,7 @@ func HandleResponses(w http.ResponseWriter, r *http.Request) {
 					usage := ParseTokenUsage(out2["usage"])
 					RecordUsage(fbAcc, fbResp, &reqLog, reqLog.Model, usage)
 					requestlog.Finalize(&reqLog, usage, time.Time{}, reqLog.StartedAt, true, "")
-					writeJSON(w, http.StatusOK, chatToResponses(out2))
+					httpx.WriteJSON(w, http.StatusOK, chatToResponses(out2))
 					return
 				}
 				// 兜底也失败：zen 的真实失败原因不能被吞 —— 最终错误带上两段，
@@ -393,7 +395,7 @@ func HandleResponses(w http.ResponseWriter, r *http.Request) {
 			}
 			log.Printf("  responses api error: %v", err)
 			requestlog.Finalize(&reqLog, TokenUsage{}, time.Time{}, reqLog.StartedAt, false, err.Error())
-			writeJSON(w, http.StatusBadGateway, map[string]any{
+			httpx.WriteJSON(w, http.StatusBadGateway, map[string]any{
 				"error": map[string]string{"message": err.Error(), "type": "api_error"},
 			})
 			return
@@ -420,13 +422,13 @@ func HandleResponses(w http.ResponseWriter, r *http.Request) {
 		var raw map[string]any
 		if err := json.NewDecoder(upResp.Body).Decode(&raw); err != nil {
 			requestlog.Finalize(&reqLog, TokenUsage{}, time.Time{}, reqLog.StartedAt, false, "decode response: "+err.Error())
-			writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
+			httpx.WriteJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
 			return
 		}
 		out2 := NormalizeOpenAIResponse(unwrapDataEnvelope(raw))
 		usage := ParseTokenUsage(out2["usage"])
 		requestlog.Finalize(&reqLog, usage, time.Time{}, reqLog.StartedAt, true, "")
-		writeJSON(w, http.StatusOK, chatToResponses(out2))
+		httpx.WriteJSON(w, http.StatusOK, chatToResponses(out2))
 
 	default: // cline
 		// Cline 通道：截短超长工具名并记录映射，回程由响应处理器还原（Meta 后端硬限 ≤64）
@@ -452,7 +454,7 @@ func HandleResponses(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			log.Printf("  responses api error: %v", err)
 			requestlog.Finalize(&reqLog, TokenUsage{}, time.Time{}, reqLog.StartedAt, false, err.Error())
-			writeJSON(w, clineErrorHTTPStatus(err), map[string]any{
+			httpx.WriteJSON(w, clineErrorHTTPStatus(err), map[string]any{
 				"error": map[string]string{"message": err.Error(), "type": "api_error"},
 			})
 			return
@@ -480,7 +482,7 @@ func HandleResponses(w http.ResponseWriter, r *http.Request) {
 		var raw map[string]any
 		if err := json.NewDecoder(upResp.Body).Decode(&raw); err != nil {
 			requestlog.Finalize(&reqLog, TokenUsage{}, time.Time{}, reqLog.StartedAt, false, "decode response: "+err.Error())
-			writeJSON(w, http.StatusInternalServerError, map[string]any{
+			httpx.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 				"error": map[string]string{"message": err.Error(), "type": "parse_error"},
 			})
 			return
@@ -490,7 +492,7 @@ func HandleResponses(w http.ResponseWriter, r *http.Request) {
 		usage := ParseTokenUsage(out2["usage"])
 		RecordUsage(acc, upResp, &reqLog, reqLog.Model, usage)
 		requestlog.Finalize(&reqLog, usage, time.Time{}, reqLog.StartedAt, true, "")
-		writeJSON(w, http.StatusOK, chatToResponses(out2))
+		httpx.WriteJSON(w, http.StatusOK, chatToResponses(out2))
 	}
 }
 

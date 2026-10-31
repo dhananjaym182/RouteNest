@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"routenest/internal/domain"
+	"routenest/internal/protocol"
 )
 
 // chatChunkHasOutput reports whether a chat.completion chunk carries generated
@@ -13,12 +14,12 @@ func chatChunkHasOutput(obj map[string]any) bool {
 	if hasFirstOutput(obj) {
 		return true
 	}
-	if delta, ok := getNested(obj, "choices", 0, "delta").(map[string]any); ok {
+	if delta, ok := protocol.GetNested(obj, "choices", 0, "delta").(map[string]any); ok {
 		if r, _ := delta["reasoning_content"].(string); r != "" {
 			return true
 		}
 	}
-	if msg, ok := getNested(obj, "choices", 0, "message").(map[string]any); ok {
+	if msg, ok := protocol.GetNested(obj, "choices", 0, "message").(map[string]any); ok {
 		if r, _ := msg["reasoning_content"].(string); r != "" {
 			return true
 		}
@@ -28,7 +29,7 @@ func chatChunkHasOutput(obj map[string]any) bool {
 
 // chatChunkFinishReason returns the first non-empty finish_reason in a chunk.
 func chatChunkFinishReason(obj map[string]any) string {
-	choices, _ := getNested(obj, "choices").([]any)
+	choices, _ := protocol.GetNested(obj, "choices").([]any)
 	for _, c := range choices {
 		cm, _ := c.(map[string]any)
 		if cm == nil {

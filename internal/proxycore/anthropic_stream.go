@@ -13,8 +13,11 @@ import (
 	"routenest/internal/compaction"
 	"routenest/internal/dispatch"
 	"routenest/internal/domain"
+	"routenest/internal/httpx"
 	"routenest/internal/platform"
+	"routenest/internal/protocol"
 	anthropicconv "routenest/internal/protocol/anthropic"
+	"routenest/internal/protocol/openaichat"
 	"routenest/internal/providers"
 	"routenest/internal/requestlog"
 	"routenest/internal/routing"
@@ -62,7 +65,7 @@ func finishAnthropicStreamFailure(sw *sseWriter, w http.ResponseWriter, reqLog *
 		emitAnthropicErrorEvent(sw, msg)
 		return
 	}
-	writeJSON(w, status, map[string]any{
+	httpx.WriteJSON(w, status, map[string]any{
 		"error": map[string]string{"message": msg, "type": "api_error"},
 	})
 }
@@ -344,7 +347,7 @@ func HandleAnthropicStream(ctx context.Context, sw *sseWriter, upstream *http.Re
 		startIndex = 0
 	}
 	st := anthropicconv.NewStreamState(startIndex)
-	st.ToolID = genToolUseID
+	st.ToolID = openaichat.GenToolUseID
 	committed := false
 
 	// 信封提前发送：响应头 + message_start + 首个 ping 事件。
@@ -512,7 +515,7 @@ L:
 				commit() // 首条有效数据行到达，提交响应头 + message_start
 			}
 
-			choices, _ := getNested(obj, "choices").([]any)
+			choices, _ := protocol.GetNested(obj, "choices").([]any)
 			if len(choices) == 0 {
 				continue
 			}

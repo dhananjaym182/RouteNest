@@ -1,7 +1,6 @@
 package proxycore
 
 import (
-	"encoding/json"
 	"fmt"
 	"net"
 	"net/http"
@@ -14,9 +13,6 @@ import (
 
 	"routenest/internal/config"
 	"routenest/internal/domain"
-	"routenest/internal/httpx"
-	"routenest/internal/protocol"
-	anthropicconv "routenest/internal/protocol/anthropic"
 	"routenest/internal/protocol/openaichat"
 	"routenest/internal/providers"
 )
@@ -129,18 +125,6 @@ func envRoutingDurationFromMS(name string, def time.Duration) time.Duration {
 
 // 仅离线 / 从未同步成功时才允许内置硬编码 fallback。
 
-func CorsHandler(h http.HandlerFunc) http.HandlerFunc {
-	return httpx.CORS(h)
-}
-
-func writeJSON(w http.ResponseWriter, status int, data any) {
-	httpx.WriteJSON(w, status, data)
-}
-
-func cleanMessages(messages []any) []any {
-	return openaichat.CleanMessages(messages)
-}
-
 // shortenToolName truncates names above the upstream limit deterministically.
 func shortenToolName(orig string) string {
 	return openaichat.ShortenToolName(orig)
@@ -156,25 +140,6 @@ func clampParamsToolNames(params map[string]any) map[string]string {
 // non-stream response shapes.
 func restoreToolCallsInResponse(obj map[string]any, shortToOrig map[string]string) {
 	openaichat.RestoreToolCalls(obj, shortToOrig)
-}
-
-// sanitizeMessages repairs malformed tool_calls in outbound history.
-func sanitizeMessages(messages []any) []any {
-	return openaichat.SanitizeMessages(messages)
-}
-
-// genToolUseID returns a fallback tool_use block id.
-func genToolUseID() string {
-	return openaichat.GenToolUseID()
-}
-
-// hasToolUseBlocks reports whether content contains an Anthropic tool_use block.
-func hasToolUseBlocks(content any) bool {
-	return openaichat.HasToolUseBlocks(content)
-}
-
-func numericInt(value any) (int, bool) {
-	return openaichat.NumericInt(value)
 }
 
 // ModelMaxOutputLimit 返回模型已知的最大输出 token 硬上限（0=未知，不封顶）。
@@ -469,10 +434,6 @@ func hasFirstOutput(obj map[string]any) bool {
 
 // Anthropic Messages API support
 
-func extractStringContent(raw json.RawMessage) string {
-	return anthropicconv.ExtractStringContent(raw)
-}
-
 // routing.ZenFailoverToCline zen 调用失败后的透明降级：改走 cline 账号池 free 模型链。
 // attempted=false 表示未启用故障转移，调用方维持原错误路径。
 // 注意：失败计数由 zen.Call 内部标记（每请求恰好一次），此处不再重复计数，
@@ -499,16 +460,6 @@ const streamFailoverCooldown = 2 * time.Minute
 
 func NormalizeOpenAIResponse(obj map[string]any) map[string]any {
 	return openaichat.NormalizeResponse(obj)
-}
-
-func sanitizeContent(s string) string { return protocol.SanitizeContent(s) }
-
-func normalizeMessage(msg map[string]any) map[string]any {
-	return openaichat.NormalizeMessage(msg)
-}
-
-func getNested(obj map[string]any, keys ...any) any {
-	return protocol.GetNested(obj, keys...)
 }
 
 func freePort(port int) {

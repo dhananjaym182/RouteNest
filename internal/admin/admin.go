@@ -15,7 +15,6 @@ import (
 	"routenest/internal/egress"
 	"routenest/internal/httpx"
 	"routenest/internal/i18n"
-	"routenest/internal/proxycore"
 	"routenest/internal/requestlog"
 )
 
@@ -117,7 +116,7 @@ func RegisterRoutes(mux *http.ServeMux) {
 	registerPublicRoutes(mux)
 	// Every other API route requires admin auth once a password is set.
 	auth := func(h http.HandlerFunc) http.HandlerFunc {
-		return requireAdminAuth(proxycore.CorsHandler(h))
+		return requireAdminAuth(httpx.CORS(h))
 	}
 	registerSessionRoutes(mux, auth)
 	registerAccountsRoutes(mux, auth)
@@ -137,8 +136,8 @@ type authWrap func(http.HandlerFunc) http.HandlerFunc
 
 // registerPublicRoutes registers the routes that need no admin login.
 func registerPublicRoutes(mux *http.ServeMux) {
-	mux.HandleFunc("/admin/api/login", proxycore.CorsHandler(handleAdminLogin))
-	mux.HandleFunc("/admin/api/logout", proxycore.CorsHandler(handleAdminLogout))
+	mux.HandleFunc("/admin/api/login", httpx.CORS(handleAdminLogin))
+	mux.HandleFunc("/admin/api/logout", httpx.CORS(handleAdminLogout))
 }
 
 // registerSessionRoutes registers the admin session and password management.

@@ -5,6 +5,8 @@ import (
 	"log"
 	"net/http"
 	"routenest/internal/domain"
+	"routenest/internal/httpx"
+	"routenest/internal/protocol"
 	"routenest/internal/requestlog"
 	"time"
 )
@@ -14,7 +16,7 @@ func handleNonStreamResponse(w http.ResponseWriter, upstream *http.Response, acc
 	var raw map[string]any
 	if err := json.NewDecoder(upstream.Body).Decode(&raw); err != nil {
 		requestlog.Finalize(reqLog, TokenUsage{}, time.Time{}, reqLog.StartedAt, false, "decode response: "+err.Error())
-		writeJSON(w, http.StatusInternalServerError, map[string]any{
+		httpx.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error": map[string]string{"message": err.Error(), "type": "parse_error"},
 		})
 		return
@@ -34,13 +36,13 @@ func handleNonStreamResponse(w http.ResponseWriter, upstream *http.Response, acc
 	RecordUsage(acc, upstream, reqLog, reqLog.Model, usage)
 	requestlog.Finalize(reqLog, usage, time.Time{}, reqLog.StartedAt, true, "")
 
-	if msg, ok := getNested(out, "choices", 0, "message").(map[string]any); ok {
+	if msg, ok := protocol.GetNested(out, "choices", 0, "message").(map[string]any); ok {
 		tc, _ := msg["tool_calls"].([]any)
 		content, _ := msg["content"].(string)
 		log.Printf("  nonstream finish=%v tool_calls=%d content_len=%d",
-			getNested(out, "choices", 0, "finish_reason"),
+			protocol.GetNested(out, "choices", 0, "finish_reason"),
 			len(tc), len(content))
 	}
 
-	writeJSON(w, http.StatusOK, out)
+	httpx.WriteJSON(w, http.StatusOK, out)
 }

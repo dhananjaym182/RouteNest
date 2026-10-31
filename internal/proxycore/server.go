@@ -11,6 +11,7 @@ import (
 	"routenest/internal/buildinfo"
 	"routenest/internal/compaction"
 	"routenest/internal/httpapi"
+	"routenest/internal/httpx"
 	"routenest/internal/platform"
 	"routenest/internal/providers"
 	"routenest/internal/requestlog"
@@ -175,8 +176,8 @@ func Start(host string, port int, registerAdmin func(*http.ServeMux)) error {
 		Version:        func() string { return buildinfo.AppVersion },
 		ActiveAccounts: func() int { return activeCount },
 	}
-	mux.HandleFunc("/v1/health", CorsHandler(health.Handler))
-	mux.HandleFunc("/health", CorsHandler(health.Handler))
+	mux.HandleFunc("/v1/health", httpx.CORS(health.Handler))
+	mux.HandleFunc("/health", httpx.CORS(health.Handler))
 
 	// Admin API (frontend + REST)
 	if registerAdmin != nil {
@@ -186,7 +187,7 @@ func Start(host string, port int, registerAdmin func(*http.ServeMux)) error {
 	apiKeyHandler := (&httpapi.APIKeyAuth{
 		Keys: func() []string { return accounts.LoadPool().Keys },
 		Unauthorized: func(w http.ResponseWriter, r *http.Request) {
-			writeJSON(w, http.StatusUnauthorized, map[string]any{
+			httpx.WriteJSON(w, http.StatusUnauthorized, map[string]any{
 				"error": map[string]string{
 					"message": "invalid API key. Generate one at /admin/ or set x-api-key header",
 					"type":    "auth_error",
@@ -197,7 +198,7 @@ func Start(host string, port int, registerAdmin func(*http.ServeMux)) error {
 
 	modelsHandler := apiKeyHandler(func(w http.ResponseWriter, r *http.Request) {
 		list := routing.BuildModelsList(ConfigProvider().OnlyFree)
-		writeJSON(w, http.StatusOK, map[string]any{"object": "list", "data": list})
+		httpx.WriteJSON(w, http.StatusOK, map[string]any{"object": "list", "data": list})
 	})
 	mux.HandleFunc("/v1/models", modelsHandler)
 	mux.HandleFunc("/models", modelsHandler)
@@ -209,7 +210,7 @@ func Start(host string, port int, registerAdmin func(*http.ServeMux)) error {
 	// Anthropic Messages API support
 	anthropicHandler := apiKeyHandler(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "POST" {
-			writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+			httpx.WriteJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
 			return
 		}
 		handleAnthropicMessages(w, r)
@@ -220,7 +221,7 @@ func Start(host string, port int, registerAdmin func(*http.ServeMux)) error {
 	// Anthropic Messages API token counting (polyfilled)
 	countTokensHandler := apiKeyHandler(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "POST" {
-			writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+			httpx.WriteJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
 			return
 		}
 		compaction.HandleCountTokens(w, r)
@@ -231,7 +232,7 @@ func Start(host string, port int, registerAdmin func(*http.ServeMux)) error {
 	// OpenAI Responses API support（所有上游：zen 免费模型 + Cline 账号池）
 	responsesHandler := apiKeyHandler(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "POST" {
-			writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+			httpx.WriteJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
 			return
 		}
 		HandleResponses(w, r)

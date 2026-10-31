@@ -11,6 +11,7 @@ import (
 	"routenest/internal/compaction"
 	"routenest/internal/config"
 	"routenest/internal/domain"
+	"routenest/internal/httpx"
 	"routenest/internal/requestlog"
 	"routenest/internal/routing"
 	"routenest/internal/zen"
@@ -23,13 +24,13 @@ import (
 func newChatCompletionsHandler(activeAccounts int) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "POST" {
-			writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+			httpx.WriteJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
 			return
 		}
 
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
-			writeJSON(w, http.StatusBadRequest, map[string]any{
+			httpx.WriteJSON(w, http.StatusBadRequest, map[string]any{
 				"error": map[string]string{"message": err.Error(), "type": "parse_error"},
 			})
 			return
@@ -37,7 +38,7 @@ func newChatCompletionsHandler(activeAccounts int) http.HandlerFunc {
 
 		var params map[string]any
 		if err := json.Unmarshal(body, &params); err != nil {
-			writeJSON(w, http.StatusBadRequest, map[string]any{
+			httpx.WriteJSON(w, http.StatusBadRequest, map[string]any{
 				"error": map[string]string{"message": err.Error(), "type": "parse_error"},
 			})
 			return
@@ -56,7 +57,7 @@ func newChatCompletionsHandler(activeAccounts int) http.HandlerFunc {
 		// Administrator model policy: alias rewrite + wildcard exclusions,
 		// enforced before routing and before the disabled check.
 		if resolved, reject := routing.ResolveClientModel(model); reject != "" {
-			writeJSON(w, http.StatusBadRequest, map[string]any{
+			httpx.WriteJSON(w, http.StatusBadRequest, map[string]any{
 				"error": map[string]string{"message": reject, "type": "invalid_request_error"},
 			})
 			return
@@ -69,7 +70,7 @@ func newChatCompletionsHandler(activeAccounts int) http.HandlerFunc {
 		// 管理员手动停用的模型在入口直接拒绝（不进列表，也不可点名调用）
 		if model != "" && routing.IsModelDisabled(model) {
 			msg := "model " + model + " is disabled"
-			writeJSON(w, http.StatusBadRequest, map[string]any{
+			httpx.WriteJSON(w, http.StatusBadRequest, map[string]any{
 				"error": map[string]string{"message": msg, "type": "invalid_request_error"},
 			})
 			return
@@ -81,7 +82,7 @@ func newChatCompletionsHandler(activeAccounts int) http.HandlerFunc {
 		// free (or free_tier with an active allowance).
 		if msg := routing.FreeOnlyRejection(model); msg != "" {
 			requestlog.Finalize(&reqLog, TokenUsage{}, time.Time{}, reqLog.StartedAt, false, msg)
-			writeJSON(w, http.StatusBadRequest, map[string]any{
+			httpx.WriteJSON(w, http.StatusBadRequest, map[string]any{
 				"error": map[string]string{"message": msg, "type": "invalid_request_error"},
 			})
 			return
@@ -125,7 +126,7 @@ func newChatCompletionsHandler(activeAccounts int) http.HandlerFunc {
 			if !combo.Enabled {
 				msg := fmt.Sprintf("model combo %q is disabled", model)
 				requestlog.Finalize(&reqLog, TokenUsage{}, time.Time{}, reqLog.StartedAt, false, msg)
-				writeJSON(w, http.StatusBadRequest, map[string]any{
+				httpx.WriteJSON(w, http.StatusBadRequest, map[string]any{
 					"error": map[string]string{"message": msg, "type": "invalid_request_error"},
 				})
 				return
@@ -142,7 +143,7 @@ func newChatCompletionsHandler(activeAccounts int) http.HandlerFunc {
 				log.Printf("  combo %q error: %v", combo.ID, run.Err)
 				msg := combos.TraceSummary(combo, run)
 				requestlog.Finalize(&reqLog, TokenUsage{}, time.Time{}, reqLog.StartedAt, false, msg)
-				writeJSON(w, clineErrorHTTPStatus(run.Err), map[string]any{
+				httpx.WriteJSON(w, clineErrorHTTPStatus(run.Err), map[string]any{
 					"error": map[string]string{"message": msg, "type": "api_error"},
 				})
 				return
@@ -164,7 +165,7 @@ func newChatCompletionsHandler(activeAccounts int) http.HandlerFunc {
 		case "reject":
 			msg := fmt.Sprintf("model %q is a paid opencode model; only free models are proxied", model)
 			requestlog.Finalize(&reqLog, TokenUsage{}, time.Time{}, reqLog.StartedAt, false, msg)
-			writeJSON(w, http.StatusBadRequest, map[string]any{
+			httpx.WriteJSON(w, http.StatusBadRequest, map[string]any{
 				"error": map[string]string{"message": msg, "type": "invalid_request_error"},
 			})
 			return
@@ -219,7 +220,7 @@ func newChatCompletionsHandler(activeAccounts int) http.HandlerFunc {
 				}
 				log.Printf("  api error: %v", err)
 				requestlog.Finalize(&reqLog, TokenUsage{}, time.Time{}, reqLog.StartedAt, false, err.Error())
-				writeJSON(w, http.StatusBadGateway, map[string]any{
+				httpx.WriteJSON(w, http.StatusBadGateway, map[string]any{
 					"error": map[string]string{"message": err.Error(), "type": "api_error"},
 				})
 				return
@@ -247,7 +248,7 @@ func newChatCompletionsHandler(activeAccounts int) http.HandlerFunc {
 
 		// cline 池路径才要求账号；zen 免费模型不依赖本地账号池
 		if activeAccounts == 0 && len(accounts.LoadPool().Accounts) == 0 {
-			writeJSON(w, http.StatusUnauthorized, map[string]any{
+			httpx.WriteJSON(w, http.StatusUnauthorized, map[string]any{
 				"error": map[string]string{
 					"message": "No accounts in accounts.Pool. Run with --add-account or POST /admin/login to add accounts.",
 					"type":    "auth_error",
@@ -280,7 +281,7 @@ func newChatCompletionsHandler(activeAccounts int) http.HandlerFunc {
 		if err != nil {
 			log.Printf("  api error: %v", err)
 			requestlog.Finalize(&reqLog, TokenUsage{}, time.Time{}, reqLog.StartedAt, false, err.Error())
-			writeJSON(w, clineErrorHTTPStatus(err), map[string]any{
+			httpx.WriteJSON(w, clineErrorHTTPStatus(err), map[string]any{
 				"error": map[string]string{"message": err.Error(), "type": "api_error"},
 			})
 			return
