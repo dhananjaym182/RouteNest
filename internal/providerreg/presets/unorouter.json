@@ -1,8 +1,0 @@
-{
-  "id": "unorouter",
-  "name": "UnoRouter",
-  "baseURL": "https://api.unorouter.com/v1",
-  "notes": "unorouter (from extremerouter registry)",
-  "freeTier": false,
-  "kind": "hasFree"
-}

@@ -53,12 +53,10 @@ reintroduce compatibility wrappers in the repository root.
 
 There are two different provider paths:
 
-- **Embedded presets** live in `internal/providerreg/presets/*.json` and are
-  compiled into the binary with `//go:embed`. Changing a preset requires a
+- **Embedded presets** form one catalogue, `internal/providerreg`. It merges
+  `manual/*.json` (hand-maintained) and `imported.json` (generated) at build time
+  and is compiled into the binary with `//go:embed`. Changing a preset requires a
   rebuild.
-- **Imported preset catalog** lives in `internal/providerreg/imported.json`.
-  It is the single-file replacement for the former generated Go map and is
-  also embedded and validated at build time.
 - **Runtime custom providers** are stored in `.routenest-providers.json` under the
   data directory and take effect without a rebuild (see the admin UI).
 
@@ -67,16 +65,30 @@ not a per-model access entitlement.
 
 ### Adding an embedded preset
 
-1. Add `internal/providerreg/presets/<provider-id>.json`; the filename must
-   equal the preset `id`.
-2. Fill the schema in `internal/providerreg/registry.go` (`id`, `name`,
-   `baseURL`, `kind`, `freeTier`, protocol/auth/fetcher fields, notes).
-3. Regenerate or adjust the preset data. The tracked generator is
-   `tools/gen-provider-presets.mjs`; it writes both `presets/*.json` and
-   `imported.json` so the two generated views stay synchronized. Hand-written
-   presets are kept as data.
-4. Run `go test ./internal/providerreg/` (IDs must be unique, filenames must
-   match IDs, required fields and enum values are validated).
+The built-in catalogue is `internal/providerreg`, built from two sources with
+distinct provenance:
+
+- `internal/providerreg/manual/<provider-id>.json`: hand-maintained presets
+  (provenance `manual`). The filename must equal the preset `id`.
+- `internal/providerreg/imported.json`: generated presets (provenance
+  `imported`). Do not edit it by hand.
+
+Steps:
+
+1. Add `manual/<provider-id>.json` with the fields in `Preset`
+   (`internal/providerreg/registry.go`): `id`, `name`, `baseURL`, `kind`,
+   `freeTier`, plus `protocol`, `authFlow`, `modelsFetcher`, `headers` and
+   `notes` where they apply.
+2. For a login (device-flow) provider, set `authFlow` to an ID of a spec in
+   `internal/deviceflow`. `loginFlow` is derived from `authFlow`; do not store it.
+3. Imported presets come from the ExtremeRouter registry. Regenerate with
+   `node tools/gen-provider-presets.mjs <registry-dir>`. The output is
+   deterministic. Manual corrections to generated entries go in
+   `tools/provider-presets.overrides.json`, with a `reason`.
+4. Run `go test ./internal/providerreg/ ./internal/providers/` and
+   `node --test tools/gen-provider-presets.test.mjs`. Duplicate IDs, duplicate
+   base URLs with conflicting protocols, unknown auth flows and unknown fetcher
+   types are rejected.
 5. Rebuild. Embedded preset edits do not apply to an existing binary.
 
 A conventional OpenAI-compatible provider usually needs only a preset because

@@ -46,8 +46,19 @@ func TestLoadImportedStructure(t *testing.T) {
 	}
 }
 
+// importedPresets returns the imported subset of the single built-in catalogue.
+func importedPresets() map[string]Preset {
+	out := map[string]Preset{}
+	for id, p := range Builtin().All() {
+		if p.Provenance == ProvenanceImported {
+			out[id] = p
+		}
+	}
+	return out
+}
+
 func TestImportedFreePaidNoOriginOverlap(t *testing.T) {
-	presets := MustImported().All()
+	presets := importedPresets()
 	freeSite := map[string]string{}
 	host := func(base string) string {
 		u, err := url.Parse(base)

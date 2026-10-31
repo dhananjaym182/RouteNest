@@ -1,8 +1,0 @@
-{
-  "id": "oobabooga",
-  "name": "oobabooga",
-  "baseURL": "http://localhost:5000/v1",
-  "notes": "oobabooga (from extremerouter registry)",
-  "freeTier": false,
-  "kind": "local"
-}

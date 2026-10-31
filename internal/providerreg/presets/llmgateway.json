@@ -1,8 +1,0 @@
-{
-  "id": "llmgateway",
-  "name": "LLM Gateway",
-  "baseURL": "https://api.llmgateway.io/v1",
-  "notes": "llmgateway (from extremerouter registry)",
-  "freeTier": false,
-  "kind": "hasFree"
-}

@@ -1,0 +1,5 @@
+{
+  "id": "manual-one",
+  "name": "Manual One",
+  "baseURL": "https://manual.example/v1"
+}

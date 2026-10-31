@@ -3,6 +3,8 @@ package providers
 import (
 	"strings"
 	"testing"
+
+	"routenest/internal/providerreg"
 )
 
 // TestProviderProtocolByBaseURL pins the baseURL → protocol mapping. Providers
@@ -41,9 +43,9 @@ func TestProviderProtocolByBaseURL(t *testing.T) {
 // provider, and ship a catalog so models exist before any manual import.
 func TestQoderPresetsAreRoutable(t *testing.T) {
 	for _, id := range []string{"qoder", "qoder-cn"} {
-		p, ok := providerPresets[id]
+		p, ok := providerreg.Builtin().Get(id)
 		if !ok {
-			t.Fatalf("root preset map missing %q", id)
+			t.Fatalf("catalogue missing %q", id)
 		}
 		if p.Protocol != "qoder" {
 			t.Errorf("%s: protocol = %q, want qoder", id, p.Protocol)

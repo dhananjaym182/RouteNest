@@ -329,7 +329,8 @@
         "notes": "浏览器授权轮询登录（state-poll，无需 API Key）；腾讯 CodeBuddy 国内站 /v2/chat/completions",
         "freeTier": true,
         "kind": "freeTier",
-        "loginFlow": true
+        "loginFlow": true,
+        "authFlow": "codebuddy-cn"
       },
       {
         "key": "codebuddy-intl",
@@ -345,7 +346,8 @@
         "notes": "浏览器授权轮询登录（state-poll，无需 API Key）；CodeBuddy 国际站 /v2/chat/completions",
         "freeTier": true,
         "kind": "freeTier",
-        "loginFlow": true
+        "loginFlow": true,
+        "authFlow": "codebuddy-intl"
       },
       {
         "key": "dahl",
@@ -579,7 +581,8 @@
         "notes": "设备码登录 GitHub → 自动兑换 Copilot 作业票（免 Key）；Copilot Free 计划含少量高级请求配额",
         "freeTier": true,
         "kind": "freeTier",
-        "loginFlow": true
+        "loginFlow": true,
+        "authFlow": "github"
       },
       {
         "key": "groq",
@@ -727,7 +730,8 @@
         "notes": "设备码登录（无需 API Key）；登录后在编辑器「账号连接」选连接，组织头自动注入",
         "freeTier": true,
         "kind": "freeTier",
-        "loginFlow": true
+        "loginFlow": true,
+        "authFlow": "kilocode"
       },
       {
         "key": "kimi-coding",
@@ -746,7 +750,8 @@
         "notes": "设备码登录 Kimi（标准 RFC8628，无需 API Key）；OpenAI 兼容 /coding/v1，含 k2 编码模型免费额度",
         "freeTier": true,
         "kind": "freeTier",
-        "loginFlow": true
+        "loginFlow": true,
+        "authFlow": "kimi-coding"
       },
       {
         "key": "lemonade",
@@ -1193,7 +1198,8 @@
         "notes": "浏览器设备码登录（COSY 签名，非 OpenAI 兼容）；推理走 /algo/api/v2/service/pro/sse/agent_chat_generation，模型目录来自 /algo/api/v2/model/list",
         "freeTier": true,
         "kind": "freeTier",
-        "loginFlow": true
+        "loginFlow": true,
+        "authFlow": "qoder"
       },
       {
         "key": "qoder-cn",
@@ -1223,7 +1229,8 @@
         "notes": "浏览器设备码登录（COSY 签名，非 OpenAI 兼容）；Qoder 国内站推理走 /algo/api/v2/service/pro/sse/agent_chat_generation，模型目录来自 /algo/api/v2/model/list",
         "freeTier": true,
         "kind": "freeTier",
-        "loginFlow": true
+        "loginFlow": true,
+        "authFlow": "qoder-cn"
       },
       {
         "key": "qwen-chat",
@@ -1238,7 +1245,8 @@
         "notes": "设备码登录 Qwen Chat（PKCE，无需 API Key）；OpenAI 兼容端点",
         "freeTier": true,
         "kind": "freeTier",
-        "loginFlow": true
+        "loginFlow": true,
+        "authFlow": "qwen"
       },
       {
         "key": "reka",
@@ -1403,7 +1411,8 @@
         "notes": "浏览器授权轮询登录（state-poll，无需 API Key）；WorkBuddy /v2/chat/completions，含混元预览模型",
         "freeTier": true,
         "kind": "freeTier",
-        "loginFlow": true
+        "loginFlow": true,
+        "authFlow": "workbuddy"
       },
       {
         "key": "xinference",

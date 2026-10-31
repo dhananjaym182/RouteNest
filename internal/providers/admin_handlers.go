@@ -5,7 +5,6 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"sort"
 	"strings"
 	"time"
 
@@ -258,26 +257,22 @@ func runProviderMiniTest(p *CustomProvider, model string) map[string]any {
 
 func HandlePresets(w http.ResponseWriter, r *http.Request) {
 	type presetOut struct {
-		Key           string            `json:"key"`
-		Name          string            `json:"name"`
-		BaseURL       string            `json:"baseURL"`
-		ModelIDs      []string          `json:"modelIDs,omitempty"`
-		ModelsFetcher *modelsFetcher    `json:"modelsFetcher,omitempty"`
-		Headers       map[string]string `json:"headers,omitempty"`
-		Notes         string            `json:"notes,omitempty"`
-		FreeTier      bool              `json:"freeTier"`
-		Kind          string            `json:"kind"`
-		LoginFlow     bool              `json:"loginFlow,omitempty"`
+		Key           string                     `json:"key"`
+		Name          string                     `json:"name"`
+		BaseURL       string                     `json:"baseURL"`
+		ModelIDs      []string                   `json:"modelIDs,omitempty"`
+		ModelsFetcher *providerreg.ModelsFetcher `json:"modelsFetcher,omitempty"`
+		Headers       map[string]string          `json:"headers,omitempty"`
+		Notes         string                     `json:"notes,omitempty"`
+		FreeTier      bool                       `json:"freeTier"`
+		Kind          string                     `json:"kind"`
+		LoginFlow     bool                       `json:"loginFlow,omitempty"`
+		AuthFlow      string                     `json:"authFlow,omitempty"`
 	}
-	presets := mergePresets(providerreg.Builtin().All(), providerPresetsImported)
-	keys := make([]string, 0, len(presets))
-	for k := range presets {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	out := make([]presetOut, 0, len(keys))
-	for _, k := range keys {
-		p := presets[k]
+	reg := providerreg.Builtin()
+	out := make([]presetOut, 0, reg.Len())
+	for _, k := range reg.IDs() {
+		p, _ := reg.Get(k)
 		kind := p.Kind
 		if kind == "" {
 			if p.FreeTier {
@@ -286,7 +281,7 @@ func HandlePresets(w http.ResponseWriter, r *http.Request) {
 				kind = "other"
 			}
 		}
-		out = append(out, presetOut{Key: k, Name: p.Name, BaseURL: p.BaseURL, Headers: p.Headers, Notes: p.Notes, FreeTier: p.FreeTier, ModelIDs: p.ModelIDs, ModelsFetcher: p.ModelsFetcher, Kind: kind, LoginFlow: p.LoginFlow})
+		out = append(out, presetOut{Key: k, Name: p.Name, BaseURL: p.BaseURL, Headers: p.Headers, Notes: p.Notes, FreeTier: p.FreeTier, ModelIDs: p.ModelIDs, ModelsFetcher: p.ModelsFetcher, Kind: kind, LoginFlow: p.LoginFlow, AuthFlow: p.AuthFlow})
 	}
 	httpx.WriteAPI(w, http.StatusOK, httpx.Response{Success: true, Data: map[string]any{"presets": out}})
 }

@@ -87,3 +87,46 @@ func TestPresetsCatalogueCounts(t *testing.T) {
 		t.Errorf("loginFlow presets = %d, want 9", login)
 	}
 }
+
+// TestPresetsEndpointCatalogueContent checks what the admin UI relies on: imported
+// presets are listed, every grouping kind is present, and login presets expose
+// their auth flow alongside loginFlow.
+func TestPresetsEndpointCatalogueContent(t *testing.T) {
+	rec := httptest.NewRecorder()
+	HandlePresets(rec, httptest.NewRequest(http.MethodGet, "/admin/api/providers/presets", nil))
+	var env struct {
+		Data struct {
+			Presets []struct {
+				Key       string `json:"key"`
+				FreeTier  bool   `json:"freeTier"`
+				Kind      string `json:"kind"`
+				LoginFlow bool   `json:"loginFlow"`
+				AuthFlow  string `json:"authFlow"`
+			} `json:"presets"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &env); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	byKey := map[string]int{}
+	kinds := map[string]bool{}
+	for i, p := range env.Data.Presets {
+		byKey[p.Key] = i
+		kinds[p.Kind] = true
+	}
+	if i, ok := byKey["g4f-groq"]; !ok || !env.Data.Presets[i].FreeTier {
+		t.Errorf("imported preset g4f-groq missing or not FreeTier")
+	}
+	for _, want := range []string{"free", "freeTier", "hasFree", "local"} {
+		if !kinds[want] {
+			t.Errorf("kind %q absent from preset list", want)
+		}
+	}
+	gh := env.Data.Presets[byKey["github-copilot"]]
+	if !gh.LoginFlow || gh.AuthFlow != "github" {
+		t.Errorf("github-copilot: loginFlow=%v authFlow=%q, want true/github", gh.LoginFlow, gh.AuthFlow)
+	}
+	if or := env.Data.Presets[byKey["openrouter"]]; or.LoginFlow || or.AuthFlow != "" {
+		t.Errorf("openrouter must not expose a login flow: %+v", or)
+	}
+}

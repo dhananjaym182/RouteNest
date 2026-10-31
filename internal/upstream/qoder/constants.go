@@ -48,7 +48,7 @@ XcW+ML9FoCI6AOvOzwIDAQAB
 
 // ModelListURL returns the live model catalog endpoint for baseURL. A user
 // who pasted the full chat endpoint gets the same signed URLs as the bare
-// host (mirrors normalizePresetBaseURL / the protocol lookup contract).
+// host (mirrors providerreg.NormalizeBaseURL / the protocol lookup contract).
 func ModelListURL(baseURL string) string {
 	return sanitizeQoderBase(baseURL) + modelListPath
 }

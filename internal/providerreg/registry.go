@@ -1,6 +1,12 @@
-// Package providerreg defines provider presets and their immutable built-in
-// registry. Presets are compile-time data: editing a JSON file requires
-// rebuilding the binary. Runtime custom providers are stored separately in
+// Package providerreg is the single authority for known provider source
+// definitions (presets). The catalogue is built once from two provenance sets:
+//
+//   - manual/*.json: hand-maintained RouteNest definitions (provenance "manual");
+//   - imported.json: definitions generated from the ExtremeRouter registry by
+//     tools/gen-provider-presets.mjs (provenance "imported").
+//
+// Presets are compile-time data: editing a JSON file requires rebuilding the
+// binary. Runtime custom providers are stored separately in
 // .routenest-providers.json and apply without a rebuild.
 package providerreg
 
@@ -13,10 +19,22 @@ import (
 	"sort"
 	"strings"
 	"sync"
+
+	"routenest/internal/deviceflow"
 )
 
-//go:embed presets/*.json
-var presetFS embed.FS
+// Provenance values record which source a definition came from.
+const (
+	ProvenanceManual   = "manual"
+	ProvenanceImported = "imported"
+)
+
+// DefaultProtocol is the protocol ID of plain OpenAI-compatible chat, which
+// presets express by leaving Protocol empty.
+const DefaultProtocol = "openai-chat"
+
+//go:embed manual/*.json
+var manualFS embed.FS
 
 //go:embed imported.json
 var importedFS embed.FS
@@ -47,14 +65,26 @@ type Preset struct {
 	ModelsFetcher *ModelsFetcher `json:"modelsFetcher,omitempty"`
 	// Kind is the UI grouping hint: free, freeTier, hasFree, local, or other.
 	Kind string `json:"kind,omitempty"`
-	// LoginFlow marks providers authenticated by a device/browser login
-	// connection instead of an API key.
+	// AuthFlow is the ID of the device/browser login flow (internal/deviceflow)
+	// that authenticates this provider. Empty means the provider uses an API key
+	// or no authentication.
+	AuthFlow string `json:"authFlow,omitempty"`
+	// LoginFlow is derived from AuthFlow (AuthFlow != "") and is not stored in
+	// preset files. It is kept for the admin API response.
 	LoginFlow bool `json:"loginFlow,omitempty"`
+	// Provenance is derived from the source file set and is not stored in
+	// preset files.
+	Provenance string `json:"provenance,omitempty"`
 }
 
-// Registry is an immutable preset lookup.
+// Registry is an immutable preset catalogue with lookup indexes. Indexes are
+// built once in New; every accessor returns copies.
 type Registry struct {
-	byID map[string]Preset
+	byID        map[string]Preset
+	byBaseURL   map[string][]string
+	byAuthFlow  map[string][]string
+	byProtocol  map[string][]string
+	protocolFor map[string]string // normalized base URL -> preset protocol
 }
 
 func clonePreset(p Preset) Preset {
@@ -73,16 +103,70 @@ func clonePreset(p Preset) Preset {
 	return cp
 }
 
-// New validates presets and returns an immutable registry.
+// NormalizeBaseURL canonicalizes a base URL for matching: lower case, no
+// trailing slash, and no trailing /chat/completions. Connection and provider
+// records match presets through this form.
+func NormalizeBaseURL(u string) string {
+	u = strings.ToLower(strings.TrimSpace(u))
+	u = strings.TrimRight(u, "/")
+	return strings.TrimSuffix(u, "/chat/completions")
+}
+
+// effectiveProtocol returns the protocol ID used for indexing. Empty means
+// DefaultProtocol.
+func effectiveProtocol(p Preset) string {
+	if p.Protocol == "" {
+		return DefaultProtocol
+	}
+	return p.Protocol
+}
+
+// New validates presets and returns an immutable registry with its indexes.
 func New(presets map[string]Preset) (*Registry, error) {
 	if err := Validate(presets); err != nil {
 		return nil, err
 	}
-	cp := make(map[string]Preset, len(presets))
-	for id, p := range presets {
-		cp[id] = clonePreset(p)
+	reg := &Registry{
+		byID:        make(map[string]Preset, len(presets)),
+		byBaseURL:   map[string][]string{},
+		byAuthFlow:  map[string][]string{},
+		byProtocol:  map[string][]string{},
+		protocolFor: map[string]string{},
 	}
-	return &Registry{byID: cp}, nil
+	for id, p := range presets {
+		cp := clonePreset(p)
+		reg.byID[id] = cp
+		base := NormalizeBaseURL(cp.BaseURL)
+		reg.byBaseURL[base] = append(reg.byBaseURL[base], id)
+		if cp.AuthFlow != "" {
+			reg.byAuthFlow[cp.AuthFlow] = append(reg.byAuthFlow[cp.AuthFlow], id)
+		}
+		proto := effectiveProtocol(cp)
+		reg.byProtocol[proto] = append(reg.byProtocol[proto], id)
+	}
+	for base, ids := range reg.byBaseURL {
+		sort.Strings(ids)
+		// Presets that share a base URL must agree on the protocol; otherwise
+		// the base URL cannot identify the protocol.
+		want := effectiveProtocol(reg.byID[ids[0]])
+		for _, id := range ids[1:] {
+			if got := effectiveProtocol(reg.byID[id]); got != want {
+				return nil, fmt.Errorf("base URL %q shared by presets %q (%s) and %q (%s) with different protocols", base, ids[0], want, id, got)
+			}
+		}
+		// Only non-default protocols are reported by ProtocolForBaseURL, matching
+		// the historical lookup where plain OpenAI chat has no protocol.
+		if reg.byID[ids[0]].Protocol != "" {
+			reg.protocolFor[base] = reg.byID[ids[0]].Protocol
+		}
+	}
+	for k := range reg.byAuthFlow {
+		sort.Strings(reg.byAuthFlow[k])
+	}
+	for k := range reg.byProtocol {
+		sort.Strings(reg.byProtocol[k])
+	}
+	return reg, nil
 }
 
 // Get returns a preset by ID.
@@ -113,6 +197,33 @@ func (r *Registry) IDs() []string {
 // Len returns the number of presets.
 func (r *Registry) Len() int { return len(r.byID) }
 
+// ByBaseURL returns the sorted IDs of presets whose normalized base URL equals
+// the normalized form of base. The result is a copy.
+func (r *Registry) ByBaseURL(base string) []string {
+	return append([]string(nil), r.byBaseURL[NormalizeBaseURL(base)]...)
+}
+
+// ProtocolForBaseURL returns the non-default protocol of the preset whose base
+// URL matches, or "" for plain OpenAI chat and unknown URLs. Connection and
+// provider records use this fallback because they carry no preset ID.
+func (r *Registry) ProtocolForBaseURL(base string) string {
+	return r.protocolFor[NormalizeBaseURL(base)]
+}
+
+// ByAuthFlow returns the sorted IDs of presets that use the given auth flow.
+func (r *Registry) ByAuthFlow(flow string) []string {
+	return append([]string(nil), r.byAuthFlow[flow]...)
+}
+
+// ByProtocol returns the sorted IDs of presets that use the given protocol ID
+// (DefaultProtocol for plain OpenAI chat).
+func (r *Registry) ByProtocol(protocol string) []string {
+	if protocol == "" {
+		protocol = DefaultProtocol
+	}
+	return append([]string(nil), r.byProtocol[protocol]...)
+}
+
 var builtinKinds = map[string]bool{"": true, "free": true, "freeTier": true, "hasFree": true, "local": true, "other": true}
 
 // knownFetcherTypes lists catalog fetcher implementations that exist in the
@@ -132,8 +243,10 @@ var knownFetcherTypes = map[string]bool{
 	"qoder": true,
 }
 
-// Validate checks every preset. The map key must equal the preset ID.
+// Validate checks every preset and its cross-references. The map key must equal
+// the preset ID. Auth flow IDs must name a built-in device-flow spec.
 func Validate(presets map[string]Preset) error {
+	flows := deviceflow.Specs()
 	seenIDs := make(map[string]string, len(presets))
 	for key, p := range presets {
 		if strings.TrimSpace(key) == "" {
@@ -161,8 +274,19 @@ func Validate(presets map[string]Preset) error {
 		}
 		// "qoder" is a signed, non-OpenAI protocol implemented in
 		// internal/upstream/qoder.
-		if p.Protocol != "" && p.Protocol != "openai-chat" && p.Protocol != "qoder" {
+		if p.Protocol != "" && p.Protocol != DefaultProtocol && p.Protocol != "qoder" {
 			return fmt.Errorf("preset %q: unsupported protocol %q", key, p.Protocol)
+		}
+		if p.AuthFlow != "" {
+			if _, ok := flows[p.AuthFlow]; !ok {
+				return fmt.Errorf("preset %q: authFlow %q has no device-flow spec", key, p.AuthFlow)
+			}
+		}
+		if p.LoginFlow != (p.AuthFlow != "") {
+			return fmt.Errorf("preset %q: loginFlow must be true exactly when authFlow is set", key)
+		}
+		if p.Provenance != "" && p.Provenance != ProvenanceManual && p.Provenance != ProvenanceImported {
+			return fmt.Errorf("preset %q: unknown provenance %q", key, p.Provenance)
 		}
 		if p.ModelsFetcher != nil {
 			fu, err := url.Parse(p.ModelsFetcher.URL)
@@ -187,12 +311,12 @@ func Validate(presets map[string]Preset) error {
 	return nil
 }
 
-// LoadEmbedded reads and validates the embedded preset files. Each filename
-// must equal "<id>.json".
-func LoadEmbedded() (*Registry, error) {
-	entries, err := fs.ReadDir(presetFS, "presets")
+// readSource decodes every JSON preset in one embedded directory or file set.
+// Each file in dir must be named "<id>.json" with a matching id.
+func readSource(fsys fs.FS, dir string, provenance string) (map[string]Preset, error) {
+	entries, err := fs.ReadDir(fsys, dir)
 	if err != nil {
-		return nil, fmt.Errorf("read embedded presets: %w", err)
+		return nil, fmt.Errorf("read %s presets: %w", provenance, err)
 	}
 	presets := make(map[string]Preset, len(entries))
 	for _, entry := range entries {
@@ -200,7 +324,7 @@ func LoadEmbedded() (*Registry, error) {
 			continue
 		}
 		name := strings.TrimSuffix(entry.Name(), ".json")
-		data, err := presetFS.ReadFile("presets/" + entry.Name())
+		data, err := fs.ReadFile(fsys, dir+"/"+entry.Name())
 		if err != nil {
 			return nil, fmt.Errorf("read preset %s: %w", entry.Name(), err)
 		}
@@ -214,17 +338,15 @@ func LoadEmbedded() (*Registry, error) {
 		if _, dup := presets[p.ID]; dup {
 			return nil, fmt.Errorf("preset %s: duplicate id", entry.Name())
 		}
+		p.LoginFlow = p.AuthFlow != ""
+		p.Provenance = provenance
 		presets[p.ID] = p
 	}
-	if len(presets) == 0 {
-		return nil, fmt.Errorf("no embedded presets found")
-	}
-	return New(presets)
+	return presets, nil
 }
 
-// LoadImported reads and validates the ExtremeRouter-derived imported preset
-// catalog embedded as a single JSON object keyed by preset ID.
-func LoadImported() (*Registry, error) {
+// readImported decodes the generated catalogue, a JSON object keyed by preset ID.
+func readImported() (map[string]Preset, error) {
 	data, err := importedFS.ReadFile("imported.json")
 	if err != nil {
 		return nil, fmt.Errorf("read imported presets: %w", err)
@@ -233,28 +355,64 @@ func LoadImported() (*Registry, error) {
 	if err := json.Unmarshal(data, &presets); err != nil {
 		return nil, fmt.Errorf("decode imported presets: %w", err)
 	}
+	for key, p := range presets {
+		if p.ID != key {
+			return nil, fmt.Errorf("imported preset %q: id %q does not match key", key, p.ID)
+		}
+		p.LoginFlow = p.AuthFlow != ""
+		p.Provenance = ProvenanceImported
+		presets[key] = p
+	}
+	return presets, nil
+}
+
+// LoadImported returns the registry of imported (generated) presets only. It
+// is for structural validation; runtime code uses Builtin.
+func LoadImported() (*Registry, error) {
+	presets, err := readImported()
+	if err != nil {
+		return nil, err
+	}
 	if len(presets) == 0 {
 		return nil, fmt.Errorf("no imported presets found")
 	}
 	return New(presets)
 }
 
-var (
-	importedOnce sync.Once
-	imported     *Registry
-	importedErr  error
-)
-
-// MustImported returns the immutable imported preset registry. Invalid
-// embedded data is a build defect and panics at first use, mirroring Builtin.
-func MustImported() *Registry {
-	importedOnce.Do(func() {
-		imported, importedErr = LoadImported()
-	})
-	if importedErr != nil {
-		panic("providerreg: invalid imported presets: " + importedErr.Error())
+// LoadEmbedded builds the single built-in catalogue: manual presets and imported
+// presets merged once. An ID defined in both sets is an error.
+func LoadEmbedded() (*Registry, error) {
+	manual, err := readSource(manualFS, "manual", ProvenanceManual)
+	if err != nil {
+		return nil, err
 	}
-	return imported
+	if len(manual) == 0 {
+		return nil, fmt.Errorf("no manual presets found")
+	}
+	imported, err := readImported()
+	if err != nil {
+		return nil, err
+	}
+	merged, err := mergeCatalogues(manual, imported)
+	if err != nil {
+		return nil, err
+	}
+	return New(merged)
+}
+
+// mergeCatalogues combines provenance sets into one map. An ID defined by two
+// sets is an error, so each preset has exactly one source.
+func mergeCatalogues(sets ...map[string]Preset) (map[string]Preset, error) {
+	merged := map[string]Preset{}
+	for _, set := range sets {
+		for id, p := range set {
+			if prev, dup := merged[id]; dup {
+				return nil, fmt.Errorf("preset %q defined by both %s and %s sources", id, prev.Provenance, p.Provenance)
+			}
+			merged[id] = p
+		}
+	}
+	return merged, nil
 }
 
 var (
@@ -263,7 +421,7 @@ var (
 	builtinErr  error
 )
 
-// Builtin returns the immutable registry compiled into the binary. Invalid
+// Builtin returns the immutable catalogue compiled into the binary. Invalid
 // embedded data is a build defect and panics at first use.
 func Builtin() *Registry {
 	builtinOnce.Do(func() {

@@ -1,8 +1,0 @@
-{
-  "id": "anyapi",
-  "name": "AnyAPI AI",
-  "baseURL": "https://api.anyapi.ai/v1",
-  "notes": "anyapi (from extremerouter registry)",
-  "freeTier": false,
-  "kind": "hasFree"
-}
