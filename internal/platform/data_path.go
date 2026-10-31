@@ -1,6 +1,7 @@
 package platform
 
 import (
+	"bytes"
 	"fmt"
 	"log"
 	"os"
@@ -24,7 +25,10 @@ const LegacyDataDirEnv = "CLINE2API_DATA_DIR"
 var legacyDataFiles = []string{
 	".cline-accounts.json",
 	".cline-config.json",
+	".cline-connections.json",
 	".cline-providers.json",
+	".cline-providers-cooldowns.json",
+	".cline-providers-sync.json",
 	".cline-request-logs.json",
 	".cline-zen.json",
 	".cline-proxy.json",
@@ -70,7 +74,11 @@ var migrateOnce sync.Once
 // MigrateLegacyDataFilesOnce runs the migration for the first data directory
 // selected in this process. It is idempotent.
 func MigrateLegacyDataFilesOnce(dir string, legacyDirs func() []string) {
-	migrateOnce.Do(func() { MigrateLegacyDataFiles(dir, legacyDirs) })
+	migrateOnce.Do(func() {
+		if err := MigrateDataFiles(dir, legacyDirs); err != nil {
+			panicDataDir(fmt.Errorf("migrate existing state: %w", err))
+		}
+	})
 }
 
 var (
@@ -226,6 +234,9 @@ func LegacyDataCandidates(legacyDirs func() []string) []string {
 	if home, err := os.UserHomeDir(); err == nil {
 		dirs = append(dirs, filepath.Join(home, ".routenest"), filepath.Join(home, ".cline2api"))
 	}
+	if base, err := userConfigDir(); err == nil && strings.TrimSpace(base) != "" {
+		dirs = append(dirs, filepath.Join(base, "routenest"))
+	}
 	seen := make(map[string]bool, len(dirs))
 	out := dirs[:0]
 	for _, d := range dirs {
@@ -241,50 +252,71 @@ func LegacyDataCandidates(legacyDirs func() []string) []string {
 	return out
 }
 
-// MigrateLegacyDataFiles copies known LEGACY data files (".cline-*") from
-// legacy locations into dir under their current "routenest" names, only when
-// the destination does not already exist. It is idempotent.
-func MigrateLegacyDataFiles(dir string, legacyDirs func() []string) {
-	if err := os.MkdirAll(dir, 0700); err != nil {
-		log.Printf("Failed to create data dir %s for migration: %v", dir, err)
-		return
+// MigrateDataFiles copies known current and legacy state files into dir. It
+// never overwrites a destination or removes a source, and verifies each copy.
+func MigrateDataFiles(dir string, legacyDirs func() []string) error {
+	if err := createDataDir(dir); err != nil {
+		return err
 	}
-	absDir, err := filepath.Abs(dir)
-	if err != nil {
-		absDir = dir
+	sources := append([]string{dir}, LegacyDataCandidates(legacyDirs)...)
+	seenSources := make(map[string]bool, len(sources))
+	uniqueSources := sources[:0]
+	for _, source := range sources {
+		abs, err := filepath.Abs(source)
+		if err != nil {
+			abs = source
+		}
+		if !seenSources[abs] {
+			seenSources[abs] = true
+			uniqueSources = append(uniqueSources, abs)
+		}
 	}
-	for _, legacy := range legacyDataFiles {
-		name := CurrentDataFileName(legacy)
+
+	for _, name := range CurrentDataFiles() {
 		dst := filepath.Join(dir, name)
 		if FileExists(dst) {
 			continue
 		}
-		// Legacy file may live beside its renamed successor in dir itself
-		// (e.g. data dir == exe dir for a pre-rename deployment).
-		if data, err := os.ReadFile(filepath.Join(dir, legacy)); err == nil {
-			if err := WriteFileAtomic(dst, data, 0600); err != nil {
-				log.Printf("Failed to migrate legacy %s in %s to %s: %v", legacy, dir, dst, err)
-			} else {
-				log.Printf("Migrated legacy %s in %s to %s", legacy, dir, dst)
-			}
-			continue
-		}
-		for _, d := range LegacyDataCandidates(legacyDirs) {
-			if d == absDir {
-				continue
-			}
-			src := filepath.Join(d, legacy)
-			data, err := os.ReadFile(src)
-			if err != nil {
-				continue
-			}
-			if err := WriteFileAtomic(dst, data, 0600); err != nil {
-				log.Printf("Failed to migrate %s from %s to %s: %v", legacy, d, dst, err)
+		legacy, _ := LegacyDataFileName(name)
+		copied := false
+		for _, sourceDir := range uniqueSources {
+			for _, sourceName := range []string{name, legacy} {
+				src := filepath.Join(sourceDir, sourceName)
+				if src == dst {
+					continue
+				}
+				data, err := os.ReadFile(src)
+				if err != nil {
+					continue
+				}
+				if err := WriteFileAtomic(dst, data, 0600); err != nil {
+					return fmt.Errorf("copy %s to %s: %w", src, dst, err)
+				}
+				got, err := os.ReadFile(dst)
+				if err != nil || !bytes.Equal(got, data) {
+					_ = os.Remove(dst)
+					if err != nil {
+						return fmt.Errorf("verify %s: %w", dst, err)
+					}
+					return fmt.Errorf("verify %s: copied bytes differ", dst)
+				}
+				log.Printf("Migrated RouteNest state from %s to %s (source preserved)", src, dst)
+				copied = true
 				break
 			}
-			log.Printf("Migrated %s from %s to %s", legacy, d, dst)
-			break
+			if copied {
+				break
+			}
 		}
+	}
+	return nil
+}
+
+// MigrateLegacyDataFiles is retained for callers and tests from before current
+// state filenames were included in migration.
+func MigrateLegacyDataFiles(dir string, legacyDirs func() []string) {
+	if err := MigrateDataFiles(dir, legacyDirs); err != nil {
+		log.Printf("Failed to migrate RouteNest state into %s: %v", dir, err)
 	}
 }
 

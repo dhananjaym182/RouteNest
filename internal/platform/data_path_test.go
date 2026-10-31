@@ -142,3 +142,61 @@ func TestMigrateLegacyDataFilesDoesNotOverwriteCurrent(t *testing.T) {
 		t.Fatalf("existing current file was overwritten: %q, err %v", data, err)
 	}
 }
+
+func TestMigrateDataFilesCopiesCurrentStateAndPreservesSource(t *testing.T) {
+	src := t.TempDir()
+	dst := t.TempDir()
+	name := ".routenest-connections.json"
+	sourcePath := filepath.Join(src, name)
+	content := []byte(`{"connections":[{"id":"conn-1"}]}`)
+	if err := os.WriteFile(sourcePath, content, 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	MigrateDataFiles(dst, func() []string { return []string{src} })
+
+	got, err := os.ReadFile(filepath.Join(dst, name))
+	if err != nil || string(got) != string(content) {
+		t.Fatalf("migrated content = %q, err %v", got, err)
+	}
+	if source, err := os.ReadFile(sourcePath); err != nil || string(source) != string(content) {
+		t.Fatalf("source was removed or changed: %q, err %v", source, err)
+	}
+}
+
+func TestMigrateDataFilesIncludesProviderStateAddedAfterLegacyList(t *testing.T) {
+	src := t.TempDir()
+	dst := t.TempDir()
+	for _, name := range []string{".routenest-providers-cooldowns.json", ".cline-providers-sync.json"} {
+		if err := os.WriteFile(filepath.Join(src, name), []byte(name), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	MigrateDataFiles(dst, func() []string { return []string{src} })
+
+	for _, name := range []string{".routenest-providers-cooldowns.json", ".routenest-providers-sync.json"} {
+		if _, err := os.Stat(filepath.Join(dst, name)); err != nil {
+			t.Errorf("missing migrated %s: %v", name, err)
+		}
+	}
+}
+
+func TestMigrateDataFilesDoesNotOverwriteCurrentDestination(t *testing.T) {
+	src := t.TempDir()
+	dst := t.TempDir()
+	name := ".routenest-connections.json"
+	if err := os.WriteFile(filepath.Join(src, name), []byte("source"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dst, name), []byte("destination"), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	MigrateDataFiles(dst, func() []string { return []string{src} })
+
+	got, err := os.ReadFile(filepath.Join(dst, name))
+	if err != nil || string(got) != "destination" {
+		t.Fatalf("destination = %q, err %v; existing data must win", got, err)
+	}
+}
