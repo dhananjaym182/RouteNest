@@ -117,14 +117,42 @@ var adminClineEgress = &adminapi.ClineEgress{
 
 func RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/admin/", adminStaticHandler)
-	// 无需登录的接口
-	mux.HandleFunc("/admin/api/login", proxycore.CorsHandler(handleAdminLogin))
-	mux.HandleFunc("/admin/api/logout", proxycore.CorsHandler(handleAdminLogout))
-	// 其余 API 全部需要后台鉴权（设置了密码后）
+	// Routes that need no login.
+	registerPublicRoutes(mux)
+	// Every other API route requires admin auth once a password is set.
 	auth := func(h http.HandlerFunc) http.HandlerFunc {
 		return requireAdminAuth(proxycore.CorsHandler(h))
 	}
+	registerSessionRoutes(mux, auth)
+	registerAccountsRoutes(mux, auth)
+	registerKeysRoutes(mux, auth)
+	registerModelsRoutes(mux, auth)
+	registerUpstreamsRoutes(mux, auth)
+	registerConfigRoutes(mux, auth)
+	registerProvidersRoutes(mux, auth)
+	registerConnectionsRoutes(mux, auth)
+	registerCombosRoutes(mux, auth)
+	registerObservabilityRoutes(mux, auth)
+	registerMiscRoutes(mux, auth)
+}
+
+// authWrap applies admin authentication and CORS to one handler.
+type authWrap func(http.HandlerFunc) http.HandlerFunc
+
+// registerPublicRoutes registers the routes that need no admin login.
+func registerPublicRoutes(mux *http.ServeMux) {
+	mux.HandleFunc("/admin/api/login", proxycore.CorsHandler(handleAdminLogin))
+	mux.HandleFunc("/admin/api/logout", proxycore.CorsHandler(handleAdminLogout))
+}
+
+// registerSessionRoutes registers the admin session and password management.
+func registerSessionRoutes(mux *http.ServeMux, auth authWrap) {
 	mux.HandleFunc("/admin/api/admin-sessions/clear", auth(handleAdminSessionsClear))
+	mux.HandleFunc("/admin/api/password", auth(handleAdminPassword))
+}
+
+// registerAccountsRoutes registers the Cline account pool, OAuth onboarding and batch import.
+func registerAccountsRoutes(mux *http.ServeMux, auth authWrap) {
 	mux.HandleFunc("/admin/api/accounts", auth(handleAdminAccounts))
 	mux.HandleFunc("/admin/api/accounts/add", auth(handleAdminAccountAdd))
 	mux.HandleFunc("/admin/api/accounts/delete", auth(handleAdminAccountDelete))
@@ -132,31 +160,49 @@ func RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/admin/api/oauth/start", auth(handleOAuthStart))
 	mux.HandleFunc("/admin/api/oauth/status", auth(handleOAuthStatus))
 	mux.HandleFunc("/admin/api/sso/import", auth(handleSSOImport))
-	mux.HandleFunc("/admin/api/stats", auth(handleAdminStats))
-	mux.HandleFunc("/admin/api/dashboard/overview", auth(handleDashboardOverview))
 	mux.HandleFunc("/admin/api/batch-import", auth(handleBatchImport))
 	mux.HandleFunc("/admin/api/accounts/refresh-all", auth(handleAdminRefreshAll))
 	mux.HandleFunc("/admin/api/accounts/delete-all", auth(handleAdminDeleteAll))
 	mux.HandleFunc("/admin/api/accounts/reset", auth(handleAdminAccountReset))
 	mux.HandleFunc("/admin/api/accounts/test", auth(handleAdminAccountTest))
+}
+
+// registerKeysRoutes registers the client API keys.
+func registerKeysRoutes(mux *http.ServeMux, auth authWrap) {
 	mux.HandleFunc("/admin/api/keys", auth(handleAdminGetKeys))
 	mux.HandleFunc("/admin/api/keys/generate", auth(handleAdminGenerateKey))
 	mux.HandleFunc("/admin/api/keys/delete", auth(handleAdminDeleteKey))
+}
+
+// registerModelsRoutes registers the model catalogue: list, sync, custom models, capability and policy edits, quick test.
+func registerModelsRoutes(mux *http.ServeMux, auth authWrap) {
 	mux.HandleFunc("/admin/api/models", auth(handleAdminModels))
 	mux.HandleFunc("/admin/api/models/sync", auth(handleAdminModelSync))
-	mux.HandleFunc("/admin/api/opencode/config", auth(handleOpenCodeConfig))
-	mux.HandleFunc("/admin/api/opencode/config/update", auth(handleOpenCodeConfigUpdate))
-	mux.HandleFunc("/admin/api/opencode/models/sync", auth(handleOpenCodeModelSync))
-	mux.HandleFunc("/admin/api/cline-proxy/config", auth(handleClineProxyConfig))
-	mux.HandleFunc("/admin/api/cline-proxy/config/update", auth(handleClineProxyConfigUpdate))
 	mux.HandleFunc("/admin/api/models/add", auth(handleAdminModelAdd))
 	mux.HandleFunc("/admin/api/models/delete", auth(handleAdminModelDelete))
 	mux.HandleFunc("/admin/api/models/context", auth(handleAdminModelContext))
 	mux.HandleFunc("/admin/api/models/capabilities", auth(handleAdminModelCapabilities))
 	mux.HandleFunc("/admin/api/models/toggle", auth(HandleAdminModelToggle))
 	mux.HandleFunc("/admin/api/models/test", auth(HandleAdminModelTest))
+}
+
+// registerUpstreamsRoutes registers the built-in upstreams: OpenCode zen and Cline egress configuration.
+func registerUpstreamsRoutes(mux *http.ServeMux, auth authWrap) {
+	mux.HandleFunc("/admin/api/opencode/config", auth(handleOpenCodeConfig))
+	mux.HandleFunc("/admin/api/opencode/config/update", auth(handleOpenCodeConfigUpdate))
+	mux.HandleFunc("/admin/api/opencode/models/sync", auth(handleOpenCodeModelSync))
+	mux.HandleFunc("/admin/api/cline-proxy/config", auth(handleClineProxyConfig))
+	mux.HandleFunc("/admin/api/cline-proxy/config/update", auth(handleClineProxyConfigUpdate))
+}
+
+// registerConfigRoutes registers the global proxy configuration.
+func registerConfigRoutes(mux *http.ServeMux, auth authWrap) {
 	mux.HandleFunc("/admin/api/config", auth(handleAdminConfig))
 	mux.HandleFunc("/admin/api/config/update", auth(handleAdminUpdateConfig))
+}
+
+// registerProvidersRoutes registers the custom provider source instances, presets, discovery, recheck, import and tiers.
+func registerProvidersRoutes(mux *http.ServeMux, auth authWrap) {
 	mux.HandleFunc("/admin/api/providers", auth(providers.HandleList))
 	mux.HandleFunc("/admin/api/providers/save", auth(providers.HandleSave))
 	mux.HandleFunc("/admin/api/providers/delete", auth(providers.HandleDelete))
@@ -171,6 +217,12 @@ func RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/admin/api/models/import/batch", auth(providers.HandleImportBatch))
 	mux.HandleFunc("/admin/api/models/import/discard", auth(providers.HandleImportDiscard))
 	mux.HandleFunc("/admin/api/models/cost", auth(providers.HandleModelCost))
+	mux.HandleFunc("/admin/api/providers/cooldown-reset", auth(providers.HandleCooldownReset))
+	mux.HandleFunc("/admin/api/account-health", auth(providers.HandleAccountHealth))
+}
+
+// registerConnectionsRoutes registers the provider login connections.
+func registerConnectionsRoutes(mux *http.ServeMux, auth authWrap) {
 	mux.HandleFunc("/admin/api/connections", auth(connections.HandleConnectionsList))
 	mux.HandleFunc("/admin/api/connections/login/start", auth(connections.HandleConnectionLoginStart))
 	mux.HandleFunc("/admin/api/connections/login/status", auth(connections.HandleConnectionLoginStatus))
@@ -178,18 +230,29 @@ func RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/admin/api/connections/import-batch", auth(connections.HandleConnectionImportBatch))
 	mux.HandleFunc("/admin/api/connections/delete", auth(connections.HandleConnectionDelete))
 	mux.HandleFunc("/admin/api/connections/test", auth(connections.HandleConnectionTest))
+}
+
+// registerCombosRoutes registers the named model combinations.
+func registerCombosRoutes(mux *http.ServeMux, auth authWrap) {
 	mux.HandleFunc("/admin/api/combos", auth(handleCombosList))
 	mux.HandleFunc("/admin/api/combos/save", auth(handleComboSave))
 	mux.HandleFunc("/admin/api/combos/delete", auth(handleComboDelete))
 	mux.HandleFunc("/admin/api/combos/toggle", auth(handleComboToggle))
 	mux.HandleFunc("/admin/api/combos/clone", auth(handleComboClone))
 	mux.HandleFunc("/admin/api/combos/test", auth(HandleComboTest))
-	mux.HandleFunc("/admin/api/password", auth(handleAdminPassword))
+}
+
+// registerObservabilityRoutes registers the dashboard, statistics, request logs and version checks.
+func registerObservabilityRoutes(mux *http.ServeMux, auth authWrap) {
+	mux.HandleFunc("/admin/api/stats", auth(handleAdminStats))
+	mux.HandleFunc("/admin/api/dashboard/overview", auth(handleDashboardOverview))
 	mux.HandleFunc("/admin/api/request-logs", auth(handleAdminRequestLogs))
 	mux.HandleFunc("/admin/api/request-logs/clear", auth(requestlog.HandleClear))
-	mux.HandleFunc("/admin/api/providers/cooldown-reset", auth(providers.HandleCooldownReset))
-	mux.HandleFunc("/admin/api/account-health", auth(providers.HandleAccountHealth))
 	mux.HandleFunc("/admin/api/version-check", auth(buildinfo.HandleAdminVersionCheck))
+}
+
+// registerMiscRoutes registers the miscellaneous admin actions.
+func registerMiscRoutes(mux *http.ServeMux, auth authWrap) {
 	mux.HandleFunc("/admin/api/open-external", auth(handleOpenExternal))
 }
 
