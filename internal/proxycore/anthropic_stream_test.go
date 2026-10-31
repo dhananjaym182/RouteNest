@@ -1,11 +1,9 @@
-package integration
+package proxycore
 
 import (
 	"bufio"
 	"cline-go-proxy/internal/accounts"
-	"cline-go-proxy/internal/admin"
 	"cline-go-proxy/internal/egress"
-	"cline-go-proxy/internal/proxycore"
 	"cline-go-proxy/internal/routing"
 	"encoding/json"
 	"io"
@@ -20,11 +18,11 @@ import (
 func newStreamTestServer(t *testing.T, id string, chain ...string) string {
 	t.Helper()
 	oldPool := accounts.Pool
-	oldConfig := admin.GetProxyConfig()
+	oldConfig := getProxyConfig()
 	oldTransport := egress.Client.Transport
 	t.Cleanup(func() {
 		accounts.Pool = oldPool
-		admin.SetProxyConfig(oldConfig)
+		setProxyConfig(oldConfig)
 		egress.Client.Transport = oldTransport
 	})
 
@@ -36,12 +34,12 @@ func newStreamTestServer(t *testing.T, id string, chain ...string) string {
 		Status:      "active",
 	}
 	accounts.Pool = &AccountPool{Accounts: []*Account{account}}
-	config := admin.DefaultProxyConfig()
+	config := defaultProxyConfig()
 	config.Strategy = "fill"
 	if len(chain) > 0 {
 		config.ModelChain = chain
 	}
-	admin.SetProxyConfig(config)
+	setProxyConfig(config)
 	return protocolTestServer(t)
 }
 
@@ -51,11 +49,11 @@ func newStreamTestServer(t *testing.T, id string, chain ...string) string {
 // 看不到 error 事件，也看不到重复的 message_start。
 func TestAnthropicStreamRetriesTransparentlyBeforeFirstToken(t *testing.T) {
 	oldPool := accounts.Pool
-	oldConfig := admin.GetProxyConfig()
+	oldConfig := getProxyConfig()
 	oldTransport := egress.Client.Transport
 	t.Cleanup(func() {
 		accounts.Pool = oldPool
-		admin.SetProxyConfig(oldConfig)
+		setProxyConfig(oldConfig)
 		egress.Client.Transport = oldTransport
 	})
 
@@ -67,9 +65,9 @@ func TestAnthropicStreamRetriesTransparentlyBeforeFirstToken(t *testing.T) {
 		Status:      "active",
 	}
 	accounts.Pool = &AccountPool{Accounts: []*Account{account}}
-	config := admin.DefaultProxyConfig()
+	config := defaultProxyConfig()
 	config.Strategy = "fill"
-	admin.SetProxyConfig(config)
+	setProxyConfig(config)
 
 	var upstreamCalls int
 	egress.Client.Transport = freeModelRoundTripper(func(req *http.Request) (*http.Response, error) {
@@ -131,11 +129,11 @@ func TestAnthropicStreamRetriesTransparentlyBeforeFirstToken(t *testing.T) {
 // 把断流当成一条「成功的空消息」）。提交后也无法重试，上游只应被调用一次。
 func TestAnthropicStreamMidStreamErrorNotMaskedAsEndTurn(t *testing.T) {
 	oldPool := accounts.Pool
-	oldConfig := admin.GetProxyConfig()
+	oldConfig := getProxyConfig()
 	oldTransport := egress.Client.Transport
 	t.Cleanup(func() {
 		accounts.Pool = oldPool
-		admin.SetProxyConfig(oldConfig)
+		setProxyConfig(oldConfig)
 		egress.Client.Transport = oldTransport
 	})
 
@@ -147,9 +145,9 @@ func TestAnthropicStreamMidStreamErrorNotMaskedAsEndTurn(t *testing.T) {
 		Status:      "active",
 	}
 	accounts.Pool = &AccountPool{Accounts: []*Account{account}}
-	config := admin.DefaultProxyConfig()
+	config := defaultProxyConfig()
 	config.Strategy = "fill"
-	admin.SetProxyConfig(config)
+	setProxyConfig(config)
 
 	var upstreamCalls int
 	egress.Client.Transport = freeModelRoundTripper(func(req *http.Request) (*http.Response, error) {
@@ -203,11 +201,11 @@ func TestAnthropicStreamMidStreamErrorNotMaskedAsEndTurn(t *testing.T) {
 // 当成卡死（表现为「Combobulating…」很久后 timeout，并退化为必定失败的非流式重试）。
 func TestAnthropicStreamStartsEnvelopeBeforeFirstToken(t *testing.T) {
 	oldPool := accounts.Pool
-	oldConfig := admin.GetProxyConfig()
+	oldConfig := getProxyConfig()
 	oldTransport := egress.Client.Transport
 	t.Cleanup(func() {
 		accounts.Pool = oldPool
-		admin.SetProxyConfig(oldConfig)
+		setProxyConfig(oldConfig)
 		egress.Client.Transport = oldTransport
 	})
 
@@ -219,9 +217,9 @@ func TestAnthropicStreamStartsEnvelopeBeforeFirstToken(t *testing.T) {
 		Status:      "active",
 	}
 	accounts.Pool = &AccountPool{Accounts: []*Account{account}}
-	config := admin.DefaultProxyConfig()
+	config := defaultProxyConfig()
 	config.Strategy = "fill"
-	admin.SetProxyConfig(config)
+	setProxyConfig(config)
 
 	// 上游在首 token 之前保持静默：这段窗口里客户端只应看到 `: ping` 注释行。
 	egress.Client.Transport = freeModelRoundTripper(func(req *http.Request) (*http.Response, error) {
@@ -312,11 +310,11 @@ func TestAnthropicStreamStartsEnvelopeBeforeFirstToken(t *testing.T) {
 // 这是「glm-5.3-flash 老失败」的直接缓解：坏模型自动让位，用户仍能拿到回答。
 func TestAnthropicStreamFailsOverToNextModelBeforeFirstToken(t *testing.T) {
 	oldPool := accounts.Pool
-	oldConfig := admin.GetProxyConfig()
+	oldConfig := getProxyConfig()
 	oldTransport := egress.Client.Transport
 	t.Cleanup(func() {
 		accounts.Pool = oldPool
-		admin.SetProxyConfig(oldConfig)
+		setProxyConfig(oldConfig)
 		egress.Client.Transport = oldTransport
 	})
 
@@ -328,10 +326,10 @@ func TestAnthropicStreamFailsOverToNextModelBeforeFirstToken(t *testing.T) {
 		Status:      "active",
 	}
 	accounts.Pool = &AccountPool{Accounts: []*Account{account}}
-	config := admin.DefaultProxyConfig()
+	config := defaultProxyConfig()
 	config.Strategy = "fill"
 	config.ModelChain = []string{"backup-model"}
-	admin.SetProxyConfig(config)
+	setProxyConfig(config)
 
 	var attempted []string
 	egress.Client.Transport = freeModelRoundTripper(func(req *http.Request) (*http.Response, error) {
@@ -403,11 +401,11 @@ func TestAnthropicStreamFailsOverToNextModelBeforeFirstToken(t *testing.T) {
 // 交给客户端 —— 空回答对 agent 客户端毫无价值，且用户会以为模型“没反应”。
 func TestAnthropicStreamEmptyCompletionFailsOver(t *testing.T) {
 	oldPool := accounts.Pool
-	oldConfig := admin.GetProxyConfig()
+	oldConfig := getProxyConfig()
 	oldTransport := egress.Client.Transport
 	t.Cleanup(func() {
 		accounts.Pool = oldPool
-		admin.SetProxyConfig(oldConfig)
+		setProxyConfig(oldConfig)
 		egress.Client.Transport = oldTransport
 	})
 
@@ -419,10 +417,10 @@ func TestAnthropicStreamEmptyCompletionFailsOver(t *testing.T) {
 		Status:      "active",
 	}
 	accounts.Pool = &AccountPool{Accounts: []*Account{account}}
-	config := admin.DefaultProxyConfig()
+	config := defaultProxyConfig()
 	config.Strategy = "fill"
 	config.ModelChain = []string{"backup-model"}
-	admin.SetProxyConfig(config)
+	setProxyConfig(config)
 
 	var attempted []string
 	egress.Client.Transport = freeModelRoundTripper(func(req *http.Request) (*http.Response, error) {
@@ -664,7 +662,7 @@ func TestAnthropicToolsToOpenAIOmitsNullOptionalFields(t *testing.T) {
 			// description / input_schema 缺省：转换后必须省略键，不得为 null/空串
 		},
 	}
-	got := proxycore.AnthropicToolsToOpenAI(tools)
+	got := AnthropicToolsToOpenAI(tools)
 	if len(got) != 1 {
 		t.Fatalf("got %d tools, want 1", len(got))
 	}
@@ -700,7 +698,7 @@ func TestAnthropicToolsToOpenAIPreservesPresentFields(t *testing.T) {
 			},
 		},
 	}
-	fn := proxycore.AnthropicToolsToOpenAI(tools)[0].(map[string]any)["function"].(map[string]any)
+	fn := AnthropicToolsToOpenAI(tools)[0].(map[string]any)["function"].(map[string]any)
 	if fn["description"] != "Read a file" {
 		t.Errorf("description = %v, want preserved", fn["description"])
 	}
@@ -726,7 +724,7 @@ func TestSanitizeToolsForUpstreamSharedHelper(t *testing.T) {
 		// 无 name：整条剔除
 		map[string]any{"type": "function", "function": map[string]any{"description": "no name"}},
 	}}
-	proxycore.SanitizeToolsForUpstream(body)
+	SanitizeToolsForUpstream(body)
 	tools := body["tools"].([]any)
 	if len(tools) != 3 {
 		t.Fatalf("kept %d tools, want 3 (nameless one dropped)", len(tools))

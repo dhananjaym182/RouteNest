@@ -1,6 +1,7 @@
-package integration
+package routing_test
 
 import (
+	"cline-go-proxy/internal/domain"
 	"cline-go-proxy/internal/routing"
 	"testing"
 
@@ -12,7 +13,7 @@ func TestModelMaxOutputLimit(t *testing.T) {
 	oldPool := accounts.Pool
 	t.Cleanup(func() { accounts.Pool = oldPool })
 
-	accounts.Pool = &AccountPool{Models: []Model{
+	accounts.Pool = &domain.AccountPool{Models: []domain.Model{
 		{ID: "my-model", Output: 8192},
 		{ID: "deepseek-v4-flash-free", Source: "zen", Output: 128000},
 	}}
@@ -41,7 +42,7 @@ func TestBuildUpstreamBodyCapsGeminiMaxTokens(t *testing.T) {
 	t.Setenv("ROUTENEST_MAX_TOKENS", "128000")
 	oldPool := accounts.Pool
 	t.Cleanup(func() { accounts.Pool = oldPool })
-	accounts.Pool = &AccountPool{}
+	accounts.Pool = &domain.AccountPool{}
 
 	cases := []struct {
 		name   string

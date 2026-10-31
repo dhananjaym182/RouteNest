@@ -24,6 +24,7 @@ func getProxyConfig() *config.Proxy {
 
 func setProxyConfig(cfg *config.Proxy) {
 	testProxyConfig = cfg
+	ConfigProvider = getProxyConfig
 }
 
 func init() {

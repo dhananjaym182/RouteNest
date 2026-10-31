@@ -1,7 +1,8 @@
-package integration
+package routing_test
 
 import (
 	"cline-go-proxy/internal/admin"
+	"cline-go-proxy/internal/domain"
 	"cline-go-proxy/internal/routing"
 	"fmt"
 	"strings"
@@ -11,16 +12,19 @@ import (
 	"cline-go-proxy/internal/config"
 )
 
-func policyTestPool(models ...Model) func() {
+func policyTestPool(models ...domain.Model) func() {
 	oldPool := accounts.Pool
-	accounts.Pool = &AccountPool{Models: models}
+	accounts.Pool = &domain.AccountPool{Models: models}
 	return func() { accounts.Pool = oldPool }
 }
 
 func TestBuildModelsListAppliesPolicy(t *testing.T) {
+	oldProvider := routing.ConfigProvider
+	routing.ConfigProvider = admin.GetProxyConfig
+	t.Cleanup(func() { routing.ConfigProvider = oldProvider })
 	defer policyTestPool(
-		Model{ID: "gpt-5", ThinkingLevels: []string{"low"}, InputModalities: []string{"text", "image"}},
-		Model{ID: "gpt-4-mini"},
+		domain.Model{ID: "gpt-5", ThinkingLevels: []string{"low"}, InputModalities: []string{"text", "image"}},
+		domain.Model{ID: "gpt-4-mini"},
 	)()
 
 	cfg := admin.DefaultProxyConfig()

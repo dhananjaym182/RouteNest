@@ -1,7 +1,8 @@
-package integration
+package accounts_test
 
 import (
 	"cline-go-proxy/internal/accounts"
+	_ "cline-go-proxy/internal/app"
 	"cline-go-proxy/internal/egress"
 	"cline-go-proxy/internal/routing"
 	"errors"
@@ -12,6 +13,12 @@ import (
 	"testing"
 	"time"
 )
+
+type freeModelRoundTripper func(*http.Request) (*http.Response, error)
+
+func (f freeModelRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	return f(req)
+}
 
 func isolateRefreshState(t *testing.T, transport freeModelRoundTripper) {
 	t.Helper()
