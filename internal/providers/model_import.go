@@ -199,16 +199,19 @@ func HandleImportApply(w http.ResponseWriter, r *http.Request) {
 	added, changed, now := 0, 0, time.Now().Unix()
 	accounts.LoadPool() // ensure the pool is loaded before locking
 	accounts.PoolMu.Lock()
-	existing := make(map[string]*Model, len(accounts.Pool.Models))
+	// Index, not pointer: an append below may reallocate the slice, and a stored
+	// pointer would then write into the old array and lose the change.
+	existing := make(map[string]int, len(accounts.Pool.Models))
 	for i := range accounts.Pool.Models {
-		existing[accounts.Pool.Models[i].ID] = &accounts.Pool.Models[i]
+		existing[accounts.Pool.Models[i].ID] = i
 	}
 	for id := range approved {
 		it, ok := byID[id]
 		if !ok || (it.Action != "add" && it.Action != "tier_change") {
 			continue
 		}
-		if m, exists := existing[id]; exists {
+		if i, exists := existing[id]; exists {
+			m := &accounts.Pool.Models[i]
 			m.Cost, m.TierSignal, m.TierDecidedAt = it.Tier, it.Signal, now
 			changed++
 			continue

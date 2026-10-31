@@ -1,0 +1,62 @@
+package providers
+
+import (
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+
+	"routenest/internal/accounts"
+)
+
+// Reproduces a lost update: applying an import batch appends a new model and
+// then changes an existing one. Map iteration order decides which runs first.
+// If the append reallocates the pool slice before the change, the change writes
+// into the old array and disappears. The check repeats the apply to surface it.
+func TestImportApplyKeepsTierChangeWhenAddReallocates(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`{"data":[
+			{"id":"tier/exists","pricing":{"prompt":"0","completion":"0"}},
+			{"id":"new/one","pricing":{"prompt":"1","completion":"3"}}]}`))
+	}))
+	defer srv.Close()
+
+	for run := 0; run < 30; run++ {
+		oldPool := accounts.Pool
+		oldProvs, oldLoaded := CustomProviders, Loaded
+		provider := &CustomProvider{ID: "race1", Name: "RaceProv", BaseURL: srv.URL, Enabled: true, ModelIDs: []string{"tier/exists"}}
+		CustomProviders, Loaded = []*CustomProvider{provider}, true
+		accounts.Pool = &AccountPool{Models: []Model{
+			{ID: "tier/exists", Provider: "RaceProv", Cost: "pass", Status: "active", Source: "provider"},
+		}}
+
+		rec := httptest.NewRecorder()
+		HandleImportPreview(rec, httptest.NewRequest(http.MethodPost, "/admin/api/models/import/preview", importJSONBody(map[string]any{"id": "race1"})))
+		var prev struct {
+			Data struct {
+				Batch importBatch `json:"batch"`
+			} `json:"data"`
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), &prev); err != nil {
+			t.Fatal(err)
+		}
+		rec2 := httptest.NewRecorder()
+		HandleImportApply(rec2, httptest.NewRequest(http.MethodPost, "/admin/api/models/import/apply", importJSONBody(map[string]any{
+			"batchId": prev.Data.Batch.ID,
+			"approve": []string{"tier/exists", "new/one"},
+		})))
+
+		accounts.PoolMu.Lock()
+		got := map[string]Model{}
+		for _, m := range accounts.Pool.Models {
+			got[m.ID] = m
+		}
+		accounts.PoolMu.Unlock()
+		if got["tier/exists"].Cost != "free" || got["new/one"].ID == "" {
+			t.Fatalf("run %d: tier change lost or add missing: %+v", run, got)
+		}
+
+		accounts.Pool = oldPool
+		CustomProviders, Loaded = oldProvs, oldLoaded
+	}
+}
