@@ -278,6 +278,7 @@ func installZenStub(t *testing.T, hits *int32, body string) {
 // installZenFailover sets the zen config for failover tests.
 func installZenFailover(t *testing.T, failover, enabled bool) {
 	t.Helper()
+	zen.ResetFailover()
 	zen.ConfigMu.Lock()
 	old := zen.Config
 	zen.Config = &zen.ConfigData{BaseURL: zen.APIBase, Key: "public", Enabled: enabled, Failover: failover}
@@ -286,5 +287,6 @@ func installZenFailover(t *testing.T, failover, enabled bool) {
 		zen.ConfigMu.Lock()
 		zen.Config = old
 		zen.ConfigMu.Unlock()
+		zen.ResetFailover()
 	})
 }

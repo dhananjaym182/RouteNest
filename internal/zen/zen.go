@@ -342,6 +342,12 @@ func markZenSuccess() {
 	StateMu.Unlock()
 }
 
+// ResetFailover clears the failure counter and any armed failover window. It is
+// for tests that must not inherit zen failure state from earlier tests.
+func ResetFailover() {
+	markZenSuccess()
+}
+
 func MarkFail() {
 	cfg := GetConfig()
 	// 故障转移关闭时不计数也不报警：否则会打出 “routing to cline pool” 的
