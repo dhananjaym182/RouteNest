@@ -1,7 +1,6 @@
 package providers
 
 import (
-	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -30,21 +29,13 @@ func TestImportApplyKeepsTierChangeWhenAddReallocates(t *testing.T) {
 			{ID: "tier/exists", Provider: "RaceProv", Cost: "pass", Status: "active", Source: "provider"},
 		}}
 
-		rec := httptest.NewRecorder()
-		HandleImportPreview(rec, httptest.NewRequest(http.MethodPost, "/admin/api/models/import/preview", importJSONBody(map[string]any{"id": "race1"})))
-		var prev struct {
-			Data struct {
-				Batch importBatch `json:"batch"`
-			} `json:"data"`
-		}
-		if err := json.Unmarshal(rec.Body.Bytes(), &prev); err != nil {
+		prev, err := PreviewImport(ImportSource{ID: "race1"})
+		if err != nil {
 			t.Fatal(err)
 		}
-		rec2 := httptest.NewRecorder()
-		HandleImportApply(rec2, httptest.NewRequest(http.MethodPost, "/admin/api/models/import/apply", importJSONBody(map[string]any{
-			"batchId": prev.Data.Batch.ID,
-			"approve": []string{"tier/exists", "new/one"},
-		})))
+		if _, err := ApplyImport(prev.ID, []string{"tier/exists", "new/one"}); err != nil {
+			t.Fatalf("run %d: apply: %v", run, err)
+		}
 
 		accounts.PoolMu.Lock()
 		got := map[string]Model{}

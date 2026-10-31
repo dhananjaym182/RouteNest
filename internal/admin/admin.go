@@ -17,7 +17,6 @@ import (
 	"routenest/internal/httpx"
 	"routenest/internal/i18n"
 	"routenest/internal/platform"
-	"routenest/internal/providers"
 	"routenest/internal/proxycore"
 	"routenest/internal/requestlog"
 )
@@ -202,22 +201,22 @@ func registerConfigRoutes(mux *http.ServeMux, auth authWrap) {
 
 // registerProvidersRoutes registers the custom provider source instances, presets, discovery, recheck, import and tiers.
 func registerProvidersRoutes(mux *http.ServeMux, auth authWrap) {
-	mux.HandleFunc("/admin/api/providers", auth(providers.HandleList))
-	mux.HandleFunc("/admin/api/providers/save", auth(providers.HandleSave))
-	mux.HandleFunc("/admin/api/providers/delete", auth(providers.HandleDelete))
-	mux.HandleFunc("/admin/api/providers/test", auth(providers.HandleTest))
+	mux.HandleFunc("/admin/api/providers", auth(handleProvidersList))
+	mux.HandleFunc("/admin/api/providers/save", auth(handleProviderSave))
+	mux.HandleFunc("/admin/api/providers/delete", auth(handleProviderDelete))
+	mux.HandleFunc("/admin/api/providers/test", auth(handleProviderTest))
 	mux.HandleFunc("/admin/api/providers/models", auth(HandleProviderModels))
-	mux.HandleFunc("/admin/api/providers/presets", auth(providers.HandlePresets))
+	mux.HandleFunc("/admin/api/providers/presets", auth(handleProviderPresets))
 	mux.HandleFunc("/admin/api/providers/recheck", auth(adminSync.ProviderRecheck))
 	mux.HandleFunc("/admin/api/providers/sync-status", auth(adminSync.ProviderStatus))
-	mux.HandleFunc("/admin/api/models/import/preview", auth(providers.HandleImportPreview))
-	mux.HandleFunc("/admin/api/models/import/apply", auth(providers.HandleImportApply))
-	mux.HandleFunc("/admin/api/models/import/pending", auth(providers.HandleImportPending))
-	mux.HandleFunc("/admin/api/models/import/batch", auth(providers.HandleImportBatch))
-	mux.HandleFunc("/admin/api/models/import/discard", auth(providers.HandleImportDiscard))
-	mux.HandleFunc("/admin/api/models/cost", auth(providers.HandleModelCost))
-	mux.HandleFunc("/admin/api/providers/cooldown-reset", auth(providers.HandleCooldownReset))
-	mux.HandleFunc("/admin/api/account-health", auth(providers.HandleAccountHealth))
+	mux.HandleFunc("/admin/api/models/import/preview", auth(handleModelImportPreview))
+	mux.HandleFunc("/admin/api/models/import/apply", auth(handleModelImportApply))
+	mux.HandleFunc("/admin/api/models/import/pending", auth(handleModelImportPending))
+	mux.HandleFunc("/admin/api/models/import/batch", auth(handleModelImportBatch))
+	mux.HandleFunc("/admin/api/models/import/discard", auth(handleModelImportDiscard))
+	mux.HandleFunc("/admin/api/models/cost", auth(handleModelCost))
+	mux.HandleFunc("/admin/api/providers/cooldown-reset", auth(handleProviderCooldownReset))
+	mux.HandleFunc("/admin/api/account-health", auth(handleAccountHealth))
 }
 
 // registerConnectionsRoutes registers the provider login connections.

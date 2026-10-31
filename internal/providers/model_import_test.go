@@ -151,18 +151,11 @@ func TestModelImportPreviewApplyFlow(t *testing.T) {
 		{ID: "legacy/remote-d", Provider: "Cline", Cost: "pass", Status: "active", Source: "remote"},
 	}}
 
-	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/admin/api/models/import/preview", importJSONBody(map[string]any{"id": "imp1"}))
-	HandleImportPreview(rec, req)
-	var prev struct {
-		Data struct {
-			Batch importBatch `json:"batch"`
-		} `json:"data"`
-	}
-	if err := json.Unmarshal(rec.Body.Bytes(), &prev); err != nil {
+	prevBatch, err := PreviewImport(ImportSource{ID: "imp1"})
+	if err != nil {
 		t.Fatal(err)
 	}
-	batch := prev.Data.Batch
+	batch := *prevBatch
 	if len(batch.Items) != 4 {
 		t.Fatalf("items: %+v", batch.Items)
 	}
@@ -180,14 +173,8 @@ func TestModelImportPreviewApplyFlow(t *testing.T) {
 		t.Errorf("manual/remote entries must be protected: %v", actions)
 	}
 
-	rec2 := httptest.NewRecorder()
-	req2 := httptest.NewRequest(http.MethodPost, "/admin/api/models/import/apply", importJSONBody(map[string]any{
-		"batchId": batch.ID,
-		"approve": []string{"free/model-a:free", "paid/model-b", "legacy/manual-c", "legacy/remote-d"},
-	}))
-	HandleImportApply(rec2, req2)
-	if rec2.Code != 200 {
-		t.Fatalf("apply status %d body %s", rec2.Code, rec2.Body.String())
+	if _, err := ApplyImport(batch.ID, []string{"free/model-a:free", "paid/model-b", "legacy/manual-c", "legacy/remote-d"}); err != nil {
+		t.Fatalf("apply: %v", err)
 	}
 	var curPool *AccountPool
 	accounts.PoolMu.Lock()
@@ -220,10 +207,11 @@ func TestModelImportPreviewApplyFlow(t *testing.T) {
 	}
 
 	// 幂等：第二次 preview 不应再出现 add/tier_change
-	rec3 := httptest.NewRecorder()
-	HandleImportPreview(rec3, httptest.NewRequest(http.MethodPost, "/p", importJSONBody(map[string]any{"id": "imp1"})))
-	json.Unmarshal(rec3.Body.Bytes(), &prev)
-	for _, it := range prev.Data.Batch.Items {
+	again, err := PreviewImport(ImportSource{ID: "imp1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, it := range again.Items {
 		if it.Action == "add" || it.Action == "tier_change" {
 			t.Errorf("re-preview should be stable, got %+v", it)
 		}

@@ -1,16 +1,9 @@
 package providers
 
 import (
-	"encoding/json"
-	"io"
-	"log"
-	"net/http"
 	"sort"
 	"strings"
 	"time"
-
-	"routenest/internal/httpx"
-	"routenest/internal/i18n"
 )
 
 // Provider 健康快照：配额用量 / 冷却恢复 / 近期成败热度。数据全部在内存
@@ -217,70 +210,4 @@ func accountRecentOutcomes() map[string][]int {
 		result[id] = out
 	}
 	return result
-}
-
-// GET /admin/api/account-health — 账号最近成败热度（请求日志派生，纯内存）。
-func HandleAccountHealth(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		httpx.WriteAPI(w, http.StatusMethodNotAllowed, httpx.Response{Error: i18n.TAPI(r, "method_not_allowed")})
-		return
-	}
-	httpx.WriteAPI(w, http.StatusOK, httpx.Response{Success: true, Data: map[string]any{"accounts": accountRecentOutcomes()}})
-}
-
-// POST /admin/api/providers/cooldown-reset  body: {id, model?}
-func HandleCooldownReset(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		httpx.WriteAPI(w, http.StatusMethodNotAllowed, httpx.Response{Error: i18n.TAPI(r, "method_not_allowed")})
-		return
-	}
-	body, err := io.ReadAll(r.Body)
-	if err != nil {
-		httpx.WriteAPI(w, http.StatusBadRequest, httpx.Response{Error: err.Error()})
-		return
-	}
-	defer r.Body.Close()
-	var req struct {
-		ID    string `json:"id"`
-		Model string `json:"model"`
-	}
-	if err := json.Unmarshal(body, &req); err != nil {
-		httpx.WriteAPI(w, http.StatusBadRequest, httpx.Response{Error: "invalid_json"})
-		return
-	}
-	req.ID = strings.TrimSpace(req.ID)
-	req.Model = strings.TrimSpace(req.Model)
-	if req.ID == "" {
-		httpx.WriteAPI(w, http.StatusBadRequest, httpx.Response{Error: "id is required"})
-		return
-	}
-	Mu.Lock()
-	var removed int
-	for key := range Cooldowns {
-		id := strings.SplitN(key, ":", 2)[0]
-		if id != req.ID {
-			continue
-		}
-		if req.Model != "" {
-			model := key
-			if i := strings.Index(key, ":"); i >= 0 {
-				model = key[i+1:]
-			}
-			if model != req.Model {
-				continue
-			}
-		}
-		delete(Cooldowns, key)
-		removed++
-	}
-	if removed > 0 {
-		saveProviderCooldownsLocked()
-	}
-	Mu.Unlock()
-	if removed == 0 {
-		httpx.WriteAPI(w, http.StatusOK, httpx.Response{Success: true, Data: map[string]any{"removed": 0}})
-		return
-	}
-	log.Printf("admin: provider cooldown reset id=%s model=%s removed=%d", req.ID, req.Model, removed)
-	httpx.WriteAPI(w, http.StatusOK, httpx.Response{Success: true, Data: map[string]any{"removed": removed}})
 }

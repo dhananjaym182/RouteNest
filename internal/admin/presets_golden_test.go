@@ -1,4 +1,4 @@
-package providers
+package admin_test
 
 import (
 	"bytes"
@@ -9,7 +9,20 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"routenest/internal/admin"
 )
+
+// presetsRoute serves GET /admin/api/providers/presets through the public route table.
+func presetsRoute(t *testing.T) *httptest.ResponseRecorder {
+	t.Helper()
+	installPool(t, nil)
+	mux := http.NewServeMux()
+	admin.RegisterRoutes(mux)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/admin/api/providers/presets", nil))
+	return rec
+}
 
 var updatePresetsGolden = flag.Bool("update-presets-golden", false, "rewrite testdata/presets_golden.json from the current output")
 
@@ -17,8 +30,7 @@ var updatePresetsGolden = flag.Bool("update-presets-golden", false, "rewrite tes
 // response. Any change to a preset's visible fields must be deliberate: rerun
 // with -update-presets-golden and review the diff.
 func TestPresetsEndpointGolden(t *testing.T) {
-	rec := httptest.NewRecorder()
-	HandlePresets(rec, httptest.NewRequest(http.MethodGet, "/admin/api/providers/presets", nil))
+	rec := presetsRoute(t)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", rec.Code)
 	}
@@ -47,8 +59,7 @@ func TestPresetsEndpointGolden(t *testing.T) {
 
 // TestPresetsCatalogueCounts pins the catalogue sizes documented in README.md.
 func TestPresetsCatalogueCounts(t *testing.T) {
-	rec := httptest.NewRecorder()
-	HandlePresets(rec, httptest.NewRequest(http.MethodGet, "/admin/api/providers/presets", nil))
+	rec := presetsRoute(t)
 
 	var env struct {
 		Data struct {
@@ -92,8 +103,7 @@ func TestPresetsCatalogueCounts(t *testing.T) {
 // presets are listed, every grouping kind is present, and login presets expose
 // their auth flow alongside loginFlow.
 func TestPresetsEndpointCatalogueContent(t *testing.T) {
-	rec := httptest.NewRecorder()
-	HandlePresets(rec, httptest.NewRequest(http.MethodGet, "/admin/api/providers/presets", nil))
+	rec := presetsRoute(t)
 	var env struct {
 		Data struct {
 			Presets []struct {

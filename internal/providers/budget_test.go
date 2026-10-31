@@ -1,13 +1,9 @@
 package providers
 
 import (
-	"encoding/json"
-	"net/http"
-	"net/http/httptest"
 	"path/filepath"
 	"routenest/internal/accounts"
 	"routenest/internal/connections"
-	"strings"
 	"testing"
 	"time"
 )
@@ -256,9 +252,9 @@ func TestProviderHealthSnapshotTokenFields(t *testing.T) {
 	}
 }
 
-// HandleSave 归一化 tokenWindow：空 → "monthly"，"daily"/"monthly" 保留，
-// 其余值 400 拒绝。
-func TestHandleProviderSaveTokenWindowNormalization(t *testing.T) {
+// SaveCustomProvider 归一化 tokenWindow：空 → "monthly"，"daily"/"monthly" 保留，
+// 其余值拒绝。
+func TestSaveCustomProviderTokenWindowNormalization(t *testing.T) {
 	// 落盘路径全部隔离到临时目录（save 会写 provider 文件并同步模型池）。
 	oldProvPath, oldPoolPath, oldConnPath := FilePath, accounts.PoolPath, connections.FilePath
 	FilePath = filepath.Join(t.TempDir(), ".routenest-providers.json")
@@ -271,46 +267,31 @@ func TestHandleProviderSaveTokenWindowNormalization(t *testing.T) {
 		CustomProviders, Loaded, accounts.Pool = oldProvs, oldLoaded, oldPool
 	})
 
-	save := func(body string) *httptest.ResponseRecorder {
-		rec := httptest.NewRecorder()
-		HandleSave(rec, httptest.NewRequest(http.MethodPost, "/admin/api/providers", strings.NewReader(body)))
-		return rec
-	}
-	savedWindow := func(t *testing.T, rec *httptest.ResponseRecorder) string {
-		t.Helper()
-		var payload struct {
-			Success bool `json:"success"`
-			Data    struct {
-				Provider CustomProvider `json:"provider"`
-			} `json:"data"`
-		}
-		if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
-			t.Fatalf("decode %s: %v", rec.Body.String(), err)
-		}
-		return payload.Data.Provider.TokenWindow
+	save := func(p CustomProvider) (CustomProvider, error) {
+		return SaveCustomProvider(p)
 	}
 
 	// 空窗口 → monthly
-	rec := save(`{"name":"A","baseURL":"https://a.example.com","tokenLimit":100}`)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("empty window status = %d body=%s", rec.Code, rec.Body.String())
+	got, err := save(CustomProvider{Name: "A", BaseURL: "https://a.example.com", TokenLimit: 100})
+	if err != nil {
+		t.Fatalf("empty window: %v", err)
 	}
-	if tw := savedWindow(t, rec); tw != "monthly" {
-		t.Fatalf("empty tokenWindow = %q, want monthly", tw)
+	if got.TokenWindow != "monthly" {
+		t.Fatalf("empty tokenWindow = %q, want monthly", got.TokenWindow)
 	}
 
 	// daily 保留
-	rec = save(`{"name":"B","baseURL":"https://b.example.com","tokenLimit":100,"tokenWindow":"daily"}`)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("daily window status = %d body=%s", rec.Code, rec.Body.String())
+	got, err = save(CustomProvider{Name: "B", BaseURL: "https://b.example.com", TokenLimit: 100, TokenWindow: "daily"})
+	if err != nil {
+		t.Fatalf("daily window: %v", err)
 	}
-	if tw := savedWindow(t, rec); tw != "daily" {
-		t.Fatalf("daily tokenWindow = %q, want daily", tw)
+	if got.TokenWindow != "daily" {
+		t.Fatalf("daily tokenWindow = %q, want daily", got.TokenWindow)
 	}
 
-	// 未知值 → 400
-	rec = save(`{"name":"C","baseURL":"https://c.example.com","tokenWindow":"weekly"}`)
-	if rec.Code != http.StatusBadRequest {
-		t.Fatalf("invalid window status = %d, want 400", rec.Code)
+	// 未知值 → 拒绝
+	if _, err := save(CustomProvider{Name: "C", BaseURL: "https://c.example.com", TokenWindow: "weekly"}); err == nil {
+		t.Fatal("unknown tokenWindow must be rejected")
 	}
+
 }

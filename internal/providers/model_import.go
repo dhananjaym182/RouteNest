@@ -9,10 +9,9 @@ package providers
 
 import (
 	"crypto/rand"
-	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
-	"net/http"
 	"sort"
 	"strings"
 	"sync"
@@ -20,7 +19,6 @@ import (
 
 	"routenest/internal/accounts"
 	"routenest/internal/domain"
-	"routenest/internal/httpx"
 	"routenest/internal/modelcatalog"
 	"routenest/internal/models"
 )
@@ -90,90 +88,92 @@ func buildImportBatch(p CustomProvider, entries []upstreamModelEntry) *importBat
 	return batch
 }
 
-// ---------- admin 端点 ----------
+// ---------- admin operations ----------
+// HTTP parsing and envelopes live in internal/admin; these functions hold the
+// rules and state changes.
 
-// POST /admin/api/models/import/preview  body: {id} 或草稿 {baseURL,apiKey,headers,free,name}
-// 拉取 + 分类 + 生成预览批次。草稿（未保存 Provider）走后者，批次 providerId 为空、
-// 仅可预览：apply 端点找不到 provider 会拒绝，前端改为「所选并入并保存」。
-// 上游失败按既有约定：HTTP 200 包 {error}。
-func HandleImportPreview(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		httpx.WriteAPI(w, http.StatusMethodNotAllowed, httpx.Response{Error: "method_not_allowed"})
-		return
-	}
-	var req struct {
-		ID      string            `json:"id"`
-		BaseURL string            `json:"baseURL"`
-		APIKey  string            `json:"apiKey"`
-		Headers map[string]string `json:"headers"`
-		Free    bool              `json:"free"`
-		Name    string            `json:"name"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		httpx.WriteAPI(w, http.StatusBadRequest, httpx.Response{Error: "invalid_json"})
-		return
-	}
+// ErrImportBatchNotFound: the batch was applied, discarded or expired.
+var ErrImportBatchNotFound = errors.New("batch not found (already applied or expired)")
+
+// ErrImportProviderGone: the provider that produced the batch was deleted.
+var ErrImportProviderGone = errors.New("provider no longer exists")
+
+// ErrModelNotFound: no model with the requested ID exists in the pool.
+var ErrModelNotFound = errors.New("model not found")
+
+// ErrInvalidModelCost: cost must be "free", "pass", or "" (automatic).
+var ErrInvalidModelCost = errors.New("id and cost(free|pass|empty) required")
+
+// DiscoveryError reports that upstream model discovery failed. The console shows
+// the message inside a successful response.
+type DiscoveryError struct{ Message string }
+
+func (e *DiscoveryError) Error() string { return e.Message }
+
+// ImportSource names the provider to discover from: a saved provider by ID, or
+// an unsaved draft identified by its base URL.
+type ImportSource struct {
+	ID      string
+	Name    string
+	BaseURL string
+	APIKey  string
+	Headers map[string]string
+	Free    bool
+}
+
+// PreviewImport discovers a provider's models and stores a preview batch for
+// review. A draft batch has no provider ID and cannot be applied.
+func PreviewImport(src ImportSource) (*importBatch, error) {
 	Load()
 	Mu.Lock()
 	var prov *CustomProvider
-	if req.ID != "" {
+	if src.ID != "" {
 		for _, p := range CustomProviders {
-			if p.ID == req.ID {
+			if p.ID == src.ID {
 				cp := *cloneProvider(p)
 				prov = &cp
 				break
 			}
 		}
-	} else if strings.TrimSpace(req.BaseURL) != "" {
+	} else if strings.TrimSpace(src.BaseURL) != "" {
 		prov = &CustomProvider{
-			Name:    req.Name,
-			BaseURL: strings.TrimRight(strings.TrimSpace(req.BaseURL), "/"),
-			APIKey:  req.APIKey,
-			Headers: req.Headers,
-			Free:    req.Free,
+			Name:    src.Name,
+			BaseURL: strings.TrimRight(strings.TrimSpace(src.BaseURL), "/"),
+			APIKey:  src.APIKey,
+			Headers: src.Headers,
+			Free:    src.Free,
 		}
 	}
 	Mu.Unlock()
 	if prov == nil {
-		httpx.WriteAPI(w, http.StatusNotFound, httpx.Response{Error: "provider not found"})
-		return
+		return nil, ErrProviderNotFound
 	}
 	// Protocol-aware discovery: a qoder provider catalog is COSY-signed and
 	// lives at /algo/api/v2/model/list, not {baseURL}/models.
 	entries, err := DiscoverModels(*prov, DiscoveryOverrides{})
 	if err != nil {
-		httpx.WriteAPI(w, http.StatusOK, httpx.Response{Success: true, Data: map[string]any{"error": err.Error()}})
-		return
+		return nil, &DiscoveryError{Message: err.Error()}
 	}
-	batch := buildImportBatch(*prov, entries)
-	httpx.WriteAPI(w, http.StatusOK, httpx.Response{Success: true, Data: map[string]any{"batch": batch}})
+	return buildImportBatch(*prov, entries), nil
 }
 
-// POST /admin/api/models/import/apply  body: {batchId, approve:[modelId…]}
-// 仅批准列表内的 add / tier_change 落盘；写入 provider.ModelIDs 使其在
-// SyncModels 清理逻辑中存续。
-func HandleImportApply(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		httpx.WriteAPI(w, http.StatusMethodNotAllowed, httpx.Response{Error: "method_not_allowed"})
-		return
-	}
-	var req struct {
-		BatchID string   `json:"batchId"`
-		Approve []string `json:"approve"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		httpx.WriteAPI(w, http.StatusBadRequest, httpx.Response{Error: "invalid_json"})
-		return
-	}
+// ImportApplyResult counts the models changed by ApplyImport.
+type ImportApplyResult struct {
+	Added   int
+	Changed int
+}
+
+// ApplyImport writes the approved add and tier_change items of a pending batch
+// into the pool and the provider's model list. The batch is consumed on success.
+func ApplyImport(batchID string, approve []string) (ImportApplyResult, error) {
 	importsMu.Lock()
-	batch := pendingImports[req.BatchID]
+	batch := pendingImports[batchID]
 	importsMu.Unlock()
 	if batch == nil {
-		httpx.WriteAPI(w, http.StatusNotFound, httpx.Response{Error: "batch not found (already applied or expired)"})
-		return
+		return ImportApplyResult{}, ErrImportBatchNotFound
 	}
-	approved := make(map[string]bool, len(req.Approve))
-	for _, id := range req.Approve {
+	approved := make(map[string]bool, len(approve))
+	for _, id := range approve {
 		approved[id] = true
 	}
 	byID := make(map[string]importItem, len(batch.Items))
@@ -193,8 +193,7 @@ func HandleImportApply(w http.ResponseWriter, r *http.Request) {
 		return nil
 	}()
 	if prov == nil {
-		httpx.WriteAPI(w, http.StatusNotFound, httpx.Response{Error: "provider no longer exists"})
-		return
+		return ImportApplyResult{}, ErrImportProviderGone
 	}
 	// Decisions are sorted by id so appended records keep a stable order.
 	var decisions []models.Decision
@@ -223,8 +222,7 @@ func HandleImportApply(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if added+changed == 0 {
-		httpx.WriteAPI(w, http.StatusOK, httpx.Response{Success: true, Data: map[string]any{"added": 0, "changed": 0}})
-		return
+		return ImportApplyResult{}, nil
 	}
 	Mu.Lock()
 	for i, p := range CustomProviders {
@@ -241,77 +239,57 @@ func HandleImportApply(w http.ResponseWriter, r *http.Request) {
 	importsMu.Unlock()
 	SyncModels()
 	log.Printf("model import applied: batch %s provider %s added=%d tierChanged=%d", batch.ID, prov.Name, added, changed)
-	httpx.WriteAPI(w, http.StatusOK, httpx.Response{Success: true, Data: map[string]any{"added": added, "changed": changed}})
+	return ImportApplyResult{Added: added, Changed: changed}, nil
 }
 
-// GET /admin/api/models/import/pending — 当前待批准批次（摘要）。
-func HandleImportPending(w http.ResponseWriter, r *http.Request) {
+// ImportSummary describes a pending batch without its items.
+type ImportSummary struct {
+	ID           string
+	ProviderID   string
+	ProviderName string
+	CreatedAt    time.Time
+	Items        int
+	Auto         bool
+}
+
+// PendingImports lists the batches awaiting review, newest first.
+func PendingImports() []ImportSummary {
 	importsMu.Lock()
-	out := make([]map[string]any, 0, len(pendingImports))
+	out := make([]ImportSummary, 0, len(pendingImports))
 	for _, b := range pendingImports {
-		out = append(out, map[string]any{
-			"id": b.ID, "providerId": b.ProviderID, "providerName": b.ProviderName,
-			"createdAt": b.CreatedAt, "items": len(b.Items), "auto": b.Auto,
-		})
+		out = append(out, ImportSummary{ID: b.ID, ProviderID: b.ProviderID, ProviderName: b.ProviderName, CreatedAt: b.CreatedAt, Items: len(b.Items), Auto: b.Auto})
 	}
 	importsMu.Unlock()
-	sort.Slice(out, func(i, j int) bool {
-		return out[i]["createdAt"].(time.Time).After(out[j]["createdAt"].(time.Time))
-	})
-	httpx.WriteAPI(w, http.StatusOK, httpx.Response{Success: true, Data: map[string]any{"batches": out}})
+	sort.Slice(out, func(i, j int) bool { return out[i].CreatedAt.After(out[j].CreatedAt) })
+	return out
 }
 
-// GET /admin/api/models/import/batch?id=x — 读回待批准批次全文（横幅点击打开 Auto 批次用）。
-func HandleImportBatch(w http.ResponseWriter, r *http.Request) {
-	id := r.URL.Query().Get("id")
+// PendingImport returns the full pending batch with the given ID.
+func PendingImport(id string) (*importBatch, error) {
 	importsMu.Lock()
 	batch := pendingImports[id]
 	importsMu.Unlock()
 	if batch == nil {
-		httpx.WriteAPI(w, http.StatusNotFound, httpx.Response{Error: "batch not found (already applied or expired)"})
-		return
+		return nil, ErrImportBatchNotFound
 	}
-	httpx.WriteAPI(w, http.StatusOK, httpx.Response{Success: true, Data: map[string]any{"batch": batch}})
+	return batch, nil
 }
 
-// POST /admin/api/models/import/discard  body: {batchId}
-func HandleImportDiscard(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		BatchID string `json:"batchId"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		httpx.WriteAPI(w, http.StatusBadRequest, httpx.Response{Error: "invalid_json"})
-		return
-	}
+// DiscardImport drops a pending batch without applying it.
+func DiscardImport(id string) {
 	importsMu.Lock()
-	delete(pendingImports, req.BatchID)
+	delete(pendingImports, id)
 	importsMu.Unlock()
-	httpx.WriteAPI(w, http.StatusOK, httpx.Response{Success: true})
 }
 
-// POST /admin/api/models/cost  body: {id, cost:"free"|"pass"|""}
-// 手动定级（TierSignal="manual"）；cost 传空字符串=恢复自动（清除 manual 标记，
-// 层级保留现值，等下一次导入/同步再判定）。§9.3：manual 条目在导入批次中 protected。
-func HandleModelCost(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		httpx.WriteAPI(w, http.StatusMethodNotAllowed, httpx.Response{Error: "method_not_allowed"})
-		return
+// SetModelCost sets a model's manual tier. An empty cost restores automatic
+// classification; the tier stays as it is until the next import or sync.
+func SetModelCost(id, cost string) error {
+	if id == "" || (cost != "free" && cost != "pass" && cost != "") {
+		return ErrInvalidModelCost
 	}
-	var req struct {
-		ID   string `json:"id"`
-		Cost string `json:"cost"`
+	if !models.SetManualCost(id, cost, time.Now().Unix()) {
+		return ErrModelNotFound
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		httpx.WriteAPI(w, http.StatusBadRequest, httpx.Response{Error: "invalid_json"})
-		return
-	}
-	if req.ID == "" || (req.Cost != "free" && req.Cost != "pass" && req.Cost != "") {
-		httpx.WriteAPI(w, http.StatusBadRequest, httpx.Response{Error: "id and cost(free|pass|empty) required"})
-		return
-	}
-	if !models.SetManualCost(req.ID, req.Cost, time.Now().Unix()) {
-		httpx.WriteAPI(w, http.StatusNotFound, httpx.Response{Error: "model not found"})
-		return
-	}
-	httpx.WriteAPI(w, http.StatusOK, httpx.Response{Success: true})
+	return nil
 }

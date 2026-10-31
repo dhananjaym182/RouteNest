@@ -9,7 +9,6 @@ import (
 	"net/http/httptest"
 	"routenest/internal/admin"
 	"routenest/internal/combos"
-	"routenest/internal/providers"
 	"routenest/internal/zen"
 	"strings"
 	"testing"
@@ -60,7 +59,7 @@ func TestProviderTestUnsavedOK(t *testing.T) {
 		gotModel = readReqModel(req)
 		return stubResp(req, http.StatusOK, okCompletion)
 	})
-	code, resp := postAdminJSON(t, providers.HandleTest,
+	code, resp := postAdminRoute(t, "/admin/api/providers/test",
 		`{"baseURL":"http://up.test/v1","apiKey":"sk-test","model":"unsaved-m"}`)
 	if code != 200 || !resp.Success {
 		t.Fatalf("status=%d success=%v err=%s", code, resp.Success, resp.Error)
@@ -90,7 +89,7 @@ func TestProviderTestUnsavedModelRequired(t *testing.T) {
 		t.Fatalf("no upstream call expected")
 		return stubResp(req, 500, "")
 	})
-	code, resp := postAdminJSON(t, providers.HandleTest, `{"baseURL":"http://up.test/v1"}`)
+	code, resp := postAdminRoute(t, "/admin/api/providers/test", `{"baseURL":"http://up.test/v1"}`)
 	if code != 200 || !resp.Success {
 		t.Fatalf("status=%d success=%v", code, resp.Success)
 	}
@@ -110,7 +109,7 @@ func TestProviderTestSavedModelOverride(t *testing.T) {
 		gotModel = readReqModel(req)
 		return stubResp(req, http.StatusOK, okCompletion)
 	})
-	_, resp := postAdminJSON(t, providers.HandleTest, `{"id":"p1","model":"second-m"}`)
+	_, resp := postAdminRoute(t, "/admin/api/providers/test", `{"id":"p1","model":"second-m"}`)
 	if d := dataMap(t, resp); d["model"] != "second-m" || gotModel != "second-m" {
 		t.Fatalf("model = %v (upstream saw %q), want second-m", d["model"], gotModel)
 	}
@@ -124,7 +123,7 @@ func TestProviderTestSavedUpstreamErrorIsOKEnvelope(t *testing.T) {
 	installTransport(t, func(req *http.Request) *http.Response {
 		return stubResp(req, http.StatusUnauthorized, `{"error":"bad key"}`)
 	})
-	code, resp := postAdminJSON(t, providers.HandleTest, `{"id":"p1"}`)
+	code, resp := postAdminRoute(t, "/admin/api/providers/test", `{"id":"p1"}`)
 	if code != 200 || !resp.Success {
 		t.Fatalf("status=%d success=%v", code, resp.Success)
 	}
@@ -442,4 +441,19 @@ func TestQuickModelTestTokenBudget(t *testing.T) {
 	if gotMT < 1024 {
 		t.Fatalf("provider probe max_tokens = %v, want >= 1024", gotMT)
 	}
+}
+
+// postAdminRoute posts body to path through the public route table, so the
+// request reaches the same adapter and auth wrapper as the console.
+func postAdminRoute(t *testing.T, path, body string) (int, admin.APIResponse) {
+	t.Helper()
+	mux := http.NewServeMux()
+	admin.RegisterRoutes(mux)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, httptest.NewRequest("POST", path, strings.NewReader(body)))
+	var resp admin.APIResponse
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode response: %v (body=%s)", err, rec.Body.String())
+	}
+	return rec.Code, resp
 }

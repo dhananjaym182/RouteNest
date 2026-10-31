@@ -1,10 +1,6 @@
 package providers
 
 import (
-	"encoding/json"
-	"net/http"
-	"net/http/httptest"
-	"strings"
 	"testing"
 	"time"
 )
@@ -130,11 +126,8 @@ func TestProviderCooldownResetAndListPayload(t *testing.T) {
 	}()
 
 	// 只清 m1
-	rec := httptest.NewRecorder()
-	HandleCooldownReset(rec, httptest.NewRequest(http.MethodPost, "/admin/api/providers/cooldown-reset",
-		strings.NewReader(`{"id":"provR","model":"m1"}`)))
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d body=%s", rec.Code, rec.Body.String())
+	if removed := ResetCooldowns("provR", "m1"); removed != 1 {
+		t.Fatalf("scoped reset removed %d, want 1", removed)
 	}
 	Mu.Lock()
 	_, m1 := Cooldowns["provR:m1"]
@@ -146,11 +139,8 @@ func TestProviderCooldownResetAndListPayload(t *testing.T) {
 	}
 
 	// 清整个 provider
-	rec = httptest.NewRecorder()
-	HandleCooldownReset(rec, httptest.NewRequest(http.MethodPost, "/admin/api/providers/cooldown-reset",
-		strings.NewReader(`{"id":"provR"}`)))
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d", rec.Code)
+	if removed := ResetCooldowns("provR", ""); removed != 1 {
+		t.Fatalf("provider reset removed %d, want 1 (m2)", removed)
 	}
 	Mu.Lock()
 	remaining := len(Cooldowns)
@@ -159,32 +149,12 @@ func TestProviderCooldownResetAndListPayload(t *testing.T) {
 		t.Fatalf("cooldowns left = %d, want only other:m", remaining)
 	}
 
-	// 缺 id → 400
-	rec = httptest.NewRecorder()
-	HandleCooldownReset(rec, httptest.NewRequest(http.MethodPost, "/admin/api/providers/cooldown-reset",
-		strings.NewReader(`{}`)))
-	if rec.Code != http.StatusBadRequest {
-		t.Fatalf("missing-id status = %d", rec.Code)
+	// 列表视图带 health 字段
+	ov := ProviderOverview()
+	if len(ov.Providers) != 1 {
+		t.Fatalf("providers = %d, want 1", len(ov.Providers))
 	}
-
-	// 列表接口带 health 字段
-	rec = httptest.NewRecorder()
-	HandleList(rec, httptest.NewRequest(http.MethodGet, "/admin/api/providers", nil))
-	var payload struct {
-		Success bool `json:"success"`
-		Data    struct {
-			Providers     []map[string]any `json:"providers"`
-			Health        map[string]any   `json:"health"`
-			AccountHealth map[string][]int `json:"accountHealth"`
-		} `json:"data"`
-	}
-	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
-		t.Fatalf("payload decode: %v (%s)", err, rec.Body.String())
-	}
-	if !payload.Success || len(payload.Data.Providers) != 1 {
-		t.Fatalf("payload = %+v", payload)
-	}
-	if payload.Data.Health["provR"] == nil {
-		t.Fatalf("health missing provR: %v", payload.Data.Health)
+	if ov.Health["provR"] == nil {
+		t.Fatalf("health missing provR: %v", ov.Health)
 	}
 }
