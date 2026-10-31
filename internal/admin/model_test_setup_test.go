@@ -39,12 +39,19 @@ func comboTestAccount(id string) *Account {
 
 func installPool(t *testing.T, models []Model, accs ...*Account) {
 	t.Helper()
-	old := accounts.Pool
-	t.Cleanup(func() { accounts.Pool = old })
 	if len(accs) == 0 {
 		accs = []*Account{comboTestAccount("acc1")}
 	}
+	// Writes take PoolMu: background goroutines read the pool under the same lock.
+	accounts.PoolMu.Lock()
+	old := accounts.Pool
 	accounts.Pool = &AccountPool{Accounts: accs, Models: models}
+	accounts.PoolMu.Unlock()
+	t.Cleanup(func() {
+		accounts.PoolMu.Lock()
+		accounts.Pool = old
+		accounts.PoolMu.Unlock()
+	})
 }
 
 func installConfig(t *testing.T, cfg *admin.ProxyConfig) {

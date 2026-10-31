@@ -399,6 +399,15 @@ func GetProxyConfig() *ProxyConfig {
 	return Config
 }
 
+// SnapshotProxyConfig returns a deep copy of the live configuration, taken under
+// the config lock. Writers edit the copy and publish it with SetProxy, so they
+// never mutate the configuration that requests are reading.
+func SnapshotProxyConfig() *ProxyConfig {
+	ConfigMu.Lock()
+	defer ConfigMu.Unlock()
+	return Config.Clone()
+}
+
 func SetProxyConfig(c *ProxyConfig) {
 	ConfigMu.Lock()
 	defer ConfigMu.Unlock()

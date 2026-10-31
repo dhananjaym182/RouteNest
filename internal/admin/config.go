@@ -15,7 +15,7 @@ import (
 )
 
 var adminConfig = &adminapi.Config{
-	Proxy: GetProxyConfig,
+	Proxy: SnapshotProxyConfig,
 	SetProxy: func(cfg *ProxyConfig) {
 		SetProxyConfig(cfg)
 	},
