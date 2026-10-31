@@ -21,6 +21,7 @@ import (
 	"routenest/internal/accounts"
 	"routenest/internal/httpx"
 	"routenest/internal/modelcatalog"
+	"routenest/internal/models"
 )
 
 // Tier signals (stored in Model.TierSignal; admin UI shows why a model is free
@@ -196,31 +197,21 @@ func HandleImportApply(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteAPI(w, http.StatusNotFound, httpx.Response{Error: "provider no longer exists"})
 		return
 	}
-	added, changed, now := 0, 0, time.Now().Unix()
-	accounts.LoadPool() // ensure the pool is loaded before locking
-	accounts.PoolMu.Lock()
-	// Index, not pointer: an append below may reallocate the slice, and a stored
-	// pointer would then write into the old array and lose the change.
-	existing := make(map[string]int, len(accounts.Pool.Models))
-	for i := range accounts.Pool.Models {
-		existing[accounts.Pool.Models[i].ID] = i
-	}
+	// Decisions are sorted by id so appended records keep a stable order.
+	var decisions []models.Decision
 	for id := range approved {
 		it, ok := byID[id]
 		if !ok || (it.Action != "add" && it.Action != "tier_change") {
 			continue
 		}
-		if i, exists := existing[id]; exists {
-			m := &accounts.Pool.Models[i]
-			m.Cost, m.TierSignal, m.TierDecidedAt = it.Tier, it.Signal, now
-			changed++
-			continue
-		}
-		accounts.Pool.Models = append(accounts.Pool.Models, Model{
-			ID: id, Provider: prov.Name, Cost: it.Tier, Status: "active",
-			Source: "provider", TierSignal: it.Signal, TierDecidedAt: now,
-		})
-		// 进入 provider.ModelIDs：SyncModels 的清理循环以它为准
+		decisions = append(decisions, models.Decision{ID: id, Cost: it.Tier, Signal: it.Signal})
+	}
+	sort.Slice(decisions, func(i, j int) bool { return decisions[i].ID < decisions[j].ID })
+	addedIDs, changed := models.ApplyDecisions(decisions, prov.Name, time.Now().Unix())
+	added := len(addedIDs)
+	// Newly added models join the provider's ModelIDs, which SyncModels uses as
+	// the authority for its cleanup loop.
+	for _, id := range addedIDs {
 		found := false
 		for _, mid := range prov.ModelIDs {
 			if mid == id {
@@ -231,9 +222,7 @@ func HandleImportApply(w http.ResponseWriter, r *http.Request) {
 		if !found {
 			prov.ModelIDs = append(prov.ModelIDs, id)
 		}
-		added++
 	}
-	accounts.PoolMu.Unlock()
 	if added+changed == 0 {
 		httpx.WriteAPI(w, http.StatusOK, httpx.Response{Success: true, Data: map[string]any{"added": 0, "changed": 0}})
 		return
@@ -321,28 +310,9 @@ func HandleModelCost(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteAPI(w, http.StatusBadRequest, httpx.Response{Error: "id and cost(free|pass|empty) required"})
 		return
 	}
-	p := accounts.LoadPool()
-	accounts.PoolMu.Lock()
-	found := false
-	for i, m := range p.Models {
-		if m.ID == req.ID {
-			if req.Cost == "" {
-				p.Models[i].TierSignal = ""
-				p.Models[i].TierDecidedAt = 0
-			} else {
-				p.Models[i].Cost = req.Cost
-				p.Models[i].TierSignal = "manual"
-				p.Models[i].TierDecidedAt = time.Now().Unix()
-			}
-			found = true
-			break
-		}
-	}
-	accounts.PoolMu.Unlock()
-	if !found {
+	if !models.SetManualCost(req.ID, req.Cost, time.Now().Unix()) {
 		httpx.WriteAPI(w, http.StatusNotFound, httpx.Response{Error: "model not found"})
 		return
 	}
-	accounts.SavePool()
 	httpx.WriteAPI(w, http.StatusOK, httpx.Response{Success: true})
 }

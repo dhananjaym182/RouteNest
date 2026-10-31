@@ -2,10 +2,8 @@ package providers
 
 import (
 	"log"
+	"routenest/internal/models"
 	"sort"
-	"time"
-
-	"routenest/internal/accounts"
 )
 
 // SyncModels 把启用中 provider 声明的模型同步进账号池（Source="provider"）：
@@ -20,12 +18,7 @@ import (
 //     模型的默认模型一并清空
 func SyncModels() {
 	provs := List() // Mu 自持自放；之后再拿 accounts.PoolMu，无反向持锁路径
-	type claim struct {
-		name   string
-		cost   string
-		signal string // id-only classifier hit, stamped as TierSignal provenance
-	}
-	claimed := map[string]claim{}
+	claimed := map[string]models.ProviderClaim{}
 	var ids []string
 	for _, p := range provs {
 		if !p.Enabled {
@@ -42,9 +35,9 @@ func SyncModels() {
 				// flag all land in the pool as free immediately, without the
 				// import wizard. Only a parsed non-zero price (catalog path)
 				// can override to paid.
-				c := claim{name: p.Name, cost: "pass"}
+				c := models.ProviderClaim{ID: id, Provider: p.Name, Cost: "pass"}
 				if tier, sig := classifyUpstreamModel(upstreamModelEntry{ID: id}, p.Free); tier == "free" {
-					c.cost, c.signal = "free", sig
+					c.Cost, c.TierSignal = "free", sig
 				}
 				claimed[id] = c
 				ids = append(ids, id)
@@ -52,79 +45,12 @@ func SyncModels() {
 		}
 	}
 	sort.Strings(ids) // 稳定顺序，避免 map 遍历乱序导致池内顺序抖动
-
-	p := accounts.LoadPool()
-	accounts.PoolMu.Lock()
-	changed := false
-	inPool := make(map[string]bool, len(p.Models))
-	for _, m := range p.Models {
-		inPool[m.ID] = true
-	}
-	kept := make([]Model, 0, len(p.Models)+len(ids))
-	for _, m := range p.Models {
-		if m.Source == "provider" {
-			if _, ok := claimed[m.ID]; !ok {
-				changed = true // provider 已删除 / 停用 / 移除该模型
-				continue
-			}
-		}
-		kept = append(kept, m)
-	}
+	claims := make([]models.ProviderClaim, 0, len(ids))
 	for _, id := range ids {
-		c := claimed[id]
-		if inPool[id] {
-			// 已有条目：provider 条目刷新归属与计费（其他来源条目不动）
-			for i := range kept {
-				if kept[i].ID == id && kept[i].Source == "provider" {
-					if kept[i].Provider != c.name {
-						kept[i].Provider = c.name
-						changed = true
-					}
-					// §9.3：分级器批准过的模型保留逐模型层级，不被整源层级覆盖。
-					// Untiered entries that hit an id-only free signal are upgraded
-					// in place with provenance, repairing entries seeded before the
-					// classifier existed; otherwise the provider-wide tier applies.
-					if kept[i].TierSignal == "" {
-						if c.signal != "" && kept[i].Cost != "free" {
-							kept[i].Cost = "free"
-							kept[i].TierSignal = c.signal
-							kept[i].TierDecidedAt = time.Now().Unix()
-							changed = true
-						} else if c.signal == "" && kept[i].Cost != c.cost {
-							kept[i].Cost = c.cost
-							changed = true
-						}
-					}
-					break
-				}
-			}
-			continue
-		}
-		m := Model{ID: id, Provider: c.name, Cost: c.cost, Status: "active", Source: "provider", TierSignal: c.signal}
-		if c.signal != "" {
-			m.TierDecidedAt = time.Now().Unix()
-		}
-		kept = append(kept, m)
-		changed = true
+		claims = append(claims, claimed[id])
 	}
-	if !changed {
-		accounts.PoolMu.Unlock()
+	if !models.ProjectProvider(claims) {
 		return
 	}
-	if p.DefaultModel != "" {
-		stillListed := false
-		for _, m := range kept {
-			if m.ID == p.DefaultModel {
-				stillListed = true
-				break
-			}
-		}
-		if !stillListed {
-			p.DefaultModel = ""
-		}
-	}
-	p.Models = kept
-	accounts.PoolMu.Unlock()
-	accounts.SavePool()
 	log.Printf("provider models synced: %d model(s) from %d enabled provider(s)", len(claimed), len(provs))
 }

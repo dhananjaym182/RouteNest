@@ -27,6 +27,12 @@ const (
 	SourceCustom = ""
 )
 
+// Cost values. Records carry "free" or "pass".
+const (
+	CostFree = "free"
+	CostPass = "pass"
+)
+
 // Snapshot returns a deep copy of the live model list. Callers may modify the
 // result freely; it never aliases the pool.
 func Snapshot() []domain.Model {

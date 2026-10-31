@@ -19,8 +19,8 @@ import (
 	"sync"
 	"time"
 
-	"routenest/internal/accounts"
 	"routenest/internal/modelcatalog"
+	"routenest/internal/models"
 	"routenest/internal/platform"
 	"routenest/internal/store/syncstate"
 )
@@ -108,41 +108,13 @@ func recheckProviderModels(p CustomProvider) providerRecheckState {
 	provRecheckMu.Unlock()
 
 	// 2) 写池：打/撤 Delisted（只动 Source=provider 且在本 provider 声明内的条目）
-	marked := 0
-	accounts.LoadPool() // ensure the pool is loaded before locking
-	accounts.PoolMu.Lock()
-	for i := range accounts.Pool.Models {
-		m := &accounts.Pool.Models[i]
-		if m.Source != "provider" || !declared[m.ID] {
-			continue
-		}
-		if containsStr(toMark, m.ID) {
-			if !m.Delisted {
-				m.Delisted = true
-				marked++
-			}
-		} else if upstream[m.ID] && m.Delisted {
-			m.Delisted = false
-		}
-	}
-	alreadyMarked := 0
-	for _, m := range accounts.Pool.Models {
-		if m.Source == "provider" && m.Delisted && declared[m.ID] {
-			alreadyMarked++
-		}
-	}
-	accounts.PoolMu.Unlock()
-	if marked > 0 {
-		accounts.SavePool()
-	}
+	marked, alreadyMarked := models.ApplyDelisting(declared, toMark, upstream)
 
 	// 3) 新上游模型 → Auto 预览批次（不在声明里也不在池里；每 provider 至多一个待审批次）
 	poolHas := map[string]bool{}
-	accounts.PoolMu.Lock()
-	for _, m := range accounts.Pool.Models {
+	for _, m := range models.Snapshot() {
 		poolHas[m.ID] = true
 	}
-	accounts.PoolMu.Unlock()
 	fresh := modelcatalog.FilterNew(entries, declared, poolHas)
 	batchID, queued := "", 0
 	if len(fresh) > 0 {
@@ -193,15 +165,6 @@ func setProviderRecheckState(providerID string, st providerRecheckState) {
 	providerRecheckStat[providerID] = &cp
 	saveProviderRecheckStateLocked()
 	provRecheckMu.Unlock()
-}
-
-func containsStr(list []string, s string) bool {
-	for _, v := range list {
-		if v == s {
-			return true
-		}
-	}
-	return false
 }
 
 // clearProviderRecheck provider 删除时清掉其检测状态与待审 Auto 批次。
