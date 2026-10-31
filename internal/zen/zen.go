@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -17,6 +18,7 @@ import (
 	"routenest/internal/config"
 	"routenest/internal/dispatch"
 	"routenest/internal/domain"
+	"routenest/internal/models"
 	"routenest/internal/platform"
 	"routenest/internal/protocol/openaichat"
 	responsesconv "routenest/internal/protocol/responses"
@@ -921,112 +923,80 @@ func SyncModels() SyncResult {
 		return fail(err)
 	}
 
-	// 组装远程 zen 模型（去重；计费按 -free 后缀或种子白名单判定）
+	// The build runs under the pool lock in models.ReplaceSource, against the zen
+	// records as they are at write time. Free classification uses the -free
+	// suffix or the seed allowlist, duplicates are dropped, and limits come from
+	// the seed table. Locked limits (MetaLocked) win over the table.
 	seedFree := make(map[string]bool, len(SeedModels))
 	for _, sm := range SeedModels {
 		seedFree[sm.ID] = true
 	}
-	seen := make(map[string]bool)
-	var remote []Model
-	for _, item := range payload.Data {
-		id := item.ID
-		if id == "" || seen[id] {
-			continue
-		}
-		seen[id] = true
-		cost := "pass"
-		if strings.HasSuffix(id, "-free") || seedFree[id] {
-			cost = "free"
-		}
-		remote = append(remote, Model{
-			ID:       id,
-			Provider: "opencode",
-			Cost:     cost,
-			Status:   "active",
-			Custom:   false,
-			Source:   "zen",
-		})
-	}
-	if len(remote) == 0 {
-		return fail(fmt.Errorf("models API returned empty list"))
-	}
-
-	// 补全上下文信息：远程接口不带 context/output。
-	// 用户在管理页锁定过的条目（MetaLocked）保留原值；
-	// 其余按种子表刷新（种子值更新时旧条目自动跟进），新模型回退默认。
-	p := accounts.LoadPool()
-	oldZen := make(map[string]Model, len(p.Models))
-	for _, m := range p.Models {
-		if m.Source == "zen" {
+	update, err := models.ReplaceSource(models.SourceZen, func(current []Model) []Model {
+		oldZen := make(map[string]Model, len(current))
+		for _, m := range current {
 			oldZen[m.ID] = m
 		}
-	}
-	fillMeta := func(m Model) Model {
-		if om, ok := oldZen[m.ID]; ok {
-			// 用户手动停用的模型在重建条目时保留标记，避免同步冲掉停用状态。
-			// 能力元数据（thinking/modalities）上游不提供，同样保留旧值。
-			m.Disabled = om.Disabled
-			m.ThinkingLevels = om.ThinkingLevels
-			m.InputModalities = om.InputModalities
-			m.OutputModalities = om.OutputModalities
-			if om.MetaLocked && om.Context > 0 {
-				m.Context, m.Output = om.Context, om.Output
-				m.MetaLocked = true
-				return m
+		seen := make(map[string]bool)
+		var remote []Model
+		for _, item := range payload.Data {
+			id := item.ID
+			if id == "" || seen[id] {
+				continue
 			}
-		}
-		for _, sm := range SeedModels {
-			if sm.ID == m.ID {
-				m.Context, m.Output = sm.Context, sm.Output
-				return m
+			seen[id] = true
+			cost := "pass"
+			if strings.HasSuffix(id, "-free") || seedFree[id] {
+				cost = "free"
 			}
+			remote = append(remote, Model{
+				ID:       id,
+				Provider: "opencode",
+				Cost:     cost,
+				Status:   "active",
+				Custom:   false,
+				Source:   models.SourceZen,
+			})
 		}
-		if m.Context == 0 {
-			m.Context = 200000
-		}
-		if m.Output == 0 {
-			m.Output = 32768
-		}
-		return m
-	}
-	for i := range remote {
-		remote[i] = fillMeta(remote[i])
-	}
-
-	accounts.PoolMu.Lock()
-	oldIDs := make(map[string]bool)
-	var kept []Model
-	for _, m := range p.Models {
-		if m.Source == "zen" {
-			oldIDs[m.ID] = true
-			continue
-		}
-		kept = append(kept, m)
-	}
-	for _, m := range remote {
-		if !oldIDs[m.ID] {
-			res.Added = append(res.Added, m.ID)
-		}
-	}
-	// 官方列表里消失的旧模型不删除：实测列表移除后模型往往仍可继续用
-	// （如 z-ai/glm-5.3-flash），只打上 Delisted 标记（管理页显示「已下架」，
-	// 支持手动移除）；重新出现时新条目天然无标记，标记自动清除。
-	// res.Removed 只记录新下架的。
-	for _, m := range p.Models {
-		if m.Source == "zen" && !seen[m.ID] {
-			if !m.Delisted {
-				res.Removed = append(res.Removed, m.ID)
+		fillMeta := func(m Model) Model {
+			if om, ok := oldZen[m.ID]; ok {
+				// 用户手动停用的模型在重建条目时保留标记，避免同步冲掉停用状态。
+				// 能力元数据（thinking/modalities）上游不提供，同样保留旧值。
+				m.Disabled = om.Disabled
+				m.ThinkingLevels = om.ThinkingLevels
+				m.InputModalities = om.InputModalities
+				m.OutputModalities = om.OutputModalities
+				if om.MetaLocked && om.Context > 0 {
+					m.Context, m.Output = om.Context, om.Output
+					m.MetaLocked = true
+					return m
+				}
 			}
-			m.Delisted = true
-			kept = append(kept, m)
+			for _, sm := range SeedModels {
+				if sm.ID == m.ID {
+					m.Context, m.Output = sm.Context, sm.Output
+					return m
+				}
+			}
+			if m.Context == 0 {
+				m.Context = 200000
+			}
+			if m.Output == 0 {
+				m.Output = 32768
+			}
+			return m
 		}
+		for i := range remote {
+			remote[i] = fillMeta(remote[i])
+		}
+		return remote
+	})
+	if errors.Is(err, models.ErrEmptySource) {
+		return fail(fmt.Errorf("models API returned empty list"))
 	}
-	kept = append(kept, remote...)
-	p.Models = kept
-	res.Total = len(remote)
+	res.Added = update.Added
+	res.Removed = update.Removed
+	res.Total = update.Total
 	res.Changed = len(res.Added) > 0 || len(res.Removed) > 0
-	accounts.PoolMu.Unlock()
-	accounts.SavePool()
 
 	RemoteEnabledMu.Lock()
 	RemoteEnabled = true
