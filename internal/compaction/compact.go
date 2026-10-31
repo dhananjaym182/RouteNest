@@ -81,13 +81,6 @@ var (
 	compactStatesMu sync.Mutex
 )
 
-// CallClineAPI routes a non-zen summary request through the regular Cline
-// provider path. Root composition wires the real implementation; the default
-// fails so callers fall back to truncation when the seam is unwired.
-var CallClineAPI = func(params map[string]any, stream bool) (*http.Response, error) {
-	return nil, fmt.Errorf("cline API not wired")
-}
-
 // CompactStateKeys returns the conversation keys with retained summaries.
 func CompactStateKeys() []string {
 	compactStatesMu.Lock()
@@ -341,7 +334,7 @@ func callSummaryModel(model, prompt string, maxSummary int) (string, error) {
 	if zm, ok := zen.ResolveInfo(model); ok && zen.IsFreeModel(zm) {
 		resp, err = zen.Call(body, false)
 	} else {
-		resp, err = CallClineAPI(body, false)
+		resp, _, err = routing.CallClineAPI(body, false)
 	}
 	if err != nil {
 		return "", err
@@ -797,18 +790,4 @@ func FallbackTruncate(params map[string]any, zm domain.Model) CompactOutcome {
 	}
 	params["messages"] = out
 	return CompactOutcome{Changed: true, Note: "[compacted via truncation]"}
-}
-
-// IsContextLengthError reports whether err is an upstream 400 indicating the
-// request exceeded the model's maximum context window.
-func IsContextLengthError(err error) bool {
-	if err == nil {
-		return false
-	}
-	msg := strings.ToLower(err.Error())
-	return strings.Contains(msg, "context length") ||
-		strings.Contains(msg, "maximum context") ||
-		strings.Contains(msg, "context window") ||
-		strings.Contains(msg, "too many tokens") ||
-		strings.Contains(msg, "token limit")
 }

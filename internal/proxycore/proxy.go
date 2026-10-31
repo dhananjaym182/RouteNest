@@ -476,7 +476,7 @@ func Start(host string, port int) error {
 			}
 			resp, err := zen.Call(params, isStream)
 			// 上游返回「上下文超限」400：压缩后重试一次，避免 Claude Code 大上下文直接失败
-			if err != nil && compaction.IsContextLengthError(err) {
+			if err != nil && routing.IsContextLengthError(err) {
 				log.Printf("  chat: context length exceeded, compacting and retrying")
 				out2 := compaction.FallbackTruncate(params, zm)
 				if out2.Changed {
@@ -562,7 +562,7 @@ func Start(host string, port int) error {
 		compaction.CompactForRequest(params, zm, compaction.RequestSessionID(params, r.Header), "chat")
 		reqLog.ToolNames = clampParamsToolNames(params)
 		resp, acc, err := routing.CallClineAPI(params, isStream)
-		if err != nil && compaction.IsContextLengthError(err) {
+		if err != nil && routing.IsContextLengthError(err) {
 			if out := compaction.FallbackTruncate(params, zm); out.Changed {
 				log.Printf("  chat %s", out.Note)
 				resp, acc, err = routing.CallClineAPI(params, isStream)
@@ -1360,7 +1360,7 @@ func handleAnthropicMessages(w http.ResponseWriter, r *http.Request) {
 		}
 		resp, err := zen.Call(openAIReq, req.Stream)
 		// 上游返回「上下文超限」400：压缩后重试一次
-		if err != nil && compaction.IsContextLengthError(err) {
+		if err != nil && routing.IsContextLengthError(err) {
 			log.Printf("  anthropic: context length exceeded, compacting and retrying")
 			out2 := compaction.FallbackTruncate(openAIReq, zm)
 			if out2.Changed {
@@ -1485,7 +1485,7 @@ func handleAnthropicMessages(w http.ResponseWriter, r *http.Request) {
 		contextRetried := false
 		streamAnthropicWithRetry(r.Context(), w, func() (*http.Response, *domain.Account, error) {
 			resp, acc, err := routing.CallClineAPI(openAIReq, req.Stream)
-			if err != nil && !contextRetried && compaction.IsContextLengthError(err) {
+			if err != nil && !contextRetried && routing.IsContextLengthError(err) {
 				contextRetried = true
 				if out := compaction.FallbackTruncate(openAIReq, zm); out.Changed {
 					log.Printf("  anthropic %s", out.Note)
@@ -1506,7 +1506,7 @@ func handleAnthropicMessages(w http.ResponseWriter, r *http.Request) {
 	// Cline 通道：截短超长工具名并记录映射，回程由响应处理器还原（Meta 后端硬限 ≤64）
 	reqLog.ToolNames = clampParamsToolNames(openAIReq)
 	resp, acc, err := routing.CallClineAPI(openAIReq, req.Stream)
-	if err != nil && compaction.IsContextLengthError(err) {
+	if err != nil && routing.IsContextLengthError(err) {
 		if out := compaction.FallbackTruncate(openAIReq, zm); out.Changed {
 			log.Printf("  anthropic %s", out.Note)
 			resp, acc, err = routing.CallClineAPI(openAIReq, req.Stream)
@@ -1694,7 +1694,7 @@ func StreamAnthropicCombo(ctx context.Context, w http.ResponseWriter, params map
 		}
 		start := time.Now()
 		resp, acc, upstream, provName, err := combos.CallSingleModel(params, c.entry, true, sessionID)
-		if err != nil && compaction.IsContextLengthError(err) && !truncatedForRun {
+		if err != nil && routing.IsContextLengthError(err) && !truncatedForRun {
 			truncatedForRun = true
 			log.Printf("  combo %q: entry %d %q context length exceeded, truncating and retrying", combo.ID, c.order, c.model)
 			if out := compaction.FallbackTruncate(params, compaction.ModelForCompaction(c.model)); out.Changed {
@@ -1709,7 +1709,7 @@ func StreamAnthropicCombo(ctx context.Context, w http.ResponseWriter, params map
 				Source: strings.TrimSpace(c.entry.Source), Provider: strings.TrimSpace(c.entry.Provider),
 				ProviderName: provName})
 			combos.ApplyLog(reqLog, combo, trace, "")
-			if compaction.IsContextLengthError(err) {
+			if routing.IsContextLengthError(err) {
 				// 上下文上限是模型/上游各自的属性：当前条目装不下，换下一个条目仍可能成功。
 				continue
 			}

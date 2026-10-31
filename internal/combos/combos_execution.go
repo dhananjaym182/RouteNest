@@ -203,7 +203,7 @@ func CallSingleModel(params map[string]any, entry domain.ComboEntry, stream bool
 		}
 		resp, err := zen.Call(ep, stream)
 		// 上游返回「上下文超限」400：压缩后重试一次
-		if err != nil && compaction.IsContextLengthError(err) {
+		if err != nil && routing.IsContextLengthError(err) {
 			if zm, ok := zen.ResolveInfo(model); ok {
 				log.Printf("  combo: context length exceeded, compacting and retrying")
 				if out := compaction.FallbackTruncate(ep, zm); out.Changed {
@@ -367,7 +367,7 @@ func RunCombo(params map[string]any, combo domain.ModelCombo, stream bool, sessi
 		// 上下文超限（400 + context-length error）：整条组合还没截断过时截断一次并
 		// 重试**当前**条目。模型不是 zen 时用零值 Model 兜底 —— FallbackTruncate /
 		// MaybeCompact 的零值默认（200k+封顶）仍会给出合理预算。
-		if err != nil && compaction.IsContextLengthError(err) && !truncatedForRun {
+		if err != nil && routing.IsContextLengthError(err) && !truncatedForRun {
 			truncatedForRun = true
 			log.Printf("  combo %q: entry %d %q context length exceeded, truncating and retrying", combo.ID, order, m)
 			if out := compaction.FallbackTruncate(params, compaction.ModelForCompaction(m)); out.Changed {
@@ -407,7 +407,7 @@ func RunCombo(params map[string]any, combo domain.ModelCombo, stream bool, sessi
 		})
 		log.Printf("  combo %q: entry %d %q failed (%v)", combo.ID, order, m, err)
 
-		if compaction.IsContextLengthError(err) {
+		if routing.IsContextLengthError(err) {
 			// 上下文超限：即便 HTTP 400（Retryable 判为永久）也继续换下一个条目。
 			continue
 		}

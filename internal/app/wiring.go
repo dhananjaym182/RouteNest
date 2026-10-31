@@ -75,11 +75,6 @@ func configure() {
 	}
 	combos.WithModel = routing.WithModel
 
-	routing.IsContextLengthError = compaction.IsContextLengthError
-	compaction.CallClineAPI = func(params map[string]any, stream bool) (*http.Response, error) {
-		resp, _, err := routing.CallClineAPI(params, stream)
-		return resp, err
-	}
 	compaction.AnthropicToOpenAI = func(body []byte) (map[string]any, error) {
 		var req proxycore.AnthropicReq
 		if err := json.Unmarshal(body, &req); err != nil {
@@ -88,10 +83,8 @@ func configure() {
 		return proxycore.AnthropicToOpenAI(req), nil
 	}
 
-	egress.DataPathResolver = func(name string) string { return platform.ResolveDataPath(name, nil) }
 	egress.ConfigProvider = admin.GetProxyConfig
 	requestlog.Path = platform.ResolveDataPath(requestlogstore.FileName, nil)
-	zen.DataPathResolver = func(name string) string { return platform.ResolveDataPath(name, nil) }
 	zen.IsModelGoneError = routing.IsModelGoneError
 	zen.MarkModelGone = routing.MarkModelGone
 	routing.ConfigProvider = admin.GetProxyConfig

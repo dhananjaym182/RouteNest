@@ -435,7 +435,7 @@ func HandleResponses(w http.ResponseWriter, r *http.Request) {
 		compaction.CompactForRequest(chat, zm, compaction.RequestSessionID(chat, r.Header), "responses")
 		reqLog.ToolNames = clampParamsToolNames(chat)
 		upResp, acc, err := routing.CallClineAPI(chat, isStream)
-		if err != nil && compaction.IsContextLengthError(err) {
+		if err != nil && routing.IsContextLengthError(err) {
 			if out := compaction.FallbackTruncate(chat, zm); out.Changed {
 				log.Printf("  responses %s", out.Note)
 				upResp, acc, err = routing.CallClineAPI(chat, isStream)

@@ -46,3 +46,18 @@ func IsDeterministicRequestError(err error) bool {
 		strings.Contains(msg, "invalid_request") ||
 		strings.Contains(msg, "invalid input")
 }
+
+// IsContextLengthError reports whether err is an upstream 400 indicating the
+// request exceeded the model's maximum context window. Compaction and the
+// combo and proxy retry paths use it to decide on truncation and retry.
+func IsContextLengthError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "context length") ||
+		strings.Contains(msg, "maximum context") ||
+		strings.Contains(msg, "context window") ||
+		strings.Contains(msg, "too many tokens") ||
+		strings.Contains(msg, "token limit")
+}

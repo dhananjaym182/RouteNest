@@ -15,7 +15,6 @@ var (
 	ModelsProvider        = func() []domain.Model { return nil }
 	ModelDisabled         = func(string) bool { return false }
 	EnabledCombosProvider = func() []domain.ModelCombo { return nil }
-	IsContextLengthError  = func(error) bool { return false }
 )
 
 // Client-visible model policy: administrator aliases, wildcard exclusions, and
