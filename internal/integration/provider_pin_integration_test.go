@@ -1,11 +1,11 @@
 package integration
 
 import (
-	"cline-go-proxy/internal/routing"
-	"cline-go-proxy/internal/zen"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"routenest/internal/routing"
+	"routenest/internal/zen"
 	"sync/atomic"
 	"testing"
 )

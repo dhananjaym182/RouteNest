@@ -1,23 +1,23 @@
 package proxycore
 
 import (
-	"cline-go-proxy/internal/combos"
-	"cline-go-proxy/internal/compaction"
-	"cline-go-proxy/internal/domain"
-	"cline-go-proxy/internal/routing"
-	"cline-go-proxy/internal/zen"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
+	"routenest/internal/combos"
+	"routenest/internal/compaction"
+	"routenest/internal/domain"
+	"routenest/internal/routing"
+	"routenest/internal/zen"
 	"strings"
 	"time"
 
-	"cline-go-proxy/internal/protocol/openaichat"
-	responsesconv "cline-go-proxy/internal/protocol/responses"
-	"cline-go-proxy/internal/requestlog"
+	"routenest/internal/protocol/openaichat"
+	responsesconv "routenest/internal/protocol/responses"
+	"routenest/internal/requestlog"
 )
 
 // ============================================================================

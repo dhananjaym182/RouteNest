@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"cline-go-proxy/internal/accounts"
+	"routenest/internal/accounts"
 )
 
 // IsModelGoneError：仅 400/404 且响应体含「模型不存在」类文案才算，

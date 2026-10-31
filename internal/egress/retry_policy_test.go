@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"cline-go-proxy/internal/config"
+	"routenest/internal/config"
 )
 
 func installRetryConfig(t *testing.T, r config.RetryPolicy) {

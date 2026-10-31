@@ -3,10 +3,10 @@ package admin
 import (
 	"time"
 
-	"cline-go-proxy/internal/accounts"
-	"cline-go-proxy/internal/adminapi"
-	"cline-go-proxy/internal/i18n"
-	"cline-go-proxy/internal/platform"
+	"routenest/internal/accounts"
+	"routenest/internal/adminapi"
+	"routenest/internal/i18n"
+	"routenest/internal/platform"
 )
 
 var adminImports = &adminapi.Imports{

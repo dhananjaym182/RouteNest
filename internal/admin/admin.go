@@ -1,26 +1,26 @@
 package admin
 
 import (
-	"cline-go-proxy/internal/routing"
-	"cline-go-proxy/internal/zen"
 	"errors"
 	"log"
 	"net/http"
+	"routenest/internal/routing"
+	"routenest/internal/zen"
 	"sync"
 	"time"
 
-	"cline-go-proxy/internal/accounts"
-	"cline-go-proxy/internal/adminapi"
-	"cline-go-proxy/internal/buildinfo"
-	"cline-go-proxy/internal/config"
-	"cline-go-proxy/internal/connections"
-	"cline-go-proxy/internal/egress"
-	"cline-go-proxy/internal/httpx"
-	"cline-go-proxy/internal/i18n"
-	"cline-go-proxy/internal/platform"
-	"cline-go-proxy/internal/providers"
-	"cline-go-proxy/internal/proxycore"
-	"cline-go-proxy/internal/requestlog"
+	"routenest/internal/accounts"
+	"routenest/internal/adminapi"
+	"routenest/internal/buildinfo"
+	"routenest/internal/config"
+	"routenest/internal/connections"
+	"routenest/internal/egress"
+	"routenest/internal/httpx"
+	"routenest/internal/i18n"
+	"routenest/internal/platform"
+	"routenest/internal/providers"
+	"routenest/internal/proxycore"
+	"routenest/internal/requestlog"
 )
 
 type APIResponse = httpx.Response

@@ -1,14 +1,14 @@
 package integration
 
 import (
-	"cline-go-proxy/internal/accounts"
-	"cline-go-proxy/internal/admin"
-	"cline-go-proxy/internal/compaction"
-	"cline-go-proxy/internal/egress"
-	"cline-go-proxy/internal/platform"
-	"cline-go-proxy/internal/zen"
 	"io"
 	"net/http"
+	"routenest/internal/accounts"
+	"routenest/internal/admin"
+	"routenest/internal/compaction"
+	"routenest/internal/egress"
+	"routenest/internal/platform"
+	"routenest/internal/zen"
 	"strings"
 	"testing"
 	"time"

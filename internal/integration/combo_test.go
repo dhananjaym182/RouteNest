@@ -6,16 +6,16 @@ package integration
 // 流式预提交回退与「有内容后不再重开」。另含并发配置访问的竞态用例（-race）。
 
 import (
-	"cline-go-proxy/internal/accounts"
-	"cline-go-proxy/internal/admin"
-	"cline-go-proxy/internal/combos"
-	"cline-go-proxy/internal/egress"
-	"cline-go-proxy/internal/platform"
-	"cline-go-proxy/internal/routing"
-	"cline-go-proxy/internal/zen"
 	"encoding/json"
 	"io"
 	"net/http"
+	"routenest/internal/accounts"
+	"routenest/internal/admin"
+	"routenest/internal/combos"
+	"routenest/internal/egress"
+	"routenest/internal/platform"
+	"routenest/internal/routing"
+	"routenest/internal/zen"
 	"strings"
 	"sync"
 	"testing"

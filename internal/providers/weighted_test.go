@@ -3,7 +3,7 @@ package providers
 import (
 	"testing"
 
-	"cline-go-proxy/internal/config"
+	"routenest/internal/config"
 )
 
 func weightedFixture(t *testing.T) {

@@ -11,8 +11,6 @@ package admin
 // 上游失败 ≠ API 失败：一律 200 包裹 {success:true, data:{ok:false, error:...}}。
 
 import (
-	"cline-go-proxy/internal/routing"
-	"cline-go-proxy/internal/zen"
 	"context"
 	"encoding/json"
 	"errors"
@@ -20,19 +18,21 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"routenest/internal/routing"
+	"routenest/internal/zen"
 	"sort"
 	"strings"
 	"sync"
 	"time"
 
-	"cline-go-proxy/internal/accounts"
-	"cline-go-proxy/internal/combos"
-	"cline-go-proxy/internal/connections"
-	"cline-go-proxy/internal/egress"
-	"cline-go-proxy/internal/i18n"
-	"cline-go-proxy/internal/platform"
-	"cline-go-proxy/internal/providers"
-	"cline-go-proxy/internal/proxycore"
+	"routenest/internal/accounts"
+	"routenest/internal/combos"
+	"routenest/internal/connections"
+	"routenest/internal/egress"
+	"routenest/internal/i18n"
+	"routenest/internal/platform"
+	"routenest/internal/providers"
+	"routenest/internal/proxycore"
 )
 
 const (

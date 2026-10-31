@@ -1,13 +1,13 @@
 package integration
 
 import (
-	_ "cline-go-proxy/internal/app"
 	"os"
 	"path/filepath"
+	_ "routenest/internal/app"
 	"testing"
 
-	"cline-go-proxy/internal/accounts"
-	"cline-go-proxy/internal/requestlog"
+	"routenest/internal/accounts"
+	"routenest/internal/requestlog"
 )
 
 // TestMain 把池文件与请求日志重定向到临时目录：

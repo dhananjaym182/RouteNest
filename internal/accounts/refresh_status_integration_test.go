@@ -1,14 +1,14 @@
 package accounts_test
 
 import (
-	"cline-go-proxy/internal/accounts"
-	_ "cline-go-proxy/internal/app"
-	"cline-go-proxy/internal/egress"
-	"cline-go-proxy/internal/routing"
 	"errors"
 	"io"
 	"net/http"
 	"path/filepath"
+	"routenest/internal/accounts"
+	_ "routenest/internal/app"
+	"routenest/internal/egress"
+	"routenest/internal/routing"
 	"strings"
 	"testing"
 	"time"

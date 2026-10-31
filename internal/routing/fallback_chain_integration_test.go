@@ -5,10 +5,10 @@ import (
 	"strings"
 	"testing"
 
-	"cline-go-proxy/internal/accounts"
-	"cline-go-proxy/internal/admin"
-	"cline-go-proxy/internal/domain"
-	"cline-go-proxy/internal/routing"
+	"routenest/internal/accounts"
+	"routenest/internal/admin"
+	"routenest/internal/domain"
+	"routenest/internal/routing"
 )
 
 // User-configured fallback models remain valid even when absent from the

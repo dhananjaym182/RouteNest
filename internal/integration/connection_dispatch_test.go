@@ -6,18 +6,18 @@ package integration
 // in package main until the provider extraction.
 
 import (
-	"cline-go-proxy/internal/app"
-	"cline-go-proxy/internal/proxycore"
 	"net/http"
 	"net/http/httptest"
+	"routenest/internal/app"
+	"routenest/internal/proxycore"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
-	"cline-go-proxy/internal/connections"
-	"cline-go-proxy/internal/deviceflow"
-	"cline-go-proxy/internal/providers"
+	"routenest/internal/connections"
+	"routenest/internal/deviceflow"
+	"routenest/internal/providers"
 )
 
 // importTestConn creates a connection in the real store and removes it on cleanup.

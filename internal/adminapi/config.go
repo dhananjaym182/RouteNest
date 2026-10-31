@@ -7,9 +7,9 @@ import (
 	"net/http"
 	"strings"
 
-	configpkg "cline-go-proxy/internal/config"
-	"cline-go-proxy/internal/domain"
-	"cline-go-proxy/internal/httpx"
+	configpkg "routenest/internal/config"
+	"routenest/internal/domain"
+	"routenest/internal/httpx"
 )
 
 // Config serves proxy runtime configuration administration. All state lives in

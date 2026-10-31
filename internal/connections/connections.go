@@ -22,11 +22,11 @@ import (
 	"sync"
 	"time"
 
-	"cline-go-proxy/internal/deviceflow"
-	"cline-go-proxy/internal/domain"
-	"cline-go-proxy/internal/httpx"
-	"cline-go-proxy/internal/platform"
-	connectionstore "cline-go-proxy/internal/store/connections"
+	"routenest/internal/deviceflow"
+	"routenest/internal/domain"
+	"routenest/internal/httpx"
+	"routenest/internal/platform"
+	connectionstore "routenest/internal/store/connections"
 )
 
 // Domain aliases keep the moved connection code terse; they are the same types

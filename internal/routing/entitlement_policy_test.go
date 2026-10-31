@@ -1,8 +1,8 @@
 package routing
 
 import (
-	"cline-go-proxy/internal/accounts"
-	"cline-go-proxy/internal/modelcatalog"
+	"routenest/internal/accounts"
+	"routenest/internal/modelcatalog"
 	"strings"
 	"testing"
 )

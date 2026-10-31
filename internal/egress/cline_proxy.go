@@ -14,9 +14,9 @@ import (
 
 	"golang.org/x/net/http/httpproxy"
 
-	"cline-go-proxy/internal/config"
-	"cline-go-proxy/internal/platform"
-	"cline-go-proxy/internal/transport"
+	"routenest/internal/config"
+	"routenest/internal/platform"
+	"routenest/internal/transport"
 )
 
 // ClineProxyConfig is the persisted Cline egress proxy pool configuration.

@@ -4,7 +4,7 @@ import (
 	"errors"
 	"testing"
 
-	"cline-go-proxy/internal/config"
+	"routenest/internal/config"
 )
 
 func installRuleConfig(t *testing.T, rules ...config.RequestErrorRule) {

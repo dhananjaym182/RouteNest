@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"cline-go-proxy/internal/accounts"
+	"routenest/internal/accounts"
 )
 
 func TestAdminLoginLogoutHandlers(t *testing.T) {

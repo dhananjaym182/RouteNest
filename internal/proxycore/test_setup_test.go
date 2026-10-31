@@ -3,11 +3,11 @@ package proxycore
 import (
 	"net/http"
 
-	"cline-go-proxy/internal/config"
-	"cline-go-proxy/internal/domain"
-	"cline-go-proxy/internal/egress"
-	"cline-go-proxy/internal/providers"
-	"cline-go-proxy/internal/routing"
+	"routenest/internal/config"
+	"routenest/internal/domain"
+	"routenest/internal/egress"
+	"routenest/internal/providers"
+	"routenest/internal/routing"
 )
 
 type Account = domain.Account

@@ -4,13 +4,13 @@ package admin_test
 // / EP3 单模型测试 / EP4 组合测试。全部走假 transport，不触网。
 
 import (
-	"cline-go-proxy/internal/admin"
-	"cline-go-proxy/internal/combos"
-	"cline-go-proxy/internal/providers"
-	"cline-go-proxy/internal/zen"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"routenest/internal/admin"
+	"routenest/internal/combos"
+	"routenest/internal/providers"
+	"routenest/internal/zen"
 	"strings"
 	"testing"
 )

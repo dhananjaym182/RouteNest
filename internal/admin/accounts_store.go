@@ -4,10 +4,10 @@ import (
 	"log"
 	"time"
 
-	"cline-go-proxy/internal/accounts"
-	"cline-go-proxy/internal/adminapi"
-	"cline-go-proxy/internal/domain"
-	"cline-go-proxy/internal/i18n"
+	"routenest/internal/accounts"
+	"routenest/internal/adminapi"
+	"routenest/internal/domain"
+	"routenest/internal/i18n"
 )
 
 // rootAccountStore adapts the package-level account pool to adminapi.AccountStore.

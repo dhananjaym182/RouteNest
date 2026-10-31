@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"time"
 
-	"cline-go-proxy/internal/httpx"
+	"routenest/internal/httpx"
 )
 
 // AuthHandlers serves administrator login, logout, and password changes.

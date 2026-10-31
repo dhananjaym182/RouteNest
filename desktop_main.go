@@ -3,22 +3,22 @@
 package main
 
 import (
-	"cline-go-proxy/internal/accounts"
-	_ "cline-go-proxy/internal/app"
 	"context"
 	"flag"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
+	"routenest/internal/accounts"
+	_ "routenest/internal/app"
 	"strconv"
 	"time"
 
-	"cline-go-proxy/internal/proxycore"
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
 	"github.com/wailsapp/wails/v2/pkg/options/windows"
+	"routenest/internal/proxycore"
 )
 
 const defaultDesktopPort = 3457

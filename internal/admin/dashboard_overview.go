@@ -1,15 +1,15 @@
 package admin
 
 import (
-	"cline-go-proxy/internal/routing"
 	"net/http"
+	"routenest/internal/routing"
 	"sort"
 	"strconv"
 	"time"
 
-	"cline-go-proxy/internal/buildinfo"
-	"cline-go-proxy/internal/i18n"
-	"cline-go-proxy/internal/requestlog"
+	"routenest/internal/buildinfo"
+	"routenest/internal/i18n"
+	"routenest/internal/requestlog"
 )
 
 // Dashboard overview aggregation. The admin UI's dashboard tab calls

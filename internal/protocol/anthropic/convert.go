@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"cline-go-proxy/internal/protocol"
+	"routenest/internal/protocol"
 )
 
 // Message is one Anthropic message with an already-decoded content value.

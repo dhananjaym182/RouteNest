@@ -5,9 +5,9 @@ import (
 	"net/http"
 	"time"
 
-	"cline-go-proxy/internal/accounts"
-	"cline-go-proxy/internal/adminapi"
-	"cline-go-proxy/internal/i18n"
+	"routenest/internal/accounts"
+	"routenest/internal/adminapi"
+	"routenest/internal/i18n"
 )
 
 var adminOAuth = &adminapi.OAuth{

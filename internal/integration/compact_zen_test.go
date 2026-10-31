@@ -4,8 +4,8 @@ import (
 	"testing"
 	"time"
 
-	"cline-go-proxy/internal/compaction"
-	"cline-go-proxy/internal/zen"
+	"routenest/internal/compaction"
+	"routenest/internal/zen"
 )
 
 // resetZenTestState 恢复与 zen 相关的全局可变状态，避免测试间相互污染。

@@ -1,8 +1,8 @@
 package compaction
 
 import (
-	"cline-go-proxy/internal/zen"
 	"encoding/json"
+	"routenest/internal/zen"
 	"strings"
 	"testing"
 	"time"

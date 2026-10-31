@@ -4,9 +4,9 @@ import (
 	"strings"
 	"testing"
 
-	"cline-go-proxy/internal/accounts"
-	"cline-go-proxy/internal/config"
-	"cline-go-proxy/internal/domain"
+	"routenest/internal/accounts"
+	"routenest/internal/config"
+	"routenest/internal/domain"
 )
 
 func policyTestPool(models ...Model) func() {

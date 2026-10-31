@@ -7,9 +7,9 @@ import (
 	"sync"
 	"time"
 
-	"cline-go-proxy/internal/dispatch"
-	"cline-go-proxy/internal/platform"
-	poolstore "cline-go-proxy/internal/store/accounts"
+	"routenest/internal/dispatch"
+	"routenest/internal/platform"
+	poolstore "routenest/internal/store/accounts"
 )
 
 var (

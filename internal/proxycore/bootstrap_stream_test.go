@@ -16,7 +16,7 @@ import (
 	"testing"
 	"time"
 
-	"cline-go-proxy/internal/config"
+	"routenest/internal/config"
 )
 
 func installStreamConfig(t *testing.T, s config.StreamPolicy) {

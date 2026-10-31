@@ -1,14 +1,14 @@
 package admin
 
 import (
-	"cline-go-proxy/internal/routing"
-	"cline-go-proxy/internal/zen"
 	"net/http"
+	"routenest/internal/routing"
+	"routenest/internal/zen"
 
-	"cline-go-proxy/internal/accounts"
-	"cline-go-proxy/internal/adminapi"
-	"cline-go-proxy/internal/domain"
-	"cline-go-proxy/internal/i18n"
+	"routenest/internal/accounts"
+	"routenest/internal/adminapi"
+	"routenest/internal/domain"
+	"routenest/internal/i18n"
 )
 
 // rootModelStore adapts the account pool's model catalog to adminapi.ModelStore.

@@ -1,16 +1,16 @@
 package compaction
 
 import (
-	"cline-go-proxy/internal/accounts"
-	"cline-go-proxy/internal/domain"
-	"cline-go-proxy/internal/routing"
-	"cline-go-proxy/internal/zen"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
+	"routenest/internal/accounts"
+	"routenest/internal/domain"
+	"routenest/internal/routing"
+	"routenest/internal/zen"
 	"sort"
 	"strings"
 	"sync"

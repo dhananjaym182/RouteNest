@@ -5,12 +5,12 @@ package integration
 // 同一模型不同固定不被去重、combos.ValidateCombo 拒绝非法固定，以及空固定行为不变。
 
 import (
-	"cline-go-proxy/internal/admin"
-	"cline-go-proxy/internal/combos"
-	"cline-go-proxy/internal/providers"
-	"cline-go-proxy/internal/zen"
 	"net/http"
 	"path/filepath"
+	"routenest/internal/admin"
+	"routenest/internal/combos"
+	"routenest/internal/providers"
+	"routenest/internal/zen"
 	"testing"
 	"time"
 )

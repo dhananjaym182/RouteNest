@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"cline-go-proxy/internal/config"
+	"routenest/internal/config"
 )
 
 // affinityTestError is the stand-in for the root package's Cline API error;

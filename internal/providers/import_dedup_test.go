@@ -1,7 +1,7 @@
 package providers
 
 import (
-	"cline-go-proxy/internal/accounts"
+	"routenest/internal/accounts"
 	"testing"
 	"time"
 )

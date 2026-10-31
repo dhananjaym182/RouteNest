@@ -1,9 +1,9 @@
 package integration
 
 import (
-	"cline-go-proxy/internal/platform"
 	"os"
 	"path/filepath"
+	"routenest/internal/platform"
 	"strings"
 	"testing"
 )

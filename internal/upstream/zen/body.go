@@ -7,7 +7,7 @@ import (
 	"strings"
 	"sync"
 
-	"cline-go-proxy/internal/protocol/openaichat"
+	"routenest/internal/protocol/openaichat"
 )
 
 // AnonymousCoreTools are the tool names the anonymous free tier expects. The

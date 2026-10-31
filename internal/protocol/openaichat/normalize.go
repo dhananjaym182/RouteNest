@@ -1,6 +1,6 @@
 package openaichat
 
-import "cline-go-proxy/internal/protocol"
+import "routenest/internal/protocol"
 
 // dropMetadataKeys copies m without provider/proxy bookkeeping fields.
 func dropMetadataKeys(m map[string]any) map[string]any {

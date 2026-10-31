@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"cline-go-proxy/internal/transport"
+	"routenest/internal/transport"
 )
 
 // providerTransportCache keeps one transport per normalized egress spec so a

@@ -1,13 +1,13 @@
 package integration
 
 import (
-	"cline-go-proxy/internal/accounts"
-	"cline-go-proxy/internal/admin"
-	"cline-go-proxy/internal/egress"
-	"cline-go-proxy/internal/zen"
 	"encoding/json"
 	"io"
 	"net/http"
+	"routenest/internal/accounts"
+	"routenest/internal/admin"
+	"routenest/internal/egress"
+	"routenest/internal/zen"
 	"strings"
 	"testing"
 	"time"

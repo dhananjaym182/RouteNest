@@ -5,8 +5,8 @@ import (
 	"io"
 	"net/http"
 
-	"cline-go-proxy/internal/domain"
-	"cline-go-proxy/internal/httpx"
+	"routenest/internal/domain"
+	"routenest/internal/httpx"
 )
 
 // ComboStore is the model-combo registry as seen by the admin API. Locking,

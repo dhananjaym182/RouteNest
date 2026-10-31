@@ -16,7 +16,7 @@ import (
 	"sync"
 	"time"
 
-	"cline-go-proxy/internal/deviceflow"
+	"routenest/internal/deviceflow"
 )
 
 // buildCosyHeaders produces the full Cosy-* / Authorization header set for one

@@ -9,8 +9,8 @@ import (
 	"strconv"
 	"strings"
 
-	"cline-go-proxy/internal/platform"
-	"cline-go-proxy/internal/providerreg"
+	"routenest/internal/platform"
+	"routenest/internal/providerreg"
 )
 
 const maxCatalogBody = 2 << 20

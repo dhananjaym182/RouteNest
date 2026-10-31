@@ -15,17 +15,17 @@
 package compaction
 
 import (
-	"cline-go-proxy/internal/dispatch"
-	"cline-go-proxy/internal/domain"
-	"cline-go-proxy/internal/httpx"
-	anthropicconv "cline-go-proxy/internal/protocol/anthropic"
-	"cline-go-proxy/internal/zen"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
+	"routenest/internal/dispatch"
+	"routenest/internal/domain"
+	"routenest/internal/httpx"
+	anthropicconv "routenest/internal/protocol/anthropic"
+	"routenest/internal/zen"
 	"strings"
 )
 

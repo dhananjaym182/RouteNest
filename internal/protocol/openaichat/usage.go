@@ -1,6 +1,6 @@
 package openaichat
 
-import "cline-go-proxy/internal/protocol"
+import "routenest/internal/protocol"
 
 // Usage is a normalized token accounting record parsed from an upstream body.
 type Usage struct {

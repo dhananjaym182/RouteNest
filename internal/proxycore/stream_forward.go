@@ -24,10 +24,10 @@ import (
 	"sync"
 	"time"
 
-	"cline-go-proxy/internal/domain"
-	responsesconv "cline-go-proxy/internal/protocol/responses"
-	"cline-go-proxy/internal/requestlog"
-	"cline-go-proxy/internal/routing"
+	"routenest/internal/domain"
+	responsesconv "routenest/internal/protocol/responses"
+	"routenest/internal/requestlog"
+	"routenest/internal/routing"
 )
 
 // streamHeartbeatInterval is a variable so tests can shorten it.

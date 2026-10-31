@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"cline-go-proxy/internal/platform"
+	"routenest/internal/platform"
 )
 
 // JSONPathString resolves a dotted path (with numeric array indexes) in a

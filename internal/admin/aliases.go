@@ -1,6 +1,6 @@
 package admin
 
-import "cline-go-proxy/internal/domain"
+import "routenest/internal/domain"
 
 type Account = domain.Account
 type AccountPool = domain.AccountPool

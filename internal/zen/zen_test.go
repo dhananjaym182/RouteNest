@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"cline-go-proxy/internal/accounts"
-	"cline-go-proxy/internal/upstream/openaicompat"
+	"routenest/internal/accounts"
+	"routenest/internal/upstream/openaicompat"
 )
 
 func init() {

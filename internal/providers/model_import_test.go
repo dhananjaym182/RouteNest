@@ -2,11 +2,11 @@ package providers
 
 import (
 	"bytes"
-	"cline-go-proxy/internal/accounts"
 	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"routenest/internal/accounts"
 	"testing"
 )
 

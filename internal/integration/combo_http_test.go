@@ -7,11 +7,11 @@ package integration
 // 绝不重开」。
 
 import (
-	"cline-go-proxy/internal/admin"
-	"cline-go-proxy/internal/egress"
 	"encoding/json"
 	"io"
 	"net/http"
+	"routenest/internal/admin"
+	"routenest/internal/egress"
 	"strings"
 	"testing"
 	"time"

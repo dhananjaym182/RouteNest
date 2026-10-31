@@ -5,7 +5,7 @@ import (
 	"os"
 	"strings"
 
-	"cline-go-proxy/internal/platform"
+	"routenest/internal/platform"
 )
 
 // ClineEgressPath is the data file holding the Cline egress proxy pool.

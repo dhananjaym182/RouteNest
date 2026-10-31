@@ -1,6 +1,6 @@
 package integration
 
-import "cline-go-proxy/internal/providers"
+import "routenest/internal/providers"
 
 // 本地测试（按仓库策略 *_test.go 不提交）：跨测试共享的路由状态复位助手。
 // combo_pin_test 等会话级测试依赖 resetRoutingState，把测试原子操作留下的

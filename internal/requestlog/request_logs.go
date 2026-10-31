@@ -9,13 +9,13 @@ import (
 	"sync"
 	"time"
 
-	"cline-go-proxy/internal/domain"
-	"cline-go-proxy/internal/httpx"
-	"cline-go-proxy/internal/i18n"
-	"cline-go-proxy/internal/platform"
-	"cline-go-proxy/internal/protocol/openaichat"
-	"cline-go-proxy/internal/providers"
-	requestlogstore "cline-go-proxy/internal/store/requestlog"
+	"routenest/internal/domain"
+	"routenest/internal/httpx"
+	"routenest/internal/i18n"
+	"routenest/internal/platform"
+	"routenest/internal/protocol/openaichat"
+	"routenest/internal/providers"
+	requestlogstore "routenest/internal/store/requestlog"
 )
 
 type requestLog = domain.RequestLog

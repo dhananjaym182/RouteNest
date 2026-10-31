@@ -3,15 +3,15 @@
 package main
 
 import (
-	"cline-go-proxy/internal/accounts"
-	_ "cline-go-proxy/internal/app"
-	"cline-go-proxy/internal/proxycore"
 	"flag"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
 	"os/exec"
+	"routenest/internal/accounts"
+	_ "routenest/internal/app"
+	"routenest/internal/proxycore"
 	"runtime"
 	"time"
 )

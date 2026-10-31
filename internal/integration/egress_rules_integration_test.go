@@ -1,20 +1,20 @@
 package integration
 
 import (
-	"cline-go-proxy/internal/admin"
-	"cline-go-proxy/internal/routing"
 	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"routenest/internal/admin"
+	"routenest/internal/routing"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
-	"cline-go-proxy/internal/config"
-	"cline-go-proxy/internal/egress"
-	"cline-go-proxy/internal/providers"
+	"routenest/internal/config"
+	"routenest/internal/egress"
+	"routenest/internal/providers"
 )
 
 func installRuleConfig(t *testing.T, rules ...config.RequestErrorRule) {

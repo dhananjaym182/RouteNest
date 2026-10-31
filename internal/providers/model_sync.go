@@ -19,11 +19,11 @@ import (
 	"sync"
 	"time"
 
-	"cline-go-proxy/internal/accounts"
-	"cline-go-proxy/internal/connections"
-	"cline-go-proxy/internal/modelcatalog"
-	"cline-go-proxy/internal/platform"
-	"cline-go-proxy/internal/store/syncstate"
+	"routenest/internal/accounts"
+	"routenest/internal/connections"
+	"routenest/internal/modelcatalog"
+	"routenest/internal/platform"
+	"routenest/internal/store/syncstate"
 )
 
 const (

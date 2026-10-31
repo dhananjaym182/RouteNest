@@ -9,13 +9,13 @@ import (
 	"testing"
 	"time"
 
-	"cline-go-proxy/internal/accounts"
-	"cline-go-proxy/internal/admin"
-	_ "cline-go-proxy/internal/app"
-	"cline-go-proxy/internal/domain"
-	"cline-go-proxy/internal/egress"
-	"cline-go-proxy/internal/platform"
-	"cline-go-proxy/internal/providers"
+	"routenest/internal/accounts"
+	"routenest/internal/admin"
+	_ "routenest/internal/app"
+	"routenest/internal/domain"
+	"routenest/internal/egress"
+	"routenest/internal/platform"
+	"routenest/internal/providers"
 )
 
 type Account = domain.Account

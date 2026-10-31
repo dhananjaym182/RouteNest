@@ -19,11 +19,11 @@ import (
 	"sync"
 	"time"
 
-	"cline-go-proxy/internal/accounts"
-	"cline-go-proxy/internal/connections"
-	"cline-go-proxy/internal/httpx"
-	"cline-go-proxy/internal/modelcatalog"
-	"cline-go-proxy/internal/upstream/qoder"
+	"routenest/internal/accounts"
+	"routenest/internal/connections"
+	"routenest/internal/httpx"
+	"routenest/internal/modelcatalog"
+	"routenest/internal/upstream/qoder"
 )
 
 // Tier signals (stored in Model.TierSignal; admin UI shows why a model is free

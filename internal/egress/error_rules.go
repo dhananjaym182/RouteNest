@@ -7,8 +7,8 @@ import (
 	"net/http"
 	"time"
 
-	"cline-go-proxy/internal/config"
-	"cline-go-proxy/internal/dispatch"
+	"routenest/internal/config"
+	"routenest/internal/dispatch"
 )
 
 // ConfigProvider supplies the live root proxy policy. The root composition

@@ -1,12 +1,12 @@
 package admin
 
 import (
-	"cline-go-proxy/internal/routing"
+	"routenest/internal/routing"
 	"testing"
 	"time"
 
-	"cline-go-proxy/internal/buildinfo"
-	"cline-go-proxy/internal/requestlog"
+	"routenest/internal/buildinfo"
+	"routenest/internal/requestlog"
 )
 
 func TestDashboardOverviewAggregatesWindow(t *testing.T) {

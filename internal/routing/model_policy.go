@@ -1,10 +1,10 @@
 package routing
 
 import (
-	"cline-go-proxy/internal/config"
-	"cline-go-proxy/internal/domain"
-	"cline-go-proxy/internal/providers"
 	"log"
+	"routenest/internal/config"
+	"routenest/internal/domain"
+	"routenest/internal/providers"
 	"strings"
 	"time"
 )

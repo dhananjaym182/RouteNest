@@ -4,7 +4,7 @@ import (
 	"reflect"
 	"testing"
 
-	"cline-go-proxy/internal/providerreg"
+	"routenest/internal/providerreg"
 )
 
 // The embedded JSON catalog replaced the in-code preset maps. Until the old

@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"cline-go-proxy/internal/domain"
+	"routenest/internal/domain"
 )
 
 func newImportsHandler() (*Imports, *fakeAccountStore) {

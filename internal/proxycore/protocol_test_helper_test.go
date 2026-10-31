@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"cline-go-proxy/internal/routing"
-	"cline-go-proxy/internal/zen"
+	"routenest/internal/routing"
+	"routenest/internal/zen"
 )
 
 var protocolModelSyncOnce sync.Once

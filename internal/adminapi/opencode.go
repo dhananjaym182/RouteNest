@@ -7,8 +7,8 @@ import (
 	"net/http"
 	"strings"
 
-	"cline-go-proxy/internal/config"
-	"cline-go-proxy/internal/httpx"
+	"routenest/internal/config"
+	"routenest/internal/httpx"
 )
 
 // Opencode serves the OpenCode Zen configuration endpoints. The live config is

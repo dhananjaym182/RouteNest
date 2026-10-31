@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"cline-go-proxy/internal/accounts"
+	"routenest/internal/accounts"
 )
 
 // AddAccount deduplicates by email, updating credentials in place while

@@ -3,9 +3,9 @@ package routing
 import (
 	"strings"
 
-	"cline-go-proxy/internal/accounts"
-	"cline-go-proxy/internal/config"
-	"cline-go-proxy/internal/domain"
+	"routenest/internal/accounts"
+	"routenest/internal/config"
+	"routenest/internal/domain"
 )
 
 type Model = domain.Model

@@ -16,7 +16,7 @@ import (
 	"strings"
 	"time"
 
-	"cline-go-proxy/internal/platform"
+	"routenest/internal/platform"
 )
 
 const (

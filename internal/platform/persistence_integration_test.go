@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"cline-go-proxy/internal/platform"
+	"routenest/internal/platform"
 )
 
 // chdir 临时切换工作目录（使用它的测试不可并行）。

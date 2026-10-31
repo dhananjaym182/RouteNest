@@ -5,9 +5,9 @@ import (
 	"strings"
 	"sync/atomic"
 
-	"cline-go-proxy/internal/config"
-	"cline-go-proxy/internal/domain"
-	"cline-go-proxy/internal/upstream/openaicompat"
+	"routenest/internal/config"
+	"routenest/internal/domain"
+	"routenest/internal/upstream/openaicompat"
 )
 
 // Domain aliases keep the moved registry code readable while preserving the

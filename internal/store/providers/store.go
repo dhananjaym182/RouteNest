@@ -7,8 +7,8 @@ import (
 	"os"
 	"time"
 
-	"cline-go-proxy/internal/domain"
-	"cline-go-proxy/internal/platform"
+	"routenest/internal/domain"
+	"routenest/internal/platform"
 )
 
 const (

@@ -1,17 +1,17 @@
 package admin
 
 import (
-	"cline-go-proxy/internal/routing"
-	"cline-go-proxy/internal/zen"
 	"log"
 	"net/http"
+	"routenest/internal/routing"
+	"routenest/internal/zen"
 	"runtime"
 
-	"cline-go-proxy/internal/accounts"
-	"cline-go-proxy/internal/adminapi"
-	"cline-go-proxy/internal/buildinfo"
-	"cline-go-proxy/internal/i18n"
-	"cline-go-proxy/internal/proxycore"
+	"routenest/internal/accounts"
+	"routenest/internal/adminapi"
+	"routenest/internal/buildinfo"
+	"routenest/internal/i18n"
+	"routenest/internal/proxycore"
 )
 
 var adminConfig = &adminapi.Config{

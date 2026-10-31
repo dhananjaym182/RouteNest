@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"cline-go-proxy/internal/config"
+	"routenest/internal/config"
 )
 
 func installPassthroughConfig(t *testing.T, enabled bool) {

@@ -17,8 +17,8 @@ import (
 	utls "github.com/refraction-networking/utls"
 	"golang.org/x/net/http2"
 
-	"cline-go-proxy/internal/transport"
-	zenupstream "cline-go-proxy/internal/upstream/zen"
+	"routenest/internal/transport"
+	zenupstream "routenest/internal/upstream/zen"
 )
 
 // ============================================================================

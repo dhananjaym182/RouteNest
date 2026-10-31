@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	zenupstream "cline-go-proxy/internal/upstream/zen"
+	zenupstream "routenest/internal/upstream/zen"
 )
 
 const defaultMaxTokens = 32000

@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"cline-go-proxy/internal/protocol/openaichat"
+	"routenest/internal/protocol/openaichat"
 )
 
 // isolateConnections resets the connection store + pool state to a temp dir.

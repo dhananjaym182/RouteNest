@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"time"
 
-	"cline-go-proxy/internal/httpx"
+	"routenest/internal/httpx"
 )
 
 // KeyManager serves the admin API-key endpoints. Storage lives in the account

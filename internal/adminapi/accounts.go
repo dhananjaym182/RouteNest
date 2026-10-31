@@ -7,8 +7,8 @@ import (
 	"net/http"
 	"time"
 
-	"cline-go-proxy/internal/domain"
-	"cline-go-proxy/internal/httpx"
+	"routenest/internal/domain"
+	"routenest/internal/httpx"
 )
 
 // AccountStore is the Cline account pool as seen by account administration.

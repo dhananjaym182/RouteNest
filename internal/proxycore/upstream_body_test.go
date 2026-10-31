@@ -3,7 +3,7 @@ package proxycore
 import (
 	"testing"
 
-	"cline-go-proxy/internal/routing"
+	"routenest/internal/routing"
 )
 
 func TestBuildUpstreamBodyNoneDropsReasoningEffort(t *testing.T) {

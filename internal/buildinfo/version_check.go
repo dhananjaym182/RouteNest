@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"cline-go-proxy/internal/httpx"
+	"routenest/internal/httpx"
 )
 
 // GitHub Release 更新检查：结果缓存 6 小时，?force=1 强制刷新。

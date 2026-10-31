@@ -1,15 +1,15 @@
 package routing_test
 
 import (
-	"cline-go-proxy/internal/admin"
-	"cline-go-proxy/internal/domain"
-	"cline-go-proxy/internal/routing"
 	"fmt"
+	"routenest/internal/admin"
+	"routenest/internal/domain"
+	"routenest/internal/routing"
 	"strings"
 	"testing"
 
-	"cline-go-proxy/internal/accounts"
-	"cline-go-proxy/internal/config"
+	"routenest/internal/accounts"
+	"routenest/internal/config"
 )
 
 func policyTestPool(models ...domain.Model) func() {

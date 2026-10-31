@@ -2,12 +2,12 @@ package proxycore
 
 import (
 	"bufio"
-	"cline-go-proxy/internal/accounts"
-	"cline-go-proxy/internal/egress"
-	"cline-go-proxy/internal/routing"
 	"encoding/json"
 	"io"
 	"net/http"
+	"routenest/internal/accounts"
+	"routenest/internal/egress"
+	"routenest/internal/routing"
 	"strings"
 	"testing"
 	"time"

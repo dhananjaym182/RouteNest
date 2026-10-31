@@ -3,10 +3,10 @@ package admin
 import (
 	"net/http"
 
-	"cline-go-proxy/internal/adminapi"
-	"cline-go-proxy/internal/combos"
-	"cline-go-proxy/internal/domain"
-	"cline-go-proxy/internal/i18n"
+	"routenest/internal/adminapi"
+	"routenest/internal/combos"
+	"routenest/internal/domain"
+	"routenest/internal/i18n"
 )
 
 // rootComboStore adapts the combo registry to adminapi.ComboStore.

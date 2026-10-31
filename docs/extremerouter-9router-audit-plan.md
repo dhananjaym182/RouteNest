@@ -4,7 +4,7 @@ Status: draft audit plan, not yet reviewed.
 Scope notes:
 - 9router provenance in this codebase is historical: `src/lib/dataMigration.js` migrates legacy `~/.9router` / `%APPDATA%/9router` data into ExtremeRouter. READMEs also cite [9router](https://github.com/9router/9router) as the routing lineage.
 - The working copy here is ExtremeRouter at `/home/dhan3713/extremerouter`.
-- Cline2API is Go at `/home/dhan3713/cline2api` (module `cline-go-proxy`, Go 1.25, Echo via Wails transitive dep, SQLite via `modernc.org/sqlite` indirect dep).
+- Cline2API is Go at `/home/dhan3713/cline2api` (module `routenest`, Go 1.25, Echo via Wails transitive dep, SQLite via `modernc.org/sqlite` indirect dep).
 
 This is a plan for the audit deliverable only. No edits, dependency installs, migrations, or config changes are proposed yet.
 

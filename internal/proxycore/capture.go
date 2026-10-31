@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"cline-go-proxy/internal/routing"
+	"routenest/internal/routing"
 )
 
 var (

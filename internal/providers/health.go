@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"cline-go-proxy/internal/httpx"
-	"cline-go-proxy/internal/i18n"
+	"routenest/internal/httpx"
+	"routenest/internal/i18n"
 )
 
 // Provider 健康快照：配额用量 / 冷却恢复 / 近期成败热度。数据全部在内存

@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"cline-go-proxy/internal/domain"
+	"routenest/internal/domain"
 )
 
 type fakeModelStore struct {

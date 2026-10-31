@@ -1,6 +1,6 @@
 package anthropic
 
-import "cline-go-proxy/internal/protocol"
+import "routenest/internal/protocol"
 
 // Protocol describes the Anthropic Messages wire shape.
 type Protocol struct{}

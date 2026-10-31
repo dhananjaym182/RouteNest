@@ -1,13 +1,13 @@
 package routing
 
 import (
-	"cline-go-proxy/internal/zen"
 	"fmt"
+	"routenest/internal/zen"
 	"strings"
 
-	"cline-go-proxy/internal/accounts"
-	"cline-go-proxy/internal/dispatch"
-	"cline-go-proxy/internal/domain"
+	"routenest/internal/accounts"
+	"routenest/internal/dispatch"
+	"routenest/internal/domain"
 )
 
 // ModelRouteAccess resolves the access class of a model's current route from

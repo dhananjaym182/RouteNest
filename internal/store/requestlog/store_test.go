@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"cline-go-proxy/internal/domain"
+	"routenest/internal/domain"
 )
 
 func TestLoadMissingFile(t *testing.T) {

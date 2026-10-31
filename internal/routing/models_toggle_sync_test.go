@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"cline-go-proxy/internal/accounts"
+	"routenest/internal/accounts"
 )
 
 // syncClineModels：重建 remote 条目时保留用户停用标记（Disabled），

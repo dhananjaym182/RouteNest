@@ -6,9 +6,9 @@ import (
 	"path/filepath"
 	"testing"
 
-	"cline-go-proxy/internal/accounts"
-	"cline-go-proxy/internal/domain"
-	"cline-go-proxy/internal/platform"
+	"routenest/internal/accounts"
+	"routenest/internal/domain"
+	"routenest/internal/platform"
 )
 
 type Account = domain.Account

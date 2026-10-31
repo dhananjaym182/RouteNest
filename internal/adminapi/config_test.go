@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	configpkg "cline-go-proxy/internal/config"
-	"cline-go-proxy/internal/domain"
+	configpkg "routenest/internal/config"
+	"routenest/internal/domain"
 )
 
 type configFixture struct {

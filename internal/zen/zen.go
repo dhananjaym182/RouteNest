@@ -13,16 +13,16 @@ import (
 	"sync"
 	"time"
 
-	"cline-go-proxy/internal/accounts"
-	"cline-go-proxy/internal/config"
-	"cline-go-proxy/internal/dispatch"
-	"cline-go-proxy/internal/domain"
-	"cline-go-proxy/internal/platform"
-	"cline-go-proxy/internal/protocol/openaichat"
-	responsesconv "cline-go-proxy/internal/protocol/responses"
-	"cline-go-proxy/internal/transport"
-	"cline-go-proxy/internal/upstream/openaicompat"
-	zenupstream "cline-go-proxy/internal/upstream/zen"
+	"routenest/internal/accounts"
+	"routenest/internal/config"
+	"routenest/internal/dispatch"
+	"routenest/internal/domain"
+	"routenest/internal/platform"
+	"routenest/internal/protocol/openaichat"
+	responsesconv "routenest/internal/protocol/responses"
+	"routenest/internal/transport"
+	"routenest/internal/upstream/openaicompat"
+	zenupstream "routenest/internal/upstream/zen"
 )
 
 type Model = domain.Model

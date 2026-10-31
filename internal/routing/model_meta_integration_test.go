@@ -1,11 +1,11 @@
 package routing_test
 
 import (
-	"cline-go-proxy/internal/domain"
-	"cline-go-proxy/internal/routing"
+	"routenest/internal/domain"
+	"routenest/internal/routing"
 	"testing"
 
-	"cline-go-proxy/internal/accounts"
+	"routenest/internal/accounts"
 )
 
 // routing.ModelMaxOutputLimit：已知表优先，其次池中模型 Output（zen 估值不算硬上限）。

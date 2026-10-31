@@ -10,9 +10,9 @@ import (
 	"strings"
 	"time"
 
-	"cline-go-proxy/internal/domain"
-	"cline-go-proxy/internal/platform"
-	clineupstream "cline-go-proxy/internal/upstream/cline"
+	"routenest/internal/domain"
+	"routenest/internal/platform"
+	clineupstream "routenest/internal/upstream/cline"
 )
 
 // Domain aliases keep the moved pool/auth code terse; they are the same types

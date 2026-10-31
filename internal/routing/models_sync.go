@@ -1,14 +1,14 @@
 package routing
 
 import (
-	"cline-go-proxy/internal/accounts"
-	"cline-go-proxy/internal/domain"
-	"cline-go-proxy/internal/egress"
 	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
 	"regexp"
+	"routenest/internal/accounts"
+	"routenest/internal/domain"
+	"routenest/internal/egress"
 	"strings"
 	"sync"
 	"time"

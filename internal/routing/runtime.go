@@ -14,15 +14,15 @@ import (
 	"strings"
 	"time"
 
-	"cline-go-proxy/internal/accounts"
-	"cline-go-proxy/internal/dispatch"
-	"cline-go-proxy/internal/domain"
-	"cline-go-proxy/internal/egress"
-	"cline-go-proxy/internal/platform"
-	"cline-go-proxy/internal/protocol/openaichat"
-	"cline-go-proxy/internal/providers"
-	clineupstream "cline-go-proxy/internal/upstream/cline"
-	"cline-go-proxy/internal/zen"
+	"routenest/internal/accounts"
+	"routenest/internal/dispatch"
+	"routenest/internal/domain"
+	"routenest/internal/egress"
+	"routenest/internal/platform"
+	"routenest/internal/protocol/openaichat"
+	"routenest/internal/providers"
+	clineupstream "routenest/internal/upstream/cline"
+	"routenest/internal/zen"
 )
 
 const (

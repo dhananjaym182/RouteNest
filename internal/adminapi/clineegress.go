@@ -6,8 +6,8 @@ import (
 	"log"
 	"net/http"
 
-	"cline-go-proxy/internal/config"
-	"cline-go-proxy/internal/httpx"
+	"routenest/internal/config"
+	"routenest/internal/httpx"
 )
 
 // ClineEgress serves the Cline egress proxy configuration endpoints. The live

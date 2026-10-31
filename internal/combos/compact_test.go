@@ -1,8 +1,8 @@
 package combos
 
 import (
-	"cline-go-proxy/internal/accounts"
-	"cline-go-proxy/internal/domain"
+	"routenest/internal/accounts"
+	"routenest/internal/domain"
 	"testing"
 )
 
