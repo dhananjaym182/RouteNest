@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/http/httputil"
 	"os"
@@ -13,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"routenest/internal/platform"
 	"routenest/internal/routing"
 )
 
@@ -22,8 +24,7 @@ var (
 )
 
 func init() {
-	exe, _ := os.Executable()
-	captureLogDir = filepath.Join(filepath.Dir(exe), "capture-logs")
+	captureLogDir = filepath.Join(platform.CurrentDataDir(), "capture-logs")
 }
 
 type CaptureEntry struct {
@@ -165,10 +166,20 @@ func captureRequest(name, method, rawURL, reqBody string, headers map[string]str
 var allEntries []*CaptureEntry
 
 func saveCaptureEntry(entry *CaptureEntry) {
-	os.MkdirAll(captureLogDir, 0755)
+	if err := platform.EnsurePrivateDir(captureLogDir); err != nil {
+		log.Printf("capture: secure log directory %s: %v", captureLogDir, err)
+		return
+	}
 	filename := filepath.Join(captureLogDir, fmt.Sprintf("step-%02d-%s.json", entry.Step, sanitizeFilename(entry.Name)))
-	data, _ := json.MarshalIndent(entry, "", "  ")
-	os.WriteFile(filename, data, 0644)
+	data, err := json.MarshalIndent(entry, "", "  ")
+	if err != nil {
+		log.Printf("capture: encode step %d: %v", entry.Step, err)
+		return
+	}
+	if err := platform.WriteFileAtomic(filename, data, 0600); err != nil {
+		log.Printf("capture: write %s: %v", filename, err)
+		return
+	}
 
 	// Also append to full log
 	fullLog := filepath.Join(captureLogDir, "full-capture.json")
@@ -180,8 +191,14 @@ func saveCaptureEntry(entry *CaptureEntry) {
 		entries = make([]*CaptureEntry, 0)
 	}
 	entries = append(entries, entry)
-	finalData, _ := json.MarshalIndent(entries, "", "  ")
-	os.WriteFile(fullLog, finalData, 0644)
+	finalData, err := json.MarshalIndent(entries, "", "  ")
+	if err != nil {
+		log.Printf("capture: encode full log: %v", err)
+		return
+	}
+	if err := platform.WriteFileAtomic(fullLog, finalData, 0600); err != nil {
+		log.Printf("capture: write %s: %v", fullLog, err)
+	}
 }
 
 func sanitizeFilename(s string) string {
@@ -204,7 +221,9 @@ func Capture() error {
 	fmt.Printf("  日志目录: %s\n", captureLogDir)
 	fmt.Println("")
 
-	os.MkdirAll(captureLogDir, 0755)
+	if err := platform.EnsurePrivateDir(captureLogDir); err != nil {
+		return fmt.Errorf("secure capture log directory: %w", err)
+	}
 	captureIndex = 0
 
 	// ================================================================
