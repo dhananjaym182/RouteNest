@@ -1,19 +1,11 @@
 package providers
 
 import (
-	"bytes"
-	"encoding/json"
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"routenest/internal/accounts"
 	"testing"
 )
-
-func importJSONBody(v any) io.Reader {
-	b, _ := json.Marshal(v)
-	return bytes.NewReader(b)
-}
 
 func f64(v float64) *float64 { return &v }
 

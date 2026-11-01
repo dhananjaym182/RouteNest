@@ -35,10 +35,6 @@ func responsesInputToMessages(input any) []any {
 	return responsesconv.InputToMessages(input)
 }
 
-func stringifyResponsesContent(content any) string {
-	return responsesconv.StringifyContent(content)
-}
-
 func responsesToolsToChat(tools []any) []any {
 	return responsesconv.ToolsToChat(tools)
 }
