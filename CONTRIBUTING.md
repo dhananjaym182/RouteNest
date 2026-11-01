@@ -19,21 +19,91 @@ responses; dispatch owns retries and the SSE writer.
 
 ## Repository map
 
-| Path | Responsibility |
-| --- | --- |
-| `main.go`, `desktop_main.go` | Thin CLI and desktop entry points only |
-| `internal/app/` | One-time composition of package seams shared by both entry points |
-| `internal/proxycore/` | HTTP endpoints, OpenAI/Anthropic/Responses bridging, SSE and capture |
-| `internal/routing/` | Model catalog views, policy, Cline calls and cross-upstream fallback |
-| `internal/providers/`, `internal/zen/`, `internal/egress/` | Provider dispatch, OpenCode Zen and outbound transport policy |
-| `internal/combos/`, `internal/compaction/` | Named fallback combinations and context management |
-| `internal/admin/` | Admin routes and embedded assets under `internal/admin/ui/` |
-| `internal/accounts/`, `internal/connections/`, `internal/requestlog/`, `internal/store/` | Runtime state and persistence |
-| `internal/integration/` | Cross-package integration tests that intentionally do not belong to one service package |
+Each package owns one concern. HTTP code lives in `internal/admin` (admin) and
+`internal/proxycore` (public `/v1`); owner packages expose service APIs without
+HTTP types.
 
-Put new behavior in its owning package rather than adding implementation to an
-entry point. Cross-package dependencies are wired in `internal/app`; do not
-reintroduce compatibility wrappers in the repository root.
+| Path | Owns |
+| --- | --- |
+| `main.go`, `desktop_main.go` | Thin CLI and desktop entry points. CLI modes include `--login`, `--add-account`, `--capture`, `--list` and `--start`. |
+| `internal/app` | Composition root. `app.Configure()` installs every cross-package seam; wiring-dependent tests must call it first. |
+| `internal/config` | Live proxy configuration (`config.Live()` under `config.Mu`), overrides, snapshot and publish. |
+| `internal/platform` | Data directory resolution and legacy-file migration. |
+| `internal/buildinfo` | Version and update-status information. |
+| `internal/proxycore` | Public `/v1` routes, OpenAI/Anthropic/Responses handlers, SSE streams, capture mode. |
+| `internal/admin` | Admin route registration and HTTP adapters (`*_api.go`). Embedded UI under `internal/admin/ui/`. |
+| `internal/adminapi`, `internal/i18n` | Reusable admin primitives and the admin message catalogue. |
+| `internal/httpapi`, `internal/httpx` | Shared HTTP transport helpers (responses, CORS, JSON writing). |
+| `internal/routing` | Model policy, the `ComboCatalog` port, and cross-upstream fallback. |
+| `internal/dispatch` | Retry classification and cooldown policy helpers. |
+| `internal/combos` | Named model combinations; implements `routing.ComboCatalog`. |
+| `internal/providerreg` | Source definition catalogue: `manual/*.json` and `imported.json`. |
+| `internal/providers` | Custom provider owner service: presets, model import, cooldowns, account health. |
+| `internal/deviceflow` | Device-code login strategies for providers. |
+| `internal/models` | Live model catalogue, guarded by `accounts.PoolMu`. |
+| `internal/modelcatalog` | Model discovery types and free/paid classification. |
+| `internal/zen` | OpenCode Zen integration: catalogue sync, responses, sessions, model-gone classifier. |
+| `internal/compaction` | Context management and Anthropic conversion options. |
+| `internal/protocol/...` | Wire-protocol converters: `anthropic`, `openaichat`, `responses`. |
+| `internal/upstream/...` | Upstream clients: `cline`, `openaicompat`, `qoder`, `zen`. |
+| `internal/egress`, `internal/transport` | Shared outbound HTTP client, proxy pools, transport policy. |
+| `internal/accounts` | Cline account pool and the CLI login entry (`AddAccountFromDeviceAuth`). |
+| `internal/connections` | Provider connection owner service (no HTTP). |
+| `internal/requestlog` | Request-log owner service. |
+| `internal/store/...` | JSON-file persistence, one package per domain. |
+| `internal/domain` | Shared domain types. |
+| `internal/integration` | Cross-package tests, including the route inventory golden. |
+
+Put new behavior in its owning package rather than in an entry point. Cross-package
+dependencies are wired in `internal/app`. Do not reintroduce compatibility wrappers
+in the repository root.
+
+### Which screen owns what
+
+| Admin page (hash) | Owns | Does not own |
+| --- | --- | --- |
+| Upstreams (`#upstreams`) | opencode Zen and Cline egress, request headers, proxy, health | provider instances, global model policy |
+| Providers (`#providers`) | preset selection, provider instance config, credential binding, per-source model import and recheck, per-source health | global model enable/disable and aliases |
+| Accounts (`#accounts`) | Cline account pool and provider connection pool (separate subtabs) | provider instance routing rules |
+| Routing and models (`#routing`) | model catalogue, source badges, global enable/disable, sync status, aliases, exclusions, fallback | provider credentials and instance CRUD |
+| Combos (`#combos`) | named, ordered route definitions and their tests | physical model-source configuration |
+
+Hash routes and DOM tab IDs are public. Do not rename them.
+
+## Adding an admin endpoint
+
+1. Put the owner logic in the owning package as a plain Go function or service
+   method with no `net/http` types.
+2. Add the HTTP adapter in `internal/admin/<domain>_api.go`. It parses the request,
+   calls the owner, and writes the envelope through `internal/httpx`.
+3. Register the route in `RegisterRoutes` in `internal/admin/admin.go` with the
+   domain's auth wrapper.
+4. Cover method rejection, auth, invalid JSON, not found, upstream error, and
+   redaction of any credential fields in the response.
+5. Run `go test ./internal/integration -run TestRouteInventoryStatic -update-route-golden`,
+   then review the golden diff. Only intended routes may change.
+
+## Adding admin UI assets
+
+The admin page is assembled at startup from explicit manifests in
+`internal/admin/ui_manifest.go`. Filename globs are not used for ordering.
+
+- **Page or dialog markup:** add a file under `ui/html/pages/` (a tab panel) or
+  `ui/html/dialogs/` (an overlay, drawer or modal), then list it in
+  `adminUIBodyParts` in the order it appears in the page.
+- **Script:** add a file under `ui/js/` with a unique numeric prefix, then list it in
+  `adminUIJSAssets`. Scripts share one global scope, so a function name may be
+  declared only once.
+- **Stylesheet:** add a layer under `ui/css/` and list it in `adminUICSSLayers`.
+  Layer order is part of the cascade.
+
+The tests fail if a listed file is missing, a file is listed twice, or an embedded
+file is not listed. They also fail if a duplicate top-level function exists, or if an
+inline handler (`onclick="fn(...)"`) calls a function that no script declares.
+Run `node tools/ui_inventory.js <baseUrl> <out.json>` with `PLAYWRIGHT_CORE` set to a
+`playwright-core` install and `CHROME_PATH` set to a Chromium binary before and after a
+UI change. Compare the output to confirm that no control, element ID, or `/admin/api`
+call disappeared.
 
 ## State and secret handling
 
