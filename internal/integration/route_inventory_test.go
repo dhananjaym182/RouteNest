@@ -62,7 +62,7 @@ func exprName(e ast.Expr) string {
 	return "?"
 }
 
-// wrapperChain unwraps nested calls: auth(CorsHandler(h)) -> "auth>CorsHandler", handler "h".
+// wrapperChain unwraps nested calls: auth(CORS(h)) -> "auth>CORS", handler "h".
 func wrapperChain(e ast.Expr) (chain []string, handler string) {
 	for {
 		call, ok := e.(*ast.CallExpr)

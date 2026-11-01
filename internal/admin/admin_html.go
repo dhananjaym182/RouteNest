@@ -1,11 +1,11 @@
 package admin
 
 // ============================================================================
-// 管理面板单页装配：ui/ 静态资源在 init 时拼成完整 HTML（head.html +
-// <style>styles.css + body.html + 按文件名序拼接的 js/NN_*.js + 收尾标签），
-// /admin/ 原样输出且 no-cache。JS 文件共享全局作用域，文件名前缀即拼接顺序；
-// 每个资产文件保持 ≤ 1000 行，超限时按 // ==== 段落横幅继续拆分。
-// 拼接顺序由 ui_manifest.go 的显式清单决定（不再依赖文件名排序）。
+// 管理面板单页装配：ui/ 静态资源按 ui_manifest.go 的显式清单拼成完整 HTML：
+// head.html、<style> 的 CSS 层（adminUICSSLayers）、<body> 的 HTML 片段
+// （adminUIBodyParts）、<script> 的 JS 文件（adminUIJSAssets），再加收尾标签。
+// /admin/ 原样输出且 no-cache。JS 文件共享全局作用域；每个资产文件保持
+// ≤ 1000 行，超限时按 // ==== 段落横幅拆分。
 // ============================================================================
 
 import (

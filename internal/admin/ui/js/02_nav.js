@@ -102,7 +102,7 @@ document.querySelectorAll('.nav-item').forEach(el => {
 // 从 URL/SessionStorage 恢复上次打开的标签页（统一在底部初始化时执行）
 
 // ========== 侧栏排序（拖拽） ==========
-// 排序持久化按布局版本隔离：body.html 侧栏重新分组后 bump NAV_LAYOUT_VERSION，
+// 排序持久化按布局版本隔离：ui/html/shell.html 侧栏重新分组后 bump NAV_LAYOUT_VERSION，
 // 旧版本（含最早的裸数组格式）保存的顺序直接作废——否则旧顺序会在新分组上
 // 逐条重演，把重排效果抵消掉（表现为「改了布局但侧栏看起来没变」）。
 const NAV_ORDER_KEY = 'cline_admin_nav_order';

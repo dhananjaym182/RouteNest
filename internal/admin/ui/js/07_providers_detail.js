@@ -142,8 +142,8 @@ function renderProvDetail(p) {
 function escAttrJS(s) { return escAttr(s); }
 
 // ========== §已下架模型清理（详情抽屉）：数据取模型池（GET /models），按 provider 名过滤 =====
-// 后端只允许删除 custom 或 delisted 条目（06_models deleteModel 语义），这里仅复用同一端点：
-// POST /models/delete {id}，不改 06_models.js。
+// 后端只允许删除 custom 或 delisted 条目（13_models deleteModel 语义），这里仅复用同一端点：
+// POST /models/delete {id}，不改 13_models.js。
 let _provDelisted = null; // providerName -> [{id, cost}]（每次打开详情时刷新一次）
 
 async function ensureProvDelisted() {
@@ -182,7 +182,7 @@ function provDelistedHTML(p) {
     '<span class="hint-xs ml-8">' + t('已从上游官方列表移除，可在此手动清理') + '</span></div>' + list + '</div>';
 }
 
-// 单个移除：与模型页 deleteModel 同端点同文案（仅复用，不改 06_models.js）
+// 单个移除：与模型页 deleteModel 同端点同文案（仅复用，不改 13_models.js）
 async function removeProvDelistedModel(id) {
   if (!(await showConfirm(t('确认删除模型 ') + id + ' ?'))) return;
   try {

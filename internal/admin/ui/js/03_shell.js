@@ -90,7 +90,7 @@ async function closeDrawer(name) {
   refreshSaveBar();
 }
 // ESC closes the topmost drawer, but only when no modal layer is open on top
-// of it (modal Esc handling lives in 06_models and runs on the same event).
+// of it (modal Esc handling lives in 13_models and runs on the same event).
 const _ESC_MODAL_IDS = ['confirmModal','diffModal','modelMetaEditor','provPickerModal','comboModelPicker','presetPickerModal','importPreviewModal','connLoginModal','connImportModal','comboTestModal','modelSyncOverlay','logDetailModal'];
 function _modalLayerOpen() {
   return _ESC_MODAL_IDS.some(id => { const el = _(id); return el && el.style.display === 'flex'; });
@@ -100,7 +100,7 @@ document.addEventListener('keydown', e => {
 });
 
 // ========== 未保存更改：悬浮保存条 + 变更预览弹窗 ==========
-var _verCheckDone = false; // 「关于」页更新检查只自动跑一次（checkForUpdate 在 03_settings 定义）
+var _verCheckDone = false; // 「关于」页更新检查只自动跑一次（checkForUpdate 在 05_settings 定义）
 // 每个面（provider 抽屉 / 路由页调优卡）注册一个 ctx；同一时刻只展示优先级最高且脏的那个。
 const _saveBarCtxs = {};
 const _SAVE_BAR_ORDER = ['provider', 'tuning'];

@@ -1159,7 +1159,7 @@ const formatTokenCount = n => {
   return String(value);
 };
 
-// 行内 SVG 图标助手：与 body.html 表头图标同风格（stroke=currentColor / 2px / 圆角端点）
+// 行内 SVG 图标助手：与页面表头图标（ui/html）同风格（stroke=currentColor / 2px / 圆角端点）
 const UI_ICONS = {
   bolt: '<path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>',
   reset: '<polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>',
