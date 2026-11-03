@@ -19,6 +19,7 @@ import (
 	"sync"
 	"time"
 
+	"routenest/internal/domain"
 	"routenest/internal/modelcatalog"
 	"routenest/internal/models"
 	"routenest/internal/platform"
@@ -105,6 +106,13 @@ func recheckProviderModels(p CustomProvider) providerRecheckState {
 		}
 	}
 
+	current := map[string]models.PresenceState{}
+	for _, model := range models.Snapshot() {
+		if model.Source == models.SourceProvider && declared[model.ID] {
+			current[model.ID] = models.PresenceState{Delisted: model.Delisted, Protected: model.Custom}
+		}
+	}
+
 	// 1) 声明模型的缺失计数（连续 2 次才下架；出现即清零并撤标记）
 	provRecheckMu.Lock()
 	miss := provRecheckMiss[p.ID]
@@ -112,11 +120,20 @@ func recheckProviderModels(p CustomProvider) providerRecheckState {
 		miss = map[string]int{}
 		provRecheckMiss[p.ID] = miss
 	}
-	toMark, counting := modelcatalog.TrackMissing(p.ModelIDs, upstream, miss, providerRecheckMissLimit)
+	presence, reconcileErr := models.ReconcilePresence(p.ModelIDs, upstream, current, miss, models.ReconcilePolicy{
+		ProviderID:       domain.ProviderInstanceID(p.ID),
+		MissingThreshold: providerRecheckMissLimit,
+		Authoritative:    true,
+	})
 	provRecheckMu.Unlock()
+	if reconcileErr != nil {
+		st.LastError = reconcileErr.Error()
+		setProviderRecheckState(p.ID, st)
+		return st
+	}
 
 	// 2) 写池：打/撤 Delisted（只动 Source=provider 且在本 provider 声明内的条目）
-	marked, alreadyMarked := models.ApplyDelisting(declared, toMark, upstream)
+	marked, alreadyMarked := models.ApplyDelisting(declared, presence.ToDelist, upstream)
 
 	// 3) 新上游模型 → Auto 预览批次（不在声明里也不在池里；每 provider 至多一个待审批次）
 	poolHas := map[string]bool{}
@@ -152,7 +169,7 @@ func recheckProviderModels(p CustomProvider) providerRecheckState {
 	st = providerRecheckState{
 		LastCheckedMs:  time.Now().UnixMilli(),
 		DelistedMarked: alreadyMarked,
-		MissCounting:   counting,
+		MissCounting:   presence.MissingCounting,
 		NewQueued:      queued,
 		BatchID:        batchID,
 	}

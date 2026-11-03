@@ -176,6 +176,31 @@ func TestProviderRecheckDelistCycleAndAutoBatch(t *testing.T) {
 	}
 }
 
+func TestProviderRecheckEmptySnapshotDoesNotAdvanceMissingOrDelist(t *testing.T) {
+	isolateProviderRecheck(t)
+	up := &mutableUpstream{}
+	srv := up.server()
+	defer srv.Close()
+
+	accounts.Pool = &AccountPool{Models: []Model{
+		{ID: "keep", Provider: "TestProv", Source: "provider", Cost: "free"},
+	}}
+	p := CustomProvider{ID: "prov-empty", Name: "TestProv", BaseURL: srv.URL, ModelIDs: []string{"keep"}, Enabled: true}
+	provRecheckMiss[p.ID] = map[string]int{"keep": 1}
+	up.set(nil)
+
+	st := recheckProviderModels(p)
+	if st.LastError == "" {
+		t.Fatal("empty authoritative snapshot must be reported as an error")
+	}
+	if got := provRecheckMiss[p.ID]["keep"]; got != 1 {
+		t.Fatalf("missing count advanced on empty snapshot: %d", got)
+	}
+	if model, _ := poolModelByID("keep"); model.Delisted {
+		t.Fatal("empty snapshot must not delist the model")
+	}
+}
+
 // 付费新模型绝不猜免费：pricing 非 0 时归 pass/pricing-paid。
 func TestProviderRecheckNewModelPaidDefault(t *testing.T) {
 	isolateProviderRecheck(t)

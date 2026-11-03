@@ -40,18 +40,30 @@ func ReplaceSource(source string, build func(current []domain.Model) []domain.Mo
 			}
 		}
 		desired := build(current)
-		if len(desired) == 0 {
-			err = ErrEmptySource
-			return false
-		}
 
 		oldIDs := make(map[string]bool, len(current))
+		currentState := make(map[string]PresenceState, len(current))
+		declared := make([]string, 0, len(current))
 		for _, m := range current {
 			oldIDs[m.ID] = true
+			currentState[m.ID] = PresenceState{Delisted: m.Delisted, Protected: m.Custom}
+			declared = append(declared, m.ID)
 		}
 		seen := make(map[string]bool, len(desired))
 		for _, m := range desired {
 			seen[m.ID] = true
+		}
+		presence, reconcileErr := ReconcilePresence(declared, seen, currentState, map[string]int{}, ReconcilePolicy{
+			MissingThreshold: 1,
+			Authoritative:    true,
+		})
+		if reconcileErr != nil {
+			err = reconcileErr
+			return false
+		}
+		toDelist := make(map[string]bool, len(presence.ToDelist))
+		for _, id := range presence.ToDelist {
+			toDelist[id] = true
 		}
 
 		kept := make([]domain.Model, 0, len(p.Models)+len(desired))
@@ -64,10 +76,12 @@ func ReplaceSource(source string, build func(current []domain.Model) []domain.Mo
 			if seen[m.ID] {
 				continue
 			}
-			if !m.Delisted {
+			if !m.Delisted && toDelist[m.ID] {
 				update.Removed = append(update.Removed, m.ID)
 			}
-			m.Delisted = true
+			if toDelist[m.ID] || m.Delisted {
+				m.Delisted = true
+			}
 			kept = append(kept, m)
 		}
 		kept = append(kept, desired...)
