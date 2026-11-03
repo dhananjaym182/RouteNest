@@ -15,12 +15,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/fs"
-	"net/url"
 	"sort"
 	"strings"
 	"sync"
 
-	"routenest/internal/deviceflow"
+	"routenest/internal/domain"
 )
 
 // Provenance values record which source a definition came from.
@@ -32,6 +31,26 @@ const (
 // DefaultProtocol is the protocol ID of plain OpenAI-compatible chat, which
 // presets express by leaving Protocol empty.
 const DefaultProtocol = "openai-chat"
+
+type CapabilityState = domain.CapabilityState
+
+const (
+	CapabilitySupported   = domain.CapabilitySupported
+	CapabilityUnsupported = domain.CapabilityUnsupported
+	CapabilityUnknown     = domain.CapabilityUnknown
+)
+
+const (
+	CapabilityModelDiscovery        = "modelDiscovery"
+	CapabilityFreeModelDetection    = "freeModelDetection"
+	CapabilityRemovedModelDetection = "removedModelDetection"
+	CapabilityReactiveQuota         = "reactiveQuota"
+	CapabilityProactiveQuota        = "proactiveQuota"
+	CapabilityQuotaResetDetection   = "quotaResetDetection"
+	CapabilityCredentialRotation    = "credentialRotation"
+	CapabilityEgressPool            = "egressPool"
+	CapabilityContextCompaction     = "contextCompaction"
+)
 
 //go:embed manual/*.json
 var manualFS embed.FS
@@ -52,6 +71,9 @@ type Preset struct {
 	ID      string `json:"id"`
 	Name    string `json:"name"`
 	BaseURL string `json:"baseURL"`
+	// AdapterID selects executable provider behavior. Empty definitions retain
+	// compatibility by deriving openaicompat, or qoder from Protocol.
+	AdapterID string `json:"adapter,omitempty"`
 	// Protocol is the transport protocol. Empty means OpenAI-compatible chat;
 	// "qoder" selects the signed, non-OpenAI Qoder protocol.
 	Protocol string            `json:"protocol,omitempty"`
@@ -69,6 +91,19 @@ type Preset struct {
 	// that authenticates this provider. Empty means the provider uses an API key
 	// or no authentication.
 	AuthFlow string `json:"authFlow,omitempty"`
+	// AuthFlows declares every supported credential flow for the global provider
+	// system. AuthFlow remains the legacy connection-page projection.
+	AuthFlows []string `json:"authFlows,omitempty"`
+	// Capabilities describes support, not live health. Runtime state belongs to
+	// providerstate and is never stored in provider definitions.
+	Capabilities map[string]CapabilityState `json:"capabilities,omitempty"`
+	// MissingThreshold is the number of successful authoritative snapshots in
+	// which a model may be absent before it becomes delisted. Zero means the
+	// global default; compatibility definitions may pin their historic value.
+	MissingThreshold int `json:"missingThreshold,omitempty"`
+	// RuntimeBuiltin marks a fixed Provider Instance that must not appear in the
+	// legacy custom-provider preset picker.
+	RuntimeBuiltin bool `json:"runtimeBuiltin,omitempty"`
 	// LoginFlow is derived from AuthFlow (AuthFlow != "") and is not stored in
 	// preset files. It is kept for the admin API response.
 	LoginFlow bool `json:"loginFlow,omitempty"`
@@ -80,16 +115,19 @@ type Preset struct {
 // Registry is an immutable preset catalogue with lookup indexes. Indexes are
 // built once in New; every accessor returns copies.
 type Registry struct {
-	byID        map[string]Preset
-	byBaseURL   map[string][]string
-	byAuthFlow  map[string][]string
-	byProtocol  map[string][]string
-	protocolFor map[string]string // normalized base URL -> preset protocol
+	byID               map[string]Preset
+	byBaseURL          map[string][]string
+	byAuthFlow         map[string][]string
+	byDeclaredAuthFlow map[string][]string
+	byProtocol         map[string][]string
+	byAdapter          map[string][]string
+	protocolFor        map[string]string // normalized base URL -> preset protocol
 }
 
 func clonePreset(p Preset) Preset {
 	cp := p
 	cp.ModelIDs = append([]string(nil), p.ModelIDs...)
+	cp.AuthFlows = append([]string(nil), p.AuthFlows...)
 	if p.Headers != nil {
 		cp.Headers = make(map[string]string, len(p.Headers))
 		for key, value := range p.Headers {
@@ -99,6 +137,12 @@ func clonePreset(p Preset) Preset {
 	if p.ModelsFetcher != nil {
 		fetcher := *p.ModelsFetcher
 		cp.ModelsFetcher = &fetcher
+	}
+	if p.Capabilities != nil {
+		cp.Capabilities = make(map[string]CapabilityState, len(p.Capabilities))
+		for key, value := range p.Capabilities {
+			cp.Capabilities[key] = value
+		}
 	}
 	return cp
 }
@@ -121,17 +165,46 @@ func effectiveProtocol(p Preset) string {
 	return p.Protocol
 }
 
+func effectiveAdapter(p Preset) string {
+	if p.AdapterID != "" {
+		return p.AdapterID
+	}
+	if effectiveProtocol(p) == "qoder" {
+		return "qoder"
+	}
+	return "openaicompat"
+}
+
+func declaredAuthFlows(p Preset) []string {
+	seen := map[string]bool{}
+	out := make([]string, 0, len(p.AuthFlows)+1)
+	if p.AuthFlow != "" {
+		seen[p.AuthFlow] = true
+		out = append(out, p.AuthFlow)
+	}
+	for _, flow := range p.AuthFlows {
+		if flow == "" || seen[flow] {
+			continue
+		}
+		seen[flow] = true
+		out = append(out, flow)
+	}
+	return out
+}
+
 // New validates presets and returns an immutable registry with its indexes.
 func New(presets map[string]Preset) (*Registry, error) {
 	if err := Validate(presets); err != nil {
 		return nil, err
 	}
 	reg := &Registry{
-		byID:        make(map[string]Preset, len(presets)),
-		byBaseURL:   map[string][]string{},
-		byAuthFlow:  map[string][]string{},
-		byProtocol:  map[string][]string{},
-		protocolFor: map[string]string{},
+		byID:               make(map[string]Preset, len(presets)),
+		byBaseURL:          map[string][]string{},
+		byAuthFlow:         map[string][]string{},
+		byDeclaredAuthFlow: map[string][]string{},
+		byProtocol:         map[string][]string{},
+		byAdapter:          map[string][]string{},
+		protocolFor:        map[string]string{},
 	}
 	for id, p := range presets {
 		cp := clonePreset(p)
@@ -141,8 +214,13 @@ func New(presets map[string]Preset) (*Registry, error) {
 		if cp.AuthFlow != "" {
 			reg.byAuthFlow[cp.AuthFlow] = append(reg.byAuthFlow[cp.AuthFlow], id)
 		}
+		for _, flow := range declaredAuthFlows(cp) {
+			reg.byDeclaredAuthFlow[flow] = append(reg.byDeclaredAuthFlow[flow], id)
+		}
 		proto := effectiveProtocol(cp)
 		reg.byProtocol[proto] = append(reg.byProtocol[proto], id)
+		adapter := effectiveAdapter(cp)
+		reg.byAdapter[adapter] = append(reg.byAdapter[adapter], id)
 	}
 	for base, ids := range reg.byBaseURL {
 		sort.Strings(ids)
@@ -163,8 +241,14 @@ func New(presets map[string]Preset) (*Registry, error) {
 	for k := range reg.byAuthFlow {
 		sort.Strings(reg.byAuthFlow[k])
 	}
+	for k := range reg.byDeclaredAuthFlow {
+		sort.Strings(reg.byDeclaredAuthFlow[k])
+	}
 	for k := range reg.byProtocol {
 		sort.Strings(reg.byProtocol[k])
+	}
+	for k := range reg.byAdapter {
+		sort.Strings(reg.byAdapter[k])
 	}
 	return reg, nil
 }
@@ -215,6 +299,13 @@ func (r *Registry) ByAuthFlow(flow string) []string {
 	return append([]string(nil), r.byAuthFlow[flow]...)
 }
 
+// ByDeclaredAuthFlow returns definitions that declare a legacy or global
+// credential flow. Unlike ByAuthFlow, it includes built-in Cline/Zen flows and
+// is not used by the compatibility connections endpoint.
+func (r *Registry) ByDeclaredAuthFlow(flow string) []string {
+	return append([]string(nil), r.byDeclaredAuthFlow[flow]...)
+}
+
 // AuthFlowLabels maps every auth flow to the display name of the first preset
 // (sorted by ID) that uses it. Presets pin the flow aliases used by the
 // authentication code: github-copilot uses "github" and qwen-chat uses "qwen",
@@ -241,91 +332,10 @@ func (r *Registry) ByProtocol(protocol string) []string {
 	return append([]string(nil), r.byProtocol[protocol]...)
 }
 
-var builtinKinds = map[string]bool{"": true, "free": true, "freeTier": true, "hasFree": true, "local": true, "other": true}
-
-// knownFetcherTypes lists catalog fetcher implementations that exist in the
-// codebase. Providers with a specialized fetcher still speak OpenAI-compatible
-// chat; only their catalog format differs. The exception is "qoder", whose
-// fetcher reads /algo/api/v2/model/list for the signed Qoder protocol.
-var knownFetcherTypes = map[string]bool{
-	"":              true,
-	"openai":        true,
-	"agentrouter":   true,
-	"bynara":        true,
-	"hcnsec":        true,
-	"inxora":        true,
-	"mimo-free":     true,
-	"opencode-free": true,
-	// qoder reads its catalog from /algo/api/v2/model/list.
-	"qoder": true,
-}
-
-// Validate checks every preset and its cross-references. The map key must equal
-// the preset ID. Auth flow IDs must name a built-in device-flow spec.
-func Validate(presets map[string]Preset) error {
-	flows := deviceflow.Specs()
-	seenIDs := make(map[string]string, len(presets))
-	for key, p := range presets {
-		if strings.TrimSpace(key) == "" {
-			return fmt.Errorf("preset with empty key")
-		}
-		if p.ID != "" && p.ID != key {
-			return fmt.Errorf("preset %q: id %q does not match key", key, p.ID)
-		}
-		if prev, dup := seenIDs[p.ID]; dup {
-			return fmt.Errorf("preset id %q duplicated (%s and %s)", p.ID, prev, key)
-		}
-		seenIDs[p.ID] = key
-		if strings.TrimSpace(p.Name) == "" {
-			return fmt.Errorf("preset %q: name is required", key)
-		}
-		u, err := url.Parse(p.BaseURL)
-		if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
-			return fmt.Errorf("preset %q: baseURL %q must be an absolute http(s) URL", key, p.BaseURL)
-		}
-		if !builtinKinds[p.Kind] {
-			return fmt.Errorf("preset %q: unknown kind %q", key, p.Kind)
-		}
-		if p.Kind == "free" && !p.FreeTier {
-			return fmt.Errorf("preset %q: kind free requires freeTier", key)
-		}
-		// "qoder" is a signed, non-OpenAI protocol implemented in
-		// internal/upstream/qoder.
-		if p.Protocol != "" && p.Protocol != DefaultProtocol && p.Protocol != "qoder" {
-			return fmt.Errorf("preset %q: unsupported protocol %q", key, p.Protocol)
-		}
-		if p.AuthFlow != "" {
-			if _, ok := flows[p.AuthFlow]; !ok {
-				return fmt.Errorf("preset %q: authFlow %q has no device-flow spec", key, p.AuthFlow)
-			}
-		}
-		if p.LoginFlow != (p.AuthFlow != "") {
-			return fmt.Errorf("preset %q: loginFlow must be true exactly when authFlow is set", key)
-		}
-		if p.Provenance != "" && p.Provenance != ProvenanceManual && p.Provenance != ProvenanceImported {
-			return fmt.Errorf("preset %q: unknown provenance %q", key, p.Provenance)
-		}
-		if p.ModelsFetcher != nil {
-			fu, err := url.Parse(p.ModelsFetcher.URL)
-			if err != nil || (fu.Scheme != "http" && fu.Scheme != "https") || fu.Host == "" {
-				return fmt.Errorf("preset %q: modelsFetcher URL %q must be absolute", key, p.ModelsFetcher.URL)
-			}
-			if !knownFetcherTypes[p.ModelsFetcher.Type] {
-				return fmt.Errorf("preset %q: unsupported modelsFetcher type %q", key, p.ModelsFetcher.Type)
-			}
-		}
-		seenModels := make(map[string]bool, len(p.ModelIDs))
-		for _, id := range p.ModelIDs {
-			if strings.TrimSpace(id) == "" {
-				return fmt.Errorf("preset %q: empty model id", key)
-			}
-			if seenModels[id] {
-				return fmt.Errorf("preset %q: duplicate model id %q", key, id)
-			}
-			seenModels[id] = true
-		}
-	}
-	return nil
+// ByAdapter returns sorted definition IDs using an executable adapter. Empty
+// AdapterID definitions are indexed under their derived compatibility adapter.
+func (r *Registry) ByAdapter(adapter string) []string {
+	return append([]string(nil), r.byAdapter[adapter]...)
 }
 
 // readSource decodes every JSON preset in one embedded directory or file set.

@@ -295,6 +295,34 @@
     "provenance": "imported"
   },
   {
+    "id": "cline",
+    "name": "Cline",
+    "baseURL": "https://api.cline.bot/api/v1",
+    "adapter": "cline",
+    "protocol": "cline",
+    "notes": "Built-in Cline provider with WorkOS login, refresh-token accounts, recommended/free model discovery, credential rotation, and model-scoped quota cooldowns.",
+    "freeTier": true,
+    "kind": "hasFree",
+    "authFlows": [
+      "cline-workos",
+      "cline-refresh-token"
+    ],
+    "capabilities": {
+      "contextCompaction": "unsupported",
+      "credentialRotation": "supported",
+      "egressPool": "supported",
+      "freeModelDetection": "supported",
+      "modelDiscovery": "supported",
+      "proactiveQuota": "unsupported",
+      "quotaResetDetection": "supported",
+      "reactiveQuota": "supported",
+      "removedModelDetection": "supported"
+    },
+    "missingThreshold": 1,
+    "runtimeBuiltin": true,
+    "provenance": "manual"
+  },
+  {
     "id": "cloudcode-one",
     "name": "CloudCode.ONE",
     "baseURL": "https://api.cloudcode.one/v1",
@@ -1178,6 +1206,34 @@
     "baseURL": "https://api.openai.com/v1",
     "notes": "Paid. Key: platform.openai.com",
     "freeTier": false,
+    "provenance": "manual"
+  },
+  {
+    "id": "opencode",
+    "name": "OpenCode Zen",
+    "baseURL": "https://opencode.ai/inference/v1",
+    "adapter": "opencodezen",
+    "protocol": "opencode-zen",
+    "notes": "Built-in OpenCode Zen provider with public/session identity, free-model discovery, session rotation, context compaction, and egress cooldowns.",
+    "freeTier": true,
+    "kind": "free",
+    "authFlows": [
+      "opencode-public",
+      "opencode-session"
+    ],
+    "capabilities": {
+      "contextCompaction": "supported",
+      "credentialRotation": "supported",
+      "egressPool": "supported",
+      "freeModelDetection": "supported",
+      "modelDiscovery": "supported",
+      "proactiveQuota": "unsupported",
+      "quotaResetDetection": "supported",
+      "reactiveQuota": "supported",
+      "removedModelDetection": "supported"
+    },
+    "missingThreshold": 1,
+    "runtimeBuiltin": true,
     "provenance": "manual"
   },
   {

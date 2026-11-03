@@ -8,15 +8,84 @@ import (
 	"routenest/internal/deviceflow"
 )
 
-// Plan Phase 2 counts: 109 presets = 19 manual + 90 imported.
+// Global provider plan counts: 111 definitions = 21 manual + 90 imported.
 func TestCatalogueCountsByProvenance(t *testing.T) {
 	reg := Builtin()
 	counts := map[string]int{}
 	for _, p := range reg.All() {
 		counts[p.Provenance]++
 	}
-	if reg.Len() != 109 || counts[ProvenanceManual] != 19 || counts[ProvenanceImported] != 90 {
-		t.Fatalf("total=%d manual=%d imported=%d, want 109/19/90", reg.Len(), counts[ProvenanceManual], counts[ProvenanceImported])
+	if reg.Len() != 111 || counts[ProvenanceManual] != 21 || counts[ProvenanceImported] != 90 {
+		t.Fatalf("total=%d manual=%d imported=%d, want 111/21/90", reg.Len(), counts[ProvenanceManual], counts[ProvenanceImported])
+	}
+}
+
+func TestGlobalBuiltInDefinitions(t *testing.T) {
+	reg := Builtin()
+	tests := []struct {
+		id        string
+		adapter   string
+		protocol  string
+		authFlows []string
+	}{
+		{id: "cline", adapter: "cline", protocol: "cline", authFlows: []string{"cline-workos", "cline-refresh-token"}},
+		{id: "opencode", adapter: "opencodezen", protocol: "opencode-zen", authFlows: []string{"opencode-public", "opencode-session"}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.id, func(t *testing.T) {
+			p, ok := reg.Get(tt.id)
+			if !ok {
+				t.Fatalf("missing built-in provider definition %q", tt.id)
+			}
+			if !p.RuntimeBuiltin || p.AdapterID != tt.adapter || p.Protocol != tt.protocol {
+				t.Fatalf("definition = %+v, want runtime built-in adapter=%q protocol=%q", p, tt.adapter, tt.protocol)
+			}
+			if !reflect.DeepEqual(p.AuthFlows, tt.authFlows) {
+				t.Errorf("auth flows = %v, want %v", p.AuthFlows, tt.authFlows)
+			}
+			if p.MissingThreshold != 1 {
+				t.Errorf("missing threshold = %d, want compatibility value 1", p.MissingThreshold)
+			}
+			for _, capability := range []string{
+				CapabilityModelDiscovery,
+				CapabilityFreeModelDetection,
+				CapabilityRemovedModelDetection,
+				CapabilityReactiveQuota,
+				CapabilityQuotaResetDetection,
+				CapabilityCredentialRotation,
+				CapabilityEgressPool,
+			} {
+				if p.Capabilities[capability] != CapabilitySupported {
+					t.Errorf("capability %s = %q, want supported", capability, p.Capabilities[capability])
+				}
+			}
+		})
+	}
+
+	if got := reg.ByAdapter("cline"); !reflect.DeepEqual(got, []string{"cline"}) {
+		t.Errorf("ByAdapter(cline) = %v", got)
+	}
+	if got := reg.ByDeclaredAuthFlow("opencode-session"); !reflect.DeepEqual(got, []string{"opencode"}) {
+		t.Errorf("ByDeclaredAuthFlow(opencode-session) = %v", got)
+	}
+}
+
+func TestProviderDefinitionAccessorsReturnDeepCopies(t *testing.T) {
+	reg := Builtin()
+	p, ok := reg.Get("cline")
+	if !ok {
+		t.Fatal("missing cline definition")
+	}
+	p.AuthFlows[0] = "mutated"
+	p.Capabilities[CapabilityReactiveQuota] = CapabilityUnsupported
+
+	again, _ := reg.Get("cline")
+	if again.AuthFlows[0] != "cline-workos" {
+		t.Errorf("AuthFlows aliased: %v", again.AuthFlows)
+	}
+	if again.Capabilities[CapabilityReactiveQuota] != CapabilitySupported {
+		t.Errorf("Capabilities aliased: %v", again.Capabilities)
 	}
 }
 
@@ -163,6 +232,30 @@ func TestValidateCrossReferences(t *testing.T) {
 	ok := base
 	if err := Validate(map[string]Preset{"x": ok}); err != nil {
 		t.Errorf("plain preset rejected: %v", err)
+	}
+
+	badAdapter := base
+	badAdapter.AdapterID = "missing-adapter"
+	if err := Validate(map[string]Preset{"x": badAdapter}); err == nil || !strings.Contains(err.Error(), "unsupported adapter") {
+		t.Errorf("unknown adapter: err = %v", err)
+	}
+
+	badFlow := base
+	badFlow.AuthFlows = []string{"missing-flow"}
+	if err := Validate(map[string]Preset{"x": badFlow}); err == nil || !strings.Contains(err.Error(), "unknown auth flow") {
+		t.Errorf("unknown declared auth flow: err = %v", err)
+	}
+
+	badCapability := base
+	badCapability.Capabilities = map[string]CapabilityState{CapabilityReactiveQuota: "enabled"}
+	if err := Validate(map[string]Preset{"x": badCapability}); err == nil || !strings.Contains(err.Error(), "invalid capability state") {
+		t.Errorf("invalid capability state: err = %v", err)
+	}
+
+	badThreshold := base
+	badThreshold.MissingThreshold = -1
+	if err := Validate(map[string]Preset{"x": badThreshold}); err == nil || !strings.Contains(err.Error(), "missingThreshold") {
+		t.Errorf("invalid missing threshold: err = %v", err)
 	}
 }
 

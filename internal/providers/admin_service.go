@@ -207,6 +207,12 @@ func PresetEntries() []PresetEntry {
 	out := make([]PresetEntry, 0, reg.Len())
 	for _, k := range reg.IDs() {
 		p, _ := reg.Get(k)
+		// Built-in runtime providers participate in the global provider system,
+		// not the legacy "add a custom provider" preset picker. The additive
+		// provider-system admin API exposes them later in the migration.
+		if p.RuntimeBuiltin {
+			continue
+		}
 		kind := p.Kind
 		if kind == "" {
 			if p.FreeTier {
