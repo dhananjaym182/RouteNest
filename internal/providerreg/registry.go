@@ -338,6 +338,16 @@ func (r *Registry) ByAdapter(adapter string) []string {
 	return append([]string(nil), r.byAdapter[adapter]...)
 }
 
+// AdapterFor returns the executable adapter ID for one definition, including
+// the compatibility derivation used by definitions that predate AdapterID.
+func (r *Registry) AdapterFor(id string) string {
+	p, ok := r.byID[id]
+	if !ok {
+		return ""
+	}
+	return effectiveAdapter(p)
+}
+
 // readSource decodes every JSON preset in one embedded directory or file set.
 // Each file in dir must be named "<id>.json" with a matching id.
 func readSource(fsys fs.FS, dir string, provenance string) (map[string]Preset, error) {

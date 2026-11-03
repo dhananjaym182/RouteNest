@@ -17,6 +17,12 @@ import (
 	"routenest/internal/domain"
 	"routenest/internal/egress"
 	"routenest/internal/platform"
+	"routenest/internal/provideradapters"
+	clineadapter "routenest/internal/provideradapters/cline"
+	openaicompatadapter "routenest/internal/provideradapters/openaicompat"
+	opencodezenadapter "routenest/internal/provideradapters/opencodezen"
+	qoderadapter "routenest/internal/provideradapters/qoder"
+	"routenest/internal/providerreg"
 	"routenest/internal/providers"
 	"routenest/internal/proxycore"
 	"routenest/internal/requestlog"
@@ -44,6 +50,22 @@ func Configure() {
 }
 
 func configure() {
+	adapterRegistry, err := provideradapters.NewRegistry(
+		provideradapters.Bundle{ID: "openaicompat", Invoker: openaicompatadapter.New()},
+		provideradapters.Bundle{ID: "qoder", Invoker: qoderadapter.New()},
+		provideradapters.Bundle{ID: "cline", Invoker: clineadapter.New()},
+		provideradapters.Bundle{ID: "opencodezen", Invoker: opencodezenadapter.New()},
+	)
+	if err != nil {
+		panic("app: build provider adapter registry: " + err.Error())
+	}
+	if err := adapterRegistry.ValidateDefinitions(providerreg.Builtin()); err != nil {
+		panic("app: validate provider adapter registry: " + err.Error())
+	}
+	if err := provideradapters.Publish(adapterRegistry); err != nil {
+		panic("app: publish provider adapter registry: " + err.Error())
+	}
+
 	combos.ConfigMu = &config.Mu
 	combos.Config = config.Held
 	combos.GetConfig = config.Live
@@ -121,6 +143,7 @@ func ValidateComposition() error {
 	check("proxycore.ConfigProvider", proxycore.ConfigProvider != nil)
 	check("proxycore.RecordUsage", proxycore.RecordUsage != nil)
 	check("routing combo catalogue", routing.HasComboCatalog())
+	check("provider adapter registry", provideradapters.HasDefault())
 	if len(missing) > 0 {
 		return fmt.Errorf("app: incomplete composition: %s", strings.Join(missing, ", "))
 	}

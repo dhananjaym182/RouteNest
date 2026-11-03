@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"routenest/internal/accounts"
+	"routenest/internal/provideradapters"
 	"routenest/internal/routing"
 )
 
@@ -29,5 +30,8 @@ func TestConfigureInstallsRequiredSeams(t *testing.T) {
 	}
 	if accounts.ProxyConfigProvider() == nil {
 		t.Fatal("accounts proxy config provider not installed")
+	}
+	if !provideradapters.HasDefault() {
+		t.Fatal("provider adapter registry not installed")
 	}
 }
