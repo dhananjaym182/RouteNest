@@ -78,12 +78,14 @@ func TestZenSyncReconciliation(t *testing.T) {
 	catalogue := `{"data":[
 		{"id":"deepseek-v4-flash-free"},
 		{"id":"fresh-model-free"},
+		{"id":"manual-free"},
 		{"id":"paid-model"},
 		{"id":"mimo-v2.6-flash-free"}
 	]}`
 	start := []domain.Model{
 		// Locked limits and a manual disable must survive the rebuild.
 		{ID: "paid-model", Source: "zen", Provider: "opencode", Cost: "pass", Context: 4096, Output: 8192, MetaLocked: true, Disabled: true},
+		{ID: "manual-free", Source: "zen", Provider: "opencode", Cost: "pass", TierSignal: "manual", TierDecidedAt: 99},
 		// Upstream no longer lists it: kept, marked delisted, not removed.
 		{ID: "zen-gone", Source: "zen", Provider: "opencode", Cost: "pass"},
 		// Other sources are never touched.
@@ -109,6 +111,12 @@ func TestZenSyncReconciliation(t *testing.T) {
 	}
 	if byID["paid-model"].Cost != "pass" {
 		t.Errorf("paid model cost = %q", byID["paid-model"].Cost)
+	}
+	if byID["fresh-model-free"].TierSignal != "suffix-free" || byID["fresh-model-free"].TierDecidedAt == 0 {
+		t.Errorf("fresh Zen classification evidence missing: %+v", byID["fresh-model-free"])
+	}
+	if manual := byID["manual-free"]; manual.Cost != "pass" || manual.TierSignal != "manual" || manual.TierDecidedAt != 99 {
+		t.Errorf("manual Zen tier decision was overwritten: %+v", manual)
 	}
 
 	// Limits: seed table for known ids, 200k/32k defaults for others.

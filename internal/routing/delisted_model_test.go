@@ -88,12 +88,13 @@ func TestSyncClineModelsMarksDelisted(t *testing.T) {
 	accounts.PoolPath = filepath.Join(t.TempDir(), ".cline-accounts.json")
 	accounts.Pool = &AccountPool{Accounts: []*Account{}, Keys: []string{}, Models: []Model{
 		{ID: "old-free/gone-model", Provider: "old-free", Cost: "free", Status: "active", Source: "remote"},
+		{ID: "manual/free-name", Provider: "cline", Cost: "pass", Status: "active", Source: "remote", TierSignal: "manual", TierDecidedAt: 99},
 	}}
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		// gone-model 不在最新列表里；fresh-model 是新上线的
-		w.Write([]byte(`{"free":[{"id":"new-free/fresh-model","tags":["FREE"]}]}`))
+		w.Write([]byte(`{"free":[{"id":"new-free/fresh-model","tags":["FREE"]},{"id":"manual/free-name","tags":["FREE"]}]}`))
 	}))
 	defer srv.Close()
 	clineRecommendedModelsURL = srv.URL
@@ -125,9 +126,15 @@ func TestSyncClineModelsMarksDelisted(t *testing.T) {
 	} else if got := byID["new-free/fresh-model"].Context; got != 1048576 {
 		t.Errorf("new model default context = %d, want 1048576 (1M)", got)
 	}
+	if fresh := byID["new-free/fresh-model"]; fresh.TierSignal != "flag-free" || fresh.TierDecidedAt == 0 {
+		t.Errorf("fresh model classification evidence missing: %+v", fresh)
+	}
+	if manual := byID["manual/free-name"]; manual.Cost != "pass" || manual.TierSignal != "manual" || manual.TierDecidedAt != 99 {
+		t.Errorf("manual tier decision was overwritten: %+v", manual)
+	}
 
 	// 第二次同步：模型重新回到官方列表 → 标记清除
-	srv2Body := `{"free":[{"id":"old-free/gone-model","tags":["FREE"]},{"id":"new-free/fresh-model","tags":["FREE"]}]}`
+	srv2Body := `{"free":[{"id":"old-free/gone-model","tags":["FREE"]},{"id":"new-free/fresh-model","tags":["FREE"]},{"id":"manual/free-name","tags":["FREE"]}]}`
 	srv2 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.Write([]byte(srv2Body))

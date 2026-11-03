@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"routenest/internal/domain"
 	"routenest/internal/egress"
+	"routenest/internal/modelcatalog"
 	"routenest/internal/models"
 	"routenest/internal/zen"
 	"strings"
@@ -135,19 +136,6 @@ func LookupClineModelMeta(id string) (ModelMeta, bool) {
 	return meta, ok
 }
 
-// remoteCost 判断远程模型计费：tags 含 "FREE" 或来自 free 数组 → free，否则 pass。
-func remoteCost(m clineRemoteModel, inFreeList bool) string {
-	if inFreeList {
-		return "free"
-	}
-	for _, t := range m.Tags {
-		if strings.EqualFold(t, "FREE") {
-			return "free"
-		}
-	}
-	return "pass"
-}
-
 // remoteProvider 从模型 ID 前缀推断 provider，无前缀时归为 "cline"。
 func remoteProvider(id string) string {
 	if idx := strings.Index(id, "/"); idx > 0 {
@@ -191,6 +179,7 @@ func syncClineModels() SyncResult {
 	// The rebuild runs under the pool lock in models.ReplaceSource, against the
 	// records as they are at write time. Free models come first, and duplicates
 	// are dropped.
+	now := time.Now().Unix()
 	update, err := models.ReplaceSource(models.SourceRemote, func(current []domain.Model) []domain.Model {
 		oldRemote := make(map[string]model, len(current))
 		for _, m := range current {
@@ -204,13 +193,18 @@ func syncClineModels() SyncResult {
 					continue
 				}
 				seen[m.ID] = true
+				tier, signal := modelcatalog.Classify(modelcatalog.Entry{
+					ID: m.ID, Name: m.Name, Tags: m.Tags, FreeFlag: inFree,
+				}, false, nil)
 				entry := model{
-					ID:       m.ID,
-					Provider: remoteProvider(m.ID),
-					Cost:     remoteCost(m, inFree),
-					Status:   "active",
-					Custom:   false,
-					Source:   models.SourceRemote,
+					ID:            m.ID,
+					Provider:      remoteProvider(m.ID),
+					Cost:          tier,
+					Status:        "active",
+					Custom:        false,
+					Source:        models.SourceRemote,
+					TierSignal:    signal,
+					TierDecidedAt: now,
 				}
 				// 用户手动停用的模型（Disabled）在重建条目时保留标记，
 				// 避免周期同步把停用状态冲掉（与 MetaLocked 同思路）。
@@ -220,6 +214,11 @@ func syncClineModels() SyncResult {
 					entry.ThinkingLevels = old.ThinkingLevels
 					entry.InputModalities = old.InputModalities
 					entry.OutputModalities = old.OutputModalities
+					if old.TierSignal == "manual" {
+						entry.Cost, entry.TierSignal, entry.TierDecidedAt = old.Cost, old.TierSignal, old.TierDecidedAt
+					} else if old.Cost == entry.Cost && old.TierSignal == entry.TierSignal && old.TierDecidedAt != 0 {
+						entry.TierDecidedAt = old.TierDecidedAt
+					}
 				}
 				// 远程接口不带 context/maxTokens：按已知硬限制表补全，
 				// 用户锁定过的值（MetaLocked）优先于表；未收录的模型默认 1M

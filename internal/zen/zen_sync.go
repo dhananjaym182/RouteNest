@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"routenest/internal/modelcatalog"
 	"routenest/internal/models"
 )
 
@@ -87,6 +88,7 @@ func SyncModels() SyncResult {
 	for _, sm := range SeedModels {
 		seedFree[sm.ID] = true
 	}
+	now := time.Now().Unix()
 	update, err := models.ReplaceSource(models.SourceZen, func(current []Model) []Model {
 		oldZen := make(map[string]Model, len(current))
 		for _, m := range current {
@@ -100,17 +102,16 @@ func SyncModels() SyncResult {
 				continue
 			}
 			seen[id] = true
-			cost := "pass"
-			if strings.HasSuffix(id, "-free") || seedFree[id] {
-				cost = "free"
-			}
+			cost, signal := modelcatalog.Classify(modelcatalog.Entry{ID: id}, false, seedFree)
 			remote = append(remote, Model{
-				ID:       id,
-				Provider: "opencode",
-				Cost:     cost,
-				Status:   "active",
-				Custom:   false,
-				Source:   models.SourceZen,
+				ID:            id,
+				Provider:      "opencode",
+				Cost:          cost,
+				Status:        "active",
+				Custom:        false,
+				Source:        models.SourceZen,
+				TierSignal:    signal,
+				TierDecidedAt: now,
 			})
 		}
 		fillMeta := func(m Model) Model {
@@ -121,6 +122,11 @@ func SyncModels() SyncResult {
 				m.ThinkingLevels = om.ThinkingLevels
 				m.InputModalities = om.InputModalities
 				m.OutputModalities = om.OutputModalities
+				if om.TierSignal == "manual" {
+					m.Cost, m.TierSignal, m.TierDecidedAt = om.Cost, om.TierSignal, om.TierDecidedAt
+				} else if om.Cost == m.Cost && om.TierSignal == m.TierSignal && om.TierDecidedAt != 0 {
+					m.TierDecidedAt = om.TierDecidedAt
+				}
 				if om.MetaLocked && om.Context > 0 {
 					m.Context, m.Output = om.Context, om.Output
 					m.MetaLocked = true
