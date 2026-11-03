@@ -52,6 +52,21 @@ const (
 	CapabilityContextCompaction     = "contextCompaction"
 )
 
+// CapabilityNames returns every canonical provider capability in stable order.
+func CapabilityNames() []string {
+	return []string{
+		CapabilityContextCompaction,
+		CapabilityCredentialRotation,
+		CapabilityEgressPool,
+		CapabilityFreeModelDetection,
+		CapabilityModelDiscovery,
+		CapabilityProactiveQuota,
+		CapabilityQuotaResetDetection,
+		CapabilityReactiveQuota,
+		CapabilityRemovedModelDetection,
+	}
+}
+
 //go:embed manual/*.json
 var manualFS embed.FS
 
