@@ -12,6 +12,7 @@ import (
 	"routenest/internal/domain"
 	"routenest/internal/platform"
 	"routenest/internal/protocol/openaichat"
+	"routenest/internal/providerstate"
 )
 
 type accountTestResult struct {
@@ -186,6 +187,19 @@ func SetModelCooldown(acc *domain.Account, model string, until time.Time) {
 	accounts.PoolMu.Unlock()
 	accounts.SavePool()
 	log.Printf("model cooldown: account=%s model=%s until=%s", TruncateEmail(acc.Email), model, until.Format("15:04:05"))
+	if providerstate.HasDefault() && acc.AccountID != "" {
+		scope := domain.AvailabilityScope{
+			ProviderID: "cline", CredentialID: domain.CredentialID("cline:" + acc.AccountID), ModelID: model,
+		}
+		if until.IsZero() || !time.Now().Before(until) {
+			_ = providerstate.Default().Recover(scope)
+		} else {
+			_ = providerstate.Default().Apply(domain.AvailabilityObservation{
+				Kind: domain.ObservationRateLimited, Scope: scope, Until: until,
+				Source: "legacy_cline_model_cooldown", Confidence: domain.ConfidenceFallback,
+			})
+		}
+	}
 }
 
 func TruncateEmail(email string) string {

@@ -24,6 +24,7 @@ import (
 	qoderadapter "routenest/internal/provideradapters/qoder"
 	"routenest/internal/providerreg"
 	"routenest/internal/providers"
+	"routenest/internal/providerstate"
 	"routenest/internal/proxycore"
 	"routenest/internal/requestlog"
 	"routenest/internal/routing"
@@ -50,6 +51,9 @@ func Configure() {
 }
 
 func configure() {
+	if err := configureProviderState(); err != nil {
+		panic("app: publish provider state: " + err.Error())
+	}
 	openAIAdapter := openaicompatadapter.New()
 	qoderAdapter := qoderadapter.New()
 	clineAdapter := clineadapter.New()
@@ -148,6 +152,7 @@ func ValidateComposition() error {
 	check("proxycore.RecordUsage", proxycore.RecordUsage != nil)
 	check("routing combo catalogue", routing.HasComboCatalog())
 	check("provider adapter registry", provideradapters.HasDefault())
+	check("provider state store", providerstate.HasDefault())
 	if len(missing) > 0 {
 		return fmt.Errorf("app: incomplete composition: %s", strings.Join(missing, ", "))
 	}

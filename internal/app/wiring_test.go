@@ -5,6 +5,7 @@ import (
 
 	"routenest/internal/accounts"
 	"routenest/internal/provideradapters"
+	"routenest/internal/providerstate"
 	"routenest/internal/routing"
 )
 
@@ -33,5 +34,8 @@ func TestConfigureInstallsRequiredSeams(t *testing.T) {
 	}
 	if !provideradapters.HasDefault() {
 		t.Fatal("provider adapter registry not installed")
+	}
+	if !providerstate.HasDefault() {
+		t.Fatal("provider state store not installed")
 	}
 }

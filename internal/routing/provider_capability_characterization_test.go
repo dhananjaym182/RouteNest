@@ -1,8 +1,13 @@
 package routing
 
 import (
+	"path/filepath"
 	"testing"
 	"time"
+
+	"routenest/internal/accounts"
+	"routenest/internal/domain"
+	"routenest/internal/providerstate"
 )
 
 func TestCharacterizationClineQuotaResetBody(t *testing.T) {
@@ -25,5 +30,25 @@ func TestCharacterizationClineQuotaResetBody(t *testing.T) {
 				t.Fatalf("reset = %s, want within [%s, %s]", got, before.Add(tt.want), after.Add(tt.want))
 			}
 		})
+	}
+}
+
+func TestSetModelCooldownMirrorsCredentialOfferingState(t *testing.T) {
+	oldPool, oldPath := accounts.Pool, accounts.PoolPath
+	accounts.PoolPath = filepath.Join(t.TempDir(), ".routenest-accounts.json")
+	account := &domain.Account{AccountID: "a1", Email: "a@example.com", Status: "active"}
+	accounts.Pool = &domain.AccountPool{Accounts: []*domain.Account{account}}
+	t.Cleanup(func() { accounts.Pool, accounts.PoolPath = oldPool, oldPath })
+
+	store := providerstate.NewStore(time.Now)
+	if err := providerstate.Publish(store); err != nil {
+		t.Fatal(err)
+	}
+	SetModelCooldown(account, "model", time.Now().Add(time.Minute))
+	reasons := store.Blocking(domain.AvailabilityScope{
+		ProviderID: "cline", CredentialID: "cline:a1", ModelID: "model",
+	})
+	if len(reasons) != 1 || reasons[0].Kind != domain.ObservationRateLimited {
+		t.Fatalf("shadow state = %+v", reasons)
 	}
 }

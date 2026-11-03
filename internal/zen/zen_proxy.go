@@ -17,6 +17,8 @@ import (
 	utls "github.com/refraction-networking/utls"
 	"golang.org/x/net/http2"
 
+	"routenest/internal/domain"
+	"routenest/internal/providerstate"
 	"routenest/internal/transport"
 	zenupstream "routenest/internal/upstream/zen"
 )
@@ -314,10 +316,18 @@ func cooldownZenProxy(idx int, d time.Duration) {
 	if d <= 0 {
 		d = 10 * time.Minute
 	}
+	until := time.Now().Add(d)
 	zenProxyCooldownsMu.Lock()
-	zenProxyCooldowns[idx] = time.Now().Add(d)
+	zenProxyCooldowns[idx] = until
 	zenProxyCooldownsMu.Unlock()
 	log.Printf("  zen proxy[%d] cooled down for %v", idx+1, d)
+	if providerstate.HasDefault() {
+		_ = providerstate.Default().Apply(domain.AvailabilityObservation{
+			Kind:  domain.ObservationRateLimited,
+			Scope: domain.AvailabilityScope{ProviderID: "opencode", EgressID: fmt.Sprintf("proxy-%d", idx)},
+			Until: until, Source: "legacy_zen_proxy_cooldown", Confidence: domain.ConfidenceFallback,
+		})
+	}
 }
 
 func zenProxyAvailable(idx int) bool {

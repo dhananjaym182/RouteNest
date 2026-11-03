@@ -3,6 +3,9 @@ package providers
 import (
 	"sync"
 	"time"
+
+	"routenest/internal/domain"
+	"routenest/internal/providerstate"
 )
 
 // ---- 预算上限：派发前就避开配额墙，别再拿 429 当发现手段 ----------------
@@ -35,11 +38,13 @@ func providerBudgetExceeded(providerID, model string, rpmLimit, dailyLimit int, 
 	if rpmLimit <= 0 && dailyLimit <= 0 && tokenLimit <= 0 {
 		return false
 	}
+	now := time.Now()
+	scope := domain.AvailabilityScope{ProviderID: domain.ProviderInstanceID(providerID), ModelID: model}
+	var observed *domain.AvailabilityObservation
 	budgetMu.Lock()
-	defer budgetMu.Unlock()
 	if rpmLimit > 0 {
 		key := providerID + ":" + model
-		cut := time.Now().Add(-providerRPMWindow)
+		cut := now.Add(-providerRPMWindow)
 		kept := providerRPM[key][:0]
 		for _, t := range providerRPM[key] {
 			if t.After(cut) {
@@ -48,20 +53,48 @@ func providerBudgetExceeded(providerID, model string, rpmLimit, dailyLimit int, 
 		}
 		providerRPM[key] = kept
 		if len(kept) >= rpmLimit {
-			return true
+			oldest := kept[0]
+			for _, at := range kept[1:] {
+				if at.Before(oldest) {
+					oldest = at
+				}
+			}
+			observation := domain.AvailabilityObservation{
+				Kind: domain.ObservationRateLimited, Scope: scope, Until: oldest.Add(providerRPMWindow),
+				Source: "configured_window", Confidence: domain.ConfidenceExplicit,
+			}
+			observed = &observation
 		}
 	}
-	if dailyLimit > 0 {
-		day := time.Now().UTC().Format("2006-01-02")
+	if observed == nil && dailyLimit > 0 {
+		day := now.UTC().Format("2006-01-02")
 		if providerDaily[providerID][day] >= int64(dailyLimit) {
-			return true
+			resetAt := providerstate.ConfiguredQuotaResetAt(now, "daily")
+			observation := domain.AvailabilityObservation{
+				Kind: domain.ObservationQuotaExhausted, Scope: scope, Until: resetAt, ResetAt: resetAt,
+				Source: "configured_window", Confidence: domain.ConfidenceExplicit,
+			}
+			observed = &observation
 		}
 	}
 	// token 预算：本窗口（月或日）已归集 token 达上限即超配，派发前就避开
-	if tokenLimit > 0 && providerTokens[providerID][utcTokenKey(tokenWindow)] >= tokenLimit {
-		return true
+	if observed == nil && tokenLimit > 0 && providerTokens[providerID][utcTokenKey(tokenWindow)] >= tokenLimit {
+		window := tokenWindow
+		if window != "daily" {
+			window = "monthly"
+		}
+		resetAt := providerstate.ConfiguredQuotaResetAt(now, window)
+		observation := domain.AvailabilityObservation{
+			Kind: domain.ObservationQuotaExhausted, Scope: scope, Until: resetAt, ResetAt: resetAt,
+			Source: "configured_window", Confidence: domain.ConfidenceExplicit,
+		}
+		observed = &observation
 	}
-	return false
+	budgetMu.Unlock()
+	if observed != nil && providerstate.HasDefault() {
+		_ = providerstate.Default().Apply(*observed)
+	}
+	return observed != nil
 }
 
 // recordProviderDispatch 派发即计数（成败都计入：已打出的上游请求都占配额）。

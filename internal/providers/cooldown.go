@@ -5,7 +5,9 @@ import (
 	"time"
 
 	"routenest/internal/dispatch"
+	"routenest/internal/domain"
 	"routenest/internal/platform"
+	"routenest/internal/providerstate"
 	providerstore "routenest/internal/store/providers"
 )
 
@@ -18,6 +20,17 @@ func SetCooldown(providerID, model string, until time.Time) {
 	saveProviderCooldownsLocked()
 	Mu.Unlock()
 	stickyClearForProvider(providerID) // 粘贴会话不要粘在冷却中的 provider 上
+	if providerstate.HasDefault() && providerID != "" {
+		scope := domain.AvailabilityScope{ProviderID: domain.ProviderInstanceID(providerID), ModelID: model}
+		if until.IsZero() || !time.Now().Before(until) {
+			_ = providerstate.Default().Recover(scope)
+		} else {
+			_ = providerstate.Default().Apply(domain.AvailabilityObservation{
+				Kind: domain.ObservationRateLimited, Scope: scope, Until: until,
+				Source: "legacy_provider_cooldown", Confidence: domain.ConfidenceFallback,
+			})
+		}
+	}
 }
 
 // providerRateLimitedKeys reports explicit quota/rate-limit keywords.
