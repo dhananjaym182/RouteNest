@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"net/http"
 
+	"routenest/internal/domain"
 	"routenest/internal/provideradapters"
+	"routenest/internal/providerstate"
 	upstream "routenest/internal/upstream/openaicompat"
 )
 
@@ -24,4 +26,10 @@ func (a *Adapter) Invoke(ctx context.Context, in provideradapters.Invocation) (*
 	}
 	req = req.WithContext(ctx)
 	return in.HTTP.Do(req)
+}
+
+func (a *Adapter) ClassifyFailure(in provideradapters.FailureInput) []domain.AvailabilityObservation {
+	return providerstate.DetectStandardFailure(providerstate.HTTPFailure{
+		Scope: in.Scope, StatusCode: in.StatusCode, Header: in.Header, Body: string(in.Body),
+	})
 }

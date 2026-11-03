@@ -6,7 +6,6 @@ package provideradapters
 import (
 	"context"
 	"net/http"
-	"time"
 
 	"routenest/internal/domain"
 	"routenest/internal/modelcatalog"
@@ -72,14 +71,7 @@ type ModelDiscoverer interface {
 
 // QuotaSnapshot is an adapter-level report. Unknown values stay nil; callers
 // must never convert absent provider data into a zero limit or reset time.
-type QuotaSnapshot struct {
-	Capability domain.CapabilityState
-	Limit      *int64
-	Used       *int64
-	Remaining  *int64
-	ResetAt    *time.Time
-	Source     string
-}
+type QuotaSnapshot = domain.QuotaSnapshot
 
 type QuotaReader interface {
 	ReadQuota(context.Context, Credential) (QuotaSnapshot, error)

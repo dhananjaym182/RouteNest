@@ -7,7 +7,9 @@ import (
 	"slices"
 	"sync"
 
+	"routenest/internal/domain"
 	"routenest/internal/provideradapters"
+	"routenest/internal/providerstate"
 	upstream "routenest/internal/upstream/zen"
 )
 
@@ -16,6 +18,12 @@ type Adapter struct {
 	ids      *upstream.Identifier
 	sessions *upstream.SessionCache
 	pool     []string
+}
+
+func (a *Adapter) ClassifyFailure(in provideradapters.FailureInput) []domain.AvailabilityObservation {
+	return providerstate.DetectZenFailure(providerstate.HTTPFailure{
+		Scope: in.Scope, StatusCode: in.StatusCode, Header: in.Header, Body: string(in.Body),
+	})
 }
 
 func New() *Adapter {

@@ -150,3 +150,16 @@ func (observation AvailabilityObservation) Valid() bool {
 		observation.Confidence.Valid() && observation.Source != "" &&
 		observation.Source == strings.TrimSpace(observation.Source)
 }
+
+// QuotaSnapshot is one provider/credential quota report. Pointer fields remain
+// nil when the upstream cannot report them; zero is therefore never fabricated.
+type QuotaSnapshot struct {
+	Capability CapabilityState    `json:"capability"`
+	Limit      *int64             `json:"limit,omitempty"`
+	Used       *int64             `json:"used,omitempty"`
+	Remaining  *int64             `json:"remaining,omitempty"`
+	ResetAt    time.Time          `json:"resetAt,omitempty"`
+	Window     string             `json:"window,omitempty"`
+	Source     string             `json:"source,omitempty"`
+	Confidence EvidenceConfidence `json:"confidence,omitempty"`
+}

@@ -5,7 +5,9 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
+	"routenest/internal/domain"
 	"routenest/internal/provideradapters"
 	upstreamzen "routenest/internal/upstream/zen"
 )
@@ -33,4 +35,16 @@ func TestAdapterInvokesZenWithRegisteredSession(t *testing.T) {
 		t.Fatal(err)
 	}
 	resp.Body.Close()
+}
+
+func TestAdapterTreatsZen503AsRateLimited(t *testing.T) {
+	before := time.Now()
+	got := New().ClassifyFailure(provideradapters.FailureInput{
+		Scope:      domain.AvailabilityScope{ProviderID: "opencode", ModelID: "model-free"},
+		StatusCode: http.StatusServiceUnavailable,
+		Header:     make(http.Header),
+	})
+	if len(got) != 1 || got[0].Kind != domain.ObservationRateLimited || got[0].Until.Before(before.Add(30*time.Second)) {
+		t.Fatalf("observations = %+v", got)
+	}
 }

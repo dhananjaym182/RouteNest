@@ -50,11 +50,15 @@ func Configure() {
 }
 
 func configure() {
+	openAIAdapter := openaicompatadapter.New()
+	qoderAdapter := qoderadapter.New()
+	clineAdapter := clineadapter.New()
+	openCodeAdapter := opencodezenadapter.New()
 	adapterRegistry, err := provideradapters.NewRegistry(
-		provideradapters.Bundle{ID: "openaicompat", Invoker: openaicompatadapter.New()},
-		provideradapters.Bundle{ID: "qoder", Invoker: qoderadapter.New()},
-		provideradapters.Bundle{ID: "cline", Invoker: clineadapter.New()},
-		provideradapters.Bundle{ID: "opencodezen", Invoker: opencodezenadapter.New()},
+		provideradapters.Bundle{ID: "openaicompat", Invoker: openAIAdapter, FailureClassifier: openAIAdapter},
+		provideradapters.Bundle{ID: "qoder", Invoker: qoderAdapter, FailureClassifier: qoderAdapter},
+		provideradapters.Bundle{ID: "cline", Invoker: clineAdapter, FailureClassifier: clineAdapter},
+		provideradapters.Bundle{ID: "opencodezen", Invoker: openCodeAdapter, FailureClassifier: openCodeAdapter},
 	)
 	if err != nil {
 		panic("app: build provider adapter registry: " + err.Error())

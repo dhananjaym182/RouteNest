@@ -4,7 +4,9 @@ import (
 	"context"
 	"net/http"
 
+	"routenest/internal/domain"
 	"routenest/internal/provideradapters"
+	"routenest/internal/providerstate"
 	upstream "routenest/internal/upstream/qoder"
 )
 
@@ -25,4 +27,10 @@ func (a *Adapter) Invoke(ctx context.Context, in provideradapters.Invocation) (*
 		MachineID: in.Credential.Metadata["machineId"],
 		BaseURL:   in.BaseURL,
 	}, in.Params, in.Stream)
+}
+
+func (a *Adapter) ClassifyFailure(in provideradapters.FailureInput) []domain.AvailabilityObservation {
+	return providerstate.DetectStandardFailure(providerstate.HTTPFailure{
+		Scope: in.Scope, StatusCode: in.StatusCode, Header: in.Header, Body: string(in.Body),
+	})
 }

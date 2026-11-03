@@ -5,7 +5,9 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
+	"routenest/internal/domain"
 	"routenest/internal/provideradapters"
 )
 
@@ -29,4 +31,16 @@ func TestAdapterInvokesClineEndpoint(t *testing.T) {
 		t.Fatal(err)
 	}
 	resp.Body.Close()
+}
+
+func TestAdapterClassifiesClineQuotaReset(t *testing.T) {
+	before := time.Now()
+	got := New().ClassifyFailure(provideradapters.FailureInput{
+		Scope:      domain.AvailabilityScope{ProviderID: "cline", CredentialID: "account", ModelID: "model"},
+		StatusCode: http.StatusTooManyRequests,
+		Body:       []byte(`{"message":"Try again in 1h 1m"}`),
+	})
+	if len(got) != 1 || got[0].Kind != domain.ObservationQuotaExhausted || got[0].ResetAt.Before(before.Add(61*time.Minute)) {
+		t.Fatalf("observations = %+v", got)
+	}
 }

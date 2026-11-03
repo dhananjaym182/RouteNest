@@ -28,6 +28,12 @@ func TestComposedRegistryCoversEveryDefinition(t *testing.T) {
 	if err := reg.ValidateDefinitions(providerreg.Builtin()); err != nil {
 		t.Fatal(err)
 	}
+	for _, id := range reg.IDs() {
+		bundle, _ := reg.Get(id)
+		if bundle.FailureClassifier == nil {
+			t.Errorf("adapter %q has no failure classifier", id)
+		}
+	}
 }
 
 func TestEveryInvokerPropagatesCancellation(t *testing.T) {
