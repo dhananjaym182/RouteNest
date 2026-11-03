@@ -35,6 +35,7 @@ func providerRateLimitedKeys(body string) bool {
 // 过期条目直接丢弃。文件缺失/损坏只记日志，不阻塞 provider 初始化。
 // 调方必须已持有 Mu。
 func loadProviderCooldownsLocked() {
+	ensurePaths()
 	loaded, err := providerstore.LoadCooldowns(CooldownsPath)
 	if err != nil {
 		platform.BackupCorruptFile(CooldownsPath, err)
@@ -48,6 +49,7 @@ func loadProviderCooldownsLocked() {
 // saveProviderCooldownsLocked 把未过期的冷却条目原子写盘。调方必须已持有
 // Mu。写失败只记日志：冷却丢失的最坏后果是重启后多探测一次。
 func saveProviderCooldownsLocked() {
+	ensurePaths()
 	if err := providerstore.SaveCooldowns(CooldownsPath, Cooldowns); err != nil {
 		log.Printf("provider cooldowns save failed: %v", err)
 	}

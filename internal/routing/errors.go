@@ -20,6 +20,25 @@ func (e *ClineAccountUnavailableError) Unwrap() error {
 	return e.err
 }
 
+// ClassifyAffinityError translates an upstream error into the two facts the
+// account-affinity layer needs: the HTTP status (401/429 unbind the account) and
+// whether the account itself is unavailable (unbind immediately). It lives here
+// because this package owns ClineAccountUnavailableError.
+func ClassifyAffinityError(err error) (statusCode int, unavailable bool) {
+	if err == nil {
+		return 0, false
+	}
+	var apiErr *egress.APIError
+	if errors.As(err, &apiErr) {
+		return apiErr.StatusCode, false
+	}
+	var accountErr *ClineAccountUnavailableError
+	if errors.As(err, &accountErr) {
+		return 0, true
+	}
+	return 0, false
+}
+
 type FreeModelUnavailableError struct {
 	Message string
 }

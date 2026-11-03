@@ -12,8 +12,8 @@ import (
 
 func TestCaptureDefaultDirectoryUsesDataDir(t *testing.T) {
 	want := filepath.Join(platform.CurrentDataDir(), "capture-logs")
-	if captureLogDir != want {
-		t.Fatalf("captureLogDir = %q, want %q", captureLogDir, want)
+	if got := captureDir(); got != want {
+		t.Fatalf("captureDir() = %q, want %q", got, want)
 	}
 }
 

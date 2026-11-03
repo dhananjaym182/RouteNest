@@ -23,7 +23,7 @@ func CallClineAPI(params map[string]any, stream bool) (*http.Response, *domain.A
 
 	if bare, pin := providers.SplitPin(model); pin != "" {
 		params["model"] = bare
-		if ConfigProvider().OnlyFree && !ModelFreeOnlyEligible(bare) {
+		if liveConfig().OnlyFree && !ModelFreeOnlyEligible(bare) {
 			return nil, nil, fmt.Errorf("model %q is not eligible while onlyFree is enabled (access class: %s)", bare, ModelRouteAccess(bare).Class)
 		}
 		resp, perr, attempted, provName := providers.CallAPINamed(params, stream, pin)
@@ -67,7 +67,7 @@ func CallClineAPI(params map[string]any, stream bool) (*http.Response, *domain.A
 			chain = append(chain, m)
 		}
 	}
-	if ConfigProvider().OnlyFree {
+	if liveConfig().OnlyFree {
 		eligible := make([]string, 0, len(chain))
 		for _, m := range chain {
 			if ModelFreeOnlyEligible(m) {
@@ -83,7 +83,7 @@ func CallClineAPI(params map[string]any, stream bool) (*http.Response, *domain.A
 	}
 	// 会话亲和（管理员开关，默认关闭）：同一会话在 TTL 内钉到同一 Cline 账号。
 	var affinitySk string
-	if ConfigProvider().SessionAffinity.Enabled {
+	if liveConfig().SessionAffinity.Enabled {
 		affinitySk = providers.SessionKeyFromParams(params)
 	}
 
@@ -221,7 +221,7 @@ func hasActiveAccounts() bool {
 
 func CallFreeClineAPI(params map[string]any, stream bool) (*http.Response, *domain.Account, error) {
 
-	configured := ConfigProvider().ModelChain
+	configured := liveConfig().ModelChain
 	chain := configured
 	if len(configured) == 0 {
 		chain = defaultFreeChain()
@@ -229,7 +229,7 @@ func CallFreeClineAPI(params map[string]any, stream bool) (*http.Response, *doma
 
 	chain = filterStaleModels(chain)
 	chain = accounts.SortModelsByAvailability(chain)
-	if ConfigProvider().OnlyFree {
+	if liveConfig().OnlyFree {
 		eligible := make([]string, 0, len(chain))
 		for _, m := range chain {
 			if ModelFreeOnlyEligible(m) {
@@ -244,7 +244,7 @@ func CallFreeClineAPI(params map[string]any, stream bool) (*http.Response, *doma
 	delete(params, ProviderNameParam)
 	delete(params, providers.ProviderIDParam)
 	var affinitySk string
-	if ConfigProvider().SessionAffinity.Enabled {
+	if liveConfig().SessionAffinity.Enabled {
 		affinitySk = providers.SessionKeyFromParams(params)
 	}
 	var lastErr error

@@ -11,6 +11,7 @@ import (
 
 	"routenest/internal/connections"
 	"routenest/internal/httpx"
+	"routenest/internal/providerreg"
 )
 
 // GET /admin/api/connections
@@ -18,6 +19,9 @@ func handleConnectionsList(w http.ResponseWriter, r *http.Request) {
 	httpx.WriteAPI(w, http.StatusOK, httpx.Response{Success: true, Data: map[string]any{
 		"connections": connections.ListConnections(),
 		"flows":       connections.ConnectionFlowNames(),
+		// flowLabels is the canonical display name for each auth flow, taken
+		// from the provider catalogue. The UI must not keep a parallel table.
+		"flowLabels": providerreg.Builtin().AuthFlowLabels(),
 	}})
 }
 

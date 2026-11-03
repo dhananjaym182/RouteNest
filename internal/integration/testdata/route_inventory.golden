@@ -1,82 +1,82 @@
-/admin/	admin.go	wrap=none	handler=adminStaticHandler
-/admin/api/account-health	admin.go	wrap=auth	handler=handleAccountHealth
-/admin/api/accounts	admin.go	wrap=auth	handler=handleAdminAccounts
-/admin/api/accounts/add	admin.go	wrap=auth	handler=handleAdminAccountAdd
-/admin/api/accounts/delete	admin.go	wrap=auth	handler=handleAdminAccountDelete
-/admin/api/accounts/delete-all	admin.go	wrap=auth	handler=handleAdminDeleteAll
-/admin/api/accounts/export	admin.go	wrap=auth	handler=handleExportAccounts
-/admin/api/accounts/refresh-all	admin.go	wrap=auth	handler=handleAdminRefreshAll
-/admin/api/accounts/reset	admin.go	wrap=auth	handler=handleAdminAccountReset
-/admin/api/accounts/test	admin.go	wrap=auth	handler=handleAdminAccountTest
-/admin/api/admin-sessions/clear	admin.go	wrap=auth	handler=handleAdminSessionsClear
-/admin/api/batch-import	admin.go	wrap=auth	handler=handleBatchImport
-/admin/api/cline-proxy/config	admin.go	wrap=auth	handler=handleClineProxyConfig
-/admin/api/cline-proxy/config/update	admin.go	wrap=auth	handler=handleClineProxyConfigUpdate
-/admin/api/combos	admin.go	wrap=auth	handler=handleCombosList
-/admin/api/combos/clone	admin.go	wrap=auth	handler=handleComboClone
-/admin/api/combos/delete	admin.go	wrap=auth	handler=handleComboDelete
-/admin/api/combos/save	admin.go	wrap=auth	handler=handleComboSave
-/admin/api/combos/test	admin.go	wrap=auth	handler=HandleComboTest
-/admin/api/combos/toggle	admin.go	wrap=auth	handler=handleComboToggle
-/admin/api/config	admin.go	wrap=auth	handler=handleAdminConfig
-/admin/api/config/update	admin.go	wrap=auth	handler=handleAdminUpdateConfig
-/admin/api/connections	admin.go	wrap=auth	handler=handleConnectionsList
-/admin/api/connections/delete	admin.go	wrap=auth	handler=handleConnectionDelete
-/admin/api/connections/import	admin.go	wrap=auth	handler=handleConnectionImport
-/admin/api/connections/import-batch	admin.go	wrap=auth	handler=handleConnectionImportBatch
-/admin/api/connections/login/start	admin.go	wrap=auth	handler=handleConnectionLoginStart
-/admin/api/connections/login/status	admin.go	wrap=auth	handler=handleConnectionLoginStatus
-/admin/api/connections/test	admin.go	wrap=auth	handler=handleConnectionTest
-/admin/api/dashboard/overview	admin.go	wrap=auth	handler=handleDashboardOverview
-/admin/api/keys	admin.go	wrap=auth	handler=handleAdminGetKeys
-/admin/api/keys/delete	admin.go	wrap=auth	handler=handleAdminDeleteKey
-/admin/api/keys/generate	admin.go	wrap=auth	handler=handleAdminGenerateKey
-/admin/api/login	admin.go	wrap=httpx.CORS	handler=handleAdminLogin
-/admin/api/logout	admin.go	wrap=httpx.CORS	handler=handleAdminLogout
-/admin/api/models	admin.go	wrap=auth	handler=handleAdminModels
-/admin/api/models/add	admin.go	wrap=auth	handler=handleAdminModelAdd
-/admin/api/models/capabilities	admin.go	wrap=auth	handler=handleAdminModelCapabilities
-/admin/api/models/context	admin.go	wrap=auth	handler=handleAdminModelContext
-/admin/api/models/cost	admin.go	wrap=auth	handler=handleModelCost
-/admin/api/models/delete	admin.go	wrap=auth	handler=handleAdminModelDelete
-/admin/api/models/import/apply	admin.go	wrap=auth	handler=handleModelImportApply
-/admin/api/models/import/batch	admin.go	wrap=auth	handler=handleModelImportBatch
-/admin/api/models/import/discard	admin.go	wrap=auth	handler=handleModelImportDiscard
-/admin/api/models/import/pending	admin.go	wrap=auth	handler=handleModelImportPending
-/admin/api/models/import/preview	admin.go	wrap=auth	handler=handleModelImportPreview
-/admin/api/models/sync	admin.go	wrap=auth	handler=handleAdminModelSync
-/admin/api/models/test	admin.go	wrap=auth	handler=HandleAdminModelTest
-/admin/api/models/toggle	admin.go	wrap=auth	handler=HandleAdminModelToggle
-/admin/api/oauth/start	admin.go	wrap=auth	handler=handleOAuthStart
-/admin/api/oauth/status	admin.go	wrap=auth	handler=handleOAuthStatus
-/admin/api/open-external	admin.go	wrap=auth	handler=handleOpenExternal
-/admin/api/opencode/config	admin.go	wrap=auth	handler=handleOpenCodeConfig
-/admin/api/opencode/config/update	admin.go	wrap=auth	handler=handleOpenCodeConfigUpdate
-/admin/api/opencode/models/sync	admin.go	wrap=auth	handler=handleOpenCodeModelSync
-/admin/api/password	admin.go	wrap=auth	handler=handleAdminPassword
-/admin/api/providers	admin.go	wrap=auth	handler=handleProvidersList
-/admin/api/providers/cooldown-reset	admin.go	wrap=auth	handler=handleProviderCooldownReset
-/admin/api/providers/delete	admin.go	wrap=auth	handler=handleProviderDelete
-/admin/api/providers/models	admin.go	wrap=auth	handler=HandleProviderModels
-/admin/api/providers/presets	admin.go	wrap=auth	handler=handleProviderPresets
-/admin/api/providers/recheck	admin.go	wrap=auth	handler=adminSync.ProviderRecheck
-/admin/api/providers/save	admin.go	wrap=auth	handler=handleProviderSave
-/admin/api/providers/sync-status	admin.go	wrap=auth	handler=adminSync.ProviderStatus
-/admin/api/providers/test	admin.go	wrap=auth	handler=handleProviderTest
-/admin/api/request-logs	admin.go	wrap=auth	handler=handleAdminRequestLogs
-/admin/api/request-logs/clear	admin.go	wrap=auth	handler=handleRequestLogsClear
-/admin/api/sso/import	admin.go	wrap=auth	handler=handleSSOImport
-/admin/api/stats	admin.go	wrap=auth	handler=handleAdminStats
-/admin/api/version-check	admin.go	wrap=auth	handler=handleAdminVersionCheck
-/chat/completions	server.go	wrap=withBodyLimit	handler=chatHandler
-/health	server.go	wrap=httpx.CORS	handler=health.Handler
-/messages	server.go	wrap=withBodyLimit	handler=anthropicHandler
-/messages/count_tokens	server.go	wrap=withBodyLimit	handler=countTokensHandler
-/models	server.go	wrap=none	handler=modelsHandler
-/responses	server.go	wrap=withBodyLimit	handler=responsesHandler
-/v1/chat/completions	server.go	wrap=withBodyLimit	handler=chatHandler
-/v1/health	server.go	wrap=httpx.CORS	handler=health.Handler
-/v1/messages	server.go	wrap=withBodyLimit	handler=anthropicHandler
-/v1/messages/count_tokens	server.go	wrap=withBodyLimit	handler=countTokensHandler
-/v1/models	server.go	wrap=none	handler=modelsHandler
-/v1/responses	server.go	wrap=withBodyLimit	handler=responsesHandler
+/admin/	GET	admin.go	wrap=none	handler=adminStaticHandler
+/admin/api/account-health	GET	admin.go	wrap=auth	handler=handleAccountHealth
+/admin/api/accounts	GET	admin.go	wrap=auth	handler=handleAdminAccounts
+/admin/api/accounts/add	POST	admin.go	wrap=auth	handler=handleAdminAccountAdd
+/admin/api/accounts/delete	POST	admin.go	wrap=auth	handler=handleAdminAccountDelete
+/admin/api/accounts/delete-all	POST	admin.go	wrap=auth	handler=handleAdminDeleteAll
+/admin/api/accounts/export	GET|POST	admin.go	wrap=auth	handler=handleExportAccounts
+/admin/api/accounts/refresh-all	POST	admin.go	wrap=auth	handler=handleAdminRefreshAll
+/admin/api/accounts/reset	POST	admin.go	wrap=auth	handler=handleAdminAccountReset
+/admin/api/accounts/test	POST	admin.go	wrap=auth	handler=handleAdminAccountTest
+/admin/api/admin-sessions/clear	POST	admin.go	wrap=auth	handler=handleAdminSessionsClear
+/admin/api/batch-import	POST	admin.go	wrap=auth	handler=handleBatchImport
+/admin/api/cline-proxy/config	GET	admin.go	wrap=auth	handler=handleClineProxyConfig
+/admin/api/cline-proxy/config/update	POST	admin.go	wrap=auth	handler=handleClineProxyConfigUpdate
+/admin/api/combos	GET	admin.go	wrap=auth	handler=handleCombosList
+/admin/api/combos/clone	POST	admin.go	wrap=auth	handler=handleComboClone
+/admin/api/combos/delete	POST	admin.go	wrap=auth	handler=handleComboDelete
+/admin/api/combos/save	POST	admin.go	wrap=auth	handler=handleComboSave
+/admin/api/combos/test	POST	admin.go	wrap=auth	handler=HandleComboTest
+/admin/api/combos/toggle	POST	admin.go	wrap=auth	handler=handleComboToggle
+/admin/api/config	GET	admin.go	wrap=auth	handler=handleAdminConfig
+/admin/api/config/update	POST	admin.go	wrap=auth	handler=handleAdminUpdateConfig
+/admin/api/connections	GET	admin.go	wrap=auth	handler=handleConnectionsList
+/admin/api/connections/delete	POST	admin.go	wrap=auth	handler=handleConnectionDelete
+/admin/api/connections/import	POST	admin.go	wrap=auth	handler=handleConnectionImport
+/admin/api/connections/import-batch	POST	admin.go	wrap=auth	handler=handleConnectionImportBatch
+/admin/api/connections/login/start	POST	admin.go	wrap=auth	handler=handleConnectionLoginStart
+/admin/api/connections/login/status	GET	admin.go	wrap=auth	handler=handleConnectionLoginStatus
+/admin/api/connections/test	POST	admin.go	wrap=auth	handler=handleConnectionTest
+/admin/api/dashboard/overview	GET	admin.go	wrap=auth	handler=handleDashboardOverview
+/admin/api/keys	GET	admin.go	wrap=auth	handler=handleAdminGetKeys
+/admin/api/keys/delete	POST	admin.go	wrap=auth	handler=handleAdminDeleteKey
+/admin/api/keys/generate	POST	admin.go	wrap=auth	handler=handleAdminGenerateKey
+/admin/api/login	POST	admin.go	wrap=httpx.CORS	handler=handleAdminLogin
+/admin/api/logout	POST	admin.go	wrap=httpx.CORS	handler=handleAdminLogout
+/admin/api/models	GET	admin.go	wrap=auth	handler=handleAdminModels
+/admin/api/models/add	POST	admin.go	wrap=auth	handler=handleAdminModelAdd
+/admin/api/models/capabilities	POST	admin.go	wrap=auth	handler=handleAdminModelCapabilities
+/admin/api/models/context	POST	admin.go	wrap=auth	handler=handleAdminModelContext
+/admin/api/models/cost	POST	admin.go	wrap=auth	handler=handleModelCost
+/admin/api/models/delete	POST	admin.go	wrap=auth	handler=handleAdminModelDelete
+/admin/api/models/import/apply	POST	admin.go	wrap=auth	handler=handleModelImportApply
+/admin/api/models/import/batch	GET	admin.go	wrap=auth	handler=handleModelImportBatch
+/admin/api/models/import/discard	POST	admin.go	wrap=auth	handler=handleModelImportDiscard
+/admin/api/models/import/pending	GET	admin.go	wrap=auth	handler=handleModelImportPending
+/admin/api/models/import/preview	POST	admin.go	wrap=auth	handler=handleModelImportPreview
+/admin/api/models/sync	POST	admin.go	wrap=auth	handler=handleAdminModelSync
+/admin/api/models/test	POST	admin.go	wrap=auth	handler=HandleAdminModelTest
+/admin/api/models/toggle	POST	admin.go	wrap=auth	handler=HandleAdminModelToggle
+/admin/api/oauth/start	POST	admin.go	wrap=auth	handler=handleOAuthStart
+/admin/api/oauth/status	GET	admin.go	wrap=auth	handler=handleOAuthStatus
+/admin/api/open-external	GET	admin.go	wrap=auth	handler=handleOpenExternal
+/admin/api/opencode/config	GET	admin.go	wrap=auth	handler=handleOpenCodeConfig
+/admin/api/opencode/config/update	POST	admin.go	wrap=auth	handler=handleOpenCodeConfigUpdate
+/admin/api/opencode/models/sync	POST	admin.go	wrap=auth	handler=handleOpenCodeModelSync
+/admin/api/password	POST	admin.go	wrap=auth	handler=handleAdminPassword
+/admin/api/providers	GET	admin.go	wrap=auth	handler=handleProvidersList
+/admin/api/providers/cooldown-reset	POST	admin.go	wrap=auth	handler=handleProviderCooldownReset
+/admin/api/providers/delete	POST	admin.go	wrap=auth	handler=handleProviderDelete
+/admin/api/providers/models	POST	admin.go	wrap=auth	handler=HandleProviderModels
+/admin/api/providers/presets	GET	admin.go	wrap=auth	handler=handleProviderPresets
+/admin/api/providers/recheck	POST	admin.go	wrap=auth	handler=adminSync.ProviderRecheck
+/admin/api/providers/save	POST	admin.go	wrap=auth	handler=handleProviderSave
+/admin/api/providers/sync-status	GET	admin.go	wrap=auth	handler=adminSync.ProviderStatus
+/admin/api/providers/test	POST	admin.go	wrap=auth	handler=handleProviderTest
+/admin/api/request-logs	GET	admin.go	wrap=auth	handler=handleAdminRequestLogs
+/admin/api/request-logs/clear	POST	admin.go	wrap=auth	handler=handleRequestLogsClear
+/admin/api/sso/import	POST	admin.go	wrap=auth	handler=handleSSOImport
+/admin/api/stats	GET	admin.go	wrap=auth	handler=handleAdminStats
+/admin/api/version-check	GET	admin.go	wrap=auth	handler=handleAdminVersionCheck
+/chat/completions	POST	server.go	wrap=withBodyLimit	handler=chatHandler
+/health	GET	server.go	wrap=httpx.CORS	handler=health.Handler
+/messages	POST	server.go	wrap=withBodyLimit	handler=anthropicHandler
+/messages/count_tokens	POST	server.go	wrap=withBodyLimit	handler=countTokensHandler
+/models	GET	server.go	wrap=none	handler=modelsHandler
+/responses	POST	server.go	wrap=withBodyLimit	handler=responsesHandler
+/v1/chat/completions	POST	server.go	wrap=withBodyLimit	handler=chatHandler
+/v1/health	GET	server.go	wrap=httpx.CORS	handler=health.Handler
+/v1/messages	POST	server.go	wrap=withBodyLimit	handler=anthropicHandler
+/v1/messages/count_tokens	POST	server.go	wrap=withBodyLimit	handler=countTokensHandler
+/v1/models	GET	server.go	wrap=none	handler=modelsHandler
+/v1/responses	POST	server.go	wrap=withBodyLimit	handler=responsesHandler

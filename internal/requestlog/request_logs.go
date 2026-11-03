@@ -31,11 +31,19 @@ var (
 	Path string
 )
 
-func init() {
-	Path = platform.ResolveDataPath(requestlogstore.FileName, nil)
+// pathMu guards first-use resolution of Path. Tests that assign Path keep it.
+var pathMu sync.Mutex
+
+func ensurePath() {
+	pathMu.Lock()
+	defer pathMu.Unlock()
+	if Path == "" {
+		Path = platform.ResolveDataPath(requestlogstore.FileName, nil)
+	}
 }
 
 func Load() {
+	ensurePath()
 	entries, err := requestlogstore.Load(Path)
 	if err != nil {
 		platform.BackupCorruptFile(Path, err)
@@ -72,6 +80,7 @@ func pruneRequestLogsLocked(entries []requestLog) []requestLog {
 }
 
 func saveRequestLogsLocked() {
+	ensurePath()
 	if err := requestlogstore.Save(Path, Logs); err != nil {
 		log.Printf("request logs save failed: %v", err)
 	}

@@ -418,6 +418,38 @@ func TestConnectionProbeUpstreamErrorEnvelope(t *testing.T) {
 	})
 }
 
+// The list endpoint includes the catalogue's canonical labels for every flow,
+// so the UI does not hardcode a second copy.
+func TestConnectionListEndpointIncludesFlowLabels(t *testing.T) {
+	withAdminConnections(t, func() {
+		rec := httptest.NewRecorder()
+		handleConnectionsList(rec, httptest.NewRequest(http.MethodGet, "/x", nil))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status %d", rec.Code)
+		}
+		var env struct {
+			Data struct {
+				Flows      []string          `json:"flows"`
+				FlowLabels map[string]string `json:"flowLabels"`
+			} `json:"data"`
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), &env); err != nil {
+			t.Fatal(err)
+		}
+		if len(env.Data.Flows) == 0 || len(env.Data.FlowLabels) != len(env.Data.Flows) {
+			t.Fatalf("flows=%v labels=%v", env.Data.Flows, env.Data.FlowLabels)
+		}
+		for _, flow := range env.Data.Flows {
+			if env.Data.FlowLabels[flow] == "" {
+				t.Errorf("flow %q has no label", flow)
+			}
+		}
+		if got := env.Data.FlowLabels["github"]; got != "GitHub Copilot (Free plan)" {
+			t.Errorf("github label = %q", got)
+		}
+	})
+}
+
 // The list endpoint never returns a refresh token or a job token.
 func TestConnectionListEndpointRedacts(t *testing.T) {
 	withAdminConnections(t, func() {

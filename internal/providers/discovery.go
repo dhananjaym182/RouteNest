@@ -91,12 +91,14 @@ func DiscoverModels(p CustomProvider, ov DiscoveryOverrides) ([]upstreamModelEnt
 		connToken = apiKey
 	}
 
+	fetcherBase, fetcherType := modelcatalog.CatalogueSourceFor(p.BaseURL)
 	entries, err := modelcatalog.Discover(modelcatalog.Request{
 		Client:      discoveryClient(),
 		BaseURL:     p.BaseURL,
 		APIKey:      apiKey,
 		Headers:     headers,
-		FetcherBase: FetcherBaseForBase(p.BaseURL),
+		FetcherBase: fetcherBase,
+		FetcherType: fetcherType,
 	})
 	if err != nil {
 		secrets := []string{apiKey, connToken}

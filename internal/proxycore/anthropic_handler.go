@@ -226,7 +226,7 @@ func handleAnthropicMessages(w http.ResponseWriter, r *http.Request) {
 		}
 		out := NormalizeOpenAIResponse(unwrapDataEnvelope(raw))
 		usage := ParseTokenUsage(out["usage"])
-		RecordUsage(run.Acc, run.Resp, &reqLog, reqLog.Model, usage)
+		recordUsage(run.Acc, run.Resp, &reqLog, reqLog.Model, usage)
 		requestlog.Finalize(&reqLog, usage, time.Time{}, reqLog.StartedAt, true, "")
 		restoreToolCallsInResponse(out, reqLog.ToolNames)
 		anthropicResp := openAIToAnthropic(out)
@@ -299,7 +299,7 @@ func handleAnthropicMessages(w http.ResponseWriter, r *http.Request) {
 						}
 						out2 := NormalizeOpenAIResponse(unwrapDataEnvelope(raw))
 						usage := ParseTokenUsage(out2["usage"])
-						RecordUsage(fbAcc, fbResp, &reqLog, reqLog.Model, usage)
+						recordUsage(fbAcc, fbResp, &reqLog, reqLog.Model, usage)
 						requestlog.Finalize(&reqLog, usage, time.Time{}, reqLog.StartedAt, true, "")
 						restoreToolCallsInResponse(out2, reqLog.ToolNames)
 						anthropicResp := openAIToAnthropic(out2)
@@ -448,7 +448,7 @@ func handleAnthropicMessages(w http.ResponseWriter, r *http.Request) {
 		}
 		out = NormalizeOpenAIResponse(out)
 		usage := ParseTokenUsage(out["usage"])
-		RecordUsage(acc, resp, &reqLog, reqLog.Model, usage)
+		recordUsage(acc, resp, &reqLog, reqLog.Model, usage)
 		requestlog.Finalize(&reqLog, usage, time.Time{}, reqLog.StartedAt, true, "")
 		restoreToolCallsInResponse(out, reqLog.ToolNames)
 		anthropicResp := openAIToAnthropic(out)

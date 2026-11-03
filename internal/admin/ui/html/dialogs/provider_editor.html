@@ -65,9 +65,9 @@
         </div>
       </div>
       <div class="field">
-        <label>账号连接池 <span id="provConnCount" class="grp-count"></span></label>
+        <label>Provider OAuth 账号 <span id="provConnCount" class="grp-count"></span></label>
         <div id="provConnPick" class="conn-pick-box"><span class="conn-pick-empty">加载中...</span></div>
-        <div class="field-hint">勾选多个登录连接后轮转派发，被限流/待重登的连接自动跳过由兄弟连接顶上；不勾选 = 仅用 API Key。连接的增删在「账号与连接」页管理。</div>
+        <div class="field-hint">选择多个登录账号后轮转派发；限流或待重登账号会自动跳过。不选择账号时仅使用 API Key。账号在「账号与登录 → Provider OAuth」中管理。</div>
       </div>
     </div>
   </div>
@@ -129,7 +129,7 @@
 </div>
 
   <!-- 设备码登录弹窗：从 Provider 卡片直接发起 → 展示 user code + 验证链接 → 轮询状态 -->
-  <!-- 连接弹窗位于 tab 面板之外：账号与连接页打开，跨标签页可用 -->
+  <!-- 连接弹窗位于 tab 面板之外：账号与登录页打开，跨标签页可用 -->
   <div id="connLoginModal" class="overlay-modal overlay-top" onclick="if(event.target===this)closeDeviceLogin()">
     <div class="modal-card modal-card-col w480" role="dialog" aria-modal="true" aria-label="设备码登录">
       <div class="modal-title" id="connLoginTitle">设备码登录</div>
@@ -207,4 +207,3 @@
       </div>
     </div>
   </div>
-

@@ -4,8 +4,9 @@ package admin
 // 管理面板单页装配：ui/ 静态资源按 ui_manifest.go 的显式清单拼成完整 HTML：
 // head.html、<style> 的 CSS 层（adminUICSSLayers）、<body> 的 HTML 片段
 // （adminUIBodyParts）、<script> 的 JS 文件（adminUIJSAssets），再加收尾标签。
-// /admin/ 原样输出且 no-cache。JS 文件共享全局作用域；每个资产文件保持
-// ≤ 1000 行，超限时按 // ==== 段落横幅拆分。
+// /admin/ 原样输出且 no-cache。JS 文件共享全局作用域；每个行为资产文件保持
+// ≤ 1000 行，超限时按 // ==== 段落横幅拆分。i18n 字典是纯数据，单独放在
+// 01_i18n.js，不计入代码行数上限（其内容由 tools/i18n_*.js 校验）。
 // ============================================================================
 
 import (

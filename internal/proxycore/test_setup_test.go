@@ -36,4 +36,8 @@ func setProxyConfig(cfg *config.Proxy) {
 	providers.ConfigProvider = provider
 }
 
-func init() { setProxyConfig(testProxyConfig) }
+func init() {
+	setProxyConfig(testProxyConfig)
+	// Usage attribution is a composed hook in production; tests keep a no-op.
+	RecordUsage = func(*domain.Account, *http.Response, *domain.RequestLog, string, TokenUsage) {}
+}

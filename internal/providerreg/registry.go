@@ -215,6 +215,23 @@ func (r *Registry) ByAuthFlow(flow string) []string {
 	return append([]string(nil), r.byAuthFlow[flow]...)
 }
 
+// AuthFlowLabels maps every auth flow to the display name of the first preset
+// (sorted by ID) that uses it. Presets pin the flow aliases used by the
+// authentication code: github-copilot uses "github" and qwen-chat uses "qwen",
+// so those preset names are the canonical labels for the flow.
+func (r *Registry) AuthFlowLabels() map[string]string {
+	out := make(map[string]string, len(r.byAuthFlow))
+	for flow, ids := range r.byAuthFlow {
+		for _, id := range ids {
+			if p, ok := r.byID[id]; ok && p.Name != "" {
+				out[flow] = p.Name
+				break
+			}
+		}
+	}
+	return out
+}
+
 // ByProtocol returns the sorted IDs of presets that use the given protocol ID
 // (DefaultProtocol for plain OpenAI chat).
 func (r *Registry) ByProtocol(protocol string) []string {

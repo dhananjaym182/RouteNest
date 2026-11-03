@@ -47,6 +47,96 @@ var registrationSources = []string{
 	"../admin/admin.go",
 }
 
+// routeMethods is the reviewed method contract for every registered path. The
+// inventory test fails when a route is missing here or when this table names a
+// path the mux no longer registers, so adding or removing a route cannot leave
+// the documented contract stale. "GET|POST" means the handler deliberately
+// serves both (account export: download link and form post).
+var routeMethods = map[string]string{
+	"/admin/":                              "GET",
+	"/admin/api/account-health":            "GET",
+	"/admin/api/accounts":                  "GET",
+	"/admin/api/accounts/add":              "POST",
+	"/admin/api/accounts/delete":           "POST",
+	"/admin/api/accounts/delete-all":       "POST",
+	"/admin/api/accounts/export":           "GET|POST",
+	"/admin/api/accounts/refresh-all":      "POST",
+	"/admin/api/accounts/reset":            "POST",
+	"/admin/api/accounts/test":             "POST",
+	"/admin/api/admin-sessions/clear":      "POST",
+	"/admin/api/batch-import":              "POST",
+	"/admin/api/cline-proxy/config":        "GET",
+	"/admin/api/cline-proxy/config/update": "POST",
+	"/admin/api/combos":                    "GET",
+	"/admin/api/combos/clone":              "POST",
+	"/admin/api/combos/delete":             "POST",
+	"/admin/api/combos/save":               "POST",
+	"/admin/api/combos/test":               "POST",
+	"/admin/api/combos/toggle":             "POST",
+	"/admin/api/config":                    "GET",
+	"/admin/api/config/update":             "POST",
+	"/admin/api/connections":               "GET",
+	"/admin/api/connections/delete":        "POST",
+	"/admin/api/connections/import":        "POST",
+	"/admin/api/connections/import-batch":  "POST",
+	"/admin/api/connections/login/start":   "POST",
+	"/admin/api/connections/login/status":  "GET",
+	"/admin/api/connections/test":          "POST",
+	"/admin/api/dashboard/overview":        "GET",
+	"/admin/api/keys":                      "GET",
+	"/admin/api/keys/delete":               "POST",
+	"/admin/api/keys/generate":             "POST",
+	"/admin/api/login":                     "POST",
+	"/admin/api/logout":                    "POST",
+	"/admin/api/models":                    "GET",
+	"/admin/api/models/add":                "POST",
+	"/admin/api/models/capabilities":       "POST",
+	"/admin/api/models/context":            "POST",
+	"/admin/api/models/cost":               "POST",
+	"/admin/api/models/delete":             "POST",
+	"/admin/api/models/import/apply":       "POST",
+	"/admin/api/models/import/batch":       "GET",
+	"/admin/api/models/import/discard":     "POST",
+	"/admin/api/models/import/pending":     "GET",
+	"/admin/api/models/import/preview":     "POST",
+	"/admin/api/models/sync":               "POST",
+	"/admin/api/models/test":               "POST",
+	"/admin/api/models/toggle":             "POST",
+	"/admin/api/oauth/start":               "POST",
+	"/admin/api/oauth/status":              "GET",
+	"/admin/api/open-external":             "GET",
+	"/admin/api/opencode/config":           "GET",
+	"/admin/api/opencode/config/update":    "POST",
+	"/admin/api/opencode/models/sync":      "POST",
+	"/admin/api/password":                  "POST",
+	"/admin/api/providers":                 "GET",
+	"/admin/api/providers/cooldown-reset":  "POST",
+	"/admin/api/providers/delete":          "POST",
+	"/admin/api/providers/models":          "POST",
+	"/admin/api/providers/presets":         "GET",
+	"/admin/api/providers/recheck":         "POST",
+	"/admin/api/providers/save":            "POST",
+	"/admin/api/providers/sync-status":     "GET",
+	"/admin/api/providers/test":            "POST",
+	"/admin/api/request-logs":              "GET",
+	"/admin/api/request-logs/clear":        "POST",
+	"/admin/api/sso/import":                "POST",
+	"/admin/api/stats":                     "GET",
+	"/admin/api/version-check":             "GET",
+	"/chat/completions":                    "POST",
+	"/health":                              "GET",
+	"/messages":                            "POST",
+	"/messages/count_tokens":               "POST",
+	"/models":                              "GET",
+	"/responses":                           "POST",
+	"/v1/chat/completions":                 "POST",
+	"/v1/health":                           "GET",
+	"/v1/messages":                         "POST",
+	"/v1/messages/count_tokens":            "POST",
+	"/v1/models":                           "GET",
+	"/v1/responses":                        "POST",
+}
+
 // exprName renders an identifier or selector chain such as "providers.HandleList".
 func exprName(e ast.Expr) string {
 	switch t := e.(type) {
@@ -78,6 +168,7 @@ func staticRouteInventory(t *testing.T) []string {
 	t.Helper()
 	fset := token.NewFileSet()
 	var lines []string
+	seen := map[string]string{}
 	for _, src := range registrationSources {
 		file, err := parser.ParseFile(fset, src, nil, 0)
 		if err != nil {
@@ -100,14 +191,29 @@ func staticRouteInventory(t *testing.T) []string {
 			if err != nil {
 				return true
 			}
+			if prev, dup := seen[path]; dup {
+				t.Errorf("route %s is registered twice (in %s and %s)", path, prev, filepath.Base(src))
+				return true
+			}
+			seen[path] = filepath.Base(src)
+			method, ok := routeMethods[path]
+			if !ok {
+				t.Errorf("route %s has no entry in routeMethods", path)
+				method = "UNKNOWN"
+			}
 			chain, handler := wrapperChain(call.Args[1])
 			wrap := "none"
 			if len(chain) > 0 {
 				wrap = strings.Join(chain, ">")
 			}
-			lines = append(lines, fmt.Sprintf("%s\t%s\twrap=%s\thandler=%s", path, filepath.Base(src), wrap, handler))
+			lines = append(lines, fmt.Sprintf("%s\t%s\t%s\twrap=%s\thandler=%s", path, method, filepath.Base(src), wrap, handler))
 			return true
 		})
+	}
+	for path := range routeMethods {
+		if _, ok := seen[path]; !ok {
+			t.Errorf("routeMethods lists %s, which no registration source registers", path)
+		}
 	}
 	sort.Strings(lines)
 	return lines
@@ -139,6 +245,46 @@ var probeRoutes = []string{
 	"/admin/api/providers/sync-status",
 	"/admin/api/opencode/config",
 	"/admin/api/cline-proxy/config",
+}
+
+// unprobedGETRoutes names the GET-capable routes the probe deliberately skips,
+// with the reason. The coverage test below requires every GET route to be either
+// probed or listed here, so a new endpoint cannot be added without deciding
+// whether it is safe to characterize.
+var unprobedGETRoutes = map[string]string{
+	"/admin/api/accounts/export":          "returns a credential-bearing download body",
+	"/admin/api/connections/login/status": "requires a live login session id",
+	"/admin/api/dashboard/overview":       "covered by internal/admin dashboard tests; reads mutable counters",
+	"/admin/api/models/import/batch":      "requires a staged import id",
+	"/admin/api/models/import/pending":    "returns staged import state",
+	"/admin/api/oauth/status":             "requires a device-flow session id, starts no safe read",
+	"/admin/api/open-external":            "opens the host browser",
+	"/admin/api/stats":                    "covered by internal/admin tests; reads mutable counters",
+	"/admin/api/version-check":            "may contact the release host when the cache is cold",
+}
+
+// Every GET route is either probed for its envelope or explicitly exempted.
+func TestRouteProbeCoversEveryGETRoute(t *testing.T) {
+	probed := map[string]bool{}
+	for _, p := range probeRoutes {
+		probed[p] = true
+	}
+	for path, method := range routeMethods {
+		if !strings.Contains(method, "GET") || !strings.HasPrefix(path, "/admin/") {
+			continue
+		}
+		if probed[path] {
+			continue
+		}
+		if _, ok := unprobedGETRoutes[path]; !ok {
+			t.Errorf("GET route %s is neither probed nor listed in unprobedGETRoutes", path)
+		}
+	}
+	for path := range unprobedGETRoutes {
+		if probed[path] {
+			t.Errorf("unprobedGETRoutes lists %s, but the probe already covers it", path)
+		}
+	}
 }
 
 func probeLine(t *testing.T, mux http.Handler, method, path, body string) string {

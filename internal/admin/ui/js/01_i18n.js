@@ -31,7 +31,6 @@ const I18N = {
   '请求': 'Requests',
   '输入': 'Input',
   '输出': 'Output',
-  '总 Token': 'Total Tokens',
   '缓存': 'Cache',
   '最后使用': 'Last Used',
   '创建时间': 'Created',
@@ -58,15 +57,12 @@ const I18N = {
   '总': 'Total',
   '耗时': 'Duration',
   '加载更多': 'Load More',
-  '路由基础': 'Routing Basics',
   'API 密钥管理': 'API Keys',
   '生成的密钥可用于客户端访问代理 API（作为 x-api-key 或 Authorization 头）。': 'Generated keys let clients call the proxy API (as x-api-key or Authorization header).',
   '生成新密钥': 'Generate New Key',
   '可用模型': 'Available Models',
   '添加模型': 'Add Model',
   '计费': 'Billing',
-  '付费 (pass)': 'Paid (pass)',
-  '免费 (free)': 'Free (free)',
   '访问设置': 'Access Settings',
   '监听地址': 'Listen Address',
   '127.0.0.1（仅本机）': '127.0.0.1 (local only)',
@@ -149,12 +145,9 @@ const I18N = {
   '应用信息': 'About App',
   'RouteNest · 多账号轮询 · 双协议兼容': 'RouteNest · multi-account rotation · dual protocol',
   '快速上手': 'Quick Start',
-  '添加 Cline 账号': 'Add a Cline account',
-  '在「账号与连接」页展开「登录与导入」分区，通过 OAuth 登录或手动输入 refreshToken 添加账号。支持批量导入。': 'On the Accounts page, expand the Cline Login and Import section and add via OAuth or a pasted refreshToken. Batch import supported.',
   '生成 API Key': 'Generate an API Key',
   '前往「密钥与安全」页面生成密钥。如不配置任何密钥，代理允许匿名访问。': 'Generate a key in Keys & Security. With no keys, the proxy allows anonymous access.',
   '配置客户端': 'Configure your client',
-  '在 Claude Code、Cline 等客户端中设置：': 'Configure in clients like Claude Code or Cline:',
   '功能特性': 'Features',
   '✅ 多账号轮询（轮询/填满/随机）': '✅ Multi-account rotation (round robin / fill / random)',
   '✅ OpenAI & Anthropic 双协议': '✅ OpenAI & Anthropic dual protocol',
@@ -179,7 +172,6 @@ const I18N = {
   'RouteNest 管理后台': 'RouteNest Admin',
   '该后台已启用访问密码，请输入密码登录': 'Password protection is enabled. Enter the password to continue.',
   '登录': 'Sign In',
-  '即将恢复': 'recovering soon',
   '需要登录': 'Login required',
   '登录失败': 'Login failed',
   '网络错误，请重试': 'Network error, please retry',
@@ -209,7 +201,6 @@ const I18N = {
   '删除失败: ': 'Delete failed: ',
   '确定重置此账号？将恢复为活跃状态并刷新 Token，保留历史统计。': 'Reset this account? It will become active, tokens refreshed, history kept.',
   '账号已重置': 'Account reset',
-  '重置失败: ': 'Reset failed: ',
   '⚠️ 确定删除所有账号？不可撤销！': '⚠️ Delete ALL accounts? This cannot be undone!',
   '全部账号已删除': 'All accounts deleted',
   '全部 Token 已刷新': 'All tokens refreshed',
@@ -244,7 +235,6 @@ const I18N = {
   '主导航': 'Main navigation',
   '语言': 'Language',
   '搜索邮箱': 'Search email',
-  'API Key: <生成的密钥>': 'API Key: <generated key>',
   '搜索模型': 'Search models',
   '搜索预设': 'Search presets',
   '已下架': 'Delisted',
@@ -291,14 +281,12 @@ const I18N = {
   '已移除 ': 'Removed ',
   ' 个已下架模型': ' delisted model(s)',
   '没有已下架模型': 'No delisted models',
-  '获取中': 'Loading',
   '匹配': 'Match ',
   '没有匹配的账号': 'No matching accounts',
   '请先勾选要重置的账号': 'Select accounts to reset first',
   '确认重置选中的 ': 'Confirm resetting ',
   ' 个账号？（清除冷却与失败计数）': ' selected accounts? (clears cooldowns and failure counts)',
   '重置中...': 'Resetting...',
-  '已重置 ': 'Reset ',
   '免费模型': 'Free models',
   '付费模型': 'Paid models',
   '（免费）': ' (free)',
@@ -332,8 +320,6 @@ const I18N = {
   '存在有值无键的行，已忽略': 'Rows with a value but no key were ignored',
   '请求头已保存': 'Headers saved',
   '加载失败': 'Failed to load',
-  '请输入模型 ID': 'Enter a model ID',
-  '模型已添加: ': 'Model added: ',
   '确认删除模型 ': 'Delete model ',
   '模型已删除: ': 'Model deleted: ',
   '版本 ': 'Version ',
@@ -376,15 +362,14 @@ const I18N = {
   '展开': 'Expand',
   '收起': 'Collapse',
   '暂无数据': 'No data yet',
-  // opencode 免费模型
-  '从 opencode 同步模型': 'Sync Models from opencode',
-  'opencode 模型列表已更新': 'opencode model list updated',
-  '今日 · opencode 免费模型': 'Today · opencode Free Models',
+  // OpenCode Zen 免费模型
+  '从 OpenCode Zen 同步模型': 'Sync Models from OpenCode Zen',
+  'OpenCode Zen 模型列表已更新': 'OpenCode Zen model list updated',
+  '今日 · OpenCode Zen 免费模型': 'Today · OpenCode Zen Free Models',
   '今日请求数': 'Requests today',
   '今日输入 Token': 'Input tokens today',
   '今日输出 Token': 'Output tokens today',
   '今日总 Token': 'Total tokens today',
-  '启用 opencode': 'Enable opencode',
   '启用': 'Enable',
   '停用': 'Disable',
   'API Key': 'API Key',
@@ -402,13 +387,8 @@ const I18N = {
   '压缩缓冲 Token': 'Compaction buffer (tokens)',
   '尾部保留 Token': 'Tail keep tokens',
   '摘要最大 Token': 'Max summary tokens',
-  '保存 opencode 配置': 'Save opencode Config',
   '上述字段改动后会自动保存，也可点按钮手动触发。': 'Fields above are auto-saved on change; you can also trigger a save manually with the button.',
-  'opencode 配置已保存': 'OpenCode config saved',
-  'opencode 出口代理': 'OpenCode Egress Proxies',
-  '发往 opencode 的请求可经代理池轮询出口；命中限流时冷却当前出口并自动跳过。支持 http / https / socks5 / socks5h，每行一个，如 ': 'Requests to opencode can egress through a rotating proxy pool; the current proxy is cooled down and skipped on rate limits. Supports http / https / socks5 / socks5h, one per line, e.g. ',
-  '发往 opencode 的请求可经代理池轮询出口；命中限流时冷却当前出口并自动跳过。支持 http / https / socks5 / socks5h，每行一个，如': 'Requests to opencode can egress through a rotating proxy pool; the current proxy is cooled down and skipped on rate limits. Supports http / https / socks5 / socks5h, one per line, e.g.',
-  'opencode 免费模型': 'opencode Free Models',
+  'OpenCode Zen 配置已保存': 'OpenCode Zen settings saved',
   '＋ 添加 Provider': '＋ Add Provider',
   '名称 *': 'Name *',
   '免费': 'Free',
@@ -433,13 +413,9 @@ const I18N = {
   '免费来源（供统计）': 'Free source (for stats)',
   '自定义请求头（每行 Key: Value，如 HTTP-Referer: https://mysite.com）': 'Custom headers (one Key: Value per line, e.g. HTTP-Referer: https://mysite.com)',
   '请求头（每行一个，格式 Key: Value）': 'Headers (one per line, format Key: Value)',
-  '保存 opencode 请求头': 'Save opencode Headers',
-  'opencode 请求头已保存': 'opencode headers saved',
-  '附加到发往 opencode zen 的请求。特殊值：': 'Attached to requests sent to opencode zen. Special values: ',
-  '附加到发往 opencode zen 的请求。特殊值：$session / $request / $project / $client 会注入每请求的动态身份；留空删除该头。': 'Attached to requests sent to opencode zen. Special values: $session / $request / $project / $client inject per-request dynamic identity; an empty value deletes the header.',
+  'OpenCode Zen 请求头已保存': 'OpenCode Zen request headers saved',
   '接入任意 OpenAI 兼容上游（OpenRouter / Groq / Cerebras / Gemini / vLLM 等），含设备码登录连接；模型命中时优先走该上游，失败按回退链降级，最终兜底 Cline 池': 'Connect any OpenAI-compatible upstream (OpenRouter / Groq / Cerebras / Gemini / vLLM, etc.), including device-code logins. Matching models route to the provider first; failures fall back along the chain and finally to the Cline pool.',
   '粘贴 refreshToken': 'Paste refreshToken',
-  '如 deepseek/deepseek-v4-flash': 'e.g. deepseek/deepseek-v4-flash',
   '留空保存 = 清除密码': 'leave empty to save = clear password',
   '多账号轮询（轮询/填满/随机）': 'Multi-account rotation (round-robin/fill/random)',
   'OpenAI & Anthropic 双协议': 'OpenAI & Anthropic dual protocol',
@@ -457,33 +433,60 @@ const I18N = {
   '配置': 'Configuration',
   '系统': 'System',
   '路由与模型': 'Routing & Models',
-  '上游服务': 'Upstreams',
+  '账号与登录': 'Accounts & Login',
+  'Cline 账号': 'Cline Accounts',
+  'Provider OAuth': 'Provider OAuth',
+  'Cline 账号池': 'Cline Account Pool',
+  '添加 Cline 账号': 'Add Cline Account',
+  'Provider OAuth 连接': 'Provider OAuth Connections',
+  '管理 Cline 账号与 Provider OAuth 登录，模型用量按来源汇总': 'Manage Cline accounts and provider OAuth logins, with model usage grouped by source',
+  '为上方「Cline 账号池」添加账号：OAuth 浏览器登录、粘贴 refreshToken 或批量文件。第三方服务（Kilo、GitHub Copilot 等）的登录请使用「Provider OAuth」。': 'Add accounts to the Cline account pool above through browser OAuth, a refresh token, or a batch file. Use Provider OAuth for third-party services such as Kilo and GitHub Copilot.',
+  '路由策略': 'Routing Policy',
+  '运行调优': 'Runtime Tuning',
+  '模型目录': 'Model Catalog',
+  '配置路由策略、运行行为与模型目录': 'Configure routing policy, runtime behavior, and the model catalog',
+  '设置默认模型、Cline 账号选择、全局回退链与客户端模型列表策略。': 'Set the default model, Cline account selection, global fallback chain, and client model-list policy.',
+  '上游连接 → 出口代理池：选择 OpenCode Zen / Cline 的出口代理地址 →': 'Upstream Connectivity → Egress Proxies: choose OpenCode Zen and Cline egress addresses →',
+  '「路由与模型 → 路由策略」': 'Routing & Models → Routing Policy',
+  '上游连接': 'Upstream Connectivity',
+  '出口代理池': 'Egress Proxies',
+  '上游请求头': 'Request Headers',
+  '配置 OpenCode Zen、出口代理与上游请求头': 'Configure OpenCode Zen, egress proxies, and upstream request headers',
+  'OpenCode Zen 服务': 'OpenCode Zen Service',
+  '接入 OpenCode Zen 免费模型。按请求中的模型名自动分流：免费模型走 OpenCode Zen，付费模型直接拒绝，其余走 Cline 账号池。': 'Connect OpenCode Zen free models. Requests are routed by model name: free models use OpenCode Zen, paid models are rejected, and all others use the Cline account pool.',
+  '启用 OpenCode Zen': 'Enable OpenCode Zen',
+  '保存 OpenCode Zen 配置': 'Save OpenCode Zen Settings',
+  'OpenCode Zen 出口代理': 'OpenCode Zen Egress Proxies',
+  '发往 OpenCode Zen 的请求可经代理池轮询出口；命中限流时冷却当前出口并自动跳过。支持 http / https / socks5 / socks5h，每行一个，如': 'Requests to OpenCode Zen can rotate through a proxy pool; rate-limited proxies cool down and are skipped automatically. Supports http / https / socks5 / socks5h, one per line, e.g.',
+  'OpenCode Zen 请求头': 'OpenCode Zen Request Headers',
+  '附加到发往 OpenCode Zen 的请求。特殊值：$session / $request / $project / $client 会注入每请求的动态身份；留空删除该头。': 'Attached to requests sent to OpenCode Zen. Special values $session / $request / $project / $client inject per-request dynamic identity; leave a value empty to delete the header.',
+  '保存 OpenCode Zen 请求头': 'Save OpenCode Zen Request Headers',
+  'Provider OAuth 账号': 'Provider OAuth Accounts',
+  '选择多个登录账号后轮转派发；限流或待重登账号会自动跳过。不选择账号时仅使用 API Key。账号在「账号与登录 → Provider OAuth」中管理。': 'Select multiple login accounts for rotating dispatch; rate-limited accounts and accounts awaiting login are skipped automatically. With no account selected, only the API key is used. Manage accounts under Accounts & Login → Provider OAuth.',
+  '在「账号与登录 → Cline 账号」中展开「登录与导入」，通过 OAuth、refreshToken 或批量文件添加账号。': 'Under Accounts & Login → Cline Accounts, expand Login & Import to add accounts through OAuth, refreshToken, or a batch file.',
+  '前往 Cline 账号': 'Go to Cline Accounts',
+  '统一管理 Provider 的 OAuth 设备码与 Token 登录：每个登录独立统计模型与用量，并按 Provider 分组。点击 Provider 卡片即可登录或添加账号；登录后在 Provider 编辑器的「Provider OAuth 账号」中选择参与派发的账号。Token 仅保存在服务端。': 'Manage provider device-code and token logins here. Each login tracks its own model usage and is grouped by provider. Select a provider card to sign in or add an account, then choose dispatch accounts under Provider OAuth Accounts in the provider editor. Tokens remain server-side.',
+  '设备码登录：在「账号与登录 → Provider OAuth」添加，再在编辑器「Provider OAuth 账号」中选择；无需 API Key': 'Device-code login: add it under Accounts & Login → Provider OAuth, then select it under Provider OAuth Accounts in the editor; no API key is required',
+  '已填充登录类预设：请到「账号与登录 → Provider OAuth」完成设备码登录，再在编辑器「Provider OAuth 账号」中选择账号': 'Login preset applied: complete device-code login under Accounts & Login → Provider OAuth, then select the account under Provider OAuth Accounts in the editor',
   '策略与回退一览': 'Strategies and fallbacks at a glance',
   '本页「轮询策略」= 从 Cline 账号池取号的方式（quality 同时参与自定义 Provider 评分排序）；全局「回退模型链」是组合失败的最终兜底。其余两处策略选择器在别的页面：': 'Polling strategy (this page) = how accounts are picked from the Cline pool (quality also feeds custom provider scoring); the global fallback model chain is the last resort when combos fail. The other two strategy selectors live elsewhere:',
-  '上游服务页：opencode / Cline 出口代理策略 = 多个出口代理地址之间的选择 →': 'Upstreams page: opencode / Cline egress proxy strategy = choice among proxy addresses →',
   '模型组合页：组合条目顺序与紧急回退 →': 'Model Combos page: combo entry order and emergency fallback →',
   '组合的回退顺序与紧急回退在「模型组合」页管理 →': 'Combo fallback order and emergency fallback are managed on the Model Combos page →',
-  '全局回退链与账号轮询策略在「路由与模型」页管理 →': 'Global fallback chain and account rotation strategy are managed on the Routing & Models page →',
   '仅决定多个出口代理地址之间的选择；Cline 账号轮询与 Provider 评分在': 'Only picks among egress proxy addresses; Cline account rotation and provider scoring live on',
-  '「路由与模型」': 'Routing and Models',
+  '全局回退链与账号轮询策略在「路由与模型 → 路由策略」中管理 →': 'Global fallback chain and account rotation are managed under Routing & Models → Routing Policy →',
+  '配置 OpenCode Zen': 'Configure OpenCode Zen',
   '密钥与安全': 'Keys & Security',
-  '默认模型、轮询策略、回退链、调优参数与可用模型': 'Default model, rotation strategy, fallback chain, tuning parameters & models',
-  'opencode zen、Cline 出口代理与请求头': 'opencode zen, Cline egress proxies & headers',
   'Cline 请求头': 'Cline Request Headers',
-  'opencode 请求头': 'OpenCode Request Headers',
-  '请求头配置': 'Headers',
   '自定义 Provider': 'Providers',
   'API 密钥、访问控制与危险操作': 'API keys, access control & danger zone',
   '测试连通性': 'Test connection',
   '暂无自定义 Provider': 'No custom providers yet',
   '出口冷却状态': 'Egress cooldowns',
   '代理列表': 'Proxy list',
-  '无冷却': 'None cooling',
   '已停用': 'Disabled',
-  '故障转移中（opencode 暂不可用，请求走 Cline 池）': 'Failover active (opencode unavailable, requests routed to Cline pool)',
+  '故障转移中（OpenCode Zen 暂不可用，请求走 Cline 池）': 'Failover active (OpenCode Zen unavailable, requests routed to Cline pool)',
   '正常': 'Healthy',
   '已同步模型': 'Models synced',
-  '接入 opencode（zen）免费模型。按请求中的模型名自动分流：免费模型走 opencode 上游，付费模型直接拒绝，其余走 Cline 账号池。': 'Integrates opencode (zen) free models. Requests are routed automatically by model name: free models go to the opencode upstream, paid models are rejected, everything else goes to the Cline account pool.',
   // Cline 出口代理
   'Cline 出口代理': 'Cline Egress Proxies',
   '国内直连 Cline 上游会被跨区限制；配置后所有发往 Cline 的请求（对话、登录/令牌刷新、模型同步）经代理池轮询出去。支持 http / https / socks5 / socks5h，每行一个，如 socks5://127.0.0.1:1080。回环 / 内网地址（本机 Ollama 等自定义 Provider）始终直连；未配置时依次尝试环境变量代理、直连。': 'Cline upstream is region-restricted from mainland China; once configured, all requests to Cline (chat, login/token refresh, model sync) egress through a rotating proxy pool. Supports http / https / socks5 / socks5h, one per line, e.g. socks5://127.0.0.1:1080. Loopback / private addresses (local Ollama and other custom providers) always connect directly; without config, env proxies then direct connection are tried.',
@@ -493,7 +496,6 @@ const I18N = {
   '用户自定义': 'User Custom',
   '点击展开/折叠': 'Click to expand/collapse',
   // 模型管理（提供商分组 + 启停开关）
-  '路由配置': 'Routing',
   '模型管理': 'Models',
   '模型按 Provider 添加并自动归属：在 Provider 编辑器中使用「选择模型」「手动输入模型 ID」或「导入预览」即可添加。本页用于启用 / 停用、调整计费与上下文窗口、筛选和批量操作。停用的模型不会出现在客户端模型列表（/v1/models）中，直接请求也会被拒绝。': 'Models are added per Provider and automatically attributed to it: use "Select Models", "Manual model ID" or "Import preview" in the Provider editor. This page is for enabling / disabling, billing and context-window tuning, filtering and bulk actions. Disabled models are hidden from the client model list (/v1/models) and rejected when requested.',
   '全部计费': 'All billing',
@@ -596,7 +598,6 @@ const I18N = {
   // 模型管理：两级分组 + 免费导向批量开关
   '全部来源': 'All sources',
   'Cline': 'Cline',
-  'Zen (opencode)': 'Zen (opencode)',
   '启用全部免费': 'Enable all free',
   '停用全部付费': 'Disable all paid',
   '确定启用全部免费模型？': 'Enable all free models?',
@@ -651,7 +652,6 @@ const I18N = {
   '无变化': 'No change',
   '受保护': 'Protected',
   '没有可导入的模型': 'No models to import',
-  '本批判定依据：': 'Tier basis for this batch: ',
   '依据: ': 'Basis: ',
   '按操作过滤': 'Filter by action',
   '上游返回 prompt/completion 价格为 0': 'Upstream prompt/completion pricing is 0',
@@ -660,7 +660,6 @@ const I18N = {
   '模型 id 含独立的 free 词段': 'Model id contains a standalone free segment',
   '模型显示名含 free 词段': 'Model display name contains a free word',
   '免费标签或内置白名单命中': 'Free tag or built-in allowlist match',
-  '整个 Provider 标记为免费（无更精确的逐模型信号）': 'Whole provider flagged free (no per-model signal)',
   '上游定价非零 → 付费': 'Nonzero upstream pricing → paid',
   '没有任何免费信号，保守归为付费': 'No free signal at all → conservatively paid',
   '个已选': ' selected',
@@ -671,18 +670,15 @@ const I18N = {
   // §8.3 登录连接（OAuth）
   '设备码登录': 'Device-code login',
   '选择服务': 'Provider',
-  '开始登录': 'Start login',
   '在浏览器中打开下面的地址并输入此代码，然后保持本窗口打开。': 'Open the URL below in your browser, enter this code, then keep this window open.',
   '在浏览器中打开下面的链接并完成授权，然后保持本窗口打开。': 'Open the link below and approve in your browser, then keep this window open.',
   '等待授权...': 'Waiting for authorization...',
   '发起中...': 'Starting...',
-  '发起登录失败: ': 'Login start failed: ',
   '代码已复制': 'Code copied',
   '服务 *': 'Provider *',
   '邮箱（可选，用于去重）': 'Email (optional, for dedup)',
   'Org ID（可选）': 'Org ID (optional)',
   '保存连接': 'Save connection',
-  '服务与 Token 必填': 'Provider and token are required',
   '连接已保存': 'Connection saved',
   // §8.3 导入 Token 弹窗（连接池手动 / 批量）
   '手动 Token': 'Manual token',
@@ -728,8 +724,6 @@ const I18N = {
   '导入 Token': 'Import Token',
   '可用': 'OK',
   '确定删除该连接？绑定它的 Provider 将不再注入 token。': 'Delete this connection? Bound providers will stop injecting the token.',
-  '账号与连接': 'Accounts and Connections',
-  '分开管理内置账号池（Cline 源）与 OAuth 登录连接，免费模型用量按来源汇总查看': 'Built-in account pool (Cline source) and OAuth logins on separate subtabs, with pool-wide free-model usage grouped by source',
   '账号池': 'Accounts',
   '连接池': 'Connections',
   '模型用量': 'Model Usage',
@@ -738,17 +732,9 @@ const I18N = {
   ' 个账号冷却中': ' accounts cooling',
   '免费模型用量见「模型用量」汇总': 'See the Model Usage summary for per-model totals',
   '展开模型用量': 'Open Model Usage',
-  '内置账号池（Cline 源）': 'Built-in Account Pool (Cline)',
-  'OAuth 连接池': 'OAuth Connection Pool',
-  '所有需要登录签票的上游账号（OAuth 设备码 / 粘贴 Token）统一在此管理：每个连接独立统计自己服务过的模型与用量，并按 Provider 分组。点击下方 Provider 卡片直接登录；已连接的 Provider 可继续「添加账号」，多个账号会一起参与轮转派发。登录后在 Provider 编辑器的「账号连接池」里勾选即可参与派发；Token 只存服务端，不写进 Provider。': 'All upstream accounts that need a login (OAuth device code / pasted token) are managed here: each connection tracks the models and usage it served, grouped by provider. Click a provider card below to sign in; connected providers also offer "Add Account", and multiple accounts join dispatch rotation together. After login, tick the connection in the provider editor account pool to include it; tokens stay server-side and are never copied into providers.',
   '登录与导入（Cline 账号）': 'Cline Login and Import',
-  '为上方「内置账号池（Cline 源）」添加账号：OAuth 浏览器登录、粘贴 refreshToken 或批量文件。第三方服务（Kilo、GitHub Copilot 等）的登录请使用「OAuth 连接池」。': 'Add accounts to the built-in pool above (Cline source): OAuth browser login, a pasted refreshToken, or a batch file. For third-party services (Kilo, GitHub Copilot, etc.) use the OAuth connection pool above.',
-  '账号连接池': 'Account connection pool',
-  '勾选多个登录连接后轮转派发，被限流/待重登的连接自动跳过由兄弟连接顶上；不勾选 = 仅用 API Key。连接的增删在「账号与连接」页管理。': 'Tick multiple logins for round-robin dispatch; rate-limited or reauth-pending ones are skipped while siblings take over. Tick none to use the API key only. Connections are added and removed on the Accounts and Connections page.',
   '复制': 'Copy',
   '需登录': 'Login required',
-  '设备码连接：在「账号与连接」添加，编辑器「账号连接池」勾选即可；无需 API Key': 'Device-code connection: add it under Accounts and Connections, then tick it in the editor pool; no API key needed',
-  '已填充登录类预设：请到「账号与连接」完成设备码登录，再在编辑器「账号连接池」勾选连接': 'Login preset applied: complete the device-code login under Accounts and Connections, then tick the connection in the editor pool',
   '新密钥已生成（点击复制）': 'New key generated (click to copy)',
   '暂无 API 密钥': 'No API keys yet',
   '暂无请求日志': 'No request logs yet',
@@ -885,7 +871,6 @@ const I18N = {
   '点击清除该 Provider 全部冷却': 'Click to clear all cooldowns for this provider',
   '冷却中的 Provider · 按最早恢复排序': 'Cooling providers · soonest recovery first',
   '已清除 ': 'Cleared ',
-  ' 条冷却': ' cooldowns',
   '重置失败: ': 'Reset failed: ',
   'Token 已过期': 'Token expired',
   'Token 到期 ': 'Token expires ',
@@ -920,7 +905,6 @@ const I18N = {
   '个组合': 'combos',
   '启用中': 'enabled',
   '条目总数': 'entries in total',
-  '添加后用行内 ⚙ 可设置上下文窗口与层级': 'After adding, use the inline gear to set context window and tier',
   // W3-C 上游自动检测
   '最近检测': 'Last check',
   '未检测': 'Not checked',
@@ -976,20 +960,15 @@ const I18N = {
   '搜索邮箱...': 'Search email...',
   '点击排序': 'Click to sort',
   '搜索模型 ID...': 'Search model ID...',
-  '模型 ID，如 deepseek/deepseek-v4-flash': 'Model ID, e.g. deepseek/deepseek-v4-flash',
   'sk-...（本地服务器可留空）': 'sk-... (can be left blank for local servers)',
-  'kilocode / 任意 provider key': 'kilocode / any provider key',
   '粘贴令牌（只存服务端，不外泄）': 'Paste token (stored server-side only, never leaked)',
   '访问密码': 'Access password',
   '优先级': 'Priority',
-  'CodeBuddy CN（腾讯）': 'CodeBuddy CN (Tencent)',
-  '多个 Provider 提供同名模型时，可在 Model 后追加 @Provider名 钉选来源，如 deepseek-chat@我的Provider（失败只报错、不悄悄换源）。': 'When several providers serve the same model id, append @ProviderName to Model to pin the source, e.g. deepseek-chat@MyProvider. A pinned request fails loudly instead of silently switching providers.',
   // §MC 快速开始 / 配额与预算 / 错误日志下载 / 会话清除 / 差异预览
   '快速开始': 'Quick Start',
   '配额与预算': 'Quota & Budget',
   '三步接入：添加账号 → 生成密钥 → 配置客户端': 'Three steps: add an account → generate an API key → configure your client',
   '接入步骤': 'Setup Steps',
-  '前往账号与连接': 'Go to Accounts',
   '前往密钥与安全': 'Go to Keys & Security',
   '按下方客户端示例填入 Base URL 与密钥即可。': 'Fill in the Base URL and key from the client examples below.',
   '客户端配置示例': 'Client Configuration Examples',
@@ -1001,7 +980,6 @@ const I18N = {
   '通用 OpenAI 兼容客户端': 'Generic OpenAI-compatible client',
   'curl 冒烟测试': 'curl smoke test',
   '下一步': 'Next Steps',
-  '接入更多免费上游（OpenCode / Zen）': 'Connect more free upstreams (OpenCode / Zen)',
   '添加自定义 Provider': 'Add a custom Provider',
   '配置模型组合自动换源': 'Set up model combos with auto-fallback',
   '查看配额与预算': 'View Quota & Budget',
@@ -1057,165 +1035,10 @@ const I18N = {
   '已重置 ': 'Reset ',
   ' 条冷却': ' cooldown(s)',
   '重置失败': 'Reset failed',
+  '中文': '中文',
+  'RouteNest 管理面板': 'RouteNest Admin',
+  '语言已切换为中文': 'Language switched to Chinese',
+  '代理': 'Proxy',
+  '整个 Provider 标记为免费': 'Whole provider flagged free (no per-model signal)',
+  'MIT License © 2026 dhananjaym182 (RouteNest)；上游 Cline2API © 2026 luawei1 见 THIRD_PARTY_NOTICES': 'MIT License © 2026 dhananjaym182 (RouteNest); upstream Cline2API © 2026 luawei1, see THIRD_PARTY_NOTICES',
 };
-let LANG = 'zh';
-const LC = () => LANG === 'en' ? 'en-US' : 'zh-CN';
-function detectLang(){
-  try { const m = document.cookie.match(/cline_admin_lang=(zh|en)/); if (m) return m[1]; } catch(e){}
-  try { const l = localStorage.getItem('cline_admin_lang'); if (l==='en'||l==='zh') return l; } catch(e){}
-  return (navigator.language||'').toLowerCase().startsWith('zh') ? 'zh' : 'en';
-}
-function t(s){ if (LANG==='en' && s && I18N[s]) return I18N[s]; return s; }
-// 反向映射：英文 → 中文（用于切回中文时还原静态文本）
-const I18N_REV = Object.keys(I18N).reduce((acc, k) => { acc[I18N[k]] = k; return acc; }, {});
-function applyLang(){
-  if (LANG === 'en') {
-    document.title = 'RouteNest Admin';
-  } else {
-    document.title = 'RouteNest 管理面板';
-  }
-  const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
-  const nodes = [];
-  while (walker.nextNode()) nodes.push(walker.currentNode);
-  const dict = (LANG === 'en') ? I18N : I18N_REV;
-  for (const n of nodes){
-    const txt = n.nodeValue;
-    if (!txt) continue;
-    const trimmed = txt.trim();
-    if (trimmed && dict[trimmed] && dict[trimmed] !== trimmed){
-      n.nodeValue = txt.replace(trimmed, dict[trimmed]);
-    }
-  }
-  // Wave-5: placeholder/aria-label carry user-visible copy too, so they follow
-  // the same exact-match dictionary as text nodes and [title].
-  document.querySelectorAll('[title],[placeholder],[aria-label]').forEach(el=>{
-    for (const attr of ['title','placeholder','aria-label']) {
-      const k=(el.getAttribute(attr)||'').trim();
-      if (k && dict[k]) el.setAttribute(attr, dict[k]);
-    }
-  });
-  _('langZh').classList.toggle('active', LANG === 'zh');
-  if (_('langEn')) _('langEn').classList.toggle('active', LANG === 'en');
-  const lp = LANG === 'en' ? 'false' : 'true';
-  if (_('langZh')) _('langZh').setAttribute('aria-pressed', lp);
-  if (_('langEn')) _('langEn').setAttribute('aria-pressed', LANG === 'en' ? 'true' : 'false');
-  if (typeof syncNavCollapseBtn === 'function') syncNavCollapseBtn(); // 侧栏按钮 title 随语言更新
-}
-function setLang(l){
-  LANG = l;
-  try { document.cookie = 'cline_admin_lang='+l+';path=/admin;max-age=31536000'; } catch(e){}
-  try { localStorage.setItem('cline_admin_lang', l); } catch(e){}
-  document.documentElement.lang = (l==='en')?'en':'zh-CN';
-  // 即时切换：静态文本 + title 属性翻译 + 重新渲染动态数据，不整页刷新
-  applyLang();
-  loadStats();
-  loadAccounts();
-  loadRequestLogs(true);
-  if (_('modelsList')) loadModels();
-  if (_('settingDefModel')) loadConfig();
-  toast(l === 'en' ? 'Language switched to English' : '语言已切换为中文', 'success');
-}
-LANG = detectLang();
-document.documentElement.lang = (LANG==='en')?'en':'zh-CN';
-// ===== /i18n =====
-const API = '/admin/api';
-
-const _ = id => document.getElementById(id);
-const esc = s => { const d=document.createElement('div'); d.textContent=s||''; return d.innerHTML; };
-// 属性上下文转义：esc 不处理引号，注入到 onclick / value 等属性时需额外转义引号
-const escAttr = s => esc(s).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-
-// §9.3 tier-signal provenance labels, shared by the provider import preview
-// and the per-row badges on the Models page.
-const _tierSignals = {
-  'pricing-zero': '定价为 0', 'flag-free': '上游 free 标志', 'suffix-free': 'id 后缀 free', 'name-token-free': 'id 含 free 段', 'allowlist': '免费标签/白名单',
-  'provider-free': '整源免费', 'display-name-free': '模型名含 free', 'pricing-paid': '上游定价非零', 'paid-default': '无免费信号 → 付费',
-};
-
-// Merge ids into a picker's checked-order array, skipping ids already present
-// (selection order equals attempt priority).
-function pickerMergeIds(order, ids) {
-  for (const id of ids) if (order.indexOf(id) === -1) order.push(id);
-}
-
-const ACTIVE_TAB_KEY = 'cline_admin_tab';
-
-function getActiveTab(){
-  try { const h = location.hash.replace(/^#/,''); if (h) return h; } catch(e){}
-  try { const v = sessionStorage.getItem(ACTIVE_TAB_KEY); if (v) return v; } catch(e){}
-  return 'dashboard';
-}
-function setActiveTab(name){
-  try { sessionStorage.setItem(ACTIVE_TAB_KEY, name); } catch(e){}
-}
-const formatNumber = n => new Intl.NumberFormat(LC()).format(n || 0);
-const formatTokenCount = n => {
-  const value = Number(n) || 0;
-  if (value < 1000) return String(value);
-  const units = [['B', 1e9], ['M', 1e6], ['K', 1e3]];
-  for (const [unit, size] of units) {
-    if (value >= size) return (value / size).toFixed(1).replace(/\.0$/, '') + unit;
-  }
-  return String(value);
-};
-
-// 行内 SVG 图标助手：与页面表头图标（ui/html）同风格（stroke=currentColor / 2px / 圆角端点）
-const UI_ICONS = {
-  bolt: '<path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>',
-  reset: '<polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>',
-  close: '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>',
-  check: '<polyline points="20 6 9 17 4 12"/>',
-  chart: '<rect x="3" y="12" width="4" height="8" rx="1"/><rect x="10" y="8" width="4" height="12" rx="1"/><rect x="17" y="4" width="4" height="16" rx="1"/>',
-  caretRight: '<polyline points="9 6 15 12 9 18"/>',
-  caretDown: '<polyline points="6 9 12 15 18 9"/>',
-  hourglass: '<path d="M5 22h14"/><path d="M5 2h14"/><path d="M17 22v-4.172a2 2 0 0 0-.586-1.414L12 12l-4.414-4.414A2 2 0 0 1 7 6.172V2"/><path d="M7 2v4.172a2 2 0 0 0 .586 1.414L12 12l4.414 4.414A2 2 0 0 1 17 17.828V22"/>',
-  arrowDown: '<line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/>',
-  edit: '<path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/>',
-  pause: '<rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/>',
-  play: '<polygon points="5 3 19 12 5 21 5 3"/>'
-};
-function uiIcon(name, cls) {
-  const d = UI_ICONS[name] || '';
-  return '<svg class="ui-ic' + (cls ? ' ' + cls : '') + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + d + '</svg>';
-}
-
-// Toast：堆叠队列（最多 3 条，错峰自动消失；软底色+状态色描边）
-// 兼容旧签名 toast(msg, type)，type 缺省按 info 处理
-let _toastSeq = 0;
-function toast(msg, tone) {
-  const stack = _('toastStack');
-  if (!stack) return;
-  if (!tone) tone = 'info';
-  const item = document.createElement('div');
-  item.className = 'toast ' + tone;
-  item.innerHTML = uiIcon(tone === 'success' ? 'check' : (tone === 'error' ? 'close' : 'bolt')) + '<span class="toast-msg"></span>';
-  item.querySelector('.toast-msg').textContent = msg;
-  stack.appendChild(item);
-  while (stack.children.length > 3) stack.removeChild(stack.firstChild);
-  requestAnimationFrame(() => item.classList.add('show'));
-  setTimeout(() => {
-    item.classList.remove('show');
-    setTimeout(() => { if (item.parentNode) item.parentNode.removeChild(item); }, 300);
-  }, 3500 + (_toastSeq++ % 3) * 400);
-}
-
-// 行内保存反馈统一：「✓ 已保存 / ✗ 失败」，4s 后自动清除
-function showSaveResult(id, ok, msg) {
-  const el = _(id);
-  if (!el) return;
-  el.innerHTML = '<span class="save-result ' + (ok ? 'ok' : 'err') + '">' +
-    uiIcon(ok ? 'check' : 'close') + esc(msg || (ok ? t('已保存') : t('保存失败'))) + '</span>';
-  clearTimeout(el._saveTimer);
-  el._saveTimer = setTimeout(() => { el.innerHTML = ''; }, 4000);
-}
-
-// 格式化冷却倒计时：返回紧凑的 "3.2h" 格式
-function formatCooldown(isoTime) {
-  const until = new Date(isoTime);
-  const diff = until - new Date();
-  if (diff <= 0) return t('即将恢复');
-  const hours = diff / 3600000;
-  if (hours < 1) return Math.ceil(diff / 60000) + 'm';
-  return hours.toFixed(1) + 'h';
-}
-

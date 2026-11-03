@@ -250,3 +250,74 @@ func TestEveryPresetFetcherTypeHasStrategy(t *testing.T) {
 		t.Errorf("agentrouter status = %s, want unsupported", s.Status)
 	}
 }
+
+// An unsupported fetcher type must not be read through the generic path: the
+// preset catalogue base is deliberately ignored, even when it looks like a
+// /models endpoint.
+func TestDiscoverUnsupportedFetcherIgnoresCatalogBase(t *testing.T) {
+	var catalogHits int
+	catalog := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		catalogHits++
+		w.Write([]byte(`{"data":[{"id":"from-catalog"}]}`))
+	}))
+	defer catalog.Close()
+	primary := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "primary down", http.StatusInternalServerError)
+	}))
+	defer primary.Close()
+
+	_, err := Discover(Request{
+		Client:      primary.Client(),
+		BaseURL:     primary.URL,
+		FetcherBase: catalog.URL,
+		FetcherType: "agentrouter",
+	})
+	if err == nil || !strings.Contains(err.Error(), "HTTP 500") {
+		t.Fatalf("err = %v, want the primary error", err)
+	}
+	if catalogHits != 0 {
+		t.Fatalf("unsupported fetcher requested the catalogue base %d times, want 0", catalogHits)
+	}
+}
+
+// A signed catalogue is owned by its protocol adapter and must fail here rather
+// than be guessed at with a generic GET.
+func TestDiscoverSignedFetcherRequiresAdapter(t *testing.T) {
+	var hits int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits++
+		w.Write([]byte(`{"data":[{"id":"x"}]}`))
+	}))
+	defer srv.Close()
+
+	_, err := Discover(Request{Client: srv.Client(), BaseURL: srv.URL, FetcherType: "qoder"})
+	if err == nil || !strings.Contains(err.Error(), "protocol adapter") {
+		t.Fatalf("err = %v, want a protocol-adapter error", err)
+	}
+	if hits != 0 {
+		t.Fatalf("signed fetcher made %d requests, want 0", hits)
+	}
+}
+
+// An unknown non-empty type is a visible failure, not a silent generic read.
+func TestDiscoverUnknownFetcherTypeFails(t *testing.T) {
+	_, err := Discover(Request{Client: http.DefaultClient, BaseURL: "http://127.0.0.1:1", FetcherType: "bogus"})
+	if err == nil || !strings.Contains(err.Error(), `unknown catalogue fetcher type "bogus"`) {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+// The preset lookup reports the fetcher type even when the catalogue has no
+// separate fallback base, so the strategy table is always consulted.
+func TestCatalogueSourceFor(t *testing.T) {
+	base, typ := CatalogueSourceFor("https://router.bynara.id/v1")
+	if base != "" || typ != "bynara" {
+		t.Fatalf("bynara: base=%q type=%q, want empty base and bynara type", base, typ)
+	}
+	if base, typ := CatalogueSourceFor("https://example.invalid/v1"); base != "" || typ != "" {
+		t.Fatalf("unknown URL: base=%q type=%q, want empty", base, typ)
+	}
+	if base, _ := CatalogueSourceFor("https://opencode.ai"); base != "https://opencode.ai/zen/v1" {
+		t.Fatalf("zen base = %q", base)
+	}
+}

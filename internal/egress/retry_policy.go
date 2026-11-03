@@ -8,7 +8,7 @@ import "time"
 
 // FailoverModelCap bounds model attempts in the cline→zen failover loop.
 func FailoverModelCap() int {
-	if n := ConfigProvider().Retry.MaxFailoverModels; n > 0 {
+	if n := liveConfig().Retry.MaxFailoverModels; n > 0 {
 		return n
 	}
 	return 3
@@ -17,7 +17,7 @@ func FailoverModelCap() int {
 // RetryRoundSettings returns the fallback-chain pass count (>=1), the account
 // attempt cap per model per pass (0 = unlimited), and the wait between passes.
 func RetryRoundSettings() (rounds, credCap int, interval time.Duration) {
-	r := ConfigProvider().Retry
+	r := liveConfig().Retry
 	rounds = r.MaxRounds
 	if rounds < 1 {
 		rounds = 1

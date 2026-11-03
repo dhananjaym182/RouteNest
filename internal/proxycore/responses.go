@@ -52,7 +52,7 @@ func chatToResponses(chat map[string]any) map[string]any {
 // ============ 流式响应转换（chat SSE → Responses SSE） ============
 
 // chatStreamToResponses 逐行读取上游 chat SSE，转换为完整 Responses 事件生命周期。
-// 请求日志/账号统计等编排留在根包，事件构造由 protocol/responses 负责。
+// 请求日志/账号统计等编排留在 internal/proxycore，事件构造由 protocol/responses 负责。
 //
 // 与 chat 路径共用同一套流契约：上游静默时发心跳注释；必须看到终止哨兵
 // （finish_reason 或 [DONE]）才算正常结束；已输出内容后断流会补发 error
@@ -87,7 +87,7 @@ func chatStreamToResponses(ctx context.Context, w http.ResponseWriter, upstream 
 		if reqLog == nil {
 			return
 		}
-		RecordUsage(acc, upstream, reqLog, reqLog.Model, latestUsage)
+		recordUsage(acc, upstream, reqLog, reqLog.Model, latestUsage)
 		requestlog.Finalize(reqLog, latestUsage, res.firstOutputAt, startedAt, ok, reason)
 	}
 	gone := func() streamResult {
@@ -316,7 +316,7 @@ func HandleResponses(w http.ResponseWriter, r *http.Request) {
 		out2 := NormalizeOpenAIResponse(unwrapDataEnvelope(raw))
 		restoreToolCallsInResponse(out2, reqLog.ToolNames)
 		usage := ParseTokenUsage(out2["usage"])
-		RecordUsage(run.Acc, run.Resp, &reqLog, reqLog.Model, usage)
+		recordUsage(run.Acc, run.Resp, &reqLog, reqLog.Model, usage)
 		requestlog.Finalize(&reqLog, usage, time.Time{}, reqLog.StartedAt, true, "")
 		httpx.WriteJSON(w, http.StatusOK, chatToResponses(out2))
 		return
@@ -380,7 +380,7 @@ func HandleResponses(w http.ResponseWriter, r *http.Request) {
 					out2 := NormalizeOpenAIResponse(unwrapDataEnvelope(raw))
 					restoreToolCallsInResponse(out2, reqLog.ToolNames)
 					usage := ParseTokenUsage(out2["usage"])
-					RecordUsage(fbAcc, fbResp, &reqLog, reqLog.Model, usage)
+					recordUsage(fbAcc, fbResp, &reqLog, reqLog.Model, usage)
 					requestlog.Finalize(&reqLog, usage, time.Time{}, reqLog.StartedAt, true, "")
 					httpx.WriteJSON(w, http.StatusOK, chatToResponses(out2))
 					return
@@ -486,7 +486,7 @@ func HandleResponses(w http.ResponseWriter, r *http.Request) {
 		out2 := NormalizeOpenAIResponse(unwrapDataEnvelope(raw))
 		restoreToolCallsInResponse(out2, reqLog.ToolNames)
 		usage := ParseTokenUsage(out2["usage"])
-		RecordUsage(acc, upResp, &reqLog, reqLog.Model, usage)
+		recordUsage(acc, upResp, &reqLog, reqLog.Model, usage)
 		requestlog.Finalize(&reqLog, usage, time.Time{}, reqLog.StartedAt, true, "")
 		httpx.WriteJSON(w, http.StatusOK, chatToResponses(out2))
 	}

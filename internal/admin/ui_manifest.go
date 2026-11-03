@@ -6,6 +6,7 @@ package admin
 // that are present but not listed, and listed names that do not exist.
 var adminUIJSAssets = []string{
 	"ui/js/01_i18n.js",
+	"ui/js/01_core.js",
 	"ui/js/02_nav.js",
 	"ui/js/03_shell.js",
 	"ui/js/04_accounts.js",
@@ -15,13 +16,15 @@ var adminUIJSAssets = []string{
 	"ui/js/08_providers_detect.js",
 	"ui/js/09_providers_pickers.js",
 	"ui/js/10_providers_import.js",
+	"ui/js/11_upstreams.js",
 	"ui/js/11_connections.js",
 	"ui/js/12_combos.js",
 	"ui/js/13_models.js",
 	"ui/js/14_logs.js",
 	"ui/js/15_dashboard.js",
-	"ui/js/16_init.js",
 	"ui/js/17_quota.js",
+	// 16_init runs applyLang/applyTab, so it must stay last.
+	"ui/js/16_init.js",
 }
 
 // adminUIBodyParts lists the page body fragments in document order. Concatenated,

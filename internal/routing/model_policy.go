@@ -39,10 +39,19 @@ func HasComboCatalog() bool {
 }
 
 var (
-	ConfigProvider = config.DefaultProxy
+	// ConfigProvider supplies the live proxy policy, installed by internal/app.
+	// It is nil until then so a missing composition fails loudly.
+	ConfigProvider func() *config.Proxy
 	ModelsProvider = func() []domain.Model { return nil }
 	ModelDisabled  = func(string) bool { return false }
 )
+
+func liveConfig() *config.Proxy {
+	if ConfigProvider == nil {
+		panic("routing: app.Configure() was not called (ConfigProvider unset)")
+	}
+	return ConfigProvider()
+}
 
 // Client-visible model policy: administrator aliases, wildcard exclusions, and
 // per-model capability metadata. All three entry points (chat, Responses,
@@ -59,7 +68,7 @@ func ResolveClientModel(raw string) (resolved string, reject string) {
 	if id == "" {
 		return id, ""
 	}
-	cfg := ConfigProvider()
+	cfg := liveConfig()
 
 	if _, isCombo := comboCatalog.FindCombo(id); !isCombo && id != "free" {
 		if alias, ok := cfg.AliasFor(id); ok && (alias.Force || !catalogHasModel(id)) {
@@ -137,13 +146,13 @@ func ApplyThinkingPolicy(params map[string]any, model string) {
 // ExcludedForListing filters pool models, combos, and alias entries for
 // /v1/models and admin listings.
 func ExcludedForListing(id string) bool {
-	return ConfigProvider().ExcludesModel(id)
+	return liveConfig().ExcludesModel(id)
 }
 
 // AliasListingEntries returns client-visible alias entries whose targets are
 // not themselves excluded or disabled.
 func AliasListingEntries() []map[string]any {
-	cfg := ConfigProvider()
+	cfg := liveConfig()
 	out := make([]map[string]any, 0, len(cfg.ModelAliases))
 	for _, a := range cfg.ModelAliases {
 		if ExcludedForListing(a.Alias) || ExcludedForListing(a.Target) {

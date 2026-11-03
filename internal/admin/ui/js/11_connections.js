@@ -4,13 +4,9 @@ let _connList = [];
 let _loginSessionId = '';
 let _loginPollTimer = null;
 
-// 流程 key → 用户可读名（未知 key 回落原样显示）
-const _flowLabels = {
-  kilocode: 'Kilo Code', github: 'GitHub Copilot', qwen: 'Qwen Chat',
-  'kimi-coding': 'Kimi for Coding', 'codebuddy-cn': 'CodeBuddy CN（腾讯）',
-  'codebuddy-intl': 'CodeBuddy Intl', workbuddy: 'WorkBuddy',
-  qoder: 'Qoder', 'qoder-cn': 'Qoder CN',
-};
+// 流程 key → 用户可读名由后端 /connections 的 flowLabels 提供（规范 provider
+// 目录的投影）；目录缺标签时回落实体 key，前端不再维护并行表。
+let _flowLabels = {};
 function flowLabel(p) { return t(_flowLabels[p] || p); }
 
 async function loadConnections() {
@@ -19,8 +15,9 @@ async function loadConnections() {
     const r = d.data || {};
     _connFlows = r.flows || [];
     _connList = r.connections || [];
+    _flowLabels = r.flowLabels || {};
   } catch (e) {
-    _connFlows = []; _connList = [];
+    _connFlows = []; _connList = []; _flowLabels = {};
   }
   renderConnectionProviders();
   renderConnectionsList();
@@ -109,7 +106,7 @@ function connExpiryHtml(c) {
   return '<div class="conn-expiry ' + tone + '" title="' + escAttr(new Date(ms).toLocaleString(LC())) + '">' + t('Token 到期 ') + text + '</div>';
 }
 
-// Wave-4: connection rows live on the merged Accounts page (账号与连接),
+// Connection rows live on Accounts & Login → Provider OAuth,
 // grouped by provider service, each with its own usage + per-model stats.
 function renderConnectionsList() {
   const box = _('connectionsList');
@@ -765,4 +762,3 @@ async function saveHeaders(btn) {
   } catch (e) { toast(t('保存失败: ') + e.message, 'error'); }
   finally { if (btn) { btn.disabled = false; btn.innerHTML = orig; } }
 }
-

@@ -13,18 +13,29 @@ import (
 )
 
 var (
-	// Pool is the in-memory account Pool. Exported for the root package
-	// during the phased extraction (root handlers still lock it directly).
+	// Pool is the in-memory account pool. It is exported for the packages that
+	// still share the pool lock; new model access goes through internal/models.
 	Pool     *AccountPool
 	PoolMu   sync.Mutex
 	PoolPath string
 )
 
-func init() {
-	PoolPath = platform.ResolveDataPath(".routenest-accounts.json", nil)
+// poolPathMu guards first-use resolution of PoolPath. Kept separate from PoolMu
+// so the path can be resolved before the pool lock is taken.
+var poolPathMu sync.Mutex
+
+// ensurePoolPath resolves the accounts file path on first use, so importing this
+// package performs no data-directory I/O. Tests that assign PoolPath keep it.
+func ensurePoolPath() {
+	poolPathMu.Lock()
+	defer poolPathMu.Unlock()
+	if PoolPath == "" {
+		PoolPath = platform.ResolveDataPath(".routenest-accounts.json", nil)
+	}
 }
 
 func LoadPool() *AccountPool {
+	ensurePoolPath()
 	PoolMu.Lock()
 	defer PoolMu.Unlock()
 
@@ -41,6 +52,7 @@ func LoadPool() *AccountPool {
 }
 
 func SavePool() {
+	ensurePoolPath()
 	if err := poolstore.Save(PoolPath, Pool); err != nil {
 		log.Printf("Failed to save accounts to %s: %v", PoolPath, err)
 	}

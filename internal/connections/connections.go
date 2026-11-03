@@ -27,13 +27,13 @@ import (
 )
 
 // Domain aliases keep the moved connection code terse; they are the same types
-// the root package aliases through types.go, so values cross unchanged.
+// internal/domain defines, so values cross packages unchanged.
 type Connection = domain.Connection
 type CustomProvider = domain.CustomProvider
 type ModelStat = domain.ModelStat
 
-// HTTPClient is the shared outbound client, injected by the root package
-// (http.go) so device-flow auth traffic keeps using the egress proxy pool.
+// HTTPClient is the shared outbound client, installed by internal/app so
+// device-flow auth traffic keeps using the egress proxy pool.
 var HTTPClient *http.Client
 
 func httpClientOrDefault() *http.Client {
@@ -50,11 +50,20 @@ var (
 	FilePath          string
 )
 
-func init() {
-	FilePath = platform.ResolveDataPath(connectionstore.FileName, nil)
+// filePathMu guards first-use resolution of FilePath. Tests that assign FilePath
+// keep their value.
+var filePathMu sync.Mutex
+
+func ensureFilePath() {
+	filePathMu.Lock()
+	defer filePathMu.Unlock()
+	if FilePath == "" {
+		FilePath = platform.ResolveDataPath(connectionstore.FileName, nil)
+	}
 }
 
 func LoadConnections() {
+	ensureFilePath()
 	ConnectionsMu.Lock()
 	defer ConnectionsMu.Unlock()
 	if connectionsLoaded {
@@ -71,6 +80,7 @@ func LoadConnections() {
 
 // saveConnectionsLocked 调用方持 ConnectionsMu。
 func saveConnectionsLocked() {
+	ensureFilePath()
 	if err := connectionstore.Save(FilePath, connections); err != nil {
 		log.Printf("connections save failed: %v", err)
 	}

@@ -48,14 +48,39 @@ func DefaultConfig() *ConfigData {
 }
 
 var (
+	// Config is the published Zen configuration. Production code must only read
+	// it through GetConfig (which returns a private snapshot) and replace it with
+	// SetConfig. The variable stays exported for package tests that install a
+	// fixture directly.
 	Config   *ConfigData
 	ConfigMu sync.Mutex
 )
 
-// GetConfig 惰性加载配置（避免依赖包初始化顺序）。
-func GetConfig() *ConfigData {
-	ConfigMu.Lock()
-	defer ConfigMu.Unlock()
+// cloneConfig returns a deep copy. Slices and maps are copied so a caller that
+// edits the result cannot change the published configuration.
+func cloneConfig(c *ConfigData) *ConfigData {
+	if c == nil {
+		return nil
+	}
+	out := *c
+	out.Proxies = append([]string(nil), c.Proxies...)
+	out.SessionIDs = append([]string(nil), c.SessionIDs...)
+	if c.ZenHeaders != nil {
+		out.ZenHeaders = make(map[string]string, len(c.ZenHeaders))
+		for k, v := range c.ZenHeaders {
+			out.ZenHeaders[k] = v
+		}
+	}
+	if c.SessionAutoHarvest != nil {
+		v := *c.SessionAutoHarvest
+		out.SessionAutoHarvest = &v
+	}
+	return &out
+}
+
+// getConfigLocked returns the published configuration, loading it on first use.
+// The caller must hold ConfigMu.
+func getConfigLocked() *ConfigData {
 	if Config == nil {
 		path := DataPathResolver(config.ZenPath)
 		cfg, err := config.LoadZen(path, APIBase)
@@ -67,8 +92,22 @@ func GetConfig() *ConfigData {
 	return Config
 }
 
+// GetConfig returns a private snapshot of the configuration. Request-path
+// readers cannot race with an update, and editing the result is a no-op until
+// it is published with SetConfig.
+func GetConfig() *ConfigData {
+	ConfigMu.Lock()
+	defer ConfigMu.Unlock()
+	return cloneConfig(getConfigLocked())
+}
+
 // SetConfig 原子替换配置并持久化，重建信号量与 HTTP 传输层。
+// It stores a clone, so the caller cannot mutate published state afterwards.
 func SetConfig(c *ConfigData) {
+	if c == nil {
+		return
+	}
+	c = cloneConfig(c)
 	c.NormalizeForSave(APIBase)
 	ConfigMu.Lock()
 	Config = c

@@ -11,9 +11,17 @@ import (
 	"routenest/internal/dispatch"
 )
 
-// ConfigProvider supplies the live root proxy policy. The root composition
-// replaces the default once; the default keeps this leaf package testable.
-var ConfigProvider = config.DefaultProxy
+// ConfigProvider supplies the live proxy policy, installed by internal/app. It
+// is nil until then so a missing composition fails loudly instead of applying
+// an unintended default policy.
+var ConfigProvider func() *config.Proxy
+
+func liveConfig() *config.Proxy {
+	if ConfigProvider == nil {
+		panic("egress: app.Configure() was not called (ConfigProvider unset)")
+	}
+	return ConfigProvider()
+}
 
 // APIError is an upstream API failure with its HTTP status and original
 // response message preserved for routing and policy decisions.
@@ -72,7 +80,7 @@ func RuleDecision(err error) (stop, cooldown, matched bool) {
 	if !errors.As(err, &apiErr) {
 		return false, false, false
 	}
-	action, ok := ConfigProvider().MatchRequestError(apiErr.StatusCode, apiErr.Message)
+	action, ok := liveConfig().MatchRequestError(apiErr.StatusCode, apiErr.Message)
 	if !ok {
 		return false, false, false
 	}
@@ -93,7 +101,7 @@ func RuleDecision(err error) (stop, cooldown, matched bool) {
 // >0 overrides the built-in window, -1 disables it, and 0 keeps the default.
 func CooldownUntil(status int, retryAfterHeader, body string) time.Time {
 	until := dispatch.ProviderCooldownUntil(status, retryAfterHeader, body)
-	t := ConfigProvider().Retry.TransientCooldownSeconds
+	t := liveConfig().Retry.TransientCooldownSeconds
 	if t == 0 || !isTransientUpstreamStatus(status) {
 		return until
 	}

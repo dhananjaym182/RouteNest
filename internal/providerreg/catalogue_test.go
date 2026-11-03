@@ -55,6 +55,34 @@ func TestAuthFlowCrossReferences(t *testing.T) {
 	}
 }
 
+// AuthFlowLabels gives the UI the canonical display name for each flow, so the
+// console does not keep a parallel hardcoded table.
+func TestAuthFlowLabels(t *testing.T) {
+	labels := Builtin().AuthFlowLabels()
+	want := map[string]string{"github": "GitHub Copilot (Free plan)", "qwen": "Qwen Chat (Free)"}
+	for flow, name := range want {
+		if labels[flow] != name {
+			t.Errorf("label[%s] = %q, want %q", flow, labels[flow], name)
+		}
+	}
+	for _, flow := range ConnectionFlowKeys() {
+		if labels[flow] == "" {
+			t.Errorf("flow %q has no catalogue label", flow)
+		}
+	}
+}
+
+// ConnectionFlowKeys returns every device-flow spec ID, mirroring the admin
+// connections endpoint's flow list.
+func ConnectionFlowKeys() []string {
+	specs := deviceflow.Specs()
+	out := make([]string, 0, len(specs))
+	for flow := range specs {
+		out = append(out, flow)
+	}
+	return out
+}
+
 func TestProtocolIndexResolvesQoder(t *testing.T) {
 	reg := Builtin()
 	for _, id := range []string{"qoder", "qoder-cn"} {

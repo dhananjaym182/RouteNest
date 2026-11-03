@@ -41,7 +41,7 @@ func ModelFreeOnlyEligible(id string) bool {
 // not be served under Free-only routing. Named combos are validated per entry
 // during execution instead.
 func FreeOnlyRejection(model string) string {
-	if !ConfigProvider().OnlyFree || model == "" {
+	if !liveConfig().OnlyFree || model == "" {
 		return ""
 	}
 	if _, ok := comboCatalog.FindCombo(model); ok {

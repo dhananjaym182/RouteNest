@@ -11,7 +11,7 @@ import (
 
 func withBodyLimit(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if lim := ConfigProvider().MaxRequestBodyBytes; lim > 0 && r.Body != nil {
+		if lim := liveConfig().MaxRequestBodyBytes; lim > 0 && r.Body != nil {
 			r.Body = http.MaxBytesReader(w, r.Body, lim)
 		}
 		next(w, r)

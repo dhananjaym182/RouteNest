@@ -4,6 +4,7 @@ package app
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"strings"
 	"sync"
@@ -62,6 +63,12 @@ func configure() {
 	routing.ModelsProvider = routing.AllModels
 	routing.SetComboCatalog(combos.RoutingCombos{})
 
+	// Cross-package seams that used to be installed by package init. Keeping
+	// them here makes the dependency graph explicit and testable.
+	accounts.SetProxyConfigProvider(config.Live)
+	accounts.SetAffinityErrorClassifier(routing.ClassifyAffinityError)
+	connections.RegisterProviderRefPruner(providers.PruneConnectionRefs)
+
 	buildinfo.HTTPClient = egress.Client
 	accounts.HTTPClient = egress.Client
 	connections.HTTPClient = egress.Client
@@ -90,6 +97,34 @@ func configure() {
 
 	proxycore.ConfigProvider = config.Live
 	proxycore.RecordUsage = RecordUsage
+
+	if err := ValidateComposition(); err != nil {
+		panic(err)
+	}
+}
+
+// ValidateComposition reports whether every required cross-package seam is
+// installed. Configure calls it after wiring, so an omitted assignment fails at
+// startup instead of turning into a nil accessor panic or a silent no-op on the
+// request path.
+func ValidateComposition() error {
+	missing := make([]string, 0, 8)
+	check := func(name string, ok bool) {
+		if !ok {
+			missing = append(missing, name)
+		}
+	}
+	check("accounts proxy config provider", accounts.ProxyConfigProvider() != nil)
+	check("egress.ConfigProvider", egress.ConfigProvider != nil)
+	check("routing.ConfigProvider", routing.ConfigProvider != nil)
+	check("providers.ConfigProvider", providers.ConfigProvider != nil)
+	check("proxycore.ConfigProvider", proxycore.ConfigProvider != nil)
+	check("proxycore.RecordUsage", proxycore.RecordUsage != nil)
+	check("routing combo catalogue", routing.HasComboCatalog())
+	if len(missing) > 0 {
+		return fmt.Errorf("app: incomplete composition: %s", strings.Join(missing, ", "))
+	}
+	return nil
 }
 
 // RecordUsage attributes finalized usage to either a Cline account or the

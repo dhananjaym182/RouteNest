@@ -8,7 +8,6 @@ import (
 	"sync"
 	"time"
 
-	"routenest/internal/connections"
 	"routenest/internal/platform"
 	providerstore "routenest/internal/store/providers"
 )
@@ -45,13 +44,26 @@ func cloneProvider(p *CustomProvider) *CustomProvider {
 	return &cp
 }
 
-func init() {
-	FilePath = platform.ResolveDataPath(providerstore.FileName, nil)
-	CooldownsPath = platform.ResolveDataPath(providerstore.CooldownsFileName, nil)
-	connections.RegisterProviderRefPruner(PruneConnectionRefs)
+// pathsMu guards first-use resolution of the two data file paths. Separate from
+// Mu so callers can resolve paths before taking the registry lock.
+var pathsMu sync.Mutex
+
+// ensurePaths resolves the persistence paths on first use, so importing this
+// package performs no data-directory I/O. Tests that assign FilePath or
+// CooldownsPath keep their value: a non-empty path is never overwritten.
+func ensurePaths() {
+	pathsMu.Lock()
+	defer pathsMu.Unlock()
+	if FilePath == "" {
+		FilePath = platform.ResolveDataPath(providerstore.FileName, nil)
+	}
+	if CooldownsPath == "" {
+		CooldownsPath = platform.ResolveDataPath(providerstore.CooldownsFileName, nil)
+	}
 }
 
 func Load() {
+	ensurePaths()
 	Mu.Lock()
 	defer Mu.Unlock()
 	if Loaded {
@@ -69,6 +81,7 @@ func Load() {
 }
 
 func SaveLocked() {
+	ensurePaths()
 	if err := providerstore.Save(FilePath, CustomProviders); err != nil {
 		log.Printf("providers save failed: %v", err)
 	}

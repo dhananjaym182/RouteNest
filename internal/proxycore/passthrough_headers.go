@@ -66,7 +66,7 @@ func blockedPassthroughHeader(name string) bool {
 // the merge runs under that lock so a background keepalive tick can never
 // race the header-map mutation.
 func copyPassthroughHeaders(w http.ResponseWriter, upstream http.Header) {
-	if !ConfigProvider().PassthroughHeaders || upstream == nil {
+	if !liveConfig().PassthroughHeaders || upstream == nil {
 		return
 	}
 	if s, ok := w.(interface{ WithLock(func()) }); ok {

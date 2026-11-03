@@ -161,6 +161,11 @@ type Request struct {
 	// FetcherBase is an optional preset catalogue base, tried only when the
 	// primary read fails.
 	FetcherBase string
+	// FetcherType is the preset's catalogue fetcher type. Empty means the
+	// generic OpenAI-shaped list. Discover consults StrategyFor before making a
+	// request, so an unsupported or adapter-owned format is a deliberate
+	// decision rather than a URL guess.
+	FetcherType string
 }
 
 // ErrNoModels is returned when a catalogue read succeeds but lists no model.
@@ -178,6 +183,22 @@ func Discover(req Request) ([]Entry, error) {
 	base := strings.TrimRight(strings.TrimSpace(req.BaseURL), "/")
 	if base == "" {
 		return nil, fmt.Errorf("baseURL is empty")
+	}
+	if req.FetcherType != "" {
+		strategy, ok := StrategyFor(req.FetcherType)
+		if !ok {
+			return nil, fmt.Errorf("unknown catalogue fetcher type %q", req.FetcherType)
+		}
+		switch strategy.Status {
+		case StatusSigned:
+			// A signed catalogue needs the protocol adapter (Qoder) and the
+			// bound connection; it cannot be read by the OpenAI-shaped path.
+			return nil, fmt.Errorf("catalogue fetcher type %q is served by its protocol adapter", req.FetcherType)
+		case StatusUnsupported:
+			// The reference format for this type is not an OpenAI list. Ignoring
+			// the preset catalogue base is the documented, deliberate behaviour.
+			req.FetcherBase = ""
+		}
 	}
 	entries, primaryErr := listFrom(req, base)
 	if primaryErr == nil {
@@ -282,11 +303,13 @@ func redact(s string, secrets ...string) string {
 
 const redactedMask = "***"
 
-// FetcherBaseFor returns a preset's catalog base URL for this provider baseURL.
-// Only fetcher URLs ending in /models are trusted; other formats are ignored
-// rather than guessed. The zen source is hardcoded: its catalog path is owned
-// by the dedicated zen transport, so no preset row is required.
-func FetcherBaseFor(baseURL string) string {
+// CatalogueSourceFor returns a preset's catalogue base URL and fetcher type for
+// this provider baseURL. A base is returned only when the preset catalog is an
+// OpenAI-shaped /models endpoint different from the primary one; the type is
+// returned for every matching preset so unsupported or adapter-owned formats are
+// an explicit strategy decision. The zen source is hardcoded: its catalog path is
+// owned by the dedicated zen transport, so no preset row is required.
+func CatalogueSourceFor(baseURL string) (base, fetcherType string) {
 	norm := func(u string) string {
 		u = strings.ToLower(strings.TrimRight(strings.TrimSpace(u), "/"))
 		u = strings.TrimSuffix(u, "/chat/completions")
@@ -294,21 +317,43 @@ func FetcherBaseFor(baseURL string) string {
 	}
 	target := norm(baseURL)
 	if target == "" {
-		return ""
+		return "", ""
 	}
 	if target == "https://opencode.ai" {
-		return "https://opencode.ai/zen/v1"
+		// The zen path is a plain OpenAI-shaped list; keep the generic strategy.
+		return "https://opencode.ai/zen/v1", ""
 	}
-	for _, p := range providerreg.Builtin().All() {
-		if p.ModelsFetcher == nil || !strings.HasSuffix(strings.ToLower(p.ModelsFetcher.URL), "/models") {
+	// IDs() is sorted, so two presets with the same base URL resolve
+	// deterministically instead of depending on map iteration order.
+	for _, id := range providerreg.Builtin().IDs() {
+		p, ok := providerreg.Builtin().Get(id)
+		if !ok || p.ModelsFetcher == nil {
 			continue
 		}
-		if norm(p.BaseURL) == target {
-			fb := strings.TrimRight(strings.TrimSuffix(strings.TrimRight(p.ModelsFetcher.URL, "/"), "/models"), "/")
-			if fb != "" && fb != target {
-				return fb
-			}
+		if norm(p.BaseURL) != target {
+			continue
+		}
+		if !strings.HasSuffix(strings.ToLower(p.ModelsFetcher.URL), "/models") {
+			// The format is not an OpenAI list. Report the type so the strategy
+			// table makes the "ignore this catalogue" decision explicitly.
+			return "", p.ModelsFetcher.Type
+		}
+		fb := strings.TrimRight(strings.TrimSuffix(strings.TrimRight(p.ModelsFetcher.URL, "/"), "/models"), "/")
+		if fb == target {
+			// The preset catalogue is the primary /models endpoint; no separate
+			// fallback is needed, but the type still selects the strategy.
+			return "", p.ModelsFetcher.Type
+		}
+		if fb != "" {
+			return fb, p.ModelsFetcher.Type
 		}
 	}
-	return ""
+	return "", ""
+}
+
+// FetcherBaseFor returns a preset's catalog base URL for this provider baseURL.
+// It is the base-only form of CatalogueSourceFor.
+func FetcherBaseFor(baseURL string) string {
+	base, _ := CatalogueSourceFor(baseURL)
+	return base
 }

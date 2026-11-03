@@ -1,7 +1,7 @@
 GET /admin/ -> 200 ct=text/html; charset=utf-8 shape=non-json
 GET /admin/api/providers/presets -> 200 ct=application/json shape={data,success} data{presets}
 GET /admin/api/providers -> 200 ct=application/json shape={data,success} data{accountHealth,health,providers}
-GET /admin/api/connections -> 200 ct=application/json shape={data,success} data{connections,flows}
+GET /admin/api/connections -> 200 ct=application/json shape={data,success} data{connections,flowLabels,flows}
 GET /admin/api/models -> 200 ct=application/json shape={data,success} data{lastSync,models}
 GET /admin/api/config -> 200 ct=application/json shape={data,success} data{address,build,defaultModel,excludedModels,hasPassword,headers,host,localIPs,maxRequestBodyBytes,modelAliases,modelChain,nonstreamKeepaliveSeconds,onlyFree,passthroughHeaders,poolPath,requestErrorRules,retry,sessionAffinity,strategy,stream,version,zenHeaders}
 GET /admin/api/keys -> 200 ct=application/json shape={data,success} data{keys}

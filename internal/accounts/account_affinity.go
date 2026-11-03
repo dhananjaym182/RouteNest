@@ -41,9 +41,17 @@ func SetProxyConfigProvider(f func() *config.Proxy) {
 	cfgMu.Unlock()
 }
 
+// ProxyConfigProvider returns the installed config accessor, if any. The
+// composition root uses it to verify that wiring completed.
+func ProxyConfigProvider() func() *config.Proxy {
+	cfgMu.RLock()
+	defer cfgMu.RUnlock()
+	return cfgProvider
+}
+
 // SetAffinityErrorClassifier injects Cline error classification. The concrete
-// error types still live in the root package, so accounts asks for the two
-// facts it needs instead of importing them.
+// error types live in internal/routing, so accounts asks for the two facts it
+// needs instead of importing them.
 func SetAffinityErrorClassifier(f func(err error) (statusCode int, unavailable bool)) {
 	cfgMu.Lock()
 	affinityClsf = f

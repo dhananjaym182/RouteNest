@@ -197,7 +197,7 @@ func Start(host string, port int, registerAdmin func(*http.ServeMux)) error {
 	}).Wrap
 
 	modelsHandler := apiKeyHandler(func(w http.ResponseWriter, r *http.Request) {
-		list := routing.BuildModelsList(ConfigProvider().OnlyFree)
+		list := routing.BuildModelsList(liveConfig().OnlyFree)
 		httpx.WriteJSON(w, http.StatusOK, map[string]any{"object": "list", "data": list})
 	})
 	mux.HandleFunc("/v1/models", modelsHandler)

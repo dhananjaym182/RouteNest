@@ -10,12 +10,12 @@ import (
 func resetLive(t *testing.T) {
 	t.Helper()
 	Mu.Lock()
-	old := live
-	live = nil
+	old := live.Load()
+	live.Store(nil)
 	Mu.Unlock()
 	t.Cleanup(func() {
 		Mu.Lock()
-		live = old
+		live.Store(old)
 		Mu.Unlock()
 	})
 }
@@ -70,4 +70,56 @@ func TestHeldMatchesLiveUnderLock(t *testing.T) {
 	if held != Live() {
 		t.Fatal("Held and Live must return the same live pointer")
 	}
+}
+
+// Publish clones its argument: a caller that keeps editing the value it passed
+// cannot change what readers see.
+func TestPublishClonesArgument(t *testing.T) {
+	t.Setenv("ROUTENEST_DATA_DIR", t.TempDir())
+	resetLive(t)
+
+	next := DefaultProxy()
+	next.OnlyFree = false
+	Publish(next)
+	next.OnlyFree = true
+	next.Headers["X-Mutated"] = "yes"
+
+	if Live().OnlyFree {
+		t.Fatal("editing the published argument changed the live value")
+	}
+	if _, ok := Live().Headers["X-Mutated"]; ok {
+		t.Fatal("editing the published map changed the live value")
+	}
+}
+
+// Readers take no lock and must never observe a partially edited value while
+// publishers swap configurations. Run with -race.
+func TestConcurrentPublishAndRead(t *testing.T) {
+	t.Setenv("ROUTENEST_DATA_DIR", t.TempDir())
+	resetLive(t)
+
+	mk := func(free bool) *Proxy {
+		p := DefaultProxy()
+		p.OnlyFree = free
+		return p
+	}
+	Publish(mk(false))
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for i := 0; i < 200; i++ {
+			Publish(mk(i%2 == 0))
+		}
+	}()
+	for i := 0; i < 2000; i++ {
+		cfg := Live()
+		if cfg == nil {
+			t.Fatal("Live returned nil")
+		}
+		_ = cfg.OnlyFree
+		_ = cfg.Headers
+		_ = cfg.ModelChain
+	}
+	<-done
 }

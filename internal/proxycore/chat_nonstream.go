@@ -33,7 +33,7 @@ func handleNonStreamResponse(w http.ResponseWriter, upstream *http.Response, acc
 	out = NormalizeOpenAIResponse(out)
 	restoreToolCallsInResponse(out, reqLog.ToolNames)
 	usage := ParseTokenUsage(out["usage"])
-	RecordUsage(acc, upstream, reqLog, reqLog.Model, usage)
+	recordUsage(acc, upstream, reqLog, reqLog.Model, usage)
 	requestlog.Finalize(reqLog, usage, time.Time{}, reqLog.StartedAt, true, "")
 
 	if msg, ok := protocol.GetNested(out, "choices", 0, "message").(map[string]any); ok {

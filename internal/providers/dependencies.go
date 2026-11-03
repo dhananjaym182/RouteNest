@@ -10,8 +10,8 @@ import (
 	"routenest/internal/upstream/openaicompat"
 )
 
-// Domain aliases keep the moved registry code readable while preserving the
-// exact types used by root call sites during the phased extraction.
+// Domain aliases keep the registry code readable; they are the same types
+// internal/domain defines, so values cross packages unchanged.
 type CustomProvider = domain.CustomProvider
 type Connection = domain.Connection
 type Account = domain.Account
@@ -24,16 +24,25 @@ type RequestLog = domain.RequestLog
 // log attribution. It was previously owned by package main.
 const ProviderIDParam = "__served_by_id"
 
-// Root-owned dependencies are injected once from http.go. Defaults keep this
-// internal package independently testable without importing package main.
+// Composition seams are installed by internal/app. Functional defaults keep this
+// package independently testable; required seams are nil until wired.
 var (
 	TransportProvider = func() http.RoundTripper { return http.DefaultTransport }
 
 	BodyOptionsProvider = func() openaicompat.BodyOptions {
 		return openaicompat.BodyOptions{}
 	}
-	ConfigProvider = config.DefaultProxy
+	// ConfigProvider supplies the live proxy policy, installed by internal/app.
+	// Nil until then so a missing composition fails loudly.
+	ConfigProvider func() *config.Proxy
 )
+
+func liveConfig() *config.Proxy {
+	if ConfigProvider == nil {
+		panic("providers: app.Configure() was not called (ConfigProvider unset)")
+	}
+	return ConfigProvider()
+}
 
 var freeIDs = func() *atomic.Value {
 	v := &atomic.Value{}

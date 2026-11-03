@@ -81,6 +81,13 @@ function applyTab(name){
 
 function switchTab(name) { applyTab(name); }
 
+// Open a settings area at a specific subtab instead of restoring whichever
+// subtab happened to be active on the user's last visit.
+function showPageSubTab(page, sub) {
+  applyTab(page);
+  switchPageSubTab(page, sub);
+}
+
 // 顶栏一键刷新：重新加载当前页数据（对齐 CLIProxyAPI 面板的 header refresh）
 function refreshAll(btn) {
   const el = document.querySelector('.nav-item.active');
@@ -208,4 +215,3 @@ document.querySelectorAll('#importTabs .tab').forEach(el => {
     _('import-' + el.dataset.tab).classList.add('active');
   });
 });
-

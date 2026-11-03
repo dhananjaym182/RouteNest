@@ -43,9 +43,16 @@ var (
 	providerSyncFilePath = ""
 )
 
-func init() { providerSyncFilePath = platform.ResolveDataPath(syncstate.FileName, nil) }
+// ensureSyncPath resolves the recheck-state path on first use. Tests that set
+// providerSyncFilePath keep their value.
+func ensureSyncPath() {
+	if providerSyncFilePath == "" {
+		providerSyncFilePath = platform.ResolveDataPath(syncstate.FileName, nil)
+	}
+}
 
 func LoadRecheckState() {
+	ensureSyncPath()
 	provRecheckMu.Lock()
 	defer provRecheckMu.Unlock()
 	if provRecheckLoaded {
@@ -65,6 +72,7 @@ func LoadRecheckState() {
 }
 
 func saveProviderRecheckStateLocked() {
+	ensureSyncPath()
 	out := make(map[string]providerRecheckState, len(providerRecheckStat))
 	for id, st := range providerRecheckStat {
 		out[id] = *st

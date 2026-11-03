@@ -37,7 +37,7 @@ var streamHeartbeatInterval = 15 * time.Second
 // StreamPolicy.KeepaliveSeconds: 0/absent keeps the built-in interval, -1
 // disables heartbeats entirely.
 func streamHeartbeatActive() bool {
-	if s := ConfigProvider().Stream.KeepaliveSeconds; s < 0 {
+	if s := liveConfig().Stream.KeepaliveSeconds; s < 0 {
 		return false
 	}
 	return streamHeartbeatInterval > 0
@@ -46,7 +46,7 @@ func streamHeartbeatActive() bool {
 // heartbeatInterval returns the ticker period: the built-in default when
 // KeepaliveSeconds is unset, otherwise the configured interval.
 func heartbeatIntervalOrDefault() time.Duration {
-	if s := ConfigProvider().Stream.KeepaliveSeconds; s > 0 {
+	if s := liveConfig().Stream.KeepaliveSeconds; s > 0 {
 		return time.Duration(s) * time.Second
 	}
 	return streamHeartbeatInterval
@@ -55,7 +55,7 @@ func heartbeatIntervalOrDefault() time.Duration {
 // effectiveBootstrapRetries: StreamPolicy.BootstrapRetries=0 must preserve the
 // historic single retry, so it maps to 1; N maps to N attempts after the first.
 func effectiveBootstrapRetries() int {
-	if n := ConfigProvider().Stream.BootstrapRetries; n > 0 {
+	if n := liveConfig().Stream.BootstrapRetries; n > 0 {
 		return n
 	}
 	return 1
@@ -95,7 +95,7 @@ type keepaliveWriter struct {
 // newKeepaliveWriter wraps w when ProxyConfig.NonstreamKeepaliveSeconds > 0,
 // otherwise returns nil (no wrapping, historic behavior).
 func newKeepaliveWriter(w http.ResponseWriter) *keepaliveWriter {
-	secs := ConfigProvider().NonstreamKeepaliveSeconds
+	secs := liveConfig().NonstreamKeepaliveSeconds
 	if secs <= 0 {
 		return nil
 	}
@@ -191,7 +191,7 @@ func (k *keepaliveWriter) Flush() {
 // attempt has produced no semantic content within FirstContentTimeoutSeconds.
 // Zero config or an unbuffered sink yields a nil channel (never fires).
 func firstContentDeadline(sink *sseSink) (<-chan time.Time, func()) {
-	secs := ConfigProvider().Stream.FirstContentTimeoutSeconds
+	secs := liveConfig().Stream.FirstContentTimeoutSeconds
 	if secs <= 0 || sink.boot == nil {
 		return nil, func() {}
 	}
@@ -297,7 +297,7 @@ type bootstrapBuffer struct {
 }
 
 func newBootstrapBuffer(w http.ResponseWriter) *bootstrapBuffer {
-	cfg := ConfigProvider().Stream
+	cfg := liveConfig().Stream
 	f, _ := w.(http.Flusher)
 	maxBytes := cfg.BootstrapBufferBytes
 	if maxBytes <= 0 {
@@ -432,7 +432,7 @@ func handleStreamResponse(ctx context.Context, w http.ResponseWriter, upstream *
 		if reqLog == nil {
 			return
 		}
-		RecordUsage(acc, upstream, reqLog, reqLog.Model, latestUsage)
+		recordUsage(acc, upstream, reqLog, reqLog.Model, latestUsage)
 		requestlog.Finalize(reqLog, latestUsage, res.firstOutputAt, reqLog.StartedAt, ok, reason)
 	}
 

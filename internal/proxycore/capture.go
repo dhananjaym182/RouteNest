@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"routenest/internal/platform"
@@ -21,10 +22,18 @@ import (
 var (
 	captureLogDir string
 	captureIndex  int
+	captureDirMu  sync.Mutex
 )
 
-func init() {
-	captureLogDir = filepath.Join(platform.CurrentDataDir(), "capture-logs")
+// captureDir resolves the capture log directory on first use, so importing this
+// package performs no data-directory I/O. Tests that set captureLogDir keep it.
+func captureDir() string {
+	captureDirMu.Lock()
+	defer captureDirMu.Unlock()
+	if captureLogDir == "" {
+		captureLogDir = filepath.Join(platform.CurrentDataDir(), "capture-logs")
+	}
+	return captureLogDir
 }
 
 type CaptureEntry struct {
@@ -166,11 +175,11 @@ func captureRequest(name, method, rawURL, reqBody string, headers map[string]str
 var allEntries []*CaptureEntry
 
 func saveCaptureEntry(entry *CaptureEntry) {
-	if err := platform.EnsurePrivateDir(captureLogDir); err != nil {
-		log.Printf("capture: secure log directory %s: %v", captureLogDir, err)
+	if err := platform.EnsurePrivateDir(captureDir()); err != nil {
+		log.Printf("capture: secure log directory %s: %v", captureDir(), err)
 		return
 	}
-	filename := filepath.Join(captureLogDir, fmt.Sprintf("step-%02d-%s.json", entry.Step, sanitizeFilename(entry.Name)))
+	filename := filepath.Join(captureDir(), fmt.Sprintf("step-%02d-%s.json", entry.Step, sanitizeFilename(entry.Name)))
 	data, err := json.MarshalIndent(entry, "", "  ")
 	if err != nil {
 		log.Printf("capture: encode step %d: %v", entry.Step, err)
@@ -182,7 +191,7 @@ func saveCaptureEntry(entry *CaptureEntry) {
 	}
 
 	// Also append to full log
-	fullLog := filepath.Join(captureLogDir, "full-capture.json")
+	fullLog := filepath.Join(captureDir(), "full-capture.json")
 	var entries []*CaptureEntry
 	if existing, err := os.ReadFile(fullLog); err == nil {
 		json.Unmarshal(existing, &entries)
@@ -218,10 +227,10 @@ func Capture() error {
 	fmt.Println("╔" + strings.Repeat("═", 70) + "╗")
 	fmt.Println("║         Cline OAuth 完整流量抓包 - 全流程记录                    ║")
 	fmt.Println("╚" + strings.Repeat("═", 70) + "╝")
-	fmt.Printf("  日志目录: %s\n", captureLogDir)
+	fmt.Printf("  日志目录: %s\n", captureDir())
 	fmt.Println("")
 
-	if err := platform.EnsurePrivateDir(captureLogDir); err != nil {
+	if err := platform.EnsurePrivateDir(captureDir()); err != nil {
 		return fmt.Errorf("secure capture log directory: %w", err)
 	}
 	captureIndex = 0
@@ -499,11 +508,11 @@ func Capture() error {
 	fmt.Println("")
 	fmt.Println(strings.Repeat("╬", 72))
 	fmt.Println("  抓包完成! 所有记录已保存到:")
-	fmt.Println("  " + captureLogDir)
+	fmt.Println("  " + captureDir())
 	fmt.Println("")
 	fmt.Println("  关键文件:")
-	fmt.Println("  - " + filepath.Join(captureLogDir, "full-capture.json") + " (完整记录)")
-	fmt.Println("  - " + filepath.Join(captureLogDir, "step-*.json") + " (每一步独立文件)")
+	fmt.Println("  - " + filepath.Join(captureDir(), "full-capture.json") + " (完整记录)")
+	fmt.Println("  - " + filepath.Join(captureDir(), "step-*.json") + " (每一步独立文件)")
 	fmt.Println("")
 	fmt.Println("  重要 Token 汇总:")
 	fmt.Println("")

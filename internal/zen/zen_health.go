@@ -83,7 +83,14 @@ func FailedNow() bool {
 }
 
 func rebuildZenSemLocked() {
-	n := Config.MaxConcurrency
+	// Config is replaced atomically by SetConfig; read it under ConfigMu rather
+	// than touching the exported variable directly.
+	ConfigMu.Lock()
+	n := 0
+	if Config != nil {
+		n = Config.MaxConcurrency
+	}
+	ConfigMu.Unlock()
 	if n <= 0 {
 		n = 8
 	}

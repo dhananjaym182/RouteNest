@@ -48,9 +48,9 @@ async function renderAttention() {
     const cools = a.modelCooldowns || {};
     return Object.keys(cools).some(k => { const ts = new Date(cools[k]).getTime(); return !isNaN(ts) && ts > now; });
   }).length;
-  if (expired > 0) row('a-bad', icRed, t('已过期账号 · 需要重新导入或登录'), expired, "switchTab('accounts')");
-  if (cooling > 0) row('a-warn', icYellow, t('冷却中账号 · 稍后自动恢复'), cooling, "switchTab('accounts')");
-  if (modelCooling > 0) row('a-warn', icYellow, t('存在模型级冷却的账号'), modelCooling, "switchTab('accounts')");
+  if (expired > 0) row('a-bad', icRed, t('已过期账号 · 需要重新导入或登录'), expired, "showPageSubTab('accounts', 'pool')");
+  if (cooling > 0) row('a-warn', icYellow, t('冷却中账号 · 稍后自动恢复'), cooling, "showPageSubTab('accounts', 'pool')");
+  if (modelCooling > 0) row('a-warn', icYellow, t('存在模型级冷却的账号'), modelCooling, "showPageSubTab('accounts', 'pool')");
   // 登录连接：60s 内的缓存直接用，失败静默（连接页自己会报错）
   if (!_attentionConnCache || now - _attentionConnAt > 60000) {
     try {
@@ -60,7 +60,7 @@ async function renderAttention() {
     } catch (e) { if (!_attentionConnCache) _attentionConnCache = []; }
   }
   const reauth = (Array.isArray(_attentionConnCache) ? _attentionConnCache : []).filter(c => c.status && c.status !== 'active').length;
-  if (reauth > 0) row('a-info', icBlue, t('需重新登录的连接'), reauth, "switchTab('providers')");
+  if (reauth > 0) row('a-info', icBlue, t('需重新登录的连接'), reauth, "showPageSubTab('accounts', 'conns')");
   if (!rows.length) {
     box.innerHTML = '<div class="attention-empty">' + t('暂无需要处理的项目 · 账号池健康') + '</div>';
     return;
@@ -345,4 +345,3 @@ function renderDashRuntime(rt) {
   if (rt.onlyFree) chips.push('<span class="chip ok">' + t('仅免费模型') + '</span>');
   box.innerHTML = chips.join('');
 }
-

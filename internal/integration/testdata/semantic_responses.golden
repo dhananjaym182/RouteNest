@@ -176,6 +176,17 @@
         "status": "active"
       }
     ],
+    "flowLabels": {
+      "codebuddy-cn": "CodeBuddy CN (Free)",
+      "codebuddy-intl": "CodeBuddy Intl (Free)",
+      "github": "GitHub Copilot (Free plan)",
+      "kilocode": "Kilo Code (Free)",
+      "kimi-coding": "Kimi for Coding (Free)",
+      "qoder": "Qoder",
+      "qoder-cn": "Qoder CN",
+      "qwen": "Qwen Chat (Free)",
+      "workbuddy": "WorkBuddy (Free)"
+    },
     "flows": [
       "codebuddy-cn",
       "codebuddy-intl",

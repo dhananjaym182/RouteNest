@@ -78,7 +78,7 @@ type providerCand struct {
 // quality 策略按实测成绩优先 —— 窗口内成功率高者在前，等同程按平均时延升序，
 // 仍平按配置优先级。无样本的候选拿中性值，不因无数据而插队压过实测优秀者。
 func sortProviderCands(cs []providerCand, model string) {
-	if ConfigProvider().Strategy == "quality" {
+	if liveConfig().Strategy == "quality" {
 		sort.SliceStable(cs, func(i, j int) bool {
 			ri, li := providerScoreStats(cs[i].p.ID, model)
 			rj, lj := providerScoreStats(cs[j].p.ID, model)
@@ -174,7 +174,7 @@ func orderProviderCandsWeighted(cs []providerCand, model string) []providerCand 
 // orderProviderCands 按当前路由策略产出候选顺序；weighted_round_robin 会重排
 // 并可能剔除负权候选，其余策略沿用 sortProviderCands 的排序语义。
 func orderProviderCands(cs []providerCand, model string) []providerCand {
-	if ConfigProvider().Strategy == "weighted_round_robin" {
+	if liveConfig().Strategy == "weighted_round_robin" {
 		return orderProviderCandsWeighted(cs, model)
 	}
 	sortProviderCands(cs, model)

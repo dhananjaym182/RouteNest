@@ -1,10 +1,8 @@
 package admin
 
 import (
-	"errors"
 	"log"
 	"net/http"
-	"routenest/internal/routing"
 	"routenest/internal/zen"
 	"time"
 
@@ -397,30 +395,6 @@ func handleAdminAccountTest(w http.ResponseWriter, r *http.Request) {
 
 // Global proxy config (mutable via API, persisted to .routenest-config.json)
 type ProxyConfig = config.Proxy
-
-// init 注入 accounts 包需要的根状态：代理配置读取器与 Cline 错误分类器
-// （具体错误类型仍定义在 egress，accounts 只消费分类结果）。
-func init() {
-	accounts.SetProxyConfigProvider(GetProxyConfig)
-	accounts.SetAffinityErrorClassifier(classifyAffinityError)
-}
-
-// classifyAffinityError 把 egress 的上游错误翻译成 accounts 亲和层需要的两个事实：
-// HTTP 状态码（401/429 需解绑）与「账号不可用」标记（直接解绑）。
-func classifyAffinityError(err error) (int, bool) {
-	if err == nil {
-		return 0, false
-	}
-	var apiErr *egress.APIError
-	if errors.As(err, &apiErr) {
-		return apiErr.StatusCode, false
-	}
-	var accountErr *routing.ClineAccountUnavailableError
-	if errors.As(err, &accountErr) {
-		return 0, true
-	}
-	return 0, false
-}
 
 func DefaultProxyConfig() *ProxyConfig {
 	return config.DefaultProxy()

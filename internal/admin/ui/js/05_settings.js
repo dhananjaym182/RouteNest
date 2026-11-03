@@ -561,7 +561,7 @@ async function applyBulkHeaders() {
   } catch (e) { toast(t('保存失败: ') + e.message, 'error'); }
 }
 
-// ========== opencode 请求头 ==========
+// ========== OpenCode Zen 请求头 ==========
 function parseHeaderText(text) {
   const out = {};
   text.split('\n').forEach(line => {
@@ -588,7 +588,7 @@ async function saveZenHeaders(btn) {
   if (btn) { btn.disabled = true; btn.innerHTML = '<span class="loading"></span> ' + t('保存中...'); }
   try {
     await api('POST', '/opencode/config/update', { zenHeaders: parseHeaderText(_('zenHeadersBulk').value) });
-    toast(t('opencode 请求头已保存'), 'success');
+    toast(t('OpenCode Zen 请求头已保存'), 'success');
     showSaveResult('zenHeaderSaveResult', true);
   } catch (e) { toast(t('保存失败: ') + e.message, 'error'); }
   finally { if (btn) { btn.disabled = false; btn.innerHTML = orig; } }

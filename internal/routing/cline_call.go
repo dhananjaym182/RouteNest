@@ -38,7 +38,7 @@ func CallClineAPIWithAccountCtx(ctx context.Context, acc *domain.Account, params
 	client := &clineupstream.Client{
 		HTTP:         &http.Client{Transport: egress.Client.Transport},
 		BaseURL:      accounts.ClineAPIBase,
-		ExtraHeaders: ConfigProvider().Headers,
+		ExtraHeaders: liveConfig().Headers,
 	}
 
 	toolCount := 0

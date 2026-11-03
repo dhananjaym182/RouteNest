@@ -332,7 +332,7 @@ func filterStaleModels(chain []string) []string {
 // 只有动态派生的免费链才按 LiveModelSet 过滤下架条目。点名模型本身始终
 // 保留 —— 它是客户端显式要求的（可能由 zen / provider 服务，不归本仓判定）。
 func ModelFallbackChain(requested string) []string {
-	configured := ConfigProvider().ModelChain
+	configured := liveConfig().ModelChain
 	if len(configured) == 0 {
 		configured = filterStaleModels(defaultFreeChain())
 	}

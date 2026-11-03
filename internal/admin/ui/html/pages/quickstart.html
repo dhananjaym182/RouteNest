@@ -14,8 +14,8 @@
           <div class="step-dot">1</div>
           <div>
             <div class="txt-strong">添加 Cline 账号</div>
-            <div class="page-sub-title">在「账号与连接」页展开「登录与导入」分区，通过 OAuth 登录或手动输入 refreshToken 添加账号。支持批量导入。</div>
-            <button class="btn btn-sm mt-6" onclick="switchTab('accounts')">前往账号与连接</button>
+            <div class="page-sub-title">在「账号与登录 → Cline 账号」中展开「登录与导入」，通过 OAuth、refreshToken 或批量文件添加账号。</div>
+            <button class="btn btn-sm mt-6" onclick="showPageSubTab('accounts', 'pool')">前往 Cline 账号</button>
           </div>
         </div>
         <div class="step-item">
@@ -75,7 +75,7 @@ Model:    cline-free/glm-5.2</pre>
     <div class="section-title">下一步</div>
     <div class="section-body">
       <div class="quickstart-links">
-        <button class="btn btn-sm" onclick="switchTab('upstreams')">接入更多免费上游（OpenCode / Zen）</button>
+        <button class="btn btn-sm" onclick="showPageSubTab('upstreams', 'zen')">配置 OpenCode Zen</button>
         <button class="btn btn-sm" onclick="switchTab('providers')">添加自定义 Provider</button>
         <button class="btn btn-sm" onclick="switchTab('combos')">配置模型组合自动换源</button>
         <button class="btn btn-sm" onclick="switchTab('quota')">查看配额与预算</button>
@@ -83,4 +83,3 @@ Model:    cline-free/glm-5.2</pre>
     </div>
   </div>
 </div>
-

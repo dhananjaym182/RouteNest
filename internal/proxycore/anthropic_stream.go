@@ -558,7 +558,7 @@ L:
 		msgDelta["context_management"] = compaction.ContextManagementResponse(compactionApplied)
 	}
 	emit("message_delta", msgDelta)
-	RecordUsage(acc, upstream, reqLog, reqLog.Model, latestUsage)
+	recordUsage(acc, upstream, reqLog, reqLog.Model, latestUsage)
 	requestlog.Finalize(reqLog, latestUsage, firstOutputAt, reqLog.StartedAt, true, "")
 
 	emit("message_stop", map[string]any{"type": "message_stop"})

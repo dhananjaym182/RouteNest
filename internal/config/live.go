@@ -3,57 +3,77 @@ package config
 import (
 	"log"
 	"sync"
+	"sync/atomic"
 
 	"routenest/internal/platform"
 )
 
-// Mu guards the live proxy configuration. Callers that read or write fields of
-// the live value hold Mu for the whole operation.
+// Mu guards the live proxy configuration. Callers that write fields of the live
+// value hold Mu for the whole operation; readers use the published value.
 var Mu sync.Mutex
 
-// live is the process-wide proxy configuration. It is loaded from disk on first
-// use, not at package init, so importing this package does no I/O.
-var live *Proxy
+// live holds the published configuration. Publication is atomic, and the value
+// behind the pointer is never edited: writers build a new value and call
+// Publish, which stores a clone. A reader therefore keeps a coherent value for
+// the whole operation even while an admin update is applied.
+var live atomic.Pointer[Proxy]
 
-func liveLocked() *Proxy {
-	if live == nil {
-		live = LoadLiveFromDisk()
+// heldLocked returns the published configuration, loading it on first use. The
+// caller must hold Mu (or otherwise guarantee exclusive access).
+func heldLocked() *Proxy {
+	if p := live.Load(); p != nil {
+		return p
 	}
-	return live
+	p := LoadLiveFromDisk()
+	live.Store(p)
+	return p
 }
 
-// Live returns the live configuration. The pointer is shared: read fields under
-// Mu, or use Snapshot for a private copy.
-func Live() *Proxy {
+// current returns the published configuration, taking Mu only when the value has
+// not been loaded yet.
+func current() *Proxy {
+	if p := live.Load(); p != nil {
+		return p
+	}
 	Mu.Lock()
 	defer Mu.Unlock()
-	return liveLocked()
+	return heldLocked()
 }
 
-// Held returns the live configuration without taking Mu. The caller must already
-// hold Mu.
-func Held() *Proxy { return liveLocked() }
+// Live returns the published configuration. The value is immutable after
+// publication, so callers may read fields without holding Mu. Use Snapshot when
+// the caller needs to modify a copy.
+func Live() *Proxy {
+	return current()
+}
+
+// Held returns the published configuration without taking Mu. The caller must
+// already hold Mu.
+func Held() *Proxy { return heldLocked() }
 
 // Snapshot returns a deep copy of the live configuration, taken under Mu.
 // Writers edit the copy and publish it with Publish, so they never mutate the
 // configuration that requests are reading.
 func Snapshot() *Proxy {
-	Mu.Lock()
-	defer Mu.Unlock()
-	return liveLocked().Clone()
+	return current().Clone()
 }
 
-// Publish replaces the live configuration and persists it.
+// Publish stores a clone of c as the live configuration and persists it. Cloning
+// on publish means a caller that keeps editing its own value cannot change what
+// readers observe.
 func Publish(c *Proxy) {
+	if c == nil {
+		return
+	}
 	Mu.Lock()
 	defer Mu.Unlock()
-	live = c
+	live.Store(c.Clone())
 	SaveLocked()
 }
 
 // SaveLocked persists the live configuration. The caller must hold Mu.
 func SaveLocked() {
-	if err := SaveProxy(platform.ResolveDataPath(ProxyPath, nil), liveLocked()); err != nil {
+	if err := SaveProxy(platform.ResolveDataPath(ProxyPath, nil), heldLocked()); err != nil {
 		log.Printf("proxy config save failed: %v", err)
 	}
 }

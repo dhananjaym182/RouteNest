@@ -1,29 +1,29 @@
 <div id="tab-upstreams" class="tab-panel" style="display:none">
   <div class="page-header">
     <div>
-      <div class="large-title">上游服务</div>
-      <div class="large-subtitle">opencode zen、Cline 出口代理与请求头</div>
+      <div class="large-title">上游连接</div>
+      <div class="large-subtitle">配置 OpenCode Zen、出口代理与上游请求头</div>
     </div>
   </div>
   <div class="subtabs page-subtabs" data-page="upstreams">
-    <div class="subtab active" data-sub="zen">opencode Zen</div>
-    <div class="subtab" data-sub="cline">Cline 出口代理</div>
-    <div class="subtab" data-sub="headers">请求头配置</div>
+    <div class="subtab active" data-sub="zen">OpenCode Zen</div>
+    <div class="subtab" data-sub="cline">出口代理池</div>
+    <div class="subtab" data-sub="headers">上游请求头</div>
   </div>
 
   <div class="page-subpage" data-subpage="zen">
   <div class="section">
-    <div class="section-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg><span>opencode 免费模型</span>
+    <div class="section-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg><span>OpenCode Zen 服务</span>
       <span class="title-tools">
         <span id="ocRuntimeStatus">-</span>
       </span>
     </div>
-    <div class="section-desc">接入 opencode（zen）免费模型。按请求中的模型名自动分流：免费模型走 opencode 上游，付费模型直接拒绝，其余走 Cline 账号池。</div>
+    <div class="section-desc">接入 OpenCode Zen 免费模型。按请求中的模型名自动分流：免费模型走 OpenCode Zen，付费模型直接拒绝，其余走 Cline 账号池。</div>
     <div class="section-body">
       <div class="form-group-label">基础连接</div>
       <div class="form-row">
         <div class="field w-220">
-          <label>启用 opencode</label>
+          <label>启用 OpenCode Zen</label>
           <select id="ocEnabled" onchange="saveOcConfig()">
             <option value="true">启用</option>
             <option value="false">停用</option>
@@ -61,16 +61,18 @@
         <div class="field"><label>摘要最大 Token</label><input type="number" id="ocCompactMaxSummary" min="0" onchange="saveOcConfig()"></div>
       </div>
       <div class="form-actions mt-14">
-        <button class="btn btn-primary" onclick="saveOcConfig(this)">保存 opencode 配置</button>
+        <button class="btn btn-primary" onclick="saveOcConfig(this)">保存 OpenCode Zen 配置</button>
       </div>
       <div id="ocSaveResult" class="mt-8" aria-live="polite"></div>
       <div class="hint-sm mt-8">上述字段改动后会自动保存，也可点按钮手动触发。</div>
     </div>
   </div>
+  </div>
 
+  <div class="page-subpage" data-subpage="cline" style="display:none">
   <div class="section">
-    <div class="section-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>opencode 出口代理</div>
-    <div class="section-desc">发往 opencode 的请求可经代理池轮询出口；命中限流时冷却当前出口并自动跳过。支持 http / https / socks5 / socks5h，每行一个，如 <span class="mono">socks5://127.0.0.1:1080</span>。</div>
+    <div class="section-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>OpenCode Zen 出口代理</div>
+    <div class="section-desc">发往 OpenCode Zen 的请求可经代理池轮询出口；命中限流时冷却当前出口并自动跳过。支持 http / https / socks5 / socks5h，每行一个，如 <span class="mono">socks5://127.0.0.1:1080</span>。</div>
     <div class="section-body">
       <div class="form-row">
         <div class="field w-260">
@@ -80,7 +82,7 @@
             <option value="random">随机 (random)</option>
             <option value="fill">填满 (fill)</option>
           </select>
-          <div class="field-hint">仅决定多个出口代理地址之间的选择；Cline 账号轮询与 Provider 评分在 <a href="#" onclick="switchTab('routing');return false" class="lnk-a">「路由与模型」</a></div>
+          <div class="field-hint">仅决定多个出口代理地址之间的选择；Cline 账号轮询与 Provider 评分在 <a href="#" onclick="showPageSubTab('routing', 'config');return false" class="lnk-a">「路由与模型 → 路由策略」</a></div>
         </div>
         <div class="field f1"><label>出口冷却状态</label><div id="ocProxyCooldowns" class="hint-sm">-</div></div>
       </div>
@@ -91,9 +93,6 @@
     </div>
   </div>
 
-  </div>
-
-  <div class="page-subpage" data-subpage="cline" style="display:none">
   <div class="section">
     <div class="section-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>Cline 出口代理</div>
     <div class="section-desc">国内直连 Cline 上游会被跨区限制；配置后所有发往 Cline 的请求（对话、登录/令牌刷新、模型同步）经代理池轮询出去。支持 http / https / socks5 / socks5h，每行一个，如 socks5://127.0.0.1:1080。回环 / 内网地址（本机 Ollama 等自定义 Provider）始终直连；未配置时依次尝试环境变量代理、直连。</div>
@@ -106,7 +105,7 @@
             <option value="random">随机 (random)</option>
             <option value="fill">填满 (fill)</option>
           </select>
-          <div class="field-hint">仅决定多个出口代理地址之间的选择；Cline 账号轮询与 Provider 评分在 <a href="#" onclick="switchTab('routing');return false" class="lnk-a">「路由与模型」</a></div>
+          <div class="field-hint">仅决定多个出口代理地址之间的选择；Cline 账号轮询与 Provider 评分在 <a href="#" onclick="showPageSubTab('routing', 'config');return false" class="lnk-a">「路由与模型 → 路由策略」</a></div>
         </div>
       </div>
       <div class="field mt-10">
@@ -142,15 +141,15 @@
   </div>
 
   <div class="section">
-    <div class="section-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7V4h16v3"/><path d="M9 20h6"/><path d="M12 4v16"/></svg>opencode 请求头</div>
-    <div class="section-desc">附加到发往 opencode zen 的请求。特殊值：$session / $request / $project / $client 会注入每请求的动态身份；留空删除该头。</div>
+    <div class="section-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7V4h16v3"/><path d="M9 20h6"/><path d="M12 4v16"/></svg>OpenCode Zen 请求头</div>
+    <div class="section-desc">附加到发往 OpenCode Zen 的请求。特殊值：$session / $request / $project / $client 会注入每请求的动态身份；留空删除该头。</div>
     <div class="section-body">
       <div class="field">
         <label>请求头（每行一个，格式 Key: Value）</label>
         <textarea id="zenHeadersBulk" rows="6" placeholder="User-Agent: opencode/1.18.31&#10;x-opencode-project: global&#10;x-custom-header: my-value"></textarea>
       </div>
       <div class="form-actions mt-10">
-        <button class="btn btn-sm btn-primary" onclick="saveZenHeaders(this)">保存 opencode 请求头</button>
+        <button class="btn btn-sm btn-primary" onclick="saveZenHeaders(this)">保存 OpenCode Zen 请求头</button>
       </div>
       <div id="zenHeaderSaveResult" class="mt-8" aria-live="polite"></div>
     </div>
@@ -159,4 +158,3 @@
   </div>
 
 </div>
-

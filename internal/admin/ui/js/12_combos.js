@@ -5,11 +5,11 @@ var _comboReserved = [];
 var _comboEntries = [];
 var _editingComboId = '';
 
-// 组合模型来源显示名：provider → 真实 Provider 名；remote → Cline；zen/seed → opencode；其余 → 自定义
+// 组合模型来源显示名：provider → 真实 Provider 名；remote → Cline；zen/seed → OpenCode Zen；其余 → 自定义
 function comboSourceName(m) {
   if (m.source === 'provider') return m.provider || t('自定义');
   if (m.source === 'remote') return 'Cline';
-  if (m.source === 'zen' || m.source === 'seed') return 'opencode';
+  if (m.source === 'zen' || m.source === 'seed') return 'OpenCode Zen';
   return t('自定义');
 }
 
@@ -685,14 +685,14 @@ function comboTestResultDetails() {
 function comboTestUpstreamBadge(upstream) {
   if (!upstream) return '';
   const map = { opencode: 'zen', cline: 'remote', provider: 'provider' };
-  const label = upstream === 'opencode' ? 'opencode' : (upstream === 'cline' ? 'Cline' : 'Provider');
+  const label = upstream === 'opencode' ? 'OpenCode Zen' : (upstream === 'cline' ? 'Cline' : 'Provider');
   return '<span class="model-source-badge ' + (map[upstream] || '') + '" title="' + t('上游') + '">' + esc(label) + '</span>';
 }
 
 function comboTestSourcePin(e, res) {
   const src = res && res.source ? res.source : (e.source || '');
   if (src === 'provider') return '<span class="model-source-badge provider">' + esc((res && res.provider) || e.provider || 'Provider') + '</span>';
-  if (src === 'zen') return '<span class="model-source-badge zen">opencode</span>';
+  if (src === 'zen') return '<span class="model-source-badge zen">OpenCode Zen</span>';
   if (src === 'cline') return '<span class="model-source-badge remote">Cline</span>';
   return '<span class="model-source-badge" title="' + t('自动') + '">' + t('自动') + '</span>';
 }
@@ -813,4 +813,3 @@ async function comboTestSave(btn) {
     if (btn) { btn.disabled = false; btn.innerHTML = orig; }
   }
 }
-

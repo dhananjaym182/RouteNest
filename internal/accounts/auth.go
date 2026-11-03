@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync"
 
 	"routenest/internal/domain"
 	"routenest/internal/platform"
@@ -15,14 +16,14 @@ import (
 )
 
 // Domain aliases keep the moved pool/auth code terse; they are the same types
-// the root package aliases through types.go, so values cross unchanged.
+// internal/domain defines, so values cross packages unchanged.
 type Account = domain.Account
 type AccountPool = domain.AccountPool
 type Model = domain.Model
 type ModelStat = domain.ModelStat
 
-// HTTPClient is the shared outbound client, injected by the root package
-// (http.go) so WorkOS/Cline auth calls keep using the egress proxy pool.
+// HTTPClient is the shared outbound client, installed by internal/app so the
+// WorkOS/Cline auth calls use the same egress proxy pool as other upstreams.
 var HTTPClient *http.Client
 
 func httpClientOrDefault() *http.Client {
@@ -31,8 +32,6 @@ func httpClientOrDefault() *http.Client {
 	}
 	return http.DefaultClient
 }
-
-const ()
 
 var clineAuthConfig = clineupstream.DefaultConfig()
 
@@ -48,10 +47,16 @@ type clineRefreshResp = clineupstream.RefreshResponse
 
 var (
 	credentialsPath string
+	credsPathMu     sync.Mutex
 )
 
-func init() {
-	credentialsPath = findCredentialsFile()
+// ensureCredentialsPath resolves the credentials file path on first use.
+func ensureCredentialsPath() {
+	credsPathMu.Lock()
+	defer credsPathMu.Unlock()
+	if credentialsPath == "" {
+		credentialsPath = findCredentialsFile()
+	}
 }
 
 func findCredentialsFile() string {
@@ -61,6 +66,7 @@ func findCredentialsFile() string {
 }
 
 func loadCredentials() *credentials {
+	ensureCredentialsPath()
 	data, err := os.ReadFile(credentialsPath)
 	if err != nil {
 		return nil
@@ -73,6 +79,7 @@ func loadCredentials() *credentials {
 }
 
 func saveCredentials(rt string) {
+	ensureCredentialsPath()
 	c := credentials{RefreshToken: rt}
 	data, _ := json.MarshalIndent(c, "", "  ")
 	if err := platform.WriteFileAtomic(credentialsPath, data, 0600); err != nil {

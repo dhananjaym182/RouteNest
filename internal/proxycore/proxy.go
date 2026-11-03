@@ -17,11 +17,29 @@ import (
 	"routenest/internal/providers"
 )
 
-// Root-owned live state seams, wired once from root composition.
+// Root-owned live state seams, installed by internal/app. They have no silent
+// defaults: a server started without composition fails loudly on the request
+// path instead of using a default policy or dropping usage silently.
 var (
-	ConfigProvider = func() *config.Proxy { return config.DefaultProxy() }
-	RecordUsage    = func(*domain.Account, *http.Response, *domain.RequestLog, string, TokenUsage) {}
+	ConfigProvider func() *config.Proxy
+	RecordUsage    func(*domain.Account, *http.Response, *domain.RequestLog, string, TokenUsage)
 )
+
+// liveConfig returns the composed proxy configuration or panics with the reason.
+func liveConfig() *config.Proxy {
+	if ConfigProvider == nil {
+		panic("proxycore: app.Configure() was not called (ConfigProvider unset)")
+	}
+	return ConfigProvider()
+}
+
+// recordUsage attributes finalized usage through the composed hook.
+func recordUsage(acc *domain.Account, upstream *http.Response, reqLog *domain.RequestLog, model string, usage TokenUsage) {
+	if RecordUsage == nil {
+		panic("proxycore: app.Configure() was not called (RecordUsage unset)")
+	}
+	RecordUsage(acc, upstream, reqLog, model, usage)
+}
 
 const (
 	// DefaultMaxTokens 是上游请求的默认/上限输出 token 数。
@@ -35,9 +53,6 @@ const (
 	// maxUpstreamToolNameLength is the upstream tool-name limit.
 	maxUpstreamToolNameLength = openaichat.MaxToolNameLength
 )
-
-// MinUpstreamMaxTokens 上游对输出 token 的硬下限：Cline 免费模型经 OpenRouter
-// 转发时（如 meta/muse-spark），max_output_tokens < 16 会被上游直接 400。
 
 // defaultFirstContentTimeout 是单次上游尝试等待「首个内容事件」的上限。
 // 超时即认定该模型此刻不可用：放弃本次尝试、冷却该模型、立刻换到链上下一个模型。
@@ -142,23 +157,6 @@ func restoreToolCallsInResponse(obj map[string]any, shortToOrig map[string]strin
 	openaichat.RestoreToolCalls(obj, shortToOrig)
 }
 
-// ModelMaxOutputLimit 返回模型已知的最大输出 token 硬上限（0=未知，不封顶）。
-// 已知硬限制表优先（gemini-3.8-flash 等）；其次取池中该模型的 Output 元数据
-// （remote 同步 / 管理页设置 / 用户自定义模型）。zen 模型的 Output 是压缩预算
-// 用的估值（未知模型默认 32768），作为硬上限会误伤长输出，跳过。
-
-// 客户端发的 0 视为未设置、1~15 低于上游硬下限：一律兜到默认值，
-// 否则 muse-spark 等模型直接 400 且错误会被回退链吞掉
-
-// 模型已知硬上限封顶：gemini-3.8-flash 最大输出 65536，默认预算 128000 会被
-// 上游网关 400（MaxOutputTokens out of range / Request contains an invalid argument），
-// 且 429 配额限流回退到 vertex/google 路由时必现。
-
-// Cline 上游不接受 "none" 枚举：客户端显式关闭推理时直接省略该字段；
-// 空字符串同样省略（避免把非法枚举下发到上游）。
-
-// 定稿前清洗 tools：null 可选字段会被部分上游网关硬拒 400（见函数注释）。
-
 // SanitizeToolsForUpstream cleans optional tool fields before a request body is
 // finalized for any gateway.
 func SanitizeToolsForUpstream(body map[string]any) {
@@ -171,7 +169,7 @@ func clineHeaders(token, sessionID string) http.Header {
 	h.Set("Content-Type", "application/json")
 	h.Set("X-Task-ID", sessionID)
 
-	cfg := ConfigProvider()
+	cfg := liveConfig()
 	for k, v := range cfg.Headers {
 		h.Set(k, v)
 	}
@@ -185,19 +183,6 @@ func clineErrorHTTPStatus(err error) int {
 	}
 	return http.StatusInternalServerError
 }
-
-// IsDeterministicRequestError 判断 err 是否为「换账号/换模型重试也无法自愈」的
-// 上游确定性 400：invalid-request 语义（invalid_request_error 类型、invalid_request
-// 伪码、网关字段校验 "Invalid input"，如工具可选字段被序列化为 null）。
-// 上下文超限 400 显式排除（IsContextLengthError）：那类错误有压缩+重试的自愈路径，
-// 必须保留现有的 truncate/retry 行为。限流 429/5xx 不在此列。
-
-// routing.ServedByParam 是 routing.CallClineAPI 族回写在 params 上的「实际服务方」标记：
-// 自定义 provider 成功服务时写入 zen.UpstreamProvider。仅用于请求日志归因——
-// BuildUpstreamBody / providers.Call / zen.Call 只拷贝白名单键，不会外发。
-
-// routing.ProviderNameParam 与 routing.ServedByParam 配套：自定义 provider 成功服务时回写实际
-// 命中之家的显示名，供 stampUpstream 归因到请求日志的 providerName 字段。
 
 // stampUpstream 按实际服务结果写入请求日志的上游归因：
 // provider 标记 > 生效模型是 zen 模型（反向故障转移）> Cline 账号池。
