@@ -22,7 +22,10 @@ import (
 var requiredAdminIDs = []string{
 	"tab-dashboard", "tab-accounts", "tab-logs", "tab-security",
 	"tab-routing", "tab-combos", "tab-upstreams", "tab-providers",
-	"tab-quickstart", "tab-quota", "tab-about",
+	"tab-quickstart", "tab-quota", "tab-about", "tab-global",
+	"globalProviderFilter", "globalInstances", "globalCredentials",
+	"globalOfferings", "globalState", "globalEgress",
+
 	"toastStack", "loginOverlay", "loginPassword", "loginError",
 	"langZh", "langEn", "themeSwitch", "refreshAllBtn", "saveDiscardBar",
 	"navEdgeToggle",
@@ -339,6 +342,50 @@ func TestAdminUICanonicalOpenCodeLabels(t *testing.T) {
 	for _, tt := range tests {
 		if src := adminUIAsset(t, tt.asset); !strings.Contains(src, tt.want) {
 			t.Errorf("%s missing canonical OpenCode label %q", tt.asset, tt.want)
+		}
+	}
+}
+
+// The global provider view is the UI projection of the additive admin
+// endpoints. It must stay navigable, read-only, and explicit about unknown
+// capability states; a silent absence would reintroduce provider silos.
+func TestAdminGlobalProviderViewCoversCapabilityInventory(t *testing.T) {
+	shell := adminUIAsset(t, "ui/html/shell.html")
+	if !strings.Contains(shell, `data-tab="global"`) {
+		t.Fatal("navigation has no global provider entry")
+	}
+	page := adminUIAsset(t, "ui/html/pages/global.html")
+	if !strings.Contains(page, `id="tab-global"`) {
+		t.Fatal("global provider page has no tab panel")
+	}
+	js := adminUIAsset(t, "ui/js/18_global.js")
+	for _, endpoint := range []string{
+		"/provider-instances", "/credentials", "/model-offerings",
+		"/provider-state", "/egress-profiles",
+	} {
+		if !strings.Contains(js, "'"+endpoint+"'") {
+			t.Errorf("global view does not read %s", endpoint)
+		}
+	}
+	for capability := range map[string]bool{
+		"modelDiscovery": true, "freeModelDetection": true,
+		"removedModelDetection": true, "reactiveQuota": true,
+		"proactiveQuota": true, "quotaResetDetection": true,
+		"credentialRotation": true, "egressPool": true,
+		"contextCompaction": true,
+	} {
+		if !strings.Contains(js, capability) {
+			t.Errorf("capability %q is not rendered", capability)
+		}
+	}
+	for _, state := range []string{"'支持'", "'不支持'", "'未知'"} {
+		if !strings.Contains(js, state) {
+			t.Errorf("capability state %s is not rendered", state)
+		}
+	}
+	for _, field := range []string{"o.until", "o.resetAt"} {
+		if !strings.Contains(js, field) {
+			t.Errorf("runtime state does not distinguish %s", field)
 		}
 	}
 }

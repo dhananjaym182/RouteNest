@@ -23,6 +23,7 @@ var adminUIJSAssets = []string{
 	"ui/js/14_logs.js",
 	"ui/js/15_dashboard.js",
 	"ui/js/17_quota.js",
+	"ui/js/18_global.js",
 	// 16_init runs applyLang/applyTab, so it must stay last.
 	"ui/js/16_init.js",
 }
@@ -42,6 +43,7 @@ var adminUIBodyParts = []string{
 	"ui/html/dialogs/provider_detail.html",
 	"ui/html/pages/upstreams.html",
 	"ui/html/pages/providers.html",
+	"ui/html/pages/global.html",
 	"ui/html/dialogs/provider_save_bar.html",
 	"ui/html/dialogs/diff.html",
 	"ui/html/dialogs/provider_editor.html",

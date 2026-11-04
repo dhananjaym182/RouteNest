@@ -69,6 +69,7 @@ function applyTab(name){
   else if (name === 'accounts') { loadAccounts(); loadConnections(); }
   if (fromImport) toggleLoginImport(true);
   else if (name === 'logs') { loadRequestLogs(true); startLogPolling(); }
+  else if (name === 'global') { loadGlobal(); }
   else if (name === 'routing') { loadModels().then(() => { loadConfig(); }); }
   else if (name === 'combos') { loadCombos(); }
   else if (name === 'upstreams') { loadOcConfig(); loadClineProxyConfig(); loadZenHeaders(); }
