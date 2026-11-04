@@ -14,6 +14,7 @@ import (
 	"routenest/internal/combos"
 	"routenest/internal/config"
 	"routenest/internal/connections"
+	"routenest/internal/credentials"
 	"routenest/internal/domain"
 	"routenest/internal/egress"
 	"routenest/internal/platform"
@@ -53,6 +54,9 @@ func Configure() {
 func configure() {
 	if err := configureProviderState(); err != nil {
 		panic("app: publish provider state: " + err.Error())
+	}
+	if err := configureCredentials(); err != nil {
+		panic("app: publish credentials: " + err.Error())
 	}
 	openAIAdapter := openaicompatadapter.New()
 	qoderAdapter := qoderadapter.New()
@@ -153,6 +157,7 @@ func ValidateComposition() error {
 	check("routing combo catalogue", routing.HasComboCatalog())
 	check("provider adapter registry", provideradapters.HasDefault())
 	check("provider state store", providerstate.HasDefault())
+	check("credentials registry", credentials.HasDefault())
 	if len(missing) > 0 {
 		return fmt.Errorf("app: incomplete composition: %s", strings.Join(missing, ", "))
 	}

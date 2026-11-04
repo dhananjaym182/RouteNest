@@ -55,6 +55,37 @@ func ListConnections() []Connection {
 	return out
 }
 
+// CredentialSnapshot exposes connection eligibility metadata without secret
+// tokens. It is consumed by the global credentials compatibility adapter.
+type CredentialSnapshot struct {
+	Connection    Connection
+	Refreshable   bool
+	CooldownUntil time.Time
+}
+
+func ListCredentialSnapshots() []CredentialSnapshot {
+	LoadConnections()
+	ConnectionsMu.Lock()
+	result := make([]CredentialSnapshot, 0, len(connections))
+	for _, connection := range connections {
+		result = append(result, CredentialSnapshot{
+			Connection:  RedactedConnection(*connection),
+			Refreshable: connection.RefreshToken != "",
+		})
+	}
+	ConnectionsMu.Unlock()
+
+	now := time.Now()
+	connPoolMu.Lock()
+	for i := range result {
+		if until := connCooling[result[i].Connection.ID]; now.Before(until) {
+			result[i].CooldownUntil = until
+		}
+	}
+	connPoolMu.Unlock()
+	return result
+}
+
 // ConnectionFlowNames lists the provider login flows, sorted.
 func ConnectionFlowNames() []string {
 	flows := make([]string, 0, len(ProviderDeviceFlows))
