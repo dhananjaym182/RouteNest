@@ -40,8 +40,6 @@ const (
 // upstreamModelEntry is one parsed /models item (OpenAI list + OpenRouter-style pricing).
 type upstreamModelEntry = modelcatalog.Entry
 
-func freeWord(s string) bool { return modelcatalog.FreeWord(s) }
-
 // classifyUpstreamModel checks signals in order and returns on the first hit.
 // Explicit free markers rank above explicit non-zero pricing.
 func classifyUpstreamModel(e upstreamModelEntry, providerFree bool) (tier, signal string) {

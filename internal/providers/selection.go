@@ -61,12 +61,6 @@ func ResolveOne(model string) *CustomProvider {
 	return cs[0]
 }
 
-// providerFallbackModels 该模型的所有 provider 候选按优先级排序的模型链：
-// 原模型优先，然后是 modelChain（配置链）中启用了 provider 的模型。
-func Serves(model string) bool {
-	return ResolveOne(model) != nil
-}
-
 // ---- 候选排序 --------------------------------------------------------
 
 // providerCand 候选 provider（包级定义，排序函数复用）。

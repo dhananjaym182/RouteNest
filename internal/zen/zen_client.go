@@ -93,10 +93,6 @@ func ensureAnonymousTools(body map[string]any) {
 	zenupstream.EnsureAnonymousTools(body)
 }
 
-func anonymousToolset(names []string) []any {
-	return zenupstream.AnonymousToolset(names)
-}
-
 // buildZenBody constructs a zen chat request body.
 func buildZenBody(params map[string]any, stream bool, anonymous bool) map[string]any {
 	opts := BodyOptionsProvider()

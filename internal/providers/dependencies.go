@@ -7,7 +7,6 @@ import (
 
 	"routenest/internal/config"
 	"routenest/internal/domain"
-	"routenest/internal/upstream/openaicompat"
 )
 
 // Domain aliases keep the registry code readable; they are the same types
@@ -29,9 +28,6 @@ const ProviderIDParam = "__served_by_id"
 var (
 	TransportProvider = func() http.RoundTripper { return http.DefaultTransport }
 
-	BodyOptionsProvider = func() openaicompat.BodyOptions {
-		return openaicompat.BodyOptions{}
-	}
 	// ConfigProvider supplies the live proxy policy, installed by internal/app.
 	// Nil until then so a missing composition fails loudly.
 	ConfigProvider func() *config.Proxy

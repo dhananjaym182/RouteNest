@@ -120,7 +120,6 @@ func configure() {
 	connections.IsFreeModel = routing.IsFreeModelID
 
 	providers.TransportProvider = func() http.RoundTripper { return egress.Client.Transport }
-	providers.BodyOptionsProvider = bodyOptionsProvider
 	zen.BodyOptionsProvider = bodyOptionsProvider
 	providers.ConfigProvider = config.Live
 	freeIDs := make([]string, 0, len(zen.SeedModels)*2)

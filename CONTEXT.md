@@ -60,3 +60,19 @@ profile, or explicitly connect directly.
 
 Candidate selection that prefers eligible free Model Offerings across all
 providers. Unknown or unverified access never qualifies as free.
+
+## Compatibility Stores
+
+During the behavioral migration the existing JSON files remain the sources of
+truth: `.routenest-accounts.json` (Cline accounts, models, and admin state),
+`.routenest-connections.json`, `.routenest-providers.json` with
+`.routenest-providers-cooldowns.json`, `.routenest-zen.json`,
+`.routenest-proxy.json`, and `.routenest-providers-sync.json`.
+
+Global Provider Instances, Credentials, Model Offerings, Availability
+Observations, and Egress Profiles are projections composed from those stores by
+`internal/app`; they do not yet own a separate schema. The files are
+compatibility stores, not deprecated leftovers: routing and administration keep
+reading and writing them, and every legacy endpoint remains a supported adapter
+over the same data. Consolidating them is deferred to a separately approved
+migration so behavior changes and data migration cannot regress together.

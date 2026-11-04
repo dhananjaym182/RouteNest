@@ -37,6 +37,17 @@ Core modules point inward. `providerstate`, `egress`, and `credentials` do not
 import orchestration owners such as `routing`, `providers`, or `zen`; legacy
 adapters are composed by `internal/app`.
 
+The persisted JSON stores remain compatibility stores, not deprecated
+leftovers. Accounts (`.routenest-accounts.json`), connections
+(`.routenest-connections.json`), custom providers and their cooldowns
+(`.routenest-providers.json`, `.routenest-providers-cooldowns.json`), OpenCode
+Zen (`.routenest-zen.json`), proxy configuration (`.routenest-proxy.json`), and
+catalogue sync state (`.routenest-providers-sync.json`) keep their schemas and
+stay authoritative. Global Provider Instances, Credentials, Model Offerings,
+Availability Observations, and Egress Profiles are redacted projections composed
+from them at the composition root; no parallel persisted schema is introduced
+in this refactor.
+
 ## Consequences
 
 - Cline and OpenCode Zen become built-in Provider Instances instead of special
