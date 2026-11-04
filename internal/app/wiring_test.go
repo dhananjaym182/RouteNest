@@ -5,6 +5,7 @@ import (
 
 	"routenest/internal/accounts"
 	"routenest/internal/credentials"
+	"routenest/internal/egress"
 	"routenest/internal/provideradapters"
 	"routenest/internal/providerstate"
 	"routenest/internal/routing"
@@ -41,5 +42,8 @@ func TestConfigureInstallsRequiredSeams(t *testing.T) {
 	}
 	if !credentials.HasDefault() {
 		t.Fatal("credentials registry not installed")
+	}
+	if !egress.HasDefault() {
+		t.Fatal("egress resolver not installed")
 	}
 }

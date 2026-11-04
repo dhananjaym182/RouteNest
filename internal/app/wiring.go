@@ -58,6 +58,9 @@ func configure() {
 	if err := configureCredentials(); err != nil {
 		panic("app: publish credentials: " + err.Error())
 	}
+	if err := configureEgress(); err != nil {
+		panic("app: publish egress resolver: " + err.Error())
+	}
 	openAIAdapter := openaicompatadapter.New()
 	qoderAdapter := qoderadapter.New()
 	clineAdapter := clineadapter.New()
@@ -158,6 +161,7 @@ func ValidateComposition() error {
 	check("provider adapter registry", provideradapters.HasDefault())
 	check("provider state store", providerstate.HasDefault())
 	check("credentials registry", credentials.HasDefault())
+	check("egress resolver", egress.HasDefault())
 	if len(missing) > 0 {
 		return fmt.Errorf("app: incomplete composition: %s", strings.Join(missing, ", "))
 	}

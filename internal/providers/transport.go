@@ -4,9 +4,12 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"strings"
 	"sync"
 	"time"
 
+	"routenest/internal/domain"
+	"routenest/internal/egress"
 	"routenest/internal/transport"
 )
 
@@ -18,7 +21,26 @@ var providerTransportCache sync.Map // spec -> http.RoundTripper
 //   - "" inherits the global transport (including test overrides),
 //   - "direct"/"none" bypasses both the app proxy pool and environment proxies,
 //   - a proxy URL dials through only that proxy.
-func providerTransportFor(spec string) (http.RoundTripper, error) {
+//
+// Explicit overrides run through the global egress resolver when it is
+// installed; an empty override stays on the legacy global transport so the
+// existing pool hooks and TLS behavior are unchanged.
+func providerTransportFor(providerID, spec string) (http.RoundTripper, error) {
+	if strings.TrimSpace(spec) != "" && egress.HasDefault() {
+		decision, err := egress.Default().Resolve(
+			domain.ProviderInstanceID(providerID),
+			egress.Override{ProxyURL: spec},
+			nil,
+		)
+		if err != nil {
+			return nil, err
+		}
+		if decision.Mode == egress.ModeDirect {
+			spec = "direct"
+		} else if decision.Proxy != nil {
+			spec = decision.Proxy.String()
+		}
+	}
 	norm, err := transport.NormalizeProxySpec(spec)
 	if err != nil {
 		return nil, err

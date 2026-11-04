@@ -46,7 +46,7 @@ func Call(p *CustomProvider, params map[string]any, stream bool) (*http.Response
 	}
 	// Provider overrides get their own cached transport; an empty override
 	// keeps reusing the global transport so existing behavior is unchanged.
-	tr, err := providerTransportFor(p.ProxyURL)
+	tr, err := providerTransportFor(p.ID, p.ProxyURL)
 	if err != nil {
 		return nil, fmt.Errorf("provider %s: %w", p.Name, err)
 	}
