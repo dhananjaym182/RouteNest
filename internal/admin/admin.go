@@ -123,6 +123,7 @@ func RegisterRoutes(mux *http.ServeMux) {
 	registerUpstreamsRoutes(mux, auth)
 	registerConfigRoutes(mux, auth)
 	registerProvidersRoutes(mux, auth)
+	registerProviderSystemRoutes(mux, auth)
 	registerConnectionsRoutes(mux, auth)
 	registerCombosRoutes(mux, auth)
 	registerObservabilityRoutes(mux, auth)
@@ -212,6 +213,16 @@ func registerProvidersRoutes(mux *http.ServeMux, auth authWrap) {
 	mux.HandleFunc("/admin/api/models/cost", auth(handleModelCost))
 	mux.HandleFunc("/admin/api/providers/cooldown-reset", auth(handleProviderCooldownReset))
 	mux.HandleFunc("/admin/api/account-health", auth(handleAccountHealth))
+}
+
+// registerProviderSystemRoutes registers the additive global provider-system
+// projections. Legacy source-specific endpoints remain the compatibility API.
+func registerProviderSystemRoutes(mux *http.ServeMux, auth authWrap) {
+	mux.HandleFunc("/admin/api/provider-instances", auth(handleProviderInstances))
+	mux.HandleFunc("/admin/api/credentials", auth(handleProviderCredentials))
+	mux.HandleFunc("/admin/api/model-offerings", auth(handleModelOfferings))
+	mux.HandleFunc("/admin/api/provider-state", auth(handleProviderState))
+	mux.HandleFunc("/admin/api/egress-profiles", auth(handleEgressProfiles))
 }
 
 // registerConnectionsRoutes registers the provider login connections.

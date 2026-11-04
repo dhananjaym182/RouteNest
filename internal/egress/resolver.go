@@ -170,6 +170,22 @@ func NewResolver(registry *Registry, store *providerstate.Store) (*Resolver, err
 	}, nil
 }
 
+// GlobalID returns the configured default profile id, or "" when unset.
+func (r *Resolver) GlobalID() string {
+	if r == nil || r.registry == nil {
+		return ""
+	}
+	return r.registry.GlobalID()
+}
+
+// Profiles returns the registered profiles as redacted, ordered copies.
+func (r *Resolver) Profiles() []Profile {
+	if r == nil || r.registry == nil {
+		return nil
+	}
+	return r.registry.Profiles()
+}
+
 // SetEnvironmentProxy replaces the environment lookup seam (tests, platform).
 func (r *Resolver) SetEnvironmentProxy(fn func(*url.URL) (*url.URL, error)) {
 	if fn == nil {

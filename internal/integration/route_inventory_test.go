@@ -118,6 +118,11 @@ var routeMethods = map[string]string{
 	"/admin/api/providers/save":            "POST",
 	"/admin/api/providers/sync-status":     "GET",
 	"/admin/api/providers/test":            "POST",
+	"/admin/api/provider-instances":        "GET",
+	"/admin/api/credentials":               "GET",
+	"/admin/api/model-offerings":           "GET",
+	"/admin/api/provider-state":            "GET",
+	"/admin/api/egress-profiles":           "GET",
 	"/admin/api/request-logs":              "GET",
 	"/admin/api/request-logs/clear":        "POST",
 	"/admin/api/sso/import":                "POST",
@@ -245,6 +250,11 @@ var probeRoutes = []string{
 	"/admin/api/providers/sync-status",
 	"/admin/api/opencode/config",
 	"/admin/api/cline-proxy/config",
+	"/admin/api/provider-instances",
+	"/admin/api/credentials",
+	"/admin/api/model-offerings",
+	"/admin/api/provider-state",
+	"/admin/api/egress-profiles",
 }
 
 // unprobedGETRoutes names the GET-capable routes the probe deliberately skips,

@@ -12,4 +12,9 @@ GET /admin/api/account-health -> 200 ct=application/json shape={data,success} da
 GET /admin/api/providers/sync-status -> 200 ct=application/json shape={data,success} data{providers}
 GET /admin/api/opencode/config -> 200 ct=application/json shape={data,success} data{baseURL,compaction,enabled,failover,failoverCount,failoverMinutes,key,lastSync,maxConcurrency,proxies,proxyCooldowns,proxyStrategy,retries,runtime,syncedModels,zenHeaders}
 GET /admin/api/cline-proxy/config -> 200 ct=application/json shape={data,success} data{proxies,proxyStrategy}
+GET /admin/api/provider-instances -> 200 ct=application/json shape={data,success} data{instances}
+GET /admin/api/credentials -> 200 ct=application/json shape={data,success} data{credentials}
+GET /admin/api/model-offerings -> 200 ct=application/json shape={data,success} data{offerings}
+GET /admin/api/provider-state -> 200 ct=application/json shape={data,success} data{observations}
+GET /admin/api/egress-profiles -> 200 ct=application/json shape={data,success} data{globalProfileId,profiles}
 POST /admin/api/login -> 400 ct=application/json shape={error,success}

@@ -27,12 +27,15 @@
 /admin/api/connections/login/start	POST	admin.go	wrap=auth	handler=handleConnectionLoginStart
 /admin/api/connections/login/status	GET	admin.go	wrap=auth	handler=handleConnectionLoginStatus
 /admin/api/connections/test	POST	admin.go	wrap=auth	handler=handleConnectionTest
+/admin/api/credentials	GET	admin.go	wrap=auth	handler=handleProviderCredentials
 /admin/api/dashboard/overview	GET	admin.go	wrap=auth	handler=handleDashboardOverview
+/admin/api/egress-profiles	GET	admin.go	wrap=auth	handler=handleEgressProfiles
 /admin/api/keys	GET	admin.go	wrap=auth	handler=handleAdminGetKeys
 /admin/api/keys/delete	POST	admin.go	wrap=auth	handler=handleAdminDeleteKey
 /admin/api/keys/generate	POST	admin.go	wrap=auth	handler=handleAdminGenerateKey
 /admin/api/login	POST	admin.go	wrap=httpx.CORS	handler=handleAdminLogin
 /admin/api/logout	POST	admin.go	wrap=httpx.CORS	handler=handleAdminLogout
+/admin/api/model-offerings	GET	admin.go	wrap=auth	handler=handleModelOfferings
 /admin/api/models	GET	admin.go	wrap=auth	handler=handleAdminModels
 /admin/api/models/add	POST	admin.go	wrap=auth	handler=handleAdminModelAdd
 /admin/api/models/capabilities	POST	admin.go	wrap=auth	handler=handleAdminModelCapabilities
@@ -54,6 +57,8 @@
 /admin/api/opencode/config/update	POST	admin.go	wrap=auth	handler=handleOpenCodeConfigUpdate
 /admin/api/opencode/models/sync	POST	admin.go	wrap=auth	handler=handleOpenCodeModelSync
 /admin/api/password	POST	admin.go	wrap=auth	handler=handleAdminPassword
+/admin/api/provider-instances	GET	admin.go	wrap=auth	handler=handleProviderInstances
+/admin/api/provider-state	GET	admin.go	wrap=auth	handler=handleProviderState
 /admin/api/providers	GET	admin.go	wrap=auth	handler=handleProvidersList
 /admin/api/providers/cooldown-reset	POST	admin.go	wrap=auth	handler=handleProviderCooldownReset
 /admin/api/providers/delete	POST	admin.go	wrap=auth	handler=handleProviderDelete
