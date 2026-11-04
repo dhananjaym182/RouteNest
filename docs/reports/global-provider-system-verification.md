@@ -2,16 +2,20 @@
 
 - Date: 2026-11-04
 - Branch: `refactor/global-provider-system`
-- Head: `0ec5b92` (base `5c4942c` from `refactor/provider-architecture`)
+- Head: `eeccfc6` (base `5c4942c` from `refactor/provider-architecture`)
 - Go: `go1.26.7 linux/amd64`
 - Plan: `docs/plans/2026-11-03-global-provider-system-implementation.md`
 - ADR: `docs/adr/0001-global-provider-capability-system.md`
 
 ## Scope
 
-This report covers Tasks 0–16 and 18–19 of the implementation plan. Task 17
-(admin UI rebuild) is deferred; no UI markup, script, stylesheet, manifest, DOM
-ID, hash route, or translation key was changed by this refactor.
+This report covers Tasks 0–19 of the implementation plan. Task 17 was delivered
+as an additive, read-only global view: a new `全局视图` tab renders Provider
+Instances, Credentials, Model Offerings, Availability Observations, and Egress
+Profiles from the additive admin endpoints. No existing page, DOM ID, hash
+route, storage key, payload, or navigation target was renamed or removed. The
+full visual redesign and designer review remain pending because the `designer`
+subagent is unavailable (`401`).
 
 The migration keeps every persisted JSON schema, provider ID, storage key,
 HTTP route, payload shape, and routing semantic intact. Global Provider
@@ -36,6 +40,7 @@ with `ROUTENEST_DATA_DIR` and `CLINE2API_DATA_DIR` unset.
 | Integration ×2 | `go test ./internal/integration -count=2` | pass, 105.6 s |
 | i18n | `node tools/i18n_check.js` | gaps 0, duplicate keys 0, dead keys 0, literals without keys 0 |
 | Preset generator | `node tools/gen-provider-presets.test.mjs` | 4/4 pass |
+| Admin UI contract | `go test ./internal/admin -count=1` | pass, including the global-view capability inventory test |
 
 The route inventory and probe goldens changed only by five added GET lines
 (`/admin/api/provider-instances`, `/credentials`, `/model-offerings`,
@@ -135,9 +140,12 @@ delisting, and free-only routing.
 - Not performed: browser/Playwright is unavailable in this environment, the
   desktop build lacks GTK/WebKit, and the `designer` subagent required for UI
   work returned `401 Unauthorized`.
-- No UI asset changed, so hash routes, DOM IDs, languages, and themes are
-  unchanged by construction; the UI contract, manifest, syntax, inline-handler,
-  and globals tests pass unmodified.
+- The global view is additive: existing tabs, DOM IDs, hash routes, languages,
+  themes, and storage keys are untouched. The manifest, required-ID,
+  ID-lookup, switch-target, inline-handler, globals, and i18n gates pass with
+  the new `global` tab included. Its five data sources are the additive
+  endpoints listed above, and unknown capability states render as `未知`
+  instead of being guessed.
 - The underlying behaviors were verified by the automated tests listed above:
   credential import/login (`accounts`, `connections`, `deviceflow`), proxy
   precedence and endpoint cooldown (`egress`), quota/reset separation
@@ -158,7 +166,10 @@ delisting, and free-only routing.
   `unknown`; only configured budgets produce proactive quota state.
 - Persisted JSON has not been consolidated into a new schema.
 - Legacy admin endpoints are retained for the announced compatibility window.
-- The admin UI has not been rebuilt around global concepts (Task 17).
+- The admin UI is not yet rebuilt around global concepts. Task 17 currently
+  adds one read-only global view beside the existing pages; the tab-level
+  reorganisation, visual review, and browser checks remain pending designer
+  availability.
 
 ## Commits under verification
 
@@ -167,4 +178,4 @@ delisting, and free-only routing.
 reconciliation → `3319e41` detector → `74bcb51` state store → `ab9f168`
 credentials → `f87f3f9` egress → `f9efd5d` planner → `25a24c3` custom
 dispatch → `3dcda73` Zen → `59ff8af` Cline → `f558ca5` admin projections →
-`a3a4092` residue removal → `0ec5b92` formatting.
+`a3a4092` residue removal → `0ec5b92` formatting → `eeccfc6` global view.
