@@ -3,11 +3,14 @@ package opencodezen
 import (
 	"context"
 	"fmt"
+	"io"
 	"net/http"
 	"slices"
+	"strings"
 	"sync"
 
 	"routenest/internal/domain"
+	"routenest/internal/modelcatalog"
 	"routenest/internal/provideradapters"
 	"routenest/internal/providerstate"
 	upstream "routenest/internal/upstream/zen"
@@ -47,7 +50,11 @@ func (a *Adapter) Invoke(ctx context.Context, in provideradapters.Invocation) (*
 	if in.HTTP == nil {
 		return nil, fmt.Errorf("opencodezen adapter: HTTP client is nil")
 	}
-	a.setSessionPool(in.SessionIDs)
+	if in.SessionID != "" {
+		a.setSessionPool([]string{in.SessionID})
+	} else {
+		a.setSessionPool(in.SessionIDs)
+	}
 	protocol := in.Protocol
 	if protocol == "" {
 		protocol = upstream.ProtocolChat
@@ -61,4 +68,53 @@ func (a *Adapter) Invoke(ctx context.Context, in provideradapters.Invocation) (*
 		return nil, fmt.Errorf("opencodezen adapter: build request: %w", err)
 	}
 	return in.HTTP.Do(req)
+}
+
+func (a *Adapter) DiscoverModels(ctx context.Context, in provideradapters.DiscoveryInput) ([]modelcatalog.Entry, error) {
+	if in.HTTP == nil {
+		return nil, fmt.Errorf("opencodezen adapter: HTTP client is nil")
+	}
+	sessionID := a.ids.New("ses", true)
+	requestID := a.ids.New("msg", false)
+	endpoint := strings.TrimRight(in.BaseURL, "/") + "/models"
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return nil, fmt.Errorf("opencodezen adapter: build models request: %w", err)
+	}
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Authorization", "Bearer "+in.APIKey)
+	req.Header.Set("User-Agent", "opencode/"+upstream.ClientVersion)
+	req.Header.Set("x-opencode-project", "global")
+	req.Header.Set("x-opencode-session", sessionID)
+	req.Header.Set("x-opencode-client", "cli")
+	for key, value := range in.Headers {
+		switch value {
+		case "$session":
+			value = sessionID
+		case "$request":
+			value = requestID
+		case "$project":
+			value = "global"
+		case "$client":
+			value = "cli"
+		}
+		if strings.TrimSpace(value) == "" {
+			req.Header.Del(key)
+		} else {
+			req.Header.Set(key, value)
+		}
+	}
+	resp, err := in.HTTP.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("models API returned status %d", resp.StatusCode)
+	}
+	body, err := io.ReadAll(io.LimitReader(resp.Body, modelcatalog.MaxCatalogBody))
+	if err != nil {
+		return nil, err
+	}
+	return modelcatalog.ParseModels(body)
 }

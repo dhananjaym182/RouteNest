@@ -14,8 +14,11 @@ import (
 	"time"
 
 	"routenest/internal/dispatch"
+	"routenest/internal/domain"
 	"routenest/internal/platform"
 	"routenest/internal/protocol/openaichat"
+	"routenest/internal/provideradapters"
+	"routenest/internal/providerstate"
 	zenupstream "routenest/internal/upstream/zen"
 )
 
@@ -147,13 +150,9 @@ func Call(params map[string]any, stream bool) (*http.Response, error) {
 	if err != nil {
 		return nil, fmt.Errorf("marshal zen body: %w", err)
 	}
-	zc := zenupstream.Client{
-		HTTP:     getZenHTTPClient(),
-		BaseURL:  cfg.BaseURL,
-		APIKey:   apiKey,
-		Headers:  cfg.ZenHeaders,
-		IDs:      zenIDs,
-		Sessions: zenSessions,
+	bundle, ok := provideradapters.Default().Get("opencodezen")
+	if !ok {
+		return nil, fmt.Errorf("opencode adapter is unavailable")
 	}
 
 	StateMu.Lock()
@@ -187,17 +186,21 @@ func Call(params map[string]any, stream bool) (*http.Response, error) {
 				modelID = m.ID
 			}
 		}
-		req, err := zc.BuildRequest(watchCtx, protoName, bodyJSON, params, modelID)
-		if err != nil {
-			watchdog.Stop()
-			watchCancel()
-			return nil, fmt.Errorf("create zen request: %w", err)
+		sess := zenSessionID(params)
+		credentialID := domain.CredentialID("opencode:public")
+		if anonymous && zenSessions.PoolLen() > 0 {
+			credentialID = SessionCredentialID(sess)
 		}
-		sess := req.Header.Get("x-opencode-session")
 		log.Printf("  zen upstream: model=%v proto=%s stream=%v(下游=%v) msgs=%d via=%s attempt=%d session=%s",
 			bodyParamsModel(params), protoName, anonymous, stream, getMsgCount(params), describeZenProxy(), attempt+1, platform.Truncate(sess, 30))
 
-		resp, err := zc.HTTP.Do(req)
+		resp, err := bundle.Invoker.Invoke(watchCtx, provideradapters.Invocation{
+			ProviderID: "opencode", HTTP: getZenHTTPClient(), BaseURL: cfg.BaseURL,
+			APIKey: apiKey, Headers: cfg.ZenHeaders,
+			Credential: provideradapters.Credential{ID: credentialID},
+			Body:       bodyJSON, Params: params, Stream: stream, Protocol: protoName,
+			ModelID: modelID, SessionID: sess, SessionIDs: zenSessions.PoolSessions(),
+		})
 		if err != nil {
 			watchdog.Stop()
 			watchCancel()
@@ -238,6 +241,7 @@ func Call(params map[string]any, stream bool) (*http.Response, error) {
 		watchCancel()
 		bodyBytes := readAllLimited(resp.Body, 64<<10)
 		resp.Body.Close()
+		observeZenFailure(bundle, credentialID, bodyParamsModel(params), resp, bodyBytes)
 		reason := fmt.Sprintf("zen API %d: %s", resp.StatusCode, platform.Truncate(string(bodyBytes), 500))
 
 		// 上游明确报「模型不存在」时清理下架残留（同步标记 Delisted 保留的模型）
@@ -312,6 +316,20 @@ func Call(params map[string]any, stream bool) (*http.Response, error) {
 
 		MarkFail()
 		return nil, fmt.Errorf("%s", reason)
+	}
+}
+
+func observeZenFailure(bundle provideradapters.Bundle, credentialID domain.CredentialID, modelID string, response *http.Response, body []byte) {
+	if bundle.FailureClassifier == nil || !providerstate.HasDefault() {
+		return
+	}
+	scope := domain.AvailabilityScope{ProviderID: "opencode", CredentialID: credentialID, ModelID: modelID}
+	for _, observation := range bundle.FailureClassifier.ClassifyFailure(provideradapters.FailureInput{
+		Scope: scope, StatusCode: response.StatusCode, Header: response.Header, Body: body,
+	}) {
+		if err := providerstate.Default().Apply(observation); err != nil {
+			log.Printf("opencode: apply availability observation: %v", err)
+		}
 	}
 }
 

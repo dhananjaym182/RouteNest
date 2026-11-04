@@ -1,8 +1,6 @@
 package credentials
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
 
 	"routenest/internal/domain"
@@ -32,8 +30,7 @@ func projectZenCredentials(key string, sessions []string) []domain.ProviderCrede
 		if session == "" {
 			continue
 		}
-		hash := sha256.Sum256([]byte(session))
-		credentialID := domain.CredentialID("opencode-session:" + hex.EncodeToString(hash[:8]))
+		credentialID := zen.SessionCredentialID(session)
 		if seen[credentialID] {
 			continue
 		}

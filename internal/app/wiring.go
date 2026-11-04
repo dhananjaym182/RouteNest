@@ -77,7 +77,7 @@ func configure() {
 		provideradapters.Bundle{ID: "openaicompat", Invoker: openAIAdapter, FailureClassifier: openAIAdapter},
 		provideradapters.Bundle{ID: "qoder", Invoker: qoderAdapter, FailureClassifier: qoderAdapter},
 		provideradapters.Bundle{ID: "cline", Invoker: clineAdapter, FailureClassifier: clineAdapter},
-		provideradapters.Bundle{ID: "opencodezen", Invoker: openCodeAdapter, FailureClassifier: openCodeAdapter},
+		provideradapters.Bundle{ID: "opencodezen", Invoker: openCodeAdapter, FailureClassifier: openCodeAdapter, ModelDiscoverer: openCodeAdapter},
 	)
 	if err != nil {
 		panic("app: build provider adapter registry: " + err.Error())

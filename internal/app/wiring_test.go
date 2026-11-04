@@ -37,6 +37,9 @@ func TestConfigureInstallsRequiredSeams(t *testing.T) {
 	if !provideradapters.HasDefault() {
 		t.Fatal("provider adapter registry not installed")
 	}
+	if bundle, ok := provideradapters.Default().Get("opencodezen"); !ok || bundle.ModelDiscoverer == nil {
+		t.Fatal("OpenCode Zen model discoverer not installed")
+	}
 	if !providerstate.HasDefault() {
 		t.Fatal("provider state store not installed")
 	}

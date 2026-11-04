@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"routenest/internal/accounts"
+	"routenest/internal/provideradapters"
+	opencodezenadapter "routenest/internal/provideradapters/opencodezen"
 	"routenest/internal/upstream/openaicompat"
 )
 
@@ -18,6 +20,16 @@ func init() {
 			MinMaxTokens:     16,
 			DefaultMaxTokens: 32000,
 		}
+	}
+	adapter := opencodezenadapter.New()
+	registry, err := provideradapters.NewRegistry(provideradapters.Bundle{
+		ID: "opencodezen", Invoker: adapter, FailureClassifier: adapter, ModelDiscoverer: adapter,
+	})
+	if err != nil {
+		panic(err)
+	}
+	if err := provideradapters.Publish(registry); err != nil {
+		panic(err)
 	}
 }
 
@@ -352,6 +364,18 @@ func TestCanonicalZenSessionFormat(t *testing.T) {
 	}
 	if zenSessionID(params4) == s2 {
 		t.Error("different conversations must derive different sessions")
+	}
+}
+
+func TestSessionCredentialIDIsStableAndRedacted(t *testing.T) {
+	const session = "ses_aaaaaaaaaaaaAAAAAAAAAAAAAA"
+	first := SessionCredentialID(session)
+	second := SessionCredentialID(session)
+	if first == "" || first != second {
+		t.Fatalf("credential IDs = %q and %q", first, second)
+	}
+	if strings.Contains(string(first), session) {
+		t.Fatalf("credential ID leaked session: %q", first)
 	}
 }
 

@@ -1,10 +1,13 @@
 package zen
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"log"
 	"sync"
 	"time"
 
+	"routenest/internal/domain"
 	zenupstream "routenest/internal/upstream/zen"
 )
 
@@ -39,6 +42,13 @@ func zenConversationSeed(params map[string]any) string {
 }
 
 var zenSessions = zenupstream.NewSessionCache()
+
+// SessionCredentialID returns the global redacted identity used for one
+// registered OpenCode session. The raw session must never leave the Zen owner.
+func SessionCredentialID(session string) domain.CredentialID {
+	hash := sha256.Sum256([]byte(session))
+	return domain.CredentialID("opencode-session:" + hex.EncodeToString(hash[:8]))
+}
 
 var (
 	zenPoolMu    sync.Mutex

@@ -2,17 +2,16 @@ package zen
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
-	"net/http"
 	"strings"
 	"sync"
 	"time"
 
 	"routenest/internal/modelcatalog"
 	"routenest/internal/models"
+	"routenest/internal/provideradapters"
 )
 
 // SyncResult is one model-catalog synchronization result.
@@ -48,35 +47,21 @@ func SyncModels() SyncResult {
 	}
 
 	cfg := GetConfig()
-	endpoint := strings.TrimRight(cfg.BaseURL, "/") + "/models"
-	req, err := http.NewRequest("GET", endpoint, nil)
-	if err != nil {
-		return fail(err)
+	bundle, ok := provideradapters.Default().Get("opencodezen")
+	if !ok || bundle.ModelDiscoverer == nil {
+		return fail(fmt.Errorf("opencode model discoverer is unavailable"))
 	}
-	req.Header.Set("Authorization", "Bearer "+cfg.Key)
-	req.Header.Set("User-Agent", "opencode/"+zenClientVersion)
-	req.Header.Set("x-opencode-project", "global")
-	req.Header.Set("x-opencode-session", opencodeIdentifier("ses", true))
-	req.Header.Set("x-opencode-client", "cli")
-	// 与 chat 同路：zen 代理池 + uTLS 指纹传输层，25s 超时
+	// 与 chat 同路：adapter receives the Zen uTLS/proxy client and a bounded
+	// context, preserving the existing 25-second catalogue timeout.
 	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
 	defer cancel()
-	req = req.WithContext(ctx)
-	resp, err := getZenHTTPClient().Do(req)
+	entries, err := bundle.ModelDiscoverer.DiscoverModels(ctx, provideradapters.DiscoveryInput{
+		HTTP: getZenHTTPClient(), BaseURL: cfg.BaseURL, APIKey: cfg.Key, Headers: cfg.ZenHeaders,
+	})
 	if err != nil {
-		return fail(err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return fail(fmt.Errorf("models API returned status %d", resp.StatusCode))
-	}
-
-	var payload struct {
-		Data []struct {
-			ID string `json:"id"`
-		} `json:"data"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		if errors.Is(err, modelcatalog.ErrNoModels) {
+			return fail(fmt.Errorf("models API returned empty list"))
+		}
 		return fail(err)
 	}
 
@@ -96,7 +81,7 @@ func SyncModels() SyncResult {
 		}
 		seen := make(map[string]bool)
 		var remote []Model
-		for _, item := range payload.Data {
+		for _, item := range entries {
 			id := item.ID
 			if id == "" || seen[id] {
 				continue
