@@ -55,6 +55,45 @@ func expiry(observation domain.AvailabilityObservation) time.Time {
 	return observation.Until
 }
 
+// Active reports whether an observation may still block a candidate at now.
+// Recovery/reset observations are clearing events, not blockers.
+func Active(observation domain.AvailabilityObservation, now time.Time) bool {
+	if observation.Kind == domain.ObservationRecovered || observation.Kind == domain.ObservationQuotaReset {
+		return false
+	}
+	until := expiry(observation)
+	return until.IsZero() || now.Before(until)
+}
+
+// ScopeMatches reports whether a blocking scope applies to a candidate scope.
+// A blocker's unset dimension is broader than the candidate's.
+func ScopeMatches(blocker, candidate domain.AvailabilityScope) bool {
+	if blocker.ProviderID != candidate.ProviderID {
+		return false
+	}
+	if blocker.CredentialID != "" && blocker.CredentialID != candidate.CredentialID {
+		return false
+	}
+	if blocker.ModelID != "" && blocker.ModelID != candidate.ModelID {
+		return false
+	}
+	if blocker.EgressID != "" && blocker.EgressID != candidate.EgressID {
+		return false
+	}
+	return true
+}
+
+// Blocks returns the active observations that apply to scope, in input order.
+func Blocks(observations []domain.AvailabilityObservation, scope domain.AvailabilityScope, now time.Time) []domain.AvailabilityObservation {
+	var out []domain.AvailabilityObservation
+	for _, observation := range observations {
+		if ScopeMatches(observation.Scope, scope) && Active(observation, now) {
+			out = append(out, observation)
+		}
+	}
+	return out
+}
+
 func (s *Store) expireLocked(now time.Time) {
 	for scope, byKind := range s.states {
 		for kind, observation := range byKind {
@@ -119,19 +158,7 @@ func (s *Store) Recover(scope domain.AvailabilityScope) error {
 }
 
 func scopeMatches(blocker, candidate domain.AvailabilityScope) bool {
-	if blocker.ProviderID != candidate.ProviderID {
-		return false
-	}
-	if blocker.CredentialID != "" && blocker.CredentialID != candidate.CredentialID {
-		return false
-	}
-	if blocker.ModelID != "" && blocker.ModelID != candidate.ModelID {
-		return false
-	}
-	if blocker.EgressID != "" && blocker.EgressID != candidate.EgressID {
-		return false
-	}
-	return true
+	return ScopeMatches(blocker, candidate)
 }
 
 func observationLess(a, b domain.AvailabilityObservation) bool {
