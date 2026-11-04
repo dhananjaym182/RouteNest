@@ -9,11 +9,13 @@ import (
 
 	"routenest/internal/config"
 	"routenest/internal/connections"
+	"routenest/internal/egress"
 	"routenest/internal/upstream/openaicompat"
 )
 
 func init() {
 	ConfigProvider = func() *config.Proxy { return config.DefaultProxy() }
+	egress.ConfigProvider = func() *config.Proxy { return config.DefaultProxy() }
 	TransportProvider = func() http.RoundTripper { return http.DefaultTransport }
 	BodyOptionsProvider = func() openaicompat.BodyOptions { return openaicompat.BodyOptions{} }
 	connections.RegisterProviderRefPruner(PruneConnectionRefs)

@@ -63,6 +63,9 @@ func TestCustomProviderServesModel(t *testing.T) {
 	egress.Client.Transport = freeModelRoundTripper(func(req *http.Request) (*http.Response, error) {
 		if req.URL.Host == "provider.test" {
 			providerCalls++
+			if req.Header.Get("Authorization") != "Bearer sk-x" {
+				t.Fatalf("provider API key missing, got %q", req.Header.Get("Authorization"))
+			}
 			body, _ := io.ReadAll(req.Body)
 			var params map[string]any
 			json.Unmarshal(body, &params)

@@ -9,10 +9,12 @@ import (
 	"time"
 
 	"routenest/internal/connections"
+	"routenest/internal/domain"
 	"routenest/internal/egress"
 	"routenest/internal/platform"
-	"routenest/internal/upstream/openaicompat"
-	"routenest/internal/upstream/qoder"
+	"routenest/internal/provideradapters"
+	"routenest/internal/providerreg"
+	"routenest/internal/providerstate"
 )
 
 func messageCount(params map[string]any) int {
@@ -23,21 +25,13 @@ func messageCount(params map[string]any) int {
 }
 
 func Call(p *CustomProvider, params map[string]any, stream bool) (*http.Response, error) {
-	protocol := Protocol(p)
-
-	// The qoder protocol builds its own signed body, so the OpenAI body
-	// preparation is skipped entirely for it.
-	var bodyJSON []byte
-	var err error
-	if protocol != "qoder" {
-		opts := BodyOptionsProvider()
-		if opts.Logf == nil {
-			opts.Logf = log.Printf
-		}
-		bodyJSON, err = openaicompat.PrepareBody(params, stream, opts)
-		if err != nil {
-			return nil, err
-		}
+	if p == nil {
+		return nil, fmt.Errorf("provider is nil")
+	}
+	adapterID := customInstance(providerreg.Builtin(), *p).AdapterID
+	bundle, ok := provideradapters.Default().Get(adapterID)
+	if !ok {
+		return nil, fmt.Errorf("provider %s: adapter %q is unavailable", p.Name, adapterID)
 	}
 
 	timeout := time.Duration(p.TimeoutSec) * time.Second
@@ -51,13 +45,6 @@ func Call(p *CustomProvider, params map[string]any, stream bool) (*http.Response
 		return nil, fmt.Errorf("provider %s: %w", p.Name, err)
 	}
 	httpCli := &http.Client{Transport: tr, Timeout: timeout}
-	pc := &openaicompat.Client{
-		HTTP:    httpCli,
-		BaseURL: p.BaseURL,
-		APIKey:  p.APIKey,
-		Headers: p.Headers,
-	}
-
 	modelKey := fmt.Sprintf("%v", params["model"])
 	log.Printf("  provider upstream: name=%s model=%v stream=%v msgs=%d", p.Name, modelKey, stream, messageCount(params))
 
@@ -73,14 +60,10 @@ func Call(p *CustomProvider, params map[string]any, stream bool) (*http.Response
 	if len(conns) == 0 {
 		conns = []*Connection{nil}
 	}
-	// qoder signs every request with per-account credentials (user id + machine
-	// id), so it cannot run on a bare API key.
-	if protocol == "qoder" && conns[0] == nil {
-		return nil, fmt.Errorf("provider %s: qoder requires a logged-in connection", p.Name)
-	}
 	for i, conn := range conns {
 		token := ""
 		extra := map[string]string{}
+		credential := provideradapters.Credential{}
 		// Bound connection: authenticate with the connection token and inject
 		// connection-level dynamic headers (e.g. the Kilo org header).
 		if conn != nil {
@@ -95,27 +78,27 @@ func Call(p *CustomProvider, params map[string]any, stream bool) (*http.Response
 					extra[spec.OrgHeader] = oid
 				}
 			}
+			metadata := make(map[string]string, len(conn.ProviderSpecificData))
+			for key, value := range conn.ProviderSpecificData {
+				metadata[key] = value
+			}
+			credential = provideradapters.Credential{
+				ID: domain.CredentialID("connection:" + conn.ID), Token: token,
+				Email: conn.Email, Headers: extra, Metadata: metadata,
+			}
+		} else if p.APIKey != "" {
+			credential.ID = domain.CredentialID("api-key:" + p.ID)
 		}
 		// Count at dispatch: RPM/daily budget measures requests actually sent upstream.
 		recordProviderDispatch(p.ID, modelKey)
 		started := time.Now()
 		var resp *http.Response
-		if protocol == "qoder" {
-			resp, err = qoder.Chat(context.Background(), httpCli, qoder.Creds{
-				UserID:    conn.ProviderSpecificData["userId"],
-				AuthToken: token,
-				Email:     conn.Email,
-				MachineID: conn.ProviderSpecificData["machineId"],
-				BaseURL:   p.BaseURL,
-			}, params, stream)
-		} else {
-			var req *http.Request
-			req, err = pc.BuildRequest(bodyJSON, openaicompat.RequestOptions{Token: token, Headers: extra})
-			if err != nil {
-				return nil, fmt.Errorf("create provider request: %w", err)
-			}
-			resp, err = httpCli.Do(req)
-		}
+		resp, err = bundle.Invoker.Invoke(context.Background(), provideradapters.Invocation{
+			ProviderID: domain.ProviderInstanceID(p.ID), HTTP: httpCli,
+			BaseURL: p.BaseURL, APIKey: p.APIKey, Headers: p.Headers,
+			Credential: credential, Params: params, Stream: stream,
+			Protocol: Protocol(p), ModelID: modelKey,
+		})
 		latency := time.Since(started).Milliseconds()
 		if err != nil {
 			recordProviderOutcome(p.ID, modelKey, false, latency)
@@ -134,6 +117,7 @@ func Call(p *CustomProvider, params map[string]any, stream bool) (*http.Response
 		bodyBytes, _ := io.ReadAll(io.LimitReader(resp.Body, 8<<10))
 		resp.Body.Close()
 		bodyStr := string(bodyBytes)
+		observeProviderFailure(bundle, p, credential.ID, modelKey, resp, bodyBytes)
 		// Connection-specific failure with siblings left in the pool:
 		// park this connection (401/403 -> reauth, 429 -> timed cooldown)
 		// and retry with the next connection now instead of failing the provider.
@@ -158,4 +142,21 @@ func Call(p *CustomProvider, params map[string]any, stream bool) (*http.Response
 		return nil, egress.NewAPIError(resp.StatusCode, platform.Truncate(bodyStr, 500))
 	}
 	return nil, fmt.Errorf("provider %s: no connection attempts made", p.Name)
+}
+
+func observeProviderFailure(bundle provideradapters.Bundle, provider *CustomProvider, credentialID domain.CredentialID, modelID string, response *http.Response, body []byte) {
+	if bundle.FailureClassifier == nil || !providerstate.HasDefault() {
+		return
+	}
+	scope := domain.AvailabilityScope{
+		ProviderID: domain.ProviderInstanceID(provider.ID), CredentialID: credentialID, ModelID: modelID,
+	}
+	observations := bundle.FailureClassifier.ClassifyFailure(provideradapters.FailureInput{
+		Scope: scope, StatusCode: response.StatusCode, Header: response.Header, Body: body,
+	})
+	for _, observation := range observations {
+		if err := providerstate.Default().Apply(observation); err != nil {
+			log.Printf("provider %s: apply availability observation: %v", provider.Name, err)
+		}
+	}
 }

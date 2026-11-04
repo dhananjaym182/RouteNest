@@ -2,6 +2,7 @@ package openaicompat
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -39,4 +40,29 @@ func TestAdapterInvokesOpenAICompatibleEndpoint(t *testing.T) {
 		t.Fatal(err)
 	}
 	resp.Body.Close()
+}
+
+func TestAdapterPreparesBodyFromParams(t *testing.T) {
+	var got map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&got); err != nil {
+			t.Fatalf("decode body: %v", err)
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer srv.Close()
+
+	resp, err := New().Invoke(context.Background(), provideradapters.Invocation{
+		HTTP: srv.Client(), BaseURL: srv.URL,
+		Params: map[string]any{
+			"model": "m", "messages": []any{}, "stream": false,
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if got["model"] != "m" {
+		t.Fatalf("prepared body = %#v", got)
+	}
 }

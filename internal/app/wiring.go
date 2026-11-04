@@ -61,7 +61,15 @@ func configure() {
 	if err := configureEgress(); err != nil {
 		panic("app: publish egress resolver: " + err.Error())
 	}
-	openAIAdapter := openaicompatadapter.New()
+	bodyOptionsProvider := func() openaicompat.BodyOptions {
+		return openaicompat.BodyOptions{
+			PassThroughKeys:     routing.PassThroughKeys,
+			MinMaxTokens:        routing.MinUpstreamMaxTokens,
+			DefaultMaxTokens:    routing.DefaultMaxTokens,
+			ModelMaxOutputLimit: routing.ModelMaxOutputLimit,
+		}
+	}
+	openAIAdapter := openaicompatadapter.New(bodyOptionsProvider)
 	qoderAdapter := qoderadapter.New()
 	clineAdapter := clineadapter.New()
 	openCodeAdapter := opencodezenadapter.New()
@@ -112,14 +120,6 @@ func configure() {
 	connections.IsFreeModel = routing.IsFreeModelID
 
 	providers.TransportProvider = func() http.RoundTripper { return egress.Client.Transport }
-	bodyOptionsProvider := func() openaicompat.BodyOptions {
-		return openaicompat.BodyOptions{
-			PassThroughKeys:     routing.PassThroughKeys,
-			MinMaxTokens:        routing.MinUpstreamMaxTokens,
-			DefaultMaxTokens:    routing.DefaultMaxTokens,
-			ModelMaxOutputLimit: routing.ModelMaxOutputLimit,
-		}
-	}
 	providers.BodyOptionsProvider = bodyOptionsProvider
 	zen.BodyOptionsProvider = bodyOptionsProvider
 	providers.ConfigProvider = config.Live

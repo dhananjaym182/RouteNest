@@ -2,6 +2,7 @@ package qoder
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 
 	"routenest/internal/domain"
@@ -15,6 +16,9 @@ type Adapter struct{}
 func New() *Adapter { return &Adapter{} }
 
 func (a *Adapter) Invoke(ctx context.Context, in provideradapters.Invocation) (*http.Response, error) {
+	if in.Credential.Token == "" || in.Credential.Metadata["userId"] == "" {
+		return nil, fmt.Errorf("qoder adapter: logged-in connection is required")
+	}
 	client := in.HTTP
 	if client == nil {
 		client = http.DefaultClient
