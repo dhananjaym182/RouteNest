@@ -6,6 +6,8 @@ import (
 	"routenest/internal/config"
 	"routenest/internal/domain"
 	"routenest/internal/egress"
+	"routenest/internal/provideradapters"
+	clineadapter "routenest/internal/provideradapters/cline"
 	"routenest/internal/providers"
 	"routenest/internal/routing"
 )
@@ -40,4 +42,17 @@ func init() {
 	setProxyConfig(testProxyConfig)
 	// Usage attribution is a composed hook in production; tests keep a no-op.
 	RecordUsage = func(*domain.Account, *http.Response, *domain.RequestLog, string, TokenUsage) {}
+	// The real composition root installs the adapter registry; this package
+	// cannot import app (app imports proxycore), so install the Cline bundle
+	// the dispatch path needs.
+	adapter := clineadapter.New()
+	registry, err := provideradapters.NewRegistry(provideradapters.Bundle{
+		ID: "cline", Invoker: adapter, FailureClassifier: adapter,
+	})
+	if err != nil {
+		panic(err)
+	}
+	if err := provideradapters.Publish(registry); err != nil {
+		panic(err)
+	}
 }

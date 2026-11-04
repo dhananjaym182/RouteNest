@@ -76,7 +76,7 @@ func configure() {
 	adapterRegistry, err := provideradapters.NewRegistry(
 		provideradapters.Bundle{ID: "openaicompat", Invoker: openAIAdapter, FailureClassifier: openAIAdapter},
 		provideradapters.Bundle{ID: "qoder", Invoker: qoderAdapter, FailureClassifier: qoderAdapter},
-		provideradapters.Bundle{ID: "cline", Invoker: clineAdapter, FailureClassifier: clineAdapter},
+		provideradapters.Bundle{ID: "cline", Invoker: clineAdapter, FailureClassifier: clineAdapter, ModelDiscoverer: clineAdapter},
 		provideradapters.Bundle{ID: "opencodezen", Invoker: openCodeAdapter, FailureClassifier: openCodeAdapter, ModelDiscoverer: openCodeAdapter},
 	)
 	if err != nil {

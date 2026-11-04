@@ -156,8 +156,16 @@ func TestCallClassifiesFailureIntoProviderState(t *testing.T) {
 	if classifier.inputs[0].Scope != scope || classifier.inputs[0].StatusCode != http.StatusTooManyRequests {
 		t.Fatalf("failure input = %+v", classifier.inputs[0])
 	}
-	if blocked := store.Blocking(scope); len(blocked) != 1 || blocked[0].Kind != domain.ObservationRateLimited {
-		t.Fatalf("provider state = %+v", blocked)
+	blocked := store.Blocking(scope)
+	foundClassified := false
+	for _, observation := range blocked {
+		if observation.Kind == domain.ObservationRateLimited &&
+			observation.Scope.CredentialID == "api-key:p" && observation.Confidence == domain.ConfidenceExplicit {
+			foundClassified = true
+		}
+	}
+	if !foundClassified {
+		t.Fatalf("classified provider state missing: %+v", blocked)
 	}
 }
 

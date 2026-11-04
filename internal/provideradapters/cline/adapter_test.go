@@ -44,3 +44,28 @@ func TestAdapterClassifiesClineQuotaReset(t *testing.T) {
 		t.Fatalf("observations = %+v", got)
 	}
 }
+
+func TestAdapterDiscoversRecommendedModels(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/recommended" {
+			t.Fatalf("path = %q", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{
+			"free":[{"id":"free/model","name":"Free","tags":["fast"]}],
+			"clinePass":[{"id":"pass/model"}],
+			"recommended":[{"id":"recommended/model"}]
+		}`))
+	}))
+	defer srv.Close()
+
+	entries, err := New().DiscoverModels(context.Background(), provideradapters.DiscoveryInput{
+		HTTP: srv.Client(), BaseURL: srv.URL + "/recommended",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 3 || entries[0].ID != "free/model" || !entries[0].FreeFlag || entries[1].ID != "pass/model" || entries[2].ID != "recommended/model" {
+		t.Fatalf("entries = %+v", entries)
+	}
+}

@@ -1,6 +1,10 @@
 package domain
 
-import "time"
+import (
+	"crypto/sha256"
+	"encoding/hex"
+	"time"
+)
 
 type CredentialKind string
 
@@ -42,6 +46,16 @@ type ProviderCredential struct {
 	CompletionTokens int64                `json:"completionTokens,omitempty"`
 	TotalTokens      int64                `json:"totalTokens,omitempty"`
 	CachedTokens     int64                `json:"cachedTokens,omitempty"`
+}
+
+// ClineCredentialID is the canonical global identity for a Cline account. Old
+// account records without AccountID use a redacted email fingerprint.
+func ClineCredentialID(accountID, email string) CredentialID {
+	if accountID != "" {
+		return CredentialID("cline:" + accountID)
+	}
+	hash := sha256.Sum256([]byte(email))
+	return CredentialID("cline:legacy:" + hex.EncodeToString(hash[:8]))
 }
 
 func (credential ProviderCredential) Valid() bool {

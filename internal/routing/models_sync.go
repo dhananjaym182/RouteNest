@@ -1,7 +1,7 @@
 package routing
 
 import (
-	"encoding/json"
+	"context"
 	"errors"
 	"fmt"
 	"log"
@@ -10,6 +10,7 @@ import (
 	"routenest/internal/egress"
 	"routenest/internal/modelcatalog"
 	"routenest/internal/models"
+	"routenest/internal/provideradapters"
 	"routenest/internal/zen"
 	"strings"
 	"sync"
@@ -32,25 +33,6 @@ const modelSyncTimeout = 10 * time.Second
 // 配置里的模型随之下架失效，每个请求都要先撞一次必败的上游往返。
 // 单次同步只是一个 10s 超时的 GET，每小时一次的成本可忽略；管理后台仍可手动触发。
 const clineModelSyncInterval = time.Hour
-
-// clineRemoteModel 对应接口返回的单个模型字段。
-type clineRemoteModel struct {
-	ID          string   `json:"id"`
-	Name        string   `json:"name"`
-	Tags        []string `json:"tags"`
-	ContextWin  int      `json:"contextWindow"`
-	MaxInput    int      `json:"maxInputTokens"`
-	MaxTokens   int      `json:"maxTokens"`
-	ReleaseDate string   `json:"releaseDate"`
-	Family      string   `json:"family"`
-}
-
-// clineRecommendedResponse 对应接口返回结构：recommended / free / clinePass 三个数组。
-type clineRecommendedResponse struct {
-	Recommended []clineRemoteModel `json:"recommended"`
-	Free        []clineRemoteModel `json:"free"`
-	ClinePass   []clineRemoteModel `json:"clinePass"`
-}
 
 // SyncResult 是一次模型同步的结果（供管理后台弹窗展示）。
 type SyncResult struct {
@@ -76,25 +58,25 @@ var (
 	remoteModelsEnabledMu sync.Mutex
 )
 
-// fetchClineRecommendedModels 拉取并解析 Cline 官方推荐模型接口。
-func fetchClineRecommendedModels() (clineRecommendedResponse, error) {
+// fetchClineRecommendedModels asks the Cline adapter for its authoritative
+// catalogue while retaining the legacy endpoint and timeout.
+func fetchClineRecommendedModels() ([]modelcatalog.Entry, error) {
 	// 复用全局 transport：模型同步与 Cline 对话同源（api.cline.bot），共用出口代理
 	client := &http.Client{Timeout: modelSyncTimeout, Transport: egress.Transport}
-	resp, err := client.Get(clineRecommendedModelsURL)
+	bundle, ok := provideradapters.Default().Get("cline")
+	if !ok || bundle.ModelDiscoverer == nil {
+		return nil, fmt.Errorf("cline model discoverer is unavailable")
+	}
+	entries, err := bundle.ModelDiscoverer.DiscoverModels(context.Background(), provideradapters.DiscoveryInput{
+		HTTP: client, BaseURL: clineRecommendedModelsURL,
+	})
+	if errors.Is(err, modelcatalog.ErrNoModels) {
+		return nil, fmt.Errorf("models API returned empty list")
+	}
 	if err != nil {
-		return clineRecommendedResponse{}, fmt.Errorf("fetch models: %w", err)
+		return nil, fmt.Errorf("fetch models: %w", err)
 	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return clineRecommendedResponse{}, fmt.Errorf("models API returned status %d", resp.StatusCode)
-	}
-
-	var data clineRecommendedResponse
-	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
-		return clineRecommendedResponse{}, fmt.Errorf("decode models: %w", err)
-	}
-	return data, nil
+	return entries, nil
 }
 
 // ModelMeta 是已知模型的上下文窗口 / 最大输出 token 元数据。
@@ -171,7 +153,7 @@ func syncClineModels() SyncResult {
 		return res
 	}
 
-	data, err := fetchClineRecommendedModels()
+	entries, err := fetchClineRecommendedModels()
 	if err != nil {
 		return fail(err)
 	}
@@ -187,15 +169,13 @@ func syncClineModels() SyncResult {
 		}
 		var remote []model
 		seen := make(map[string]bool)
-		addGroup := func(group []clineRemoteModel, inFree bool) {
+		addGroup := func(group []modelcatalog.Entry) {
 			for _, m := range group {
 				if m.ID == "" || seen[m.ID] {
 					continue
 				}
 				seen[m.ID] = true
-				tier, signal := modelcatalog.Classify(modelcatalog.Entry{
-					ID: m.ID, Name: m.Name, Tags: m.Tags, FreeFlag: inFree,
-				}, false, nil)
+				tier, signal := modelcatalog.Classify(m, false, nil)
 				entry := model{
 					ID:            m.ID,
 					Provider:      remoteProvider(m.ID),
@@ -234,9 +214,7 @@ func syncClineModels() SyncResult {
 				remote = append(remote, entry)
 			}
 		}
-		addGroup(data.Free, true)
-		addGroup(data.ClinePass, false)
-		addGroup(data.Recommended, false)
+		addGroup(entries)
 		return remote
 	})
 	if errors.Is(err, models.ErrEmptySource) {

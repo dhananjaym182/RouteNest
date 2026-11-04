@@ -40,6 +40,9 @@ func TestConfigureInstallsRequiredSeams(t *testing.T) {
 	if bundle, ok := provideradapters.Default().Get("opencodezen"); !ok || bundle.ModelDiscoverer == nil {
 		t.Fatal("OpenCode Zen model discoverer not installed")
 	}
+	if bundle, ok := provideradapters.Default().Get("cline"); !ok || bundle.ModelDiscoverer == nil {
+		t.Fatal("Cline model discoverer not installed")
+	}
 	if !providerstate.HasDefault() {
 		t.Fatal("provider state store not installed")
 	}

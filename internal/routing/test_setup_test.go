@@ -6,6 +6,8 @@ import (
 	"routenest/internal/accounts"
 	"routenest/internal/config"
 	"routenest/internal/domain"
+	"routenest/internal/provideradapters"
+	clineadapter "routenest/internal/provideradapters/cline"
 )
 
 type Model = domain.Model
@@ -33,6 +35,16 @@ func init() {
 		return accounts.LoadPool().Models
 	}
 	SetComboCatalog(testCombos{})
+	adapter := clineadapter.New()
+	registry, err := provideradapters.NewRegistry(provideradapters.Bundle{
+		ID: "cline", Invoker: adapter, FailureClassifier: adapter, ModelDiscoverer: adapter,
+	})
+	if err != nil {
+		panic(err)
+	}
+	if err := provideradapters.Publish(registry); err != nil {
+		panic(err)
+	}
 }
 
 // testCombos finds combos in the test proxy config. The enabled list stays empty,

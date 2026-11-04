@@ -1,9 +1,6 @@
 package credentials
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
-
 	"routenest/internal/accounts"
 	"routenest/internal/domain"
 )
@@ -13,11 +10,7 @@ type AccountsSource struct{}
 func (AccountsSource) Name() string { return "cline-accounts" }
 
 func clineCredentialID(accountID, email string) domain.CredentialID {
-	if accountID != "" {
-		return domain.CredentialID("cline:" + accountID)
-	}
-	hash := sha256.Sum256([]byte(email))
-	return domain.CredentialID("cline:legacy:" + hex.EncodeToString(hash[:8]))
+	return domain.ClineCredentialID(accountID, email)
 }
 
 func projectAccounts(list []*domain.Account) []domain.ProviderCredential {
