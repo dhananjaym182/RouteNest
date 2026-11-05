@@ -8,13 +8,23 @@ async function loadKeys() {
       el.innerHTML = '<div class="empty-state"><div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg></div>' + t('暂无 API 密钥') + '</div>';
       return;
     }
-    el.innerHTML = keys.map(k =>
-     '<div class="flex mb-8">' +
-        '<span class="key-display f1" onclick="copyText(\'' + k + '\')" title="' + t('点击复制') + '">' + esc(k) + '</span>' +
-        '<button class="btn btn-sm btn-danger" onclick="deleteKey(\'' + k + '\', this)" title="' + t('删除') + '" aria-label="' + t('删除') + '">'+uiIcon('close')+'</button>' +
-      '</div>'
-    ).join('');
+    el.textContent = '';
+    keys.forEach(k => {
+      const row = document.createElement('div'); row.className = 'key-row';
+      const masked = document.createElement('span'); masked.className = 'key-mask'; masked.textContent = maskAPIKey(k); masked.title = t('完整密钥已隐藏');
+      const copy = document.createElement('button'); copy.type = 'button'; copy.className = 'btn btn-sm'; copy.textContent = t('复制');
+      copy.addEventListener('click', () => copyText(k));
+      const del = document.createElement('button'); del.type = 'button'; del.className = 'btn btn-sm btn-danger'; del.innerHTML = uiIcon('close'); del.title = t('撤销'); del.setAttribute('aria-label', t('撤销'));
+      del.addEventListener('click', () => deleteKey(k, del));
+      row.appendChild(masked); row.appendChild(copy); row.appendChild(del); el.appendChild(row);
+    });
   } catch (e) { _('keysList').innerHTML = '<div class="empty">' + t('加载失败') + '</div>'; }
+}
+
+function maskAPIKey(key) {
+  const value = String(key || '');
+  if (value.length <= 8) return '••••' + value.slice(-2);
+  return value.slice(0, 4) + '••••••••' + value.slice(-4);
 }
 
 async function generateKey(btn) {
@@ -23,11 +33,12 @@ async function generateKey(btn) {
   try {
     const d = await api('POST', '/keys/generate');
     const key = d.data.key;
-    _('keyGenResult').innerHTML =
-      '<div class="save-banner">' +
-        '<div class="save-result ok mb-8">✓ ' + t('新密钥已生成（点击复制）') + '</div>' +
-        '<div class="key-display" onclick="copyText(\'' + key + '\')">' + esc(key) + '</div>' +
-      '</div>';
+    const result = _('keyGenResult');
+    result.textContent = '';
+    const banner = document.createElement('div'); banner.className = 'save-banner';
+    const note = document.createElement('div'); note.className = 'save-result ok mb-8'; note.textContent = t('新密钥仅在此处完整显示，请立即复制');
+    const display = document.createElement('button'); display.type = 'button'; display.className = 'key-display w-full'; display.textContent = key; display.addEventListener('click', () => copyText(key));
+    banner.appendChild(note); banner.appendChild(display); result.appendChild(banner);
     loadKeys();
     toast(t('密钥已生成'), 'success');
     setTimeout(() => _('keyGenResult').innerHTML = '', 8000);
@@ -58,10 +69,10 @@ async function deleteAllKeys() {
   } catch (e) { toast(t('删除失败: ') + e.message, 'error'); }
 }
 
-function copyText(t) {
-  navigator.clipboard.writeText(t).then(() => toast(t('已复制到剪贴板'), 'success')).catch(() => {
+function copyText(textValue) {
+  navigator.clipboard.writeText(textValue).then(() => toast(t('已复制到剪贴板'), 'success')).catch(() => {
     const ta = document.createElement('textarea');
-    ta.value = t; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta);
+    ta.value = textValue; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta);
     toast(t('已复制到剪贴板'), 'success');
   });
 }

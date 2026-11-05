@@ -76,4 +76,5 @@ var adminUICSSLayers = []string{
 	"ui/css/70_pages_overview_logs_health.css",
 	"ui/css/80_waves.css",
 	"ui/css/90_connection_import.css",
+	"ui/css/95_control_plane.css",
 }

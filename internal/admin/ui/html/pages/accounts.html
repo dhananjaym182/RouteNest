@@ -2,14 +2,14 @@
   <span id="tab-accounts" hidden aria-hidden="true"></span>
   <div class="page-header">
     <div>
-      <div class="page-kicker">Provider 系统</div>
-      <div class="large-title">凭据</div>
-      <div class="large-subtitle">统一查看已脱敏凭据，并管理 Cline 账号与 Provider OAuth 登录。</div>
+      <div class="page-kicker">连接管理</div>
+      <div class="large-title">账号与凭据</div>
+      <div class="large-subtitle">区分 Provider 定义与已认证连接，统一查看脱敏凭据、账号状态和用量。</div>
     </div>
     <div class="action-row"><button type="button" class="btn btn-sm" onclick="loadGlobal(true);loadAccounts();loadConnections()">刷新</button></div>
   </div>
   <div class="subtabs page-subtabs" data-page="accounts">
-    <div class="subtab active" data-sub="inventory">全部凭据</div>
+    <div class="subtab active" data-sub="inventory">凭据清单</div>
     <div class="subtab" data-sub="pool">Cline 账号</div>
     <div class="subtab" data-sub="conns">Provider OAuth</div>
   </div>
@@ -33,6 +33,34 @@
   </div>
 
   <div class="page-subpage" data-subpage="pool" style="display:none">
+  <div class="metric-section">
+    <div class="pool-hero">
+      <div class="pool-hero-top">
+        <div class="pool-hero-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/></svg>Cline 账号池状态</div>
+        <div class="pool-requests">累计请求 <b id="statPoolRequests">-</b></div>
+      </div>
+      <div class="cap-bar" id="poolCapBar" role="img" aria-label="池容量分布">
+        <span class="cap-seg ok" id="capSegActive"></span>
+        <span class="cap-seg warn" id="capSegCooldown"></span>
+        <span class="cap-seg bad" id="capSegExpired"></span>
+      </div>
+      <div class="pool-chips">
+        <span class="chip">总数 <b id="statTotal">-</b></span>
+        <span class="chip ok"><span class="dot"></span>活跃 <b id="statActive">-</b></span>
+        <span class="chip warn"><span class="dot"></span>冷却 <b id="statCooldown">-</b></span>
+        <span class="chip bad"><span class="dot"></span>已过期 <b id="statExpired">-</b></span>
+      </div>
+    </div>
+  </div>
+  <div class="metric-section">
+    <div class="metric-heading">Cline 账号累计 Token</div>
+    <div class="tiles">
+      <div class="stat-tile"><div class="tile-body"><div class="tile-num" id="statPromptTokens">-</div><div class="tile-label">输入 Token</div></div></div>
+      <div class="stat-tile"><div class="tile-body"><div class="tile-num" id="statCompletionTokens">-</div><div class="tile-label">输出 Token</div></div></div>
+      <div class="stat-tile"><div class="tile-body"><div class="tile-num" id="statTotalTokens">-</div><div class="tile-label">总 Token</div><div class="tile-sub" id="statAvgPerReq">平均 -/请求</div></div></div>
+      <div class="stat-tile"><div class="tile-body"><div class="tile-num" id="statCachedTokens">-</div><div class="tile-label">缓存 Token</div><div class="tile-sub" id="statCacheRate">缓存率 -</div></div></div>
+    </div>
+  </div>
   <div class="section">
     <div class="section-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg><span>Cline 账号池</span>
       <span class="title-tools action-row">

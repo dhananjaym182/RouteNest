@@ -2,7 +2,14 @@
 async function api(method, path, body) {
   const opts = { method, headers: {} };
   if (body) { opts.headers['Content-Type'] = 'application/json'; opts.body = JSON.stringify(body); }
-  const res = await fetch(API + path, opts);
+  let res;
+  try {
+    res = await fetch(API + path, opts);
+    setGatewayReachability(true);
+  } catch (e) {
+    setGatewayReachability(false);
+    throw e;
+  }
   if (res.status === 401) {
     showLogin();
     throw new Error(t('需要登录'));
@@ -10,6 +17,17 @@ async function api(method, path, body) {
   const data = await res.json();
   if (!data.success && data.error) throw new Error(data.error);
   return data;
+}
+
+let _gatewayReachable = null;
+function setGatewayReachability(ok) {
+  _gatewayReachable = ok;
+  const el = _('gatewayStatus'), label = _('gatewayStatusLabel');
+  if (!el || !label) return;
+  el.classList.toggle('is-online', ok === true);
+  el.classList.toggle('is-offline', ok === false);
+  el.classList.toggle('is-checking', ok == null);
+  label.textContent = ok === true ? t('管理 API 可访问') : (ok === false ? t('管理 API 不可访问') : t('正在检查网关'));
 }
 
 // ========== 后台登录 ==========
@@ -52,8 +70,11 @@ async function openExternal(url) {
 const THEME_KEY = 'cline_admin_theme';
 function applyTheme(theme) {
   document.documentElement.dataset.theme = theme;
-  document.querySelectorAll('#themeSwitch button').forEach(btn => {
+  const themeMeta = document.querySelector('meta[name="theme-color"]');
+  if (themeMeta) themeMeta.setAttribute('content', theme === 'dark' ? '#0B1020' : '#F7F8FC');
+  document.querySelectorAll('[data-theme-opt]').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.themeOpt === theme);
+    btn.setAttribute('aria-pressed', btn.dataset.themeOpt === theme ? 'true' : 'false');
   });
 }
 function setTheme(theme) {
@@ -62,6 +83,37 @@ function setTheme(theme) {
   applyTheme(theme);
 }
 applyTheme(document.documentElement.dataset.theme || 'light');
+
+// ========== 移动端导航 ==========
+let _mobileNavReturnFocus = null;
+function toggleMobileNav(force) {
+  const wasOpen = document.documentElement.dataset.mobileNav === 'open';
+  const open = force === undefined ? !wasOpen : !!force;
+  if (open && !wasOpen) _mobileNavReturnFocus = document.activeElement;
+  if (open) document.documentElement.dataset.mobileNav = 'open';
+  else delete document.documentElement.dataset.mobileNav;
+  const btn = _('mobileNavBtn');
+  if (btn) {
+    btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    btn.setAttribute('aria-label', t(open ? '关闭导航' : '打开导航'));
+  }
+  const main = document.querySelector('.main');
+  if (main) {
+    if (open) main.setAttribute('inert', '');
+    else main.removeAttribute('inert');
+  }
+  if (open) {
+    requestAnimationFrame(() => {
+      const target = document.querySelector('.sidebar .nav-item.active') || document.querySelector('.sidebar .nav-item');
+      if (target) target.focus();
+    });
+  } else if (wasOpen && _mobileNavReturnFocus && typeof _mobileNavReturnFocus.focus === 'function') {
+    _mobileNavReturnFocus.focus();
+    _mobileNavReturnFocus = null;
+  }
+}
+function closeMobileNav() { toggleMobileNav(false); }
+window.addEventListener('resize', () => { if (window.innerWidth > 900) closeMobileNav(); });
 
 // ========== 抽屉（右侧滑出编辑器） ==========
 const _openDrawers = [];
@@ -96,6 +148,7 @@ function _modalLayerOpen() {
   return _ESC_MODAL_IDS.some(id => { const el = _(id); return el && el.style.display === 'flex'; });
 }
 document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && document.documentElement.dataset.mobileNav === 'open') { closeMobileNav(); return; }
   if (e.key === 'Escape' && _openDrawers.length && !_modalLayerOpen()) closeDrawer(_openDrawers[_openDrawers.length - 1]);
 });
 

@@ -2,9 +2,9 @@
   <span id="tab-upstreams" hidden aria-hidden="true"></span>
   <div class="page-header">
     <div>
-      <div class="page-kicker">Provider 系统</div>
-      <div class="large-title">网络</div>
-      <div class="large-subtitle">查看出口配置，并管理上游连接、代理池与请求头。</div>
+      <div class="page-kicker">连接管理</div>
+      <div class="large-title">网络与出口</div>
+      <div class="large-subtitle">查看脱敏出口配置，并管理上游连接、代理池与请求头。</div>
     </div>
     <div class="action-row"><button type="button" class="btn btn-sm" onclick="loadGlobal(true);loadOcConfig();loadClineProxyConfig();loadZenHeaders()">刷新</button></div>
   </div>
@@ -22,6 +22,15 @@
   </div>
 
   <div class="page-subpage" data-subpage="zen">
+  <div class="metric-section">
+    <div class="metric-heading">OpenCode Zen 今日用量</div>
+    <div class="tiles">
+      <div class="stat-tile"><div class="tile-body"><div class="tile-num" id="statOcRequests">-</div><div class="tile-label">请求数</div></div></div>
+      <div class="stat-tile"><div class="tile-body"><div class="tile-num" id="statOcInputTokens">-</div><div class="tile-label">输入 Token</div></div></div>
+      <div class="stat-tile"><div class="tile-body"><div class="tile-num" id="statOcOutputTokens">-</div><div class="tile-label">输出 Token</div></div></div>
+      <div class="stat-tile"><div class="tile-body"><div class="tile-num" id="statOcTotalTokens">-</div><div class="tile-label">总 Token</div></div></div>
+    </div>
+  </div>
   <div class="section">
     <div class="section-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg><span>OpenCode Zen 服务</span>
       <span class="title-tools">

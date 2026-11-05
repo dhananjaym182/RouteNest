@@ -198,18 +198,25 @@ func TestAdminUICanonicalNavigationLabels(t *testing.T) {
 			name:  "sidebar",
 			asset: "ui/html/shell.html",
 			want: []string{
+				`class="nav-section-label">工作区</div>`,
 				`data-tab="providers"`,
-				`class="nav-label">Providers</span>`,
+				`class="nav-label">Provider 管理</span>`,
 				`data-tab="credentials"`,
-				`class="nav-label">凭据</span>`,
+				`class="nav-label">账号与凭据</span>`,
 				`data-tab="models"`,
-				`class="nav-label">模型</span>`,
+				`class="nav-label">模型与授权</span>`,
 				`data-tab="routing"`,
-				`class="nav-label">路由</span>`,
+				`class="nav-label">路由策略</span>`,
+				`data-tab="combos"`,
+				`class="nav-label">路由组合</span>`,
 				`data-tab="network"`,
-				`class="nav-label">网络</span>`,
+				`class="nav-label">网络与出口</span>`,
+				`data-tab="logs"`,
+				`class="nav-label">请求日志</span>`,
+				`data-tab="quota"`,
+				`class="nav-label">用量与配额</span>`,
 				`data-tab="health"`,
-				`class="nav-label">使用与健康</span>`,
+				`class="nav-label">Provider 健康</span>`,
 			},
 		},
 		{
@@ -217,8 +224,8 @@ func TestAdminUICanonicalNavigationLabels(t *testing.T) {
 			asset: "ui/html/pages/accounts.html",
 			want: []string{
 				`id="tab-credentials"`,
-				`class="large-title">凭据</div>`,
-				`data-sub="inventory">全部凭据</div>`,
+				`class="large-title">账号与凭据</div>`,
+				`data-sub="inventory">凭据清单</div>`,
 				`data-sub="pool">Cline 账号</div>`,
 				`data-sub="conns">Provider OAuth</div>`,
 			},
@@ -227,7 +234,7 @@ func TestAdminUICanonicalNavigationLabels(t *testing.T) {
 			name:  "routing",
 			asset: "ui/html/pages/routing.html",
 			want: []string{
-				`class="large-title">路由</div>`,
+				`class="large-title">路由策略</div>`,
 				`data-sub="config">路由策略</div>`,
 				`data-sub="tuning">运行调优</div>`,
 				`data-sub="models" title="打开模型页">模型目录 ↗</div>`,
@@ -238,7 +245,7 @@ func TestAdminUICanonicalNavigationLabels(t *testing.T) {
 			asset: "ui/html/pages/upstreams.html",
 			want: []string{
 				`id="tab-network"`,
-				`class="large-title">网络</div>`,
+				`class="large-title">网络与出口</div>`,
 				`data-sub="zen">OpenCode Zen</div>`,
 				`data-sub="cline">出口代理池</div>`,
 				`data-sub="headers">上游请求头</div>`,
@@ -248,14 +255,15 @@ func TestAdminUICanonicalNavigationLabels(t *testing.T) {
 			name:  "english translations",
 			asset: "ui/js/01_i18n.js",
 			want: []string{
-				`'凭据': 'Credentials'`,
+				`'账号与凭据': 'Accounts & Credentials'`,
+				`'Provider 管理': 'Providers'`,
 				`'Cline 账号': 'Cline Accounts'`,
 				`'Provider OAuth': 'Provider OAuth'`,
 				`'路由策略': 'Routing Policy'`,
 				`'运行调优': 'Runtime Tuning'`,
 				`'模型目录': 'Model Catalog'`,
-				`'网络': 'Network'`,
-				`'使用与健康': 'Usage & Health'`,
+				`'网络与出口': 'Network & Egress'`,
+				`'Provider 健康': 'Provider Health'`,
 				`'出口代理池': 'Egress Proxies'`,
 				`'上游请求头': 'Request Headers'`,
 			},
@@ -326,6 +334,13 @@ func TestAdminUIDirectSubtabLinks(t *testing.T) {
 	}
 }
 
+func TestAdminUIProviderEditorDoesNotCloseApplicationShell(t *testing.T) {
+	src := adminUIAsset(t, "ui/html/dialogs/provider_editor.html")
+	if opens, closes := strings.Count(src, "<div"), strings.Count(src, "</div>"); opens != closes {
+		t.Fatalf("provider editor fragment has %d opening divs and %d closing divs", opens, closes)
+	}
+}
+
 func TestAdminUICanonicalAccountReferences(t *testing.T) {
 	assets := []string{
 		"ui/html/pages/accounts.html",
@@ -348,7 +363,7 @@ func TestAdminUICanonicalOpenCodeLabels(t *testing.T) {
 		asset string
 		want  string
 	}{
-		{"ui/html/pages/dashboard.html", "今日 · OpenCode Zen 免费模型"},
+		{"ui/html/pages/upstreams.html", "OpenCode Zen 今日用量"},
 		{"ui/html/pages/models.html", "从 OpenCode Zen 同步模型"},
 		{"ui/html/pages/upstreams.html", "OpenCode Zen 出口代理"},
 		{"ui/html/pages/upstreams.html", "OpenCode Zen 请求头"},
@@ -373,7 +388,7 @@ func TestAdminGlobalProviderViewCoversCapabilityInventory(t *testing.T) {
 			t.Errorf("navigation has no canonical %s entry", tab)
 		}
 	}
-	for _, legacy := range []string{"global", "accounts", "upstreams", "combos", "dashboard", "logs", "quota"} {
+	for _, legacy := range []string{"global", "accounts", "upstreams"} {
 		if strings.Contains(shell, `data-tab="`+legacy+`"`) {
 			t.Errorf("legacy %s remains a primary navigation item", legacy)
 		}

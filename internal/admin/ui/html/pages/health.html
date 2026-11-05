@@ -1,12 +1,14 @@
 <div id="tab-health" class="tab-panel system-page" style="display:none">
   <div class="page-header">
     <div>
-      <div class="page-kicker">Provider 系统</div>
-      <div class="large-title">使用与健康</div>
-      <div class="large-subtitle">查看运行状态证据，并进入用量、请求日志与预算工具。</div>
+      <div class="page-kicker">可观测性</div>
+      <div class="large-title">Provider 健康</div>
+      <div class="large-subtitle">区分 Provider 配置、凭据状态、冷却与上游重置证据。</div>
     </div>
     <div class="action-row"><button type="button" class="btn btn-sm" onclick="loadGlobal(true)">刷新状态</button></div>
   </div>
+
+  <div id="globalHealthSummary" class="health-summary-grid" aria-live="polite"></div>
 
   <div class="health-links" aria-label="使用与健康工具">
     <button type="button" class="health-link-card" onclick="switchTab('dashboard')">

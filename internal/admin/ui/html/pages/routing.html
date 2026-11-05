@@ -1,14 +1,26 @@
 <div id="tab-routing" class="tab-panel" style="display:none">
   <div class="page-header">
     <div>
-      <div class="page-kicker">Provider 系统</div>
-      <div class="large-title">路由</div>
-      <div class="large-subtitle">配置候选选择、回退顺序与运行行为。</div>
+      <div class="page-kicker">模型管理</div>
+      <div class="large-title">路由策略</div>
+      <div class="large-subtitle">配置逻辑模型解析、Provider 候选、账号选择和全局回退。</div>
     </div>
     <div class="action-row">
       <button type="button" class="btn btn-sm" onclick="switchTab('models')">查看模型</button>
       <button type="button" class="btn btn-sm" onclick="switchTab('combos')">管理模型组合</button>
     </div>
+  </div>
+
+  <div class="route-flow" aria-label="路由解析流程">
+    <div class="route-flow-node"><span>01</span><small>客户端请求</small><strong>逻辑模型 / 别名</strong></div>
+    <i aria-hidden="true">→</i>
+    <div class="route-flow-node"><span>02</span><small>默认或请求模型</small><strong id="routeFlowModel">加载中…</strong></div>
+    <i aria-hidden="true">→</i>
+    <div class="route-flow-node"><span>03</span><small>候选选择</small><strong id="routeFlowStrategy">加载中…</strong></div>
+    <i aria-hidden="true">→</i>
+    <div class="route-flow-node"><span>04</span><small>可用 Provider / 账号 / 授权</small><strong>按资格与优先级派发</strong></div>
+    <i aria-hidden="true">→</i>
+    <div class="route-flow-node"><span>05</span><small>失败后的兜底</small><strong id="routeFlowFallback">加载中…</strong></div>
   </div>
 
   <div class="subtabs page-subtabs" data-page="routing">

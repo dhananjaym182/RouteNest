@@ -1,8 +1,9 @@
 <div id="tab-security" class="tab-panel" style="display:none">
   <div class="page-header">
     <div>
-      <div class="large-title">密钥与安全</div>
-      <div class="large-subtitle">API 密钥、访问控制与危险操作</div>
+      <div class="page-kicker">系统</div>
+      <div class="large-title">API 密钥与安全</div>
+      <div class="large-subtitle">管理客户端密钥、后台访问控制和危险操作。</div>
     </div>
   </div>
 
@@ -16,11 +17,12 @@
   <div class="section">
     <div class="section-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg><span>API 密钥管理</span>
       <span class="title-tools">
-        <button class="btn btn-sm btn-success" onclick="generateKey(this)">生成新密钥</button>
+        <button class="btn btn-sm btn-primary" onclick="generateKey(this)">生成新密钥</button>
       </span>
     </div>
     <div class="section-desc">生成的密钥可用于客户端访问代理 API（作为 x-api-key 或 Authorization 头）。</div>
     <div class="section-body">
+      <div class="security-note mb-12">已保存密钥默认脱敏。新密钥只在生成后短暂完整显示；当前后端未提供别名、创建时间或最后使用时间。</div>
       <div id="keysList"></div>
       <div id="keyGenResult" class="mt-8" aria-live="polite"></div>
     </div>

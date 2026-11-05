@@ -1,9 +1,9 @@
 <div id="tab-providers" class="tab-panel system-page" style="display:none">
   <div class="page-header">
     <div>
-      <div class="page-kicker">Provider 系统</div>
-      <div class="large-title">Providers</div>
-      <div class="large-subtitle">查看所有可路由上游及其已知能力，再按需管理自定义 Provider。</div>
+      <div class="page-kicker">连接管理</div>
+      <div class="large-title">Provider 管理</div>
+      <div class="large-subtitle">统一查看上游平台、认证方式、账号与模型数量，再管理自定义 Provider。</div>
     </div>
     <div class="action-row">
       <button type="button" class="btn btn-sm" onclick="loadGlobal(true);loadProviders()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>刷新</button>
@@ -11,9 +11,9 @@
   </div>
   <div class="system-hero">
     <div class="system-hero-copy">
-      <span class="system-hero-label">全局清单</span>
-      <h2>一个 Provider 视图，覆盖全部上游</h2>
-      <p>能力状态来自运行时定义；未知与不支持不会被隐藏或猜测。</p>
+      <span class="system-hero-label">Provider 目录</span>
+      <h2>多 Provider 资源概览</h2>
+      <p>能力状态、凭据与模型数量来自现有运行时投影；未知值保持未知。</p>
     </div>
     <div id="globalSummary" class="system-summary" aria-live="polite"></div>
   </div>
@@ -21,9 +21,19 @@
     <div class="section-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15 15 0 0 1 0 20M12 2a15 15 0 0 0 0 20"/></svg><span>Provider 清单</span></div>
     <div class="section-desc">内置与自定义上游统一展示。打开关联视图时会保留当前 Provider 筛选。</div>
     <div class="system-toolbar">
-      <div class="field system-filter-field">
-        <label for="globalProviderFilter">Provider 筛选</label>
-        <select id="globalProviderFilter" onchange="setGlobalFilter(this.value)"></select>
+      <div class="system-toolbar-grid">
+        <div class="field system-filter-field system-search-field">
+          <label for="globalProviderSearch">搜索</label>
+          <input type="search" id="globalProviderSearch" placeholder="搜索名称、ID、适配器或地址…" oninput="setGlobalProviderSearch(this.value)">
+        </div>
+        <div class="field system-filter-field">
+          <label for="globalProviderFilter">Provider</label>
+          <select id="globalProviderFilter" onchange="setGlobalFilter(this.value)"></select>
+        </div>
+        <div class="field system-filter-field">
+          <label for="globalProviderKindFilter">类型</label>
+          <select id="globalProviderKindFilter" onchange="setGlobalProviderKind(this.value)"><option value="">全部类型</option></select>
+        </div>
       </div>
       <div class="capability-legend" aria-label="能力状态图例">
         <span class="capability-state capability-supported">支持</span>

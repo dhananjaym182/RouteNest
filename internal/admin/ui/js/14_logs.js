@@ -6,6 +6,9 @@ let _logItems = [];       // 已加载日志（新→旧），筛选/渲染都�
 let _logIds = new Set();  // 已知 ID 集合，跟随轮询去重用
 let _logFilter = 'all';   // all|ok|fail|stream|combo|fallback
 let _logSearch = '';
+let _logTimeHours = 0;
+let _logProvider = '';
+let _logModel = '';
 let _logPending = [];     // 暂停跟随时缓冲的新日志
 // 跟随新日志为客户端实时视图开关：默认开，用户手动停用后持久化（跨标签页/刷新保留）
 const LOG_FOLLOW_KEY = 'cline_admin_log_follow';
@@ -120,6 +123,12 @@ function logMatches(l) {
   if (!f.fn(l)) return false;
   const sel = _('logFilterProtocol');
   if (sel && sel.value && (l.protocol || '') !== sel.value) return false;
+  if (_logProvider && logProviderKey(l) !== _logProvider) return false;
+  if (_logModel && (l.model || '') !== _logModel && (l.requestedModel || '') !== _logModel) return false;
+  if (_logTimeHours > 0) {
+    const ts = new Date(l.startedAt).getTime();
+    if (!ts || ts < Date.now() - _logTimeHours * 3600000) return false;
+  }
   if (_logSearch) {
     const q = _logSearch.toLowerCase();
     const hay = [l.model, l.requestedModel, l.accountEmail, l.connectionEmail, l.providerName, l.id,
@@ -127,6 +136,10 @@ function logMatches(l) {
     if (hay.indexOf(q) === -1) return false;
   }
   return true;
+}
+
+function logProviderKey(l) {
+  return l.providerName || l.upstream || (l.accountEmail ? 'cline' : 'unknown');
 }
 
 function updateLogChips() {
@@ -146,6 +159,16 @@ function updateLogChips() {
     sel.innerHTML = '<option value="">' + t('全部协议') + '</option>' +
       protos.map(p => '<option value="' + escAttr(p) + '"' + (p === cur ? ' selected' : '') + '>' + esc(p) + '</option>').join('');
   }
+  const providerSel = _('logFilterProvider');
+  if (providerSel) {
+    const providers = [...new Set(_logItems.map(logProviderKey).filter(Boolean))].sort();
+    providerSel.innerHTML = '<option value="">' + t('全部 Provider') + '</option>' + providers.map(p => '<option value="' + escAttr(p) + '"' + (p === _logProvider ? ' selected' : '') + '>' + esc(p) + '</option>').join('');
+  }
+  const modelSel = _('logFilterModel');
+  if (modelSel) {
+    const models = [...new Set(_logItems.flatMap(l => [l.model, l.requestedModel]).filter(Boolean))].sort();
+    modelSel.innerHTML = '<option value="">' + t('全部模型') + '</option>' + models.map(m => '<option value="' + escAttr(m) + '"' + (m === _logModel ? ' selected' : '') + '>' + esc(m) + '</option>').join('');
+  }
 }
 
 function setLogFilter(key) {
@@ -155,6 +178,13 @@ function setLogFilter(key) {
 }
 
 function onLogProtoFilterChange() { renderLogList(); }
+
+function onLogAdvancedFilterChange() {
+  _logTimeHours = Number((_('logFilterTime') && _('logFilterTime').value) || 0) || 0;
+  _logProvider = (_('logFilterProvider') && _('logFilterProvider').value) || '';
+  _logModel = (_('logFilterModel') && _('logFilterModel').value) || '';
+  renderLogList();
+}
 
 function onLogSearchInput() {
   clearTimeout(_logSearchT);

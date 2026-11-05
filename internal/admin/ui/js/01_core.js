@@ -7,8 +7,22 @@ function detectLang(){
   return (navigator.language||'').toLowerCase().startsWith('zh') ? 'zh' : 'en';
 }
 function t(s){ if (LANG==='en' && s && I18N[s]) return I18N[s]; return s; }
-// 反向映射：英文 → 中文（用于切回中文时还原静态文本）
-const I18N_REV = Object.keys(I18N).reduce((acc, k) => { acc[I18N[k]] = k; return acc; }, {});
+// Only retain unambiguous English → Chinese fallbacks. Static DOM nodes keep
+// their own source key below, so collisions such as "Providers" cannot restore
+// the wrong Chinese label after an English session.
+const I18N_REV = Object.keys(I18N).reduce((acc, k) => {
+  const value = I18N[k];
+  if (!Object.prototype.hasOwnProperty.call(acc, value)) acc[value] = k;
+  else acc[value] = null;
+  return acc;
+}, {});
+const _i18nTextSources = new WeakMap();
+const _i18nAttrSources = new WeakMap();
+function i18nSourceKey(value) {
+  if (!value) return value;
+  if (Object.prototype.hasOwnProperty.call(I18N, value)) return value;
+  return I18N_REV[value] || value;
+}
 function applyLang(){
   if (LANG === 'en') {
     document.title = 'RouteNest Admin';
@@ -18,29 +32,48 @@ function applyLang(){
   const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
   const nodes = [];
   while (walker.nextNode()) nodes.push(walker.currentNode);
-  const dict = (LANG === 'en') ? I18N : I18N_REV;
   for (const n of nodes){
+    const parentTag = n.parentElement && n.parentElement.tagName;
+    if (parentTag === 'SCRIPT' || parentTag === 'STYLE' || parentTag === 'NOSCRIPT') continue;
     const txt = n.nodeValue;
     if (!txt) continue;
     const trimmed = txt.trim();
-    if (trimmed && dict[trimmed] && dict[trimmed] !== trimmed){
-      n.nodeValue = txt.replace(trimmed, dict[trimmed]);
+    if (!trimmed) continue;
+    let source = _i18nTextSources.get(n);
+    if (!source || trimmed !== source.rendered) {
+      source = { raw: txt, key: i18nSourceKey(trimmed), rendered: trimmed };
+      _i18nTextSources.set(n, source);
     }
+    const rendered = LANG === 'en' ? (I18N[source.key] || source.key) : source.key;
+    if (trimmed !== rendered) n.nodeValue = source.raw.replace(source.raw.trim(), rendered);
+    source.rendered = rendered;
   }
   // Wave-5: placeholder/aria-label carry user-visible copy too, so they follow
   // the same exact-match dictionary as text nodes and [title].
   document.querySelectorAll('[title],[placeholder],[aria-label]').forEach(el=>{
+    let sources = _i18nAttrSources.get(el);
+    if (!sources) { sources = {}; _i18nAttrSources.set(el, sources); }
     for (const attr of ['title','placeholder','aria-label']) {
-      const k=(el.getAttribute(attr)||'').trim();
-      if (k && dict[k]) el.setAttribute(attr, dict[k]);
+      const current = (el.getAttribute(attr) || '').trim();
+      if (!current) continue;
+      let source = sources[attr];
+      if (!source || current !== source.rendered) {
+        source = { key: i18nSourceKey(current), rendered: current };
+        sources[attr] = source;
+      }
+      const rendered = LANG === 'en' ? (I18N[source.key] || source.key) : source.key;
+      if (current !== rendered) el.setAttribute(attr, rendered);
+      source.rendered = rendered;
     }
   });
-  _('langZh').classList.toggle('active', LANG === 'zh');
-  if (_('langEn')) _('langEn').classList.toggle('active', LANG === 'en');
-  const lp = LANG === 'en' ? 'false' : 'true';
-  if (_('langZh')) _('langZh').setAttribute('aria-pressed', lp);
-  if (_('langEn')) _('langEn').setAttribute('aria-pressed', LANG === 'en' ? 'true' : 'false');
+  document.querySelectorAll('[data-lang-opt]').forEach(btn => {
+    const active = btn.dataset.langOpt === LANG;
+    btn.classList.toggle('active', active);
+    btn.setAttribute('aria-pressed', active ? 'true' : 'false');
+  });
   if (typeof syncNavCollapseBtn === 'function') syncNavCollapseBtn(); // 侧栏按钮 title 随语言更新
+  if (typeof updateShellContext === 'function' && typeof _activeTabName !== 'undefined') updateShellContext(_activeTabName || getActiveTab());
+  if (typeof setGatewayReachability === 'function' && typeof _gatewayReachable !== 'undefined') setGatewayReachability(_gatewayReachable);
 }
 function setLang(l){
   LANG = l;

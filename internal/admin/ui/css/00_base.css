@@ -1,24 +1,26 @@
 /* ===== 设计令牌（浅色为默认，data-theme="dark" 覆盖同名颜色令牌） ===== */
 :root{
   color-scheme:light;
-  --bg:#f7f7f8;--surface:#ffffff;--surface2:#f3f4f6;
-  --border:#dcdde1;--border2:#e9eaee;
-  --text:#16181d;--text2:#5f6470;--text3:#68707c;
-  --accent:#2563eb;--accent-hover:#1d4fd8;--accent-soft:rgba(37,99,235,.10);--accent2:#7c3aed;
-  --green:#16a34a;--green-hover:#15803d;--green-soft:rgba(22,163,74,.12);
-  --red:#dc2626;--red-soft:rgba(220,38,38,.10);
-  --yellow:#d97706;--yellow-soft:rgba(217,119,6,.13);
-  --purple:#7c3aed;--purple-soft:rgba(124,58,237,.11);
-  --cyan:#0891b2;--cyan-soft:rgba(8,145,178,.11);
+  --bg:#F7F8FC;--surface:#FFFFFF;--surface2:#F0F2F8;--surface3:#E9ECF5;
+  --border:#E3E7F0;--border2:#EDF0F6;
+  --text:#182033;--text2:#5E6A7E;--text3:#7C879B;
+  --accent:#6655E8;--accent-hover:#5948D8;--accent-soft:rgba(102,85,232,.10);--accent2:#4778E8;
+  --green:#168A63;--green-hover:#117352;--green-soft:rgba(22,138,99,.11);
+  --red:#C94A55;--red-soft:rgba(201,74,85,.10);
+  --yellow:#B7791F;--yellow-soft:rgba(183,121,31,.12);
+  --purple:#6655E8;--purple-soft:rgba(102,85,232,.11);
+  --cyan:#4778E8;--cyan-soft:rgba(71,120,232,.10);
   --on-accent:#ffffff;
   --switch-off:#d3d6db;--switch-knob:#ffffff;
   --row-alt:rgba(127,127,140,.045);
-  --shadow-sm:0 1px 2px rgba(0,0,0,.05);
-  --shadow-md:0 2px 8px rgba(0,0,0,.06);
-  --shadow-lg:0 8px 24px rgba(0,0,0,.10);
-  --radius:12px;--radius-sm:8px;--radius-xs:6px;
+  --shadow-sm:0 1px 2px rgba(24,32,51,.05);
+  --shadow-md:0 8px 24px rgba(24,32,51,.08);
+  --shadow-lg:0 18px 48px rgba(24,32,51,.14);
+  --radius:14px;--radius-sm:10px;--radius-xs:7px;
   --ease:cubic-bezier(0.4,0,0.2,1);
-  --font-display:"Iowan Old Style","Palatino Linotype",Palatino,"Book Antiqua","Songti SC",Georgia,serif;
+  --font-ui:"Inter","SF Pro Text","Segoe UI","Noto Sans SC",Helvetica,Arial,sans-serif;
+  --font-mono:"IBM Plex Mono","SFMono-Regular","Cascadia Code","Consolas",monospace;
+  --font-display:var(--font-ui);
   /* 行内操作列统一宽度预算（账号/上游/组合各档，值随表格按钮数分档） */
   --action-col:280px;--action-col-mid:304px;--action-col-wide:352px;
   /* ===== 间距 / 字号 / 控件尺寸 / 焦点环 ===== */
@@ -33,28 +35,28 @@
 }
 [data-theme="dark"]{
   color-scheme:dark;
-  --bg:#0e0f12;--surface:#16171b;--surface2:#1e2025;
-  --border:#33353c;--border2:#26282e;
-  --text:#e6e7ea;--text2:#9a9ea9;--text3:#8a8f9b;
-  --accent:#5b9bff;--accent-hover:#7fb1ff;--accent-soft:rgba(91,155,255,.16);--accent2:#a78bfa;
-  --green:#4ade80;--green-hover:#3fce70;--green-soft:rgba(74,222,128,.14);
-  --red:#f87171;--red-soft:rgba(248,113,113,.14);
-  --yellow:#fbbf24;--yellow-soft:rgba(251,191,36,.14);
-  --purple:#a78bfa;--purple-soft:rgba(167,139,250,.16);
-  --cyan:#22d3ee;--cyan-soft:rgba(34,211,238,.14);
-  --on-accent:#0c1526;
-  --switch-off:#3a3d45;--switch-knob:#e6e7ea;
+  --bg:#0B1020;--surface:#111A2D;--surface2:#182238;--surface3:#202C43;
+  --border:#2A3854;--border2:#202D47;
+  --text:#F0F3FA;--text2:#AAB4C7;--text3:#7F8CA5;
+  --accent:#7968F8;--accent-hover:#8A7BFF;--accent-soft:rgba(121,104,248,.16);--accent2:#5B8CFF;
+  --green:#43C995;--green-hover:#5AD7A7;--green-soft:rgba(67,201,149,.14);
+  --red:#EF6B73;--red-soft:rgba(239,107,115,.14);
+  --yellow:#E2AA4A;--yellow-soft:rgba(226,170,74,.14);
+  --purple:#9B8CFB;--purple-soft:rgba(155,140,251,.15);
+  --cyan:#6C9BFF;--cyan-soft:rgba(108,155,255,.14);
+  --on-accent:#FFFFFF;
+  --switch-off:#33415E;--switch-knob:#F0F3FA;
   --row-alt:rgba(255,255,255,.03);
-  --shadow-sm:0 1px 2px rgba(0,0,0,.35);
-  --shadow-md:0 2px 10px rgba(0,0,0,.45);
-  --shadow-lg:0 10px 30px rgba(0,0,0,.55);
+  --shadow-sm:0 1px 2px rgba(0,0,0,.28);
+  --shadow-md:0 12px 28px rgba(0,0,0,.30);
+  --shadow-lg:0 24px 64px rgba(0,0,0,.42);
   --overlay-bg:rgba(2,6,16,0.62);
 }
 *{margin:0;padding:0;box-sizing:border-box}
 /* hidden 属性强约束：防止别处 display:flex/grid 类规则压过 UA 默认 [hidden]，导致应隐藏的元素仍然显示 */
 [hidden]{display:none !important}
 html{-webkit-text-size-adjust:100%}
-body{font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','SF Pro Text','Segoe UI','Noto Sans',Helvetica,Arial,sans-serif;background:var(--bg);color:var(--text);font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+body{font-family:var(--font-ui);background:var(--bg);color:var(--text);font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
 .layout{display:flex;min-height:100vh;position:relative;--nav-w:260px}
 
 /* ===== Sidebar ===== */

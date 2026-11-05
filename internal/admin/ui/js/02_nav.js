@@ -12,13 +12,22 @@ function normalizeTabName(name) {
 }
 
 function primaryNavTab(name) {
-  name = normalizeTabName(name);
-  if (name === 'dashboard' || name === 'logs' || name === 'quota') return 'health';
-  if (name === 'combos') return 'routing';
-  return name;
+  return normalizeTabName(name);
 }
 
 let _activeTabName = '';
+
+function updateShellContext(name) {
+  name = normalizeTabName(name || 'dashboard');
+  const nav = document.querySelector('.nav-item[data-tab="' + primaryNavTab(name) + '"]');
+  const title = nav && nav.querySelector('.nav-label');
+  const section = nav && nav.closest('.nav-section');
+  const sectionLabel = section && section.querySelector('.nav-section-label');
+  const titleEl = _('currentPageTitle');
+  const sectionEl = _('currentNavSection');
+  if (titleEl) titleEl.textContent = title ? title.textContent.trim() : t('概览');
+  if (sectionEl) sectionEl.textContent = sectionLabel ? sectionLabel.textContent.trim() : t('工作区');
+}
 
 function toggleLoginImport(forceOpen) {
   const body = _('loginImportBody'), btn = _('loginImportToggle');
@@ -80,17 +89,19 @@ function applyTab(name){
   try { history.replaceState(null, '', '#' + name); } catch(e){}
   _activeTabName = name;
   setActiveTab(name);
+  updateShellContext(name);
+  if (typeof closeMobileNav === 'function') closeMobileNav();
   if (name !== 'dashboard' && typeof stopDashPolling === 'function') stopDashPolling();
   if (name !== 'logs' && typeof stopLogPolling === 'function') stopLogPolling();
-  if (name === 'dashboard') { applyLang(); loadStats(); loadAccounts(); loadDashboardOverview(); startDashPolling(); }
-  else if (name === 'credentials') { loadGlobal(); loadAccounts(); loadConnections(); }
+  if (name === 'dashboard') { applyLang(); loadStats(); loadAccounts(); loadDashboardOverview(); if (typeof loadDashboardActivity === 'function') loadDashboardActivity(); startDashPolling(); }
+  else if (name === 'credentials') { loadGlobal(); loadAccounts(); loadConnections(); loadStats(); }
   if (fromImport) { switchPageSubTab('accounts', 'pool', true); toggleLoginImport(true); }
   else if (fromAccounts) switchPageSubTab('accounts', 'pool', true);
   else if (name === 'logs') { loadRequestLogs(true); startLogPolling(); }
   else if (name === 'routing') { loadModels().then(() => { loadConfig(); }); }
   else if (name === 'models') { loadGlobal(); loadModels().then(() => { loadConfig(); }); }
   else if (name === 'combos') { loadCombos(); }
-  else if (name === 'network') { loadGlobal(); loadOcConfig(); loadClineProxyConfig(); loadZenHeaders(); }
+  else if (name === 'network') { loadGlobal(); loadOcConfig(); loadClineProxyConfig(); loadZenHeaders(); loadStats(); }
   else if (name === 'providers') { loadGlobal(); loadProviders(); loadConnections(); }
   else if (name === 'health') { loadGlobal(); }
   else if (name === 'security') { loadKeys(); loadConfig(); }
@@ -132,7 +143,7 @@ document.querySelectorAll('.nav-item').forEach(el => {
 // 旧版本（含最早的裸数组格式）保存的顺序直接作废——否则旧顺序会在新分组上
 // 逐条重演，把重排效果抵消掉（表现为「改了布局但侧栏看起来没变」）。
 const NAV_ORDER_KEY = 'cline_admin_nav_order';
-const NAV_LAYOUT_VERSION = '4';
+const NAV_LAYOUT_VERSION = '5';
 function applyNavOrder() {
   let saved = null;
   try { saved = JSON.parse(localStorage.getItem(NAV_ORDER_KEY) || 'null'); } catch(e) {}

@@ -716,5 +716,17 @@ async function loadConfig() {
       ).join('');
     }
     if (typeof fillTuning === 'function') fillTuning(c);
+    renderRouteSummary(c);
   } catch (e) { toast(t('加载失败') + ': ' + e.message, 'error'); }
+}
+
+function renderRouteSummary(c) {
+  const model = _('routeFlowModel'), strategy = _('routeFlowStrategy'), fallback = _('routeFlowFallback');
+  if (model) model.textContent = c.defaultModel || t('请求中指定的模型');
+  if (strategy) strategy.textContent = c.strategy || 'round_robin';
+  if (fallback) {
+    const chain = Array.isArray(c.modelChain) ? c.modelChain.filter(Boolean) : [];
+    fallback.textContent = chain.length ? chain.join(' → ') : t('内置免费回退链');
+    fallback.title = fallback.textContent;
+  }
 }

@@ -140,6 +140,7 @@ function startDashPolling() {
     if (document.visibilityState !== 'visible') return;
     if (typeof _activeTabName === 'undefined' || _activeTabName !== 'dashboard') return;
     loadDashboardOverview();
+    loadDashboardActivity();
   }, 60000);
 }
 
@@ -332,6 +333,45 @@ function renderDashModels(models) {
       '<span class="model-meter"><span style="width:' + Math.max(2, (m.requests / max) * 100) + '%"></span></span>' +
       '<span class="model-count">' + formatNumber(m.requests) + '</span>' +
     '</div>').join('');
+}
+
+async function loadDashboardActivity() {
+  const box = _('dashActivity');
+  if (!box) return;
+  try {
+    const d = await api('GET', '/request-logs?limit=8');
+    const items = (d.data && d.data.items) || [];
+    renderDashboardActivity(items);
+  } catch (e) {
+    box.innerHTML = '<div class="dash-activity-empty">' + esc(t('近期请求暂时不可用')) + '</div>';
+  }
+}
+
+function renderDashboardActivity(items) {
+  const box = _('dashActivity');
+  if (!box) return;
+  if (!Array.isArray(items) || !items.length) {
+    box.innerHTML = '<div class="dash-activity-empty">' + esc(t('暂无近期请求')) + '</div>';
+    return;
+  }
+  box.innerHTML = items.map(l => {
+    const ok = !!l.completed && !l.error;
+    const status = '<span class="log-status ' + (ok ? 'ok' : 'fail') + '">' + esc(t(ok ? '完成' : '失败')) + '</span>';
+    const model = l.model || l.requestedModel || '—';
+    const upstream = typeof logUpstreamValue === 'function' ? logUpstreamValue(l) : (l.providerName || l.upstream || l.accountEmail || '—');
+    const meta = [upstream, l.protocol || '', l.fallbackUsed ? t('已回退') : ''].filter(Boolean).join(' · ');
+    let time = '—';
+    if (l.startedAt) {
+      const at = new Date(l.startedAt);
+      if (!isNaN(at.getTime())) time = at.toLocaleTimeString(LC(), { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+    }
+    return '<div class="dash-activity-row" title="' + escAttr(l.id || '') + '">' +
+      '<span class="dash-activity-time">' + esc(time) + '</span>' +
+      '<span class="dash-activity-model">' + esc(model) + '</span>' +
+      '<span class="dash-activity-meta">' + esc(meta) + '</span>' +
+      '<span class="dash-activity-latency">' + esc(formatDuration(l.durationMs)) + '</span>' + status +
+      '</div>';
+  }).join('');
 }
 
 function renderDashRuntime(rt) {

@@ -1,6 +1,18 @@
 <div id="tab-about" class="tab-panel" style="display:none">
-  <div class="large-title">关于</div>
-  <div class="large-subtitle">应用信息、使用指南与开源协议</div>
+  <div class="page-header">
+    <div>
+      <div class="page-kicker">系统</div>
+      <div class="large-title">设置与运行时</div>
+      <div class="large-subtitle">进入常用系统设置，并查看当前进程、版本、地址和项目资料。</div>
+    </div>
+  </div>
+
+  <div class="settings-hub" aria-label="系统设置入口">
+    <button type="button" class="settings-hub-card" onclick="showPageSubTab('security','access')"><strong>访问控制</strong><span>监听地址、管理密码与后台会话</span></button>
+    <button type="button" class="settings-hub-card" onclick="showPageSubTab('routing','tuning')"><strong>运行调优</strong><span>重试、流式、亲和和错误规则</span></button>
+    <button type="button" class="settings-hub-card" onclick="showPageSubTab('upstreams','cline')"><strong>网络与出口</strong><span>代理池、出口策略与请求头</span></button>
+    <button type="button" class="settings-hub-card" onclick="switchTab('quickstart')"><strong>客户端接入</strong><span>Base URL、协议与快速验证示例</span></button>
+  </div>
 
   <div class="section">
     <div class="section-title">应用信息</div>
@@ -32,14 +44,14 @@
     <div class="section-title">功能特性</div>
     <div class="section-body">
       <div class="about-feature-grid small-t2">
-        <div>✅ 多账号轮询（轮询/填满/随机）</div>
-        <div>✅ OpenAI & Anthropic 双协议</div>
-        <div>✅ 429 冷却自动恢复</div>
-        <div>✅ 账号导出/导入（跨设备迁移）</div>
-        <div>✅ OAuth 系统浏览器登录</div>
-        <div>✅ 请求日志与统计</div>
-        <div>✅ System Prompt 覆盖</div>
-        <div>✅ 跨平台桌面端（Win/Mac/Linux）</div>
+        <div>多账号轮询（轮询 / 填满 / 随机）</div>
+        <div>OpenAI 与 Anthropic 双协议</div>
+        <div>429 冷却与自动恢复</div>
+        <div>账号导出 / 导入</div>
+        <div>OAuth 系统浏览器登录</div>
+        <div>请求日志与统计</div>
+        <div>System Prompt 覆盖</div>
+        <div>跨平台桌面端</div>
       </div>
     </div>
   </div>

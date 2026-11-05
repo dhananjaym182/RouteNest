@@ -1,8 +1,9 @@
 <div id="tab-logs" class="tab-panel" style="display:none">
   <div class="page-header">
     <div>
+      <div class="page-kicker">可观测性</div>
       <div class="large-title">请求日志</div>
-      <div class="large-subtitle">查看每次请求的 Token 消耗、缓存、耗时与流式速度</div>
+      <div class="large-subtitle">追踪逻辑模型、实际上游、Token、延迟和回退尝试。</div>
     </div>
     <div class="action-row">
       <button class="btn btn-sm btn-primary" id="logFollowBtn" onclick="toggleLogFollow(this)" title="自动跟随新日志">跟随新日志</button>
@@ -18,9 +19,13 @@
   <div class="log-toolbar">
     <div class="log-chips" id="logFilterChips" role="group" aria-label="快捷筛选"></div>
     <div class="log-filters">
+      <select id="logFilterTime" onchange="onLogAdvancedFilterChange()" aria-label="时间范围"><option value="">已加载时间</option><option value="1">最近 1 小时</option><option value="24">最近 24 小时</option><option value="168">最近 7 天</option></select>
+      <select id="logFilterProvider" onchange="onLogAdvancedFilterChange()" aria-label="Provider 筛选"><option value="">全部 Provider</option></select>
+      <select id="logFilterModel" onchange="onLogAdvancedFilterChange()" aria-label="模型筛选"><option value="">全部模型</option></select>
       <select id="logFilterProtocol" onchange="onLogProtoFilterChange()" aria-label="协议筛选"><option value="">全部协议</option></select>
       <input type="search" id="logSearch" placeholder="搜索模型 / 账号 / 请求 ID…" oninput="onLogSearchInput()">
     </div>
+    <div class="log-filter-note">筛选作用于当前已加载记录；继续加载可扩大可检索范围。</div>
   </div>
   <div class="log-resume-bar" id="logResumeBar" hidden>
     <span class="log-resume-dot" aria-hidden="true"></span>
