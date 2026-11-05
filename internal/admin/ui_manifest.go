@@ -62,6 +62,7 @@ var adminUIBodyParts = []string{
 // contiguous slice of the original stylesheet.
 var adminUICSSLayers = []string{
 	"ui/css/00_base.css",
+	"ui/css/01_fonts.css",
 	"ui/css/10_pages_dashboard.css",
 	"ui/css/20_layout.css",
 	"ui/css/30_components.css",

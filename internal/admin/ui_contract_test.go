@@ -460,20 +460,14 @@ func TestAdminUILegacyHashesAliasCanonicalConcepts(t *testing.T) {
 }
 
 func TestAdminUILegacyWorkflowsRemainReachable(t *testing.T) {
-	health := adminUIAsset(t, "ui/html/pages/health.html")
-	for _, tab := range []string{"dashboard", "logs", "quota"} {
-		if !strings.Contains(health, `switchTab('`+tab+`')`) {
-			t.Errorf("usage and health does not link to legacy %s workflow", tab)
-		}
-	}
 	routing := adminUIAsset(t, "ui/html/pages/routing.html")
 	if !strings.Contains(routing, `switchTab('combos')`) {
 		t.Error("routing does not link to model combinations")
 	}
 	shell := adminUIAsset(t, "ui/html/shell.html")
-	for _, tab := range []string{"quickstart", "security", "about"} {
+	for _, tab := range []string{"dashboard", "logs", "quota", "health", "quickstart", "security", "about"} {
 		if !strings.Contains(shell, `data-tab="`+tab+`"`) {
-			t.Errorf("system workflow %s is no longer reachable", tab)
+			t.Errorf("sidebar workflow %s is no longer reachable", tab)
 		}
 	}
 }

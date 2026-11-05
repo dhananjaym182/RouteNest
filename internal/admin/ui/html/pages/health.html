@@ -2,31 +2,13 @@
   <div class="page-header">
     <div>
       <div class="page-kicker">可观测性</div>
-      <div class="large-title">Provider 健康</div>
-      <div class="large-subtitle">区分 Provider 配置、凭据状态、冷却与上游重置证据。</div>
+      <div class="large-title">Provider 健康与诊断</div>
+      <div class="large-subtitle">检查凭据状态、模型可用性、限流与冷却恢复证据。</div>
     </div>
     <div class="action-row"><button type="button" class="btn btn-sm" onclick="loadGlobal(true)">刷新状态</button></div>
   </div>
 
   <div id="globalHealthSummary" class="health-summary-grid" aria-live="polite"></div>
-
-  <div class="health-links" aria-label="使用与健康工具">
-    <button type="button" class="health-link-card" onclick="switchTab('dashboard')">
-      <span class="health-link-index">01</span>
-      <strong>用量概览</strong>
-      <span>吞吐、延迟、Token 与上游分布</span>
-    </button>
-    <button type="button" class="health-link-card" onclick="switchTab('logs')">
-      <span class="health-link-index">02</span>
-      <strong>请求日志</strong>
-      <span>逐请求结果、耗时与故障转移</span>
-    </button>
-    <button type="button" class="health-link-card" onclick="switchTab('quota')">
-      <span class="health-link-index">03</span>
-      <strong>配额与预算</strong>
-      <span>配置预算、用量窗口与冷却恢复</span>
-    </button>
-  </div>
 
   <div class="section system-section">
     <div class="section-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l2.5-7 5 14 2.5-7h4"/><path d="M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"/></svg><span>可用性观察</span></div>
