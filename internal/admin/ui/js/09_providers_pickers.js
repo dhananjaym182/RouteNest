@@ -229,7 +229,7 @@ function presetRowHTML(p) {
     '<span class="preset-name">' + esc(p.name) + '</span>' +
     '<span class="preset-key">' + esc(p.baseURL || p.key) + '</span>' +
     '<span class="row-inline">' +
-    (p.loginFlow ? '<span class="model-source-badge zen" title="' + t('设备码登录：在「账号与登录 → Provider OAuth」添加，再在编辑器「Provider OAuth 账号」中选择；无需 API Key') + '">' + t('需登录') + '</span>' : (g.badge ? '<span class="' + g.cls + '">' + t(g.badge) + '</span>' : '')) +
+    (p.loginFlow ? '<span class="model-source-badge zen" title="' + t('设备码登录：在「凭据 → Provider OAuth」添加，再在编辑器「Provider OAuth 账号」中选择；无需 API Key') + '">' + t('需登录') + '</span>' : (g.badge ? '<span class="' + g.cls + '">' + t(g.badge) + '</span>' : '')) +
     (p.modelIDs && p.modelIDs.length ? '<span class="model-source-badge">' + p.modelIDs.length + ' ' + t('个模型') + '</span>' : '') +
     '</span></div>';
 }
@@ -279,7 +279,7 @@ function applyPreset(key) {
   // 带种子模型或目录端点的预设：新建保存后自动开分级预览（勾选后才写入，绝不静默导入）
   _previewAfterSave = !p.loginFlow && (!!p.modelIDs || !!p.modelsFetcher || wholeFree);
   if (p.loginFlow) {
-    toast(t('已填充登录类预设：请到「账号与登录 → Provider OAuth」完成设备码登录，再在编辑器「Provider OAuth 账号」中选择账号'), 'info');
+    toast(t('已填充登录类预设：请到「凭据 → Provider OAuth」完成设备码登录，再在编辑器「Provider OAuth 账号」中选择账号'), 'info');
   } else if (p.kind === 'free' || p.kind === 'local') {
     // 免密钥/本地源：直接走上游探测，弹出模型多选（免费/付费分组）
     toast(t('免密钥预设：正在自动拉取模型…'), 'info');

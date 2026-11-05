@@ -54,6 +54,7 @@ function setLang(l){
   loadRequestLogs(true);
   if (_('modelsList')) loadModels();
   if (_('settingDefModel')) loadConfig();
+  if (typeof renderGlobal === 'function' && typeof _globalData !== 'undefined' && _globalData) renderGlobal();
   toast(l === 'en' ? 'Language switched to English' : '语言已切换为中文', 'success');
 }
 LANG = detectLang();

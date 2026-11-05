@@ -1,9 +1,19 @@
-<div id="tab-upstreams" class="tab-panel" style="display:none">
+<div id="tab-network" class="tab-panel system-page" style="display:none">
+  <span id="tab-upstreams" hidden aria-hidden="true"></span>
   <div class="page-header">
     <div>
-      <div class="large-title">上游连接</div>
-      <div class="large-subtitle">配置 OpenCode Zen、出口代理与上游请求头</div>
+      <div class="page-kicker">Provider 系统</div>
+      <div class="large-title">网络</div>
+      <div class="large-subtitle">查看出口配置，并管理上游连接、代理池与请求头。</div>
     </div>
+    <div class="action-row"><button type="button" class="btn btn-sm" onclick="loadGlobal(true);loadOcConfig();loadClineProxyConfig();loadZenHeaders()">刷新</button></div>
+  </div>
+
+  <div class="section system-section">
+    <div class="section-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg><span>出口配置清单</span></div>
+    <div class="section-desc">地址已脱敏。当前接口只提供全局配置清单，不推断 Provider 与配置的绑定关系。</div>
+    <div id="globalNetworkContext" class="network-context" aria-live="polite"></div>
+    <div id="globalEgress" class="section-body system-inventory" aria-live="polite"></div>
   </div>
   <div class="subtabs page-subtabs" data-page="upstreams">
     <div class="subtab active" data-sub="zen">OpenCode Zen</div>
@@ -82,7 +92,7 @@
             <option value="random">随机 (random)</option>
             <option value="fill">填满 (fill)</option>
           </select>
-          <div class="field-hint">仅决定多个出口代理地址之间的选择；Cline 账号轮询与 Provider 评分在 <a href="#" onclick="showPageSubTab('routing', 'config');return false" class="lnk-a">「路由与模型 → 路由策略」</a></div>
+          <div class="field-hint">仅决定多个出口代理地址之间的选择；Cline 账号轮询与 Provider 评分在 <a href="#" onclick="showPageSubTab('routing', 'config');return false" class="lnk-a">「路由 → 路由策略」</a></div>
         </div>
         <div class="field f1"><label>出口冷却状态</label><div id="ocProxyCooldowns" class="hint-sm">-</div></div>
       </div>
@@ -105,7 +115,7 @@
             <option value="random">随机 (random)</option>
             <option value="fill">填满 (fill)</option>
           </select>
-          <div class="field-hint">仅决定多个出口代理地址之间的选择；Cline 账号轮询与 Provider 评分在 <a href="#" onclick="showPageSubTab('routing', 'config');return false" class="lnk-a">「路由与模型 → 路由策略」</a></div>
+          <div class="field-hint">仅决定多个出口代理地址之间的选择；Cline 账号轮询与 Provider 评分在 <a href="#" onclick="showPageSubTab('routing', 'config');return false" class="lnk-a">「路由 → 路由策略」</a></div>
         </div>
       </div>
       <div class="field mt-10">

@@ -23,8 +23,12 @@ var requiredAdminIDs = []string{
 	"tab-dashboard", "tab-accounts", "tab-logs", "tab-security",
 	"tab-routing", "tab-combos", "tab-upstreams", "tab-providers",
 	"tab-quickstart", "tab-quota", "tab-about", "tab-global",
+	"tab-credentials", "tab-models", "tab-network", "tab-health",
 	"globalProviderFilter", "globalInstances", "globalCredentials",
 	"globalOfferings", "globalState", "globalEgress",
+	"globalCredentialProviderFilter", "globalModelProviderFilter",
+	"globalHealthProviderFilter", "globalNetworkContext",
+	"globalOfferingsToggle",
 
 	"toastStack", "loginOverlay", "loginPassword", "loginError",
 	"langZh", "langEn", "themeSwitch", "refreshAllBtn", "saveDiscardBar",
@@ -194,16 +198,27 @@ func TestAdminUICanonicalNavigationLabels(t *testing.T) {
 			name:  "sidebar",
 			asset: "ui/html/shell.html",
 			want: []string{
-				`class="nav-label">账号与登录</span>`,
-				`class="nav-label">路由与模型</span>`,
-				`class="nav-label">上游连接</span>`,
+				`data-tab="providers"`,
+				`class="nav-label">Providers</span>`,
+				`data-tab="credentials"`,
+				`class="nav-label">凭据</span>`,
+				`data-tab="models"`,
+				`class="nav-label">模型</span>`,
+				`data-tab="routing"`,
+				`class="nav-label">路由</span>`,
+				`data-tab="network"`,
+				`class="nav-label">网络</span>`,
+				`data-tab="health"`,
+				`class="nav-label">使用与健康</span>`,
 			},
 		},
 		{
-			name:  "accounts",
+			name:  "credentials",
 			asset: "ui/html/pages/accounts.html",
 			want: []string{
-				`class="large-title">账号与登录</div>`,
+				`id="tab-credentials"`,
+				`class="large-title">凭据</div>`,
+				`data-sub="inventory">全部凭据</div>`,
 				`data-sub="pool">Cline 账号</div>`,
 				`data-sub="conns">Provider OAuth</div>`,
 			},
@@ -212,16 +227,18 @@ func TestAdminUICanonicalNavigationLabels(t *testing.T) {
 			name:  "routing",
 			asset: "ui/html/pages/routing.html",
 			want: []string{
+				`class="large-title">路由</div>`,
 				`data-sub="config">路由策略</div>`,
 				`data-sub="tuning">运行调优</div>`,
-				`data-sub="models">模型目录</div>`,
+				`data-sub="models" title="打开模型页">模型目录 ↗</div>`,
 			},
 		},
 		{
-			name:  "upstreams",
+			name:  "network",
 			asset: "ui/html/pages/upstreams.html",
 			want: []string{
-				`class="large-title">上游连接</div>`,
+				`id="tab-network"`,
+				`class="large-title">网络</div>`,
 				`data-sub="zen">OpenCode Zen</div>`,
 				`data-sub="cline">出口代理池</div>`,
 				`data-sub="headers">上游请求头</div>`,
@@ -231,13 +248,14 @@ func TestAdminUICanonicalNavigationLabels(t *testing.T) {
 			name:  "english translations",
 			asset: "ui/js/01_i18n.js",
 			want: []string{
-				`'账号与登录': 'Accounts & Login'`,
+				`'凭据': 'Credentials'`,
 				`'Cline 账号': 'Cline Accounts'`,
 				`'Provider OAuth': 'Provider OAuth'`,
 				`'路由策略': 'Routing Policy'`,
 				`'运行调优': 'Runtime Tuning'`,
 				`'模型目录': 'Model Catalog'`,
-				`'上游连接': 'Upstream Connectivity'`,
+				`'网络': 'Network'`,
+				`'使用与健康': 'Usage & Health'`,
 				`'出口代理池': 'Egress Proxies'`,
 				`'上游请求头': 'Request Headers'`,
 			},
@@ -331,7 +349,7 @@ func TestAdminUICanonicalOpenCodeLabels(t *testing.T) {
 		want  string
 	}{
 		{"ui/html/pages/dashboard.html", "今日 · OpenCode Zen 免费模型"},
-		{"ui/html/pages/routing.html", "从 OpenCode Zen 同步模型"},
+		{"ui/html/pages/models.html", "从 OpenCode Zen 同步模型"},
 		{"ui/html/pages/upstreams.html", "OpenCode Zen 出口代理"},
 		{"ui/html/pages/upstreams.html", "OpenCode Zen 请求头"},
 		{"ui/js/11_upstreams.js", "t('OpenCode Zen 配置已保存')"},
@@ -346,17 +364,30 @@ func TestAdminUICanonicalOpenCodeLabels(t *testing.T) {
 	}
 }
 
-// The global provider view is the UI projection of the additive admin
-// endpoints. It must stay navigable, read-only, and explicit about unknown
-// capability states; a silent absence would reintroduce provider silos.
+// The global provider views project the additive admin endpoints into six
+// canonical concepts. They remain read-only and explicit about unknown states.
 func TestAdminGlobalProviderViewCoversCapabilityInventory(t *testing.T) {
 	shell := adminUIAsset(t, "ui/html/shell.html")
-	if !strings.Contains(shell, `data-tab="global"`) {
-		t.Fatal("navigation has no global provider entry")
+	for _, tab := range []string{"providers", "credentials", "models", "routing", "network", "health"} {
+		if !strings.Contains(shell, `class="nav-item`) || !strings.Contains(shell, `data-tab="`+tab+`"`) {
+			t.Errorf("navigation has no canonical %s entry", tab)
+		}
 	}
-	page := adminUIAsset(t, "ui/html/pages/global.html")
-	if !strings.Contains(page, `id="tab-global"`) {
-		t.Fatal("global provider page has no tab panel")
+	for _, legacy := range []string{"global", "accounts", "upstreams", "combos", "dashboard", "logs", "quota"} {
+		if strings.Contains(shell, `data-tab="`+legacy+`"`) {
+			t.Errorf("legacy %s remains a primary navigation item", legacy)
+		}
+	}
+	for asset, id := range map[string]string{
+		"ui/html/pages/providers.html": "globalInstances",
+		"ui/html/pages/accounts.html":  "globalCredentials",
+		"ui/html/pages/models.html":    "globalOfferings",
+		"ui/html/pages/upstreams.html": "globalEgress",
+		"ui/html/pages/health.html":    "globalState",
+	} {
+		if page := adminUIAsset(t, asset); !strings.Contains(page, `id="`+id+`"`) {
+			t.Errorf("%s does not own %s", asset, id)
+		}
 	}
 	js := adminUIAsset(t, "ui/js/18_global.js")
 	for _, endpoint := range []string{
@@ -383,9 +414,65 @@ func TestAdminGlobalProviderViewCoversCapabilityInventory(t *testing.T) {
 			t.Errorf("capability state %s is not rendered", state)
 		}
 	}
-	for _, field := range []string{"o.until", "o.resetAt"} {
+	for _, field := range []string{"observation.until", "observation.resetAt"} {
 		if !strings.Contains(js, field) {
 			t.Errorf("runtime state does not distinguish %s", field)
 		}
+	}
+	for _, label := range []string{"上游确认重置", "回退冷却截止", "没有上游重置证据"} {
+		if !strings.Contains(js, label) {
+			t.Errorf("runtime state does not render %q", label)
+		}
+	}
+}
+
+func TestAdminUILegacyHashesAliasCanonicalConcepts(t *testing.T) {
+	nav := adminUIAsset(t, "ui/js/02_nav.js")
+	for legacy, canonical := range map[string]string{
+		"global": "providers", "accounts": "credentials",
+		"import": "credentials", "upstreams": "network",
+	} {
+		want := legacy + ": '" + canonical + "'"
+		if !strings.Contains(nav, want) {
+			t.Errorf("navigation missing alias %s", want)
+		}
+	}
+	for _, id := range []string{"tab-global", "tab-accounts", "tab-upstreams"} {
+		if !strings.Contains(adminHTML, `id="`+id+`"`) {
+			t.Errorf("compatibility DOM id %s is missing", id)
+		}
+	}
+}
+
+func TestAdminUILegacyWorkflowsRemainReachable(t *testing.T) {
+	health := adminUIAsset(t, "ui/html/pages/health.html")
+	for _, tab := range []string{"dashboard", "logs", "quota"} {
+		if !strings.Contains(health, `switchTab('`+tab+`')`) {
+			t.Errorf("usage and health does not link to legacy %s workflow", tab)
+		}
+	}
+	routing := adminUIAsset(t, "ui/html/pages/routing.html")
+	if !strings.Contains(routing, `switchTab('combos')`) {
+		t.Error("routing does not link to model combinations")
+	}
+	shell := adminUIAsset(t, "ui/html/shell.html")
+	for _, tab := range []string{"quickstart", "security", "about"} {
+		if !strings.Contains(shell, `data-tab="`+tab+`"`) {
+			t.Errorf("system workflow %s is no longer reachable", tab)
+		}
+	}
+}
+
+func TestAdminUIProviderDetailLinksFilteredGlobalViews(t *testing.T) {
+	detail := adminUIAsset(t, "ui/js/07_providers_detail.js")
+	for _, destination := range []string{"credentials", "models", "health", "network"} {
+		if !strings.Contains(detail, "provGlobalViewButton('"+destination+"'") {
+			t.Errorf("provider detail does not link to %s", destination)
+		}
+	}
+	global := adminUIAsset(t, "ui/js/18_global.js")
+	if !strings.Contains(global, "function openGlobalProviderView(tab, providerID)") ||
+		!strings.Contains(global, "_globalFilter = String(providerID") {
+		t.Error("provider detail destinations do not retain a provider filter")
 	}
 }

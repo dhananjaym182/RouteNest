@@ -138,8 +138,7 @@ function startDashPolling() {
   if (_dashTimer) return;
   _dashTimer = setInterval(() => {
     if (document.visibilityState !== 'visible') return;
-    const el = document.querySelector('.nav-item.active');
-    if (!el || el.dataset.tab !== 'dashboard') return;
+    if (typeof _activeTabName === 'undefined' || _activeTabName !== 'dashboard') return;
     loadDashboardOverview();
   }, 60000);
 }

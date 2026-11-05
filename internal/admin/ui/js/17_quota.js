@@ -112,7 +112,7 @@ function renderQuota() {
   }
   const provs = d.providers || [];
   if (!provs.length) {
-    listEl.innerHTML = listEmptyState(ICON_MODELS, t('暂无 Provider，先在「自定义 Provider」页添加'));
+    listEl.innerHTML = listEmptyState(ICON_MODELS, t('暂无 Provider，先在「Providers」页添加'));
     return;
   }
   const health = d.health || {};

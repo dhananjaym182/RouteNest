@@ -328,8 +328,7 @@ function scrollLogToLiveEdge() {
 
 async function logPollTick() {
   if (document.visibilityState !== 'visible' || !_logFollow) return;
-  const el = document.querySelector('.nav-item.active');
-  if (!el || el.dataset.tab !== 'logs') return;
+  if (typeof _activeTabName === 'undefined' || _activeTabName !== 'logs') return;
   try {
     const d = await api('GET', '/request-logs?limit=50');
     const fresh = (d.data.items || []).filter(l => l.id && !_logIds.has(l.id));

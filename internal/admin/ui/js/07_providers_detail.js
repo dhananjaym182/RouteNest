@@ -11,6 +11,11 @@ function openProvDetail(id) {
 
 function closeProvDetail() { _provDetailOpenId = ''; closeDrawer('provDetail'); }
 
+function provGlobalViewButton(tab, providerID, label) {
+  return '<button type="button" class="btn btn-sm" onclick="closeProvDetail();openGlobalProviderView(' +
+    escAttr(JSON.stringify(tab)) + ',' + escAttr(JSON.stringify(providerID)) + ')">' + t(label) + ' →</button>';
+}
+
 //组成员 loadConnections / loadProviders 后若详情开着 → 就地刷新内容
 function refreshProvDetailIfOpen() {
   if (!_provDetailOpenId) return;
@@ -78,14 +83,10 @@ function provDetailSectionsHTML(p) {
     '</div>' + errBlock +
     '<div class="detail-meta mt-6"><span class="hint-xs">' + t('重试') + '</span> ' + provRowResultHTML('test', p.id) + ' ' + provRowResultHTML('recheck', p.id) + '</div>';
 
-  // §4 连接：勾选的登录连接（名称/状态）
-  const connList = conns.length
-    ? conns.map(c =>
-        '<div class="detail-conn-row">' +
-          '<span class="status ' + (c.status === 'active' ? 'active' : 'disabled') + '"><span class="status-dot ' + (c.status === 'active' ? 'active' : 'disabled') + '"></span>' + t(c.status === 'active' ? '已登录' : '需重新登录') + '</span>' +
-          '<span class="mono detail-clip">' + esc(c.email || c.id) + '</span>' + connExpiryHtml(c) +
-        '</div>').join('')
-    : '<div class="hint-sm">' + t('未链接任何连接') + '</div>';
+  // §4 凭据不在 Provider 详情内复制；跳转到带 Provider 筛选的全局清单。
+  const connList = '<div class="detail-linked-summary"><span>' +
+    (conns.length ? (conns.length + ' ' + t('个关联凭据')) : t('未链接任何连接')) +
+    '</span>' + provGlobalViewButton('credentials', p.id, '查看凭据') + '</div>';
 
   // §5 同步：批次入口 + 立即检测
   const sync =
@@ -112,6 +113,12 @@ function renderProvDetail(p) {
   if (!body) return;
   body.innerHTML =
     '<div class="detail-back"><a href="javascript:void(0)" class="lnk-a" onclick="closeProvDetail()">‹ ' + t('返回列表') + '</a></div>' +
+    '<div class="detail-view-links" aria-label="' + t('关联视图') + '">' +
+      provGlobalViewButton('credentials', p.id, '凭据') +
+      provGlobalViewButton('models', p.id, '模型') +
+      provGlobalViewButton('health', p.id, '使用与健康') +
+      provGlobalViewButton('network', p.id, '网络') +
+    '</div>' +
     '<div class="drawer-group">' +
       '<div class="form-group-label">' + t('概览') + '</div>' +
       '<div class="detail-actions">' +
@@ -124,13 +131,13 @@ function renderProvDetail(p) {
       '<div class="detail-kv">' + sec.overview + '</div>' +
     '</div>' +
     '<div class="drawer-group">' +
-      '<div class="form-group-label">' + t('模型') + ' <span class="grp-count">' + ((p.modelIds || []).length || '') + '</span></div>' + sec.models + provDelistedHTML(p) +
+      '<div class="form-group-label">' + t('模型') + ' <span class="grp-count">' + ((p.modelIds || []).length || '') + '</span> <button type="button" class="text-action" onclick="closeProvDetail();openGlobalProviderView(' + escAttr(JSON.stringify('models')) + ',' + escAttr(JSON.stringify(p.id)) + ')">' + t('查看全局模型') + ' →</button></div>' + sec.models + provDelistedHTML(p) +
     '</div>' +
     '<div class="drawer-group">' +
-      '<div class="form-group-label">' + t('限额与健康') + '</div>' + sec.health +
+      '<div class="form-group-label">' + t('限额与健康') + ' <button type="button" class="text-action" onclick="closeProvDetail();openGlobalProviderView(' + escAttr(JSON.stringify('health')) + ',' + escAttr(JSON.stringify(p.id)) + ')">' + t('查看运行状态') + ' →</button></div>' + sec.health +
     '</div>' +
     '<div class="drawer-group">' +
-      '<div class="form-group-label">' + t('联动连接') + ' <span class="grp-count">' + (sec.hasConns ? sec.hasConns : '') + '</span></div>' + sec.connList +
+      '<div class="form-group-label">' + t('关联凭据') + ' <span class="grp-count">' + (sec.hasConns ? sec.hasConns : '') + '</span></div>' + sec.connList +
     '</div>' +
     '<div class="drawer-group">' +
       '<div class="form-group-label">' + t('同步') + '</div>' + sec.sync +
@@ -299,5 +306,3 @@ async function providersResetCooldown(id, model, btn) {
     loadProviders();
   } catch (e) { toast(t('重置失败: ') + e.message, 'error'); if (btn) { btn.disabled = false; btn.innerHTML = orig; } }
 }
-
-

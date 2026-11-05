@@ -1,15 +1,20 @@
 <div id="tab-routing" class="tab-panel" style="display:none">
   <div class="page-header">
     <div>
-      <div class="large-title">路由与模型</div>
-      <div class="large-subtitle">配置路由策略、运行行为与模型目录</div>
+      <div class="page-kicker">Provider 系统</div>
+      <div class="large-title">路由</div>
+      <div class="large-subtitle">配置候选选择、回退顺序与运行行为。</div>
+    </div>
+    <div class="action-row">
+      <button type="button" class="btn btn-sm" onclick="switchTab('models')">查看模型</button>
+      <button type="button" class="btn btn-sm" onclick="switchTab('combos')">管理模型组合</button>
     </div>
   </div>
 
   <div class="subtabs page-subtabs" data-page="routing">
     <div class="subtab active" data-sub="config">路由策略</div>
     <div class="subtab" data-sub="tuning">运行调优</div>
-    <div class="subtab" data-sub="models">模型目录</div>
+    <div class="subtab" data-sub="models" title="打开模型页">模型目录 ↗</div>
   </div>
 
   <div class="page-subpage" data-subpage="config">
@@ -54,7 +59,7 @@
       </div>
       <div class="form-group-label">策略与回退一览</div>
       <div class="field-hint">本页「轮询策略」= 从 Cline 账号池取号的方式（quality 同时参与自定义 Provider 评分排序）；全局「回退模型链」是组合失败的最终兜底。其余两处策略选择器在别的页面：</div>
-      <div class="field-hint mt-2"><a href="#" onclick="showPageSubTab('upstreams', 'cline');return false" class="lnk-a">上游连接 → 出口代理池：选择 OpenCode Zen / Cline 的出口代理地址 →</a></div>
+      <div class="field-hint mt-2"><a href="#" onclick="showPageSubTab('upstreams', 'cline');return false" class="lnk-a">网络 → 出口代理池：选择 OpenCode Zen / Cline 的出口代理地址 →</a></div>
       <div class="field-hint mt-2"><a href="#" onclick="switchTab('combos');return false" class="lnk-a">模型组合页：组合条目顺序与紧急回退 →</a></div>
     </div>
   </div>
@@ -125,52 +130,6 @@
         <span class="hint-sm">非法别名/规则会整次拒绝并提示，不会部分生效</span>
         <span id="tunSaveResult" class="ml-8" aria-live="polite"></span>
       </div>
-    </div>
-  </div>
-  </div>
-
-  <div class="page-subpage" data-subpage="models" style="display:none">
-  <div class="section">
-    <div class="section-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="9" x2="15" y2="9"/><line x1="9" y1="15" x2="15" y2="15"/></svg><span>模型目录</span>
-      <span class="title-tools">
-        <span><span>上次同步</span>: <span id="modelSyncTime">-</span></span>
-      </span>
-    </div>
-    <div class="section-desc">模型按 Provider 添加并自动归属：在 Provider 编辑器中使用「选择模型」「手动输入模型 ID」或「导入预览」即可添加。本页用于启用 / 停用、调整计费与上下文窗口、筛选和批量操作。停用的模型不会出现在客户端模型列表（/v1/models）中，直接请求也会被拒绝。</div>
-    <div class="section-body">
-      <div id="modelStatsBar" class="model-stats-bar"></div>
-      <div class="model-toolbar">
-        <input type="text" id="modelSearch" placeholder="搜索模型 ID..." aria-label="搜索模型" oninput="onModelFilterChange('search', this.value)">
-        <select id="modelFilterProvider" onchange="onModelFilterChange('provider', this.value)"><option value="">全部来源</option></select>
-        <select id="modelFilterCost" onchange="onModelFilterChange('cost', this.value)">
-          <option value="">全部计费</option>
-          <option value="free">免费</option>
-          <option value="pass">付费</option>
-        </select>
-        <select id="modelFilterStatus" onchange="onModelFilterChange('status', this.value)">
-          <option value="">全部状态</option>
-          <option value="enabled">已启用</option>
-          <option value="disabled">已停用</option>
-          <option value="failed">测试失败</option>
-          <option value="delisted">已下架</option>
-        </select>
-        <button class="btn btn-sm" onclick="switchTab('providers')" title="在 Provider 编辑器中添加模型，自动归属该 Provider">添加模型 → Provider 页</button>
-        <!-- 低频批量操作收入「更多」，避免工具栏两行铺满；保留筛选 / 同步一键直达 -->
-        <div class="toolbar-more" id="modelBulkMore">
-          <button class="btn btn-sm" onclick="toggleToolbarMore(event)" aria-haspopup="true" aria-expanded="false" id="toolbarMoreBtn">更多操作 ▾</button>
-          <div class="toolbar-more-menu">
-            <button class="btn btn-sm" onclick="setAllModelGroups(true)">展开全部</button>
-            <button class="btn btn-sm" onclick="setAllModelGroups(false)">折叠全部</button>
-            <button class="btn btn-sm" id="bulkEnableFreeBtn" onclick="bulkModelToggle('free')">启用全部免费</button>
-            <button class="btn btn-sm" id="bulkDisablePaidBtn" onclick="bulkModelToggle('paid')">停用全部付费</button>
-            <button class="btn btn-sm" id="bulkEnableFilteredBtn" onclick="bulkToggleFiltered(false)">启用当前筛选</button>
-            <button class="btn btn-sm" id="bulkDisableFilteredBtn" onclick="bulkToggleFiltered(true)">停用当前筛选</button>
-          </div>
-        </div>
-        <button class="sync-btn" id="syncModelsBtn" onclick="syncModels()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="ic-sm"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg><span>从 Cline 同步模型</span></button>
-        <button class="sync-btn" id="syncOcModelsBtn" onclick="syncOcModels()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="ic-sm"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg><span>从 OpenCode Zen 同步模型</span></button>
-      </div>
-      <div id="modelsList" class="model-list"><div class="sk-stack"><span class="skeleton"></span><span class="skeleton w70"></span><span class="skeleton w45"></span><span class="skeleton w70"></span></div></div>
     </div>
   </div>
   </div>

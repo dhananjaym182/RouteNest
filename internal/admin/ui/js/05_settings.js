@@ -456,8 +456,7 @@ function fillTuning(c) {
   _tunBaseCfg = c;
   setSaveBarCtx('tuning', {
     host: () => {
-      const el = document.querySelector('.nav-item.active');
-      if (!el || el.dataset.tab !== 'routing') return false;
+      if (typeof _activeTabName === 'undefined' || _activeTabName !== 'routing') return false;
       const st = document.querySelector('.page-subtabs[data-page="routing"] .subtab.active');
       return !!st && st.dataset.sub === 'tuning';
     },

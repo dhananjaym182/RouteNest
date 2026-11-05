@@ -1,16 +1,38 @@
-<div id="tab-accounts" class="tab-panel" style="display:none">
+<div id="tab-credentials" class="tab-panel system-page" style="display:none">
+  <span id="tab-accounts" hidden aria-hidden="true"></span>
   <div class="page-header">
     <div>
-      <div class="large-title">账号与登录</div>
-      <div class="large-subtitle">管理 Cline 账号与 Provider OAuth 登录，模型用量按来源汇总</div>
+      <div class="page-kicker">Provider 系统</div>
+      <div class="large-title">凭据</div>
+      <div class="large-subtitle">统一查看已脱敏凭据，并管理 Cline 账号与 Provider OAuth 登录。</div>
     </div>
+    <div class="action-row"><button type="button" class="btn btn-sm" onclick="loadGlobal(true);loadAccounts();loadConnections()">刷新</button></div>
   </div>
   <div class="subtabs page-subtabs" data-page="accounts">
-    <div class="subtab active" data-sub="pool">Cline 账号</div>
+    <div class="subtab active" data-sub="inventory">全部凭据</div>
+    <div class="subtab" data-sub="pool">Cline 账号</div>
     <div class="subtab" data-sub="conns">Provider OAuth</div>
   </div>
 
-  <div class="page-subpage" data-subpage="pool">
+  <div class="page-subpage" data-subpage="inventory">
+    <div class="section system-section">
+      <div class="section-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="10" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg><span>全局凭据清单</span></div>
+      <div class="section-desc">只读投影不会显示密钥、Token 或会话秘密。管理操作仍使用下方兼容工作流。</div>
+      <div class="system-toolbar">
+        <div class="field system-filter-field">
+          <label for="globalCredentialProviderFilter">Provider 筛选</label>
+          <select id="globalCredentialProviderFilter" onchange="setGlobalFilter(this.value)"></select>
+        </div>
+        <div class="action-row system-toolbar-actions">
+          <button type="button" class="btn btn-sm" onclick="switchPageSubTab('accounts','pool')">管理 Cline 账号</button>
+          <button type="button" class="btn btn-sm" onclick="switchPageSubTab('accounts','conns')">管理 Provider OAuth</button>
+        </div>
+      </div>
+      <div id="globalCredentials" class="section-body system-inventory" aria-live="polite"></div>
+    </div>
+  </div>
+
+  <div class="page-subpage" data-subpage="pool" style="display:none">
   <div class="section">
     <div class="section-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg><span>Cline 账号池</span>
       <span class="title-tools action-row">
