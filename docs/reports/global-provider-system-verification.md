@@ -1,6 +1,6 @@
 # Global provider system — verification report
 
-- Date: 2026-11-04
+- Date: 2026-11-05
 - Branch: `refactor/global-provider-system`
 - Head: `eeccfc6` (base `5c4942c` from `refactor/provider-architecture`)
 - Go: `go1.26.7 linux/amd64`
@@ -10,12 +10,16 @@
 ## Scope
 
 This report covers Tasks 0–19 of the implementation plan. Task 17 was delivered
-as an additive, read-only global view: a new `全局视图` tab renders Provider
-Instances, Credentials, Model Offerings, Availability Observations, and Egress
-Profiles from the additive admin endpoints. No existing page, DOM ID, hash
-route, storage key, payload, or navigation target was renamed or removed. The
-full visual redesign and designer review remain pending because the `designer`
-subagent is unavailable (`401`).
+in two slices: an additive read-only global view (a new `全局视图` tab over the
+five additive admin endpoints), then the full information-architecture
+redesign the designer completed. The primary navigation is now Providers,
+Credentials, Model, Routing, Network, and Usage & Health; the five global
+projections (Provider Instances, Credentials, Model Offerings, Availability
+Observations, Egress Profiles) live on those pages. Legacy hashes
+(`global`, `accounts`, `import`, `upstreams`) alias to the canonical pages and
+legacy DOM IDs are retained as compatibility anchors. No persisted JSON
+schema, provider ID, storage key, HTTP route, payload shape, or routing
+semantic changed.
 
 The migration keeps every persisted JSON schema, provider ID, storage key,
 HTTP route, payload shape, and routing semantic intact. Global Provider
@@ -166,10 +170,10 @@ delisting, and free-only routing.
   `unknown`; only configured budgets produce proactive quota state.
 - Persisted JSON has not been consolidated into a new schema.
 - Legacy admin endpoints are retained for the announced compatibility window.
-- The admin UI is not yet rebuilt around global concepts. Task 17 currently
-  adds one read-only global view beside the existing pages; the tab-level
-  reorganisation, visual review, and browser checks remain pending designer
-  availability.
+- The admin UI is rebuilt around global concepts (Task 17). The remaining
+  residual risk is visual confirmation were limited to desktop Chromium at
+  1440×1000 plus one mobile pass; dark-theme rendering and per-provider
+  filtered cross-links were verified structurally, not by screenshot.
 
 ## Commits under verification
 
