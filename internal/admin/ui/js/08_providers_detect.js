@@ -410,4 +410,3 @@ async function testProvider(btn) {
     if (btn) { btn.disabled = false; btn.innerHTML = orig; }
   }
 }
-

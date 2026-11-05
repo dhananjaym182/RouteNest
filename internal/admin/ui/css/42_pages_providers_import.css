@@ -52,4 +52,3 @@
    fixed 布局忽略单元格 min-width，"0/2,000,000" 这类 nowrap 内容会横向绘制到相邻列。
    → 连接表改 auto 布局。Provider 侧已弃表换卡片（prov-cards），重叠压力从根上消除。 */
 #connectionsList .action-table{table-layout:auto}
-

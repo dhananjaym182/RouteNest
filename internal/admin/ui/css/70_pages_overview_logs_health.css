@@ -217,4 +217,3 @@
 .quickstart-card{background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:10px 12px}
 .quickstart-card-title{font-size:12px;font-weight:600;color:var(--text2);margin-bottom:6px}
 .quickstart-code{margin:0;font-family:ui-monospace,monospace;font-size:12px;line-height:1.6;color:var(--text);white-space:pre-wrap;word-break:break-all}
-

@@ -206,4 +206,3 @@ function provMiniHealthHTML(p) {
   if (cool) html += ' <button type="button" class="chip warn cooldown-chip" onclick="event.stopPropagation();providersResetCooldown(\'' + escAttr(p.id) + '\', \'\', this)" title="' + escAttr(t('点击清除该 Provider 全部冷却')) + '">' + uiIcon('hourglass') + ' ' + cool + ' · ' + fmtLeft(h.recoveryAt) + '</button>';
   return html;
 }
-

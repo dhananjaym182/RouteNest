@@ -73,4 +73,3 @@
 .import-group-count{font-variant-numeric:tabular-nums;color:var(--text3);font-weight:600}
 .import-group-tiers{margin-left:auto;font-weight:400;color:var(--text3);font-variant-numeric:tabular-nums}
 .import-basis{font-size:11px;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:220px}
-

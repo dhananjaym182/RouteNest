@@ -67,4 +67,3 @@ input:focus-visible,textarea:focus-visible,select:focus-visible{outline:none}
 /* action row */
 .action-row{display:flex;gap:8px;flex-wrap:wrap}
 .toolbar-sep{width:1px;align-self:stretch;margin:4px 3px;background:var(--border);flex-shrink:0}
-

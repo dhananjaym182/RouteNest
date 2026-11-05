@@ -314,4 +314,3 @@ textarea{resize:vertical;min-height:88px;font-family:ui-monospace,'SF Mono','Cas
 .subtab{padding:7px 16px;border-radius:8px;cursor:pointer;color:var(--text2);font-size:13px;font-weight:500;white-space:nowrap}
 .subtab:hover{color:var(--text)}
 .subtab.active{background:var(--surface);color:var(--accent);box-shadow:var(--shadow-sm)}
-

@@ -50,4 +50,3 @@
 .attention-row .a-link:hover{text-decoration:underline}
 .attention-empty{padding:14px 16px;font-size:var(--fs-base);color:var(--text3)}
 .attention-loading{display:flex;align-items:center;gap:8px;padding:14px 16px;font-size:var(--fs-base);color:var(--text3)}
-

@@ -30,4 +30,3 @@ html[data-nav="collapsed"] .nav-edge-toggle svg{transform:rotate(180deg)}
 .nav-rail-tip.show{display:block}
 @media (min-width:761px){.nav-collapse-btn{display:none}}
 @media (max-width:760px){.nav-edge-toggle{display:none!important}.nav-rail-tip,.nav-rail-tip.show{display:none!important}}
-
