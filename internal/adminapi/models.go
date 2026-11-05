@@ -7,8 +7,8 @@ import (
 	"net/http"
 	"strings"
 
-	"cline-go-proxy/internal/domain"
-	"cline-go-proxy/internal/httpx"
+	"routenest/internal/domain"
+	"routenest/internal/httpx"
 )
 
 // DeleteModelResult reports why a model deletion succeeded or failed.

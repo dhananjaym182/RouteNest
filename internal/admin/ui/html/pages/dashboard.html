@@ -1,0 +1,126 @@
+<div id="tab-dashboard" class="tab-panel">
+  <div class="page-header">
+    <div>
+      <div class="large-title">仪表盘</div>
+      <div class="large-subtitle">账号池容量与用量总览</div>
+    </div>
+  </div>
+  <div class="metric-section">
+    <div class="dash-hero" id="dashHero">
+      <div class="dash-hero-main">
+        <div class="dash-verdict-row">
+          <span class="dash-dot" id="dashLiveDot"></span>
+          <span class="dash-verdict" id="dashVerdict">加载中…</span>
+          <span class="dash-live-badge" id="dashLiveBadge" hidden>LIVE</span>
+        </div>
+        <div class="dash-count"><b id="dashReqCount">0</b><span id="dashCountLabel">窗口内请求</span></div>
+        <div class="dash-ratio" role="img" aria-label="成功失败占比"><span class="ratio-ok" id="dashRatioOk" style="width:100%"></span><span class="ratio-err" id="dashRatioErr" style="width:0%"></span></div>
+        <div class="dash-ratio-labels">
+          <span class="ok-lbl">✓ <b id="dashOkCount">0</b></span>
+          <span class="err-lbl">✗ <b id="dashErrCount">0</b></span>
+          <span class="rate-lbl" id="dashRateLabel">—</span>
+        </div>
+        <div class="dash-ranges" role="group" aria-label="时间窗口">
+          <button type="button" class="chip range" data-hours="1" onclick="setDashRange(1, this)">1h</button>
+          <button type="button" class="chip range active" data-hours="24" onclick="setDashRange(24, this)">24h</button>
+          <button type="button" class="chip range" data-hours="72" onclick="setDashRange(72, this)">3d</button>
+          <button type="button" class="chip range" data-hours="168" onclick="setDashRange(168, this)">7d</button>
+        </div>
+      </div>
+      <div class="dash-kpis">
+        <div class="dash-kpi"><div class="kpi-num" id="dashKpiLatency">—</div><div class="kpi-label">平均时延</div><div class="kpi-meter"><span id="dashMeterLatency"></span></div></div>
+        <div class="dash-kpi"><div class="kpi-num" id="dashKpiTtft">—</div><div class="kpi-label">首字延迟</div><div class="kpi-meter"><span id="dashMeterTtft"></span></div></div>
+        <div class="dash-kpi"><div class="kpi-num" id="dashKpiTokens">—</div><div class="kpi-label">窗口 Token</div><div class="kpi-meter"><span id="dashMeterTokens"></span></div></div>
+        <div class="dash-kpi"><div class="kpi-num" id="dashKpiFallback">—</div><div class="kpi-label">降级切换</div><div class="kpi-meter"><span id="dashMeterFallback"></span></div></div>
+      </div>
+    </div>
+  </div>
+  <div class="metric-section">
+    <div class="metric-heading">吞吐趋势</div>
+    <div class="dash-chart" id="dashThroughput"><div class="sk-stack"><span class="skeleton"></span></div></div>
+  </div>
+  <div class="metric-section">
+    <div class="dash-grid">
+      <div class="dash-col">
+        <div class="metric-heading">上游分布</div>
+        <div class="dash-fleet" id="dashFleet"><div class="sk-stack"><span class="skeleton"></span><span class="skeleton w70"></span></div></div>
+        <div class="dash-runtime" id="dashRuntime"></div>
+      </div>
+      <div class="dash-col">
+        <div class="metric-heading">热门模型</div>
+        <div class="dash-models" id="dashModels"><div class="sk-stack"><span class="skeleton"></span><span class="skeleton w70"></span></div></div>
+      </div>
+    </div>
+  </div>
+  <div class="metric-section">
+    <div class="pool-hero">
+      <div class="pool-hero-top">
+        <div class="pool-hero-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>账号池容量</div>
+        <div class="pool-requests">累计请求 <b id="statPoolRequests">-</b></div>
+      </div>
+      <div class="cap-bar" id="poolCapBar" role="img" aria-label="池容量分布">
+        <span class="cap-seg ok" id="capSegActive"></span>
+        <span class="cap-seg warn" id="capSegCooldown"></span>
+        <span class="cap-seg bad" id="capSegExpired"></span>
+      </div>
+      <div class="pool-chips">
+        <span class="chip">总数 <b id="statTotal">-</b></span>
+        <span class="chip ok"><span class="dot"></span>活跃 <b id="statActive">-</b></span>
+        <span class="chip warn"><span class="dot"></span>冷却 <b id="statCooldown">-</b></span>
+        <span class="chip bad"><span class="dot"></span>已过期 <b id="statExpired">-</b></span>
+      </div>
+    </div>
+  </div>
+  <div class="metric-section">
+    <div class="metric-heading">Token 用量</div>
+    <div class="tiles">
+      <div class="stat-tile">
+        <div class="tile-icon blue"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></div>
+        <div class="tile-body"><div class="tile-num" id="statPromptTokens">-</div><div class="tile-label">累计输入 Token</div></div>
+      </div>
+      <div class="stat-tile">
+        <div class="tile-icon green"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></div>
+        <div class="tile-body"><div class="tile-num" id="statCompletionTokens">-</div><div class="tile-label">累计输出 Token</div></div>
+      </div>
+      <div class="stat-tile">
+        <div class="tile-icon purple"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></div>
+        <div class="tile-body"><div class="tile-num" id="statTotalTokens">-</div><div class="tile-label">累计总 Token</div><div class="tile-sub" id="statAvgPerReq">平均 -/请求</div></div>
+      </div>
+      <div class="stat-tile">
+        <div class="tile-icon cyan"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a10 10 0 1 0 10 10"/><path d="M12 6v6l4 2"/></svg></div>
+        <div class="tile-body"><div class="tile-num" id="statCachedTokens">-</div><div class="tile-label">缓存 Token</div><div class="tile-sub" id="statCacheRate">缓存率 -</div></div>
+      </div>
+      <div class="tiles-subhead"><span class="dot"></span>今日 · OpenCode Zen 免费模型</div>
+      <div class="stat-tile secondary">
+        <div class="tile-icon amber"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg></div>
+        <div class="tile-body"><div class="tile-num" id="statOcRequests">-</div><div class="tile-label">今日请求数</div></div>
+      </div>
+      <div class="stat-tile secondary">
+        <div class="tile-icon blue"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></div>
+        <div class="tile-body"><div class="tile-num" id="statOcInputTokens">-</div><div class="tile-label">今日输入 Token</div></div>
+      </div>
+      <div class="stat-tile secondary">
+        <div class="tile-icon green"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></div>
+        <div class="tile-body"><div class="tile-num" id="statOcOutputTokens">-</div><div class="tile-label">今日输出 Token</div></div>
+      </div>
+      <div class="stat-tile secondary">
+        <div class="tile-icon purple"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></div>
+        <div class="tile-body"><div class="tile-num" id="statOcTotalTokens">-</div><div class="tile-label">今日总 Token</div></div>
+      </div>
+    </div>
+  </div>
+  <div class="metric-section">
+    <div class="metric-heading">需要关注</div>
+    <div class="attention-list" id="dashAttention" aria-live="polite"><div class="sk-stack"><span class="skeleton"></span><span class="skeleton w70"></span></div></div>
+  </div>
+  <div class="section">
+    <div class="section-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>快捷操作</div>
+    <div class="section-body action-row">
+      <button class="btn btn-primary" onclick="showAccountLogin('oauth')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>添加账号</button>
+      <button class="btn" onclick="refreshAllTokens(this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>刷新全部 Token</button>
+      <button class="btn" onclick="document.getElementById('fileInput').click()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>从文件导入</button>
+      <input type="file" id="fileInput" accept=".json,.txt" style="display:none" onchange="handleFileImport(event)">
+      <button class="btn" onclick="switchTab('security');switchPageSubTab('security','keys')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>API 密钥</button>
+    </div>
+  </div>
+</div>

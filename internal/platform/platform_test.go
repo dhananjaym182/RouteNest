@@ -3,6 +3,7 @@ package platform
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -96,6 +97,30 @@ func TestWriteFileAtomic(t *testing.T) {
 	}
 	if _, err := os.Stat(path + ".tmp"); !os.IsNotExist(err) {
 		t.Fatalf("temporary file was not renamed: %v", err)
+	}
+}
+
+func TestWriteFileAtomicTightensLeftoverTempFile(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows permissions use ACLs rather than Unix mode bits")
+	}
+	path := filepath.Join(t.TempDir(), "state.json")
+	if err := os.WriteFile(path+".tmp", []byte("stale"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(path+".tmp", 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := WriteFileAtomic(path, []byte("private"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := info.Mode().Perm(); got != 0600 {
+		t.Fatalf("file mode = %04o, want 0600", got)
 	}
 }
 

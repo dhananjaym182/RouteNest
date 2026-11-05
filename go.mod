@@ -1,4 +1,4 @@
-module cline-go-proxy
+module routenest
 
 go 1.25.0
 

@@ -6,8 +6,8 @@ import (
 	"encoding/json"
 	"os"
 
-	"cline-go-proxy/internal/domain"
-	"cline-go-proxy/internal/platform"
+	"routenest/internal/domain"
+	"routenest/internal/platform"
 )
 
 // FileName is the data file holding provider connections.

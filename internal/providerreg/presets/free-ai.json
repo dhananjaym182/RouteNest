@@ -1,8 +1,0 @@
-{
-  "id": "free-ai",
-  "name": "Free.ai",
-  "baseURL": "https://api.free.ai/v1/chat/",
-  "notes": "free-ai (from extremerouter registry)",
-  "freeTier": false,
-  "kind": "hasFree"
-}

@@ -1,0 +1,105 @@
+/* ===== Responsive ===== */
+@media (max-width:760px){
+  .layout{display:block}
+  .sidebar{width:100%;height:auto;min-height:0;position:static;border-right:none;border-bottom:1px solid var(--border2)}
+  .sidebar-header{padding:14px 16px;border-bottom:none}
+  .sidebar-header .brand-sub,.nav-section-label{display:none}
+  .sidebar-nav{flex:none;min-height:0;overflow:visible;padding-bottom:0}
+  .nav-section{display:flex;padding:0 10px 12px;gap:4px;overflow-x:auto}
+  .nav-item{flex:1;justify-content:center;gap:6px;margin:0;padding:8px 10px;min-width:max-content}
+  .nav-item svg{width:18px;height:18px}
+	  .main{padding:24px 16px 40px;max-width:none}
+	  .content-shell{width:100%}
+	  .large-title{font-size:22px;letter-spacing:-0.2px}
+  .large-subtitle{margin-bottom:22px;font-size:14px}
+  .page-header{align-items:flex-start;gap:14px;flex-direction:column;margin-bottom:22px}
+  .tiles{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+  .stat-tile{padding:12px 14px}
+  .tile-num{font-size:20px}
+  .pool-hero{padding:var(--sp-4)}
+  /* 收起态在窄屏还原为横向导航（媒体查询置于 collapsed 规则之后，优先级相同则后者胜出） */
+  html[data-nav="collapsed"] .sidebar{width:100%;height:auto;position:static}
+  html[data-nav="collapsed"] .sidebar-header{flex-direction:row;align-items:center;padding:14px 16px}
+  html[data-nav="collapsed"] .sidebar-header .brand{flex:1;justify-content:flex-start}
+  html[data-nav="collapsed"] .brand-text{display:block}
+  html[data-nav="collapsed"] .nav-item{display:flex;justify-content:flex-start;padding:8px 10px;gap:6px}
+  html[data-nav="collapsed"] .nav-item .nav-label{display:inline}
+  .section{border-radius:14px;margin-bottom:16px}
+  .section-title{padding:14px 16px 7px}
+  .section-desc{padding:0 16px 10px}
+  .section-body,.tab-content{padding:16px}
+  .tabs{padding:0 12px;overflow-x:auto;white-space:nowrap}
+  .tab{padding:11px 12px;font-size:13px}
+  .form-row{flex-direction:column;align-items:stretch;gap:0;margin-bottom:0}
+  .form-row .field{margin-bottom:14px}
+  .form-row.quota-win-row .field-win,.form-row.proxy-row .field-proxy{flex:1 1 auto}
+  .form-actions,.action-row{gap:8px}
+	  table{min-width:680px}
+  .section-body.flush{overflow-x:auto}
+  th,td{padding:11px 12px}
+	  .toast{max-width:calc(100vw - 32px);width:max-content;text-align:center}
+	}
+	@media (min-width:761px) and (max-width:1180px){
+	  .main{padding:30px clamp(16px,2.5vw,32px) 56px}
+	  .tiles{grid-template-columns:repeat(2,minmax(0,1fr))}
+	  .account-table th:nth-child(9),.account-table td:nth-child(9){display:none}
+	}
+	@media (max-width:760px){
+	  .log-table{display:none}
+	  .log-cards{display:grid;gap:10px;padding:12px}
+	}
+	@media (max-width:760px){
+	  .account-table{display:none}
+	  .account-cards{display:grid;gap:10px;padding:12px}
+	  .account-card{border:1px solid var(--border2);border-radius:12px;padding:14px;background:var(--surface2)}
+  .account-card-header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px}
+  .account-card .account-email{max-width:calc(100vw - 170px);min-width:0}
+	  .account-metrics{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-bottom:12px}
+	  .account-metric{padding:8px 10px;border-radius:8px;background:var(--surface)}
+	  .account-metric-label{display:block;color:var(--text2);font-size:11px;margin-bottom:2px}
+	  .account-metric-value{font-size:14px;font-weight:600;font-variant-numeric:tabular-nums}
+	  .account-card-footer{display:flex;align-items:center;justify-content:space-between;gap:12px;color:var(--text2);font-size:11px}
+	  .account-card-actions{display:flex;gap:6px;flex-shrink:0}
+	  .section-body.flush{overflow:visible}
+	}
+	@media (max-width:390px){
+	  .tiles{grid-template-columns:1fr}
+	  .nav-item .nav-label{font-size:12px}
+	  .action-row .btn{flex:1;justify-content:center}
+	}
+/* ===== 追加响应式：平板 / 工具栏换行 / 表格滚动 ===== */
+@media (max-width:1000px){
+  .model-toolbar .sync-btn{flex:1 1 auto;justify-content:center}
+}
+@media (max-width:900px){
+  .model-toolbar input[type="text"]{flex-basis:100%}
+  .model-toolbar select{flex:1 1 calc(50% - 8px)}
+  .model-toolbar .btn,.model-toolbar .sync-btn{flex:1 1 auto;justify-content:center}
+  .main{padding:28px clamp(16px,2.5vw,24px) 48px}
+}
+@media (max-width:760px){
+  .section-title{flex-wrap:wrap;gap:var(--sp-2)}
+  .title-tools{margin-left:0}
+  .combo-entry-select{flex:1 1 100%;min-width:0}
+  .combo-entry-actions{margin-left:0}
+  .log-cards{padding:var(--sp-3);gap:var(--sp-2)}
+  .section-body.xscroll{padding:var(--sp-4)}
+}
+
+/* ===== 骨架占位（表格 / 列表加载态，替代纯文本 Loading） ===== */
+.sk-stack{display:flex;flex-direction:column;gap:10px;padding:var(--sp-4) var(--sp-5)}
+.skeleton{display:block;height:14px;border-radius:6px;background:linear-gradient(90deg,var(--surface2) 25%,var(--border) 37%,var(--surface2) 63%);background-size:400% 100%;animation:skpulse 1.3s var(--ease) infinite}
+.skeleton.w70{width:70%}
+.skeleton.w45{width:45%}
+@keyframes skpulse{0%{background-position:100% 50%}100%{background-position:0 50%}}
+
+/* ===== 触屏粗指针：命中区域加大（桌面密度不变） ===== */
+@media (pointer:coarse){
+  .btn-sm{min-height:40px}
+  .btn-icon{width:40px;height:40px;padding:8px}
+  .drawer-close,.nav-collapse-btn{min-width:40px;min-height:40px}
+  .account-table input[type="checkbox"],.combo-pick-row input[type="checkbox"]{width:20px;height:20px}
+  .tab{padding-top:14px;padding-bottom:14px}
+  .nav-item{padding:12px}
+}
+

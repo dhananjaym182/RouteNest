@@ -1,0 +1,76 @@
+<div id="tab-about" class="tab-panel" style="display:none">
+  <div class="large-title">关于</div>
+  <div class="large-subtitle">应用信息、使用指南与开源协议</div>
+
+  <div class="section">
+    <div class="section-title">应用信息</div>
+    <div class="section-body">
+      <div class="about-head">
+        <div class="app-logo-lg">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+        </div>
+        <div>
+          <div class="about-brand">RouteNest</div>
+          <div class="page-sub-title">RouteNest · 多账号轮询 · 双协议兼容</div>
+          <div class="hint-sm mt-4"><span id="aboutVersion">版本 dev</span> · MIT License · Go 1.25 + Wails v2</div>
+          <div class="hint-sm mt-2" id="aboutBuildRow" hidden><span>构建信息</span>: <span id="aboutGitInfo">—</span></div>
+          <div class="hint-sm mt-2"><span>API 地址</span>: <span id="aboutApiAddr">127.0.0.1:3457</span></div>
+          <div class="hint-sm mt-2" id="aboutUptimeRow" hidden><span>运行时长</span>: <span id="aboutUptime">—</span><span id="aboutStartedAtWrap"> · 启动于 <span id="aboutStartedAt">—</span></span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">快速上手</div>
+    <div class="section-body">
+      <div class="about-para">添加账号 → 生成 API Key → 客户端配置 <code class="inline-code">Base URL: http://127.0.0.1:3457/v1</code>。完整步骤与各客户端示例见「快速开始」页。<button class="btn btn-sm ml-8" onclick="switchTab('quickstart')">打开快速开始</button></div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">功能特性</div>
+    <div class="section-body">
+      <div class="about-feature-grid small-t2">
+        <div>✅ 多账号轮询（轮询/填满/随机）</div>
+        <div>✅ OpenAI & Anthropic 双协议</div>
+        <div>✅ 429 冷却自动恢复</div>
+        <div>✅ 账号导出/导入（跨设备迁移）</div>
+        <div>✅ OAuth 系统浏览器登录</div>
+        <div>✅ 请求日志与统计</div>
+        <div>✅ System Prompt 覆盖</div>
+        <div>✅ 跨平台桌面端（Win/Mac/Linux）</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">项目链接</div>
+    <div class="section-body">
+      <div class="about-links">
+        <div><span class="about-kv">仓库地址</span><a href="#" onclick="openExternal('https://github.com/dhananjaym182/RouteNest');return false" class="oauth-url">github.com/dhananjaym182/RouteNest</a></div>
+        <div><span class="about-kv">问题反馈</span><a href="#" onclick="openExternal('https://github.com/dhananjaym182/RouteNest/issues');return false" class="oauth-url">github.com/dhananjaym182/RouteNest/issues</a></div>
+        <div><span class="about-kv">下载更新</span><a href="#" onclick="openExternal('https://github.com/dhananjaym182/RouteNest/releases');return false" class="oauth-url">github.com/dhananjaym182/RouteNest/releases</a></div>
+        <div><span class="about-kv">更新检查</span><span id="aboutVerCheck" class="hint-md">未检查</span> <button type="button" class="btn btn-sm" onclick="checkForUpdate(true,this)">检查更新</button></div>
+        <div><span class="about-kv">开源协议</span>MIT License © 2026 dhananjaym182 (RouteNest)；上游 Cline2API © 2026 luawei1 见 THIRD_PARTY_NOTICES</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">数据与隐私</div>
+    <div class="section-body">
+      <div class="about-para">
+        <div>• 本程序仅在本地运行，默认监听 <code class="inline-code">127.0.0.1:3457</code>，不对外暴露。</div>
+        <div>• 账号凭据（refreshToken）存储在数据目录的 <code class="inline-code">.routenest-accounts.json</code>（Docker 中位于 /app/data，可用 ROUTENEST_DATA_DIR 配置）中，明文保存，请注意保护。</div>
+        <div>• 所有 API 请求通过本机代理转发至 Cline 官方服务器，不经过任何第三方。</div>
+        <div>• 关闭窗口即停止服务，无后台驻留进程。</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</div>
+</div>
+</div>
+

@@ -1,0 +1,1179 @@
+{
+  "agentrouter": {
+    "id": "agentrouter",
+    "name": "AgentRouter",
+    "baseURL": "https://agentrouter.org/v1",
+    "notes": "agentrouter (from extremerouter registry)",
+    "freeTier": true,
+    "modelIds": [
+      "glm-5.2",
+      "gpt-5.5",
+      "claude-opus-4-6",
+      "claude-opus-4-7",
+      "claude-opus-4-8"
+    ],
+    "modelsFetcher": {
+      "url": "https://agentrouter.org/api/pricing",
+      "type": "agentrouter"
+    },
+    "kind": "freeTier"
+  },
+  "ai21": {
+    "id": "ai21",
+    "name": "AI21 Labs",
+    "baseURL": "https://api.ai21.com/studio/v1",
+    "notes": "ai21 (from extremerouter registry)",
+    "freeTier": false,
+    "modelIds": [
+      "jamba-large-1.7",
+      "jamba-mini-2"
+    ],
+    "kind": "hasFree"
+  },
+  "aihorde": {
+    "id": "aihorde",
+    "name": "AI Horde",
+    "baseURL": "https://oai.aihorde.net/v1",
+    "notes": "aihorde (from extremerouter registry)",
+    "freeTier": true,
+    "modelIds": [
+      "aphrodite/TheDrummer/Cydonia-24B-v4.3",
+      "aphrodite/TheDrummer/Skyfall-31B-v4.2",
+      "google/gemma-4-31b"
+    ],
+    "kind": "free"
+  },
+  "ainative": {
+    "id": "ainative",
+    "name": "AINative Studio",
+    "baseURL": "https://api.ainative.studio/api/v1",
+    "notes": "ainative (from extremerouter registry)",
+    "freeTier": false,
+    "modelIds": [
+      "qwen3-235b-cerebras",
+      "qwen3-32b",
+      "qwen3-14b",
+      "qwen3-8b",
+      "llama-4-maverick",
+      "llama3.1-8b-cerebras",
+      "deepseek-r1",
+      "nous-coder",
+      "gemini-flash"
+    ],
+    "kind": "hasFree"
+  },
+  "aion": {
+    "id": "aion",
+    "name": "Aion Labs",
+    "baseURL": "https://api.aionlabs.ai/v1",
+    "notes": "aion (from extremerouter registry)",
+    "freeTier": false,
+    "modelIds": [
+      "aion-labs/aion-3.0",
+      "aion-labs/aion-3.0-mini",
+      "aion-labs/aion-2.5",
+      "aion-labs/aion-2.0",
+      "aion-labs/aion-rp-llama-3.1-8b"
+    ],
+    "kind": "hasFree"
+  },
+  "anyapi": {
+    "id": "anyapi",
+    "name": "AnyAPI AI",
+    "baseURL": "https://api.anyapi.ai/v1",
+    "notes": "anyapi (from extremerouter registry)",
+    "freeTier": false,
+    "kind": "hasFree"
+  },
+  "arcee-ai": {
+    "id": "arcee-ai",
+    "name": "Arcee AI",
+    "baseURL": "https://api.arcee.ai/api/v1",
+    "notes": "arcee-ai (from extremerouter registry)",
+    "freeTier": false,
+    "modelIds": [
+      "trinity-mini",
+      "trinity-large-thinking",
+      "trinity-large-preview"
+    ],
+    "kind": "hasFree"
+  },
+  "auriko": {
+    "id": "auriko",
+    "name": "Auriko",
+    "baseURL": "https://api.auriko.ai/v1",
+    "notes": "auriko (from extremerouter registry)",
+    "freeTier": false,
+    "modelIds": [
+      "minimax-m2-7",
+      "claude-opus-4-7",
+      "deepseek-v4-flash",
+      "gemini-3.1-pro-preview",
+      "deepseek-v4-pro",
+      "claude-sonnet-4-6"
+    ],
+    "kind": "hasFree"
+  },
+  "baseten": {
+    "id": "baseten",
+    "name": "Baseten",
+    "baseURL": "https://inference.baseten.co/v1",
+    "notes": "baseten (from extremerouter registry)",
+    "freeTier": false,
+    "modelIds": [
+      "MiniMaxAI/MiniMax-M2.5",
+      "nvidia/Nemotron-120B-A12B",
+      "nvidia/NVIDIA-Nemotron-3-Ultra-550B-A55B",
+      "moonshotai/Kimi-K2.5",
+      "moonshotai/Kimi-K2.7-Code",
+      "moonshotai/Kimi-K3"
+    ],
+    "kind": "hasFree"
+  },
+  "bazaarlink": {
+    "id": "bazaarlink",
+    "name": "BazaarLink",
+    "baseURL": "https://bazaarlink.ai/api/v1",
+    "notes": "bazaarlink (from extremerouter registry)",
+    "freeTier": false,
+    "modelIds": [
+      "auto:free",
+      "claude-opus-4.7",
+      "claude-sonnet-4.6",
+      "claude-haiku-4.5",
+      "gpt-5.5",
+      "gpt-5.4",
+      "gpt-5.4-mini",
+      "gpt-5.4-nano",
+      "grok-4.3",
+      "grok-4.20",
+      "gemini-3.1-pro-preview",
+      "gemini-3-flash-preview",
+      "gemini-3.1-flash-lite-preview",
+      "gemma-4-31b-it",
+      "gemma-4-26b-a4b-it",
+      "deepseek-v3.2",
+      "kimi-k2.6",
+      "kimi-k2.5",
+      "glm-5.1",
+      "glm-5",
+      "mimo-v2.5-pro",
+      "mimo-v2.5",
+      "minimax-m3",
+      "minimax-m2.7",
+      "minimax-m2.5",
+      "llama-4-maverick",
+      "llama-4-scout",
+      "llama-3.3-70b-instruct",
+      "qwen3.6-plus",
+      "mistral-large-2512",
+      "mistral-medium-3.1",
+      "mistral-small-2603",
+      "nemotron-3-super-120b-a12b"
+    ],
+    "kind": "hasFree"
+  },
+  "bluesminds": {
+    "id": "bluesminds",
+    "name": "BluesMinds",
+    "baseURL": "https://api.bluesminds.com/v1",
+    "notes": "bluesminds (from extremerouter registry)",
+    "freeTier": false,
+    "modelIds": [
+      "gpt-4o",
+      "gpt-4o-mini",
+      "gpt-4.1",
+      "gpt-4.1-mini",
+      "gpt-4.1-nano",
+      "claude-sonnet-4-5",
+      "claude-haiku-4-5",
+      "gemini-2.0-flash",
+      "gemini-2.0-flash-exp",
+      "deepseek-reasoner",
+      "deepseek-chat",
+      "qwen-plus",
+      "qwen-turbo",
+      "kimi-k2",
+      "kimi-k2-thinking",
+      "glm-4.7",
+      "glm-4-flash",
+      "minimax-m2.5",
+      "claude-opus-4-5",
+      "gemini-2.5-pro",
+      "grok-3",
+      "qwen-max"
+    ],
+    "kind": "hasFree"
+  },
+  "bynara": {
+    "id": "bynara",
+    "name": "Bynara",
+    "baseURL": "https://router.bynara.id/v1",
+    "notes": "bynara (from extremerouter registry)",
+    "freeTier": true,
+    "modelIds": [
+      "agnes-video-v2.0"
+    ],
+    "modelsFetcher": {
+      "url": "https://router.bynara.id/v1/models",
+      "type": "bynara"
+    },
+    "kind": "freeTier"
+  },
+  "byteplus": {
+    "id": "byteplus",
+    "name": "BytePlus ModelArk",
+    "baseURL": "https://ark.ap-southeast.bytepluses.com/api/coding/v3",
+    "notes": "byteplus (from extremerouter registry)",
+    "freeTier": true,
+    "modelIds": [
+      "seed-2-0-pro-260328",
+      "seed-2-0-code-preview-260328",
+      "seed-2-0-mini-260215",
+      "seed-2-0-lite-260228",
+      "kimi-k2-thinking-251104",
+      "glm-4-7-251222",
+      "gpt-oss-120b-250805"
+    ],
+    "kind": "freeTier"
+  },
+  "bytez": {
+    "id": "bytez",
+    "name": "Bytez",
+    "baseURL": "https://api.bytez.com/v1",
+    "notes": "bytez (from extremerouter registry)",
+    "freeTier": false,
+    "kind": "hasFree"
+  },
+  "charm-hyper": {
+    "id": "charm-hyper",
+    "name": "Charm Hyper",
+    "baseURL": "https://hyper.charm.land/v1",
+    "notes": "charm-hyper (from extremerouter registry)",
+    "freeTier": false,
+    "kind": "hasFree"
+  },
+  "chat-oripe": {
+    "id": "chat-oripe",
+    "name": "Chat Oripe",
+    "baseURL": "https://api.oriper.com/v1",
+    "notes": "chat-oripe (from extremerouter registry)",
+    "freeTier": false,
+    "kind": "hasFree"
+  },
+  "chatanywhere": {
+    "id": "chatanywhere",
+    "name": "ChatAnywhere",
+    "baseURL": "https://api.chatanywhere.org/v1",
+    "notes": "chatanywhere (from extremerouter registry)",
+    "freeTier": false,
+    "kind": "hasFree"
+  },
+  "cloudcode-one": {
+    "id": "cloudcode-one",
+    "name": "CloudCode.ONE",
+    "baseURL": "https://api.cloudcode.one/v1",
+    "notes": "cloudcode-one (from extremerouter registry)",
+    "freeTier": false,
+    "modelIds": [
+      "glm-4.7-flash",
+      "glm-4.6v-flash"
+    ],
+    "kind": "hasFree"
+  },
+  "cloudflare-ai": {
+    "id": "cloudflare-ai",
+    "name": "Cloudflare",
+    "baseURL": "https://api.cloudflare.com/client/v4/accounts/{accountId}/ai/v1",
+    "notes": "cloudflare-ai (from extremerouter registry)",
+    "freeTier": true,
+    "modelIds": [
+      "@cf/meta/llama-3.2-1b-instruct",
+      "@cf/meta/llama-3.2-3b-instruct",
+      "@cf/meta/llama-3.1-8b-instruct-fp8-fast",
+      "@cf/meta/llama-3.1-8b-instruct-awq",
+      "@cf/mistralai/mistral-small-3.1-24b-instruct",
+      "@cf/meta/llama-3.1-70b-instruct-fp8-fast",
+      "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+      "@cf/deepseek-ai/deepseek-r1-distill-qwen-32b",
+      "@cf/moonshotai/kimi-k2.5",
+      "@cf/moonshotai/kimi-k2.6",
+      "@cf/zai-org/glm-4.7-flash",
+      "@cf/qwen/qwq-32b",
+      "@cf/qwen/qwen2.5-coder-32b-instruct"
+    ],
+    "kind": "freeTier"
+  },
+  "dahl": {
+    "id": "dahl",
+    "name": "Dahl",
+    "baseURL": "https://inference.dahl.global/v1",
+    "notes": "dahl (from extremerouter registry)",
+    "freeTier": false,
+    "modelIds": [
+      "MiniMaxAI/MiniMax-M2.7",
+      "moonshotai/Kimi-K2.6"
+    ],
+    "kind": "hasFree"
+  },
+  "deepinfra": {
+    "id": "deepinfra",
+    "name": "DeepInfra",
+    "baseURL": "https://api.deepinfra.com/v1/openai",
+    "notes": "deepinfra (from extremerouter registry)",
+    "freeTier": false,
+    "modelIds": [
+      "anthropic/claude-4-opus",
+      "anthropic/claude-4-sonnet",
+      "openai/gpt-oss-120b",
+      "openai/gpt-oss-20b",
+      "meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8",
+      "meta-llama/Llama-4-Scout-17B-16E-Instruct",
+      "deepseek-ai/DeepSeek-V4-Pro",
+      "deepseek-ai/DeepSeek-V4-Flash",
+      "zai-org/GLM-5.1",
+      "moonshotai/Kimi-K2.6",
+      "MiniMaxAI/MiniMax-M2.5",
+      "Qwen/Qwen3.5-397B-A17B",
+      "Qwen/Qwen3.6-35B-A3B",
+      "google/gemma-4-31B-it",
+      "XiaomiMiMo/MiMo-V2.5-Pro"
+    ],
+    "kind": "hasFree"
+  },
+  "dgrid": {
+    "id": "dgrid",
+    "name": "DGrid Free",
+    "baseURL": "https://api.dgrid.ai/v1",
+    "notes": "dgrid (from extremerouter registry)",
+    "freeTier": false,
+    "modelIds": [
+      "dgridai/free"
+    ],
+    "kind": "hasFree"
+  },
+  "docker-model-runner": {
+    "id": "docker-model-runner",
+    "name": "Docker Model Runner",
+    "baseURL": "http://localhost:12434/v1",
+    "notes": "docker-model-runner (from extremerouter registry)",
+    "freeTier": false,
+    "kind": "local"
+  },
+  "dxnt": {
+    "id": "dxnt",
+    "name": "DXNT / DX Token",
+    "baseURL": "https://www.dxnt.com/v1",
+    "notes": "dxnt (from extremerouter registry)",
+    "freeTier": false,
+    "kind": "hasFree"
+  },
+  "electronhub": {
+    "id": "electronhub",
+    "name": "Electron Hub",
+    "baseURL": "https://api.electronhub.ai/v1",
+    "notes": "electronhub (from extremerouter registry)",
+    "freeTier": false,
+    "kind": "hasFree"
+  },
+  "fastrouter": {
+    "id": "fastrouter",
+    "name": "FastRouter",
+    "baseURL": "https://api.fastrouter.ai/api/v1",
+    "notes": "fastrouter (from extremerouter registry)",
+    "freeTier": false,
+    "modelIds": [
+      "z-ai/glm-5",
+      "z-ai/glm-5.1",
+      "deepseek/deepseek-v4-pro",
+      "google/gemini-3.1-pro-preview",
+      "google/gemma-4-31b-it"
+    ],
+    "kind": "hasFree"
+  },
+  "free-ai": {
+    "id": "free-ai",
+    "name": "Free.ai",
+    "baseURL": "https://api.free.ai/v1/chat/",
+    "notes": "free-ai (from extremerouter registry)",
+    "freeTier": false,
+    "kind": "hasFree"
+  },
+  "freeinference": {
+    "id": "freeinference",
+    "name": "FreeInference",
+    "baseURL": "https://freeinference.org/v1",
+    "notes": "freeinference (from extremerouter registry)",
+    "freeTier": false,
+    "kind": "hasFree"
+  },
+  "freemodel-dev": {
+    "id": "freemodel-dev",
+    "name": "FreeModel.dev",
+    "baseURL": "https://api.freemodel.dev/v1",
+    "notes": "freemodel-dev (from extremerouter registry)",
+    "freeTier": false,
+    "modelIds": [
+      "gpt-5.5",
+      "gpt-5.4",
+      "gpt-5.4-mini",
+      "gpt-5.3-codex"
+    ],
+    "kind": "hasFree"
+  },
+  "freetheai": {
+    "id": "freetheai",
+    "name": "FreeTheAi",
+    "baseURL": "https://api.freetheai.xyz/v1",
+    "notes": "freetheai (from extremerouter registry)",
+    "freeTier": false,
+    "modelIds": [
+      "gpt-4o-mini",
+      "llama-3.3-70b-instruct",
+      "deepseek-chat"
+    ],
+    "kind": "hasFree"
+  },
+  "friendliai": {
+    "id": "friendliai",
+    "name": "FriendliAI",
+    "baseURL": "https://api.friendli.ai/serverless/v1",
+    "notes": "friendliai (from extremerouter registry)",
+    "freeTier": false,
+    "modelIds": [
+      "MiniMaxAI/MiniMax-M2.5",
+      "google/gemma-4-31B-it",
+      "deepseek-ai/DeepSeek-V3.2",
+      "zai-org/GLM-5.1",
+      "zai-org/GLM-5.2"
+    ],
+    "kind": "hasFree"
+  },
+  "g4f-gemini": {
+    "id": "g4f-gemini",
+    "name": "g4f.space — Gemini",
+    "baseURL": "https://g4f.space/api/gemini/v1",
+    "notes": "g4f-gemini (from extremerouter registry)",
+    "freeTier": true,
+    "modelIds": [
+      "models/gemini-2.5-flash",
+      "models/gemini-2.5-pro"
+    ],
+    "kind": "free"
+  },
+  "g4f-groq": {
+    "id": "g4f-groq",
+    "name": "g4f.space — Groq",
+    "baseURL": "https://g4f.space/api/groq/v1",
+    "notes": "g4f-groq (from extremerouter registry)",
+    "freeTier": true,
+    "modelIds": [
+      "llama-3.3-70b-versatile",
+      "llama-3.1-8b-instant"
+    ],
+    "kind": "free"
+  },
+  "g4f-nvidia": {
+    "id": "g4f-nvidia",
+    "name": "g4f.space — NVIDIA",
+    "baseURL": "https://g4f.space/api/nvidia/v1",
+    "notes": "g4f-nvidia (from extremerouter registry)",
+    "freeTier": true,
+    "modelIds": [
+      "nvidia/nemotron-3-nano-30b-a3b",
+      "z-ai/glm-5.2",
+      "minimaxai/minimax-m2.7"
+    ],
+    "kind": "free"
+  },
+  "g4f-ollama": {
+    "id": "g4f-ollama",
+    "name": "g4f.space — Ollama",
+    "baseURL": "https://g4f.space/api/ollama/v1",
+    "notes": "g4f-ollama (from extremerouter registry)",
+    "freeTier": true,
+    "modelIds": [
+      "gemma3:4b"
+    ],
+    "kind": "free"
+  },
+  "g4f-pollinations": {
+    "id": "g4f-pollinations",
+    "name": "g4f.space — Pollinations",
+    "baseURL": "https://g4f.space/api/pollinations/v1",
+    "notes": "g4f-pollinations (from extremerouter registry)",
+    "freeTier": true,
+    "modelIds": [
+      "openai",
+      "openai-fast"
+    ],
+    "kind": "free"
+  },
+  "hackclub": {
+    "id": "hackclub",
+    "name": "Hack Club AI",
+    "baseURL": "https://ai.hackclub.com/proxy/v1",
+    "notes": "hackclub (from extremerouter registry)",
+    "freeTier": true,
+    "modelIds": [
+      "meta-llama/llama-3.3-70b-instruct",
+      "mistralai/mistral-7b-instruct",
+      "deepseek-ai/deepseek-coder-33b"
+    ],
+    "kind": "free"
+  },
+  "hcnsec": {
+    "id": "hcnsec",
+    "name": "Huancheng Public API",
+    "baseURL": "https://api.hcnsec.cn/v1",
+    "notes": "hcnsec (from extremerouter registry)",
+    "freeTier": true,
+    "modelIds": [
+      "deepseek-v3",
+      "deepseek-r1",
+      "qwq-32b"
+    ],
+    "modelsFetcher": {
+      "url": "https://api.hcnsec.cn/v1/models",
+      "type": "hcnsec"
+    },
+    "kind": "freeTier"
+  },
+  "helyxai": {
+    "id": "helyxai",
+    "name": "Helyx AI",
+    "baseURL": "https://helyxai.space/v1",
+    "notes": "helyxai (from extremerouter registry)",
+    "freeTier": false,
+    "modelIds": [
+      "DeepSeek-V4-Flash",
+      "gpt-5.6-luna",
+      "gemini-3.1-flash-lite",
+      "GLM-5.2",
+      "Qwen3-32B",
+      "MiniMax-M3",
+      "DeepSeek-V4-Pro",
+      "Mistral-4",
+      "gemma-4-31B-it",
+      "gpt-oss-120b",
+      "Kimi-K3",
+      "llama-3.1-8b-instruct",
+      "kling-video"
+    ],
+    "kind": "hasFree"
+  },
+  "inception": {
+    "id": "inception",
+    "name": "Inception",
+    "baseURL": "https://api.inceptionlabs.ai/v1",
+    "notes": "inception (from extremerouter registry)",
+    "freeTier": false,
+    "modelIds": [
+      "mercury-2"
+    ],
+    "kind": "hasFree"
+  },
+  "inference-net": {
+    "id": "inference-net",
+    "name": "Inference.net",
+    "baseURL": "https://api.inference.net/v1",
+    "notes": "inference-net (from extremerouter registry)",
+    "freeTier": false,
+    "kind": "hasFree"
+  },
+  "inferx": {
+    "id": "inferx",
+    "name": "InferX",
+    "baseURL": "https://model.inferx.net/endpoints/v1",
+    "notes": "inferx (from extremerouter registry)",
+    "freeTier": false,
+    "modelIds": [
+      "deepseek-v4-flash",
+      "deepseek-v4-flash-0731",
+      "Qwen3.6-35B-A3B-FP8",
+      "Qwen3.6-35B-A3B-fp8-no-thinking",
+      "Qwen3-Coder-Next-FP8",
+      "gemma-4-31B-it-fp8",
+      "glm-52",
+      "Agents-A1",
+      "Devstral-2-123B-Instruct-2512-int4-AutoRound",
+      "Ornith-1.0-35B-FP8",
+      "Qwen3.6-27B-FP8"
+    ],
+    "modelsFetcher": {
+      "url": "https://model.inferx.net/endpoints/v1/models",
+      "type": "openai"
+    },
+    "kind": "hasFree"
+  },
+  "infron": {
+    "id": "infron",
+    "name": "Infron AI",
+    "baseURL": "https://llm.onerouter.pro/v1",
+    "notes": "infron (from extremerouter registry)",
+    "freeTier": true,
+    "modelsFetcher": {
+      "url": "https://llm.onerouter.pro/v1/models",
+      "type": "openai"
+    },
+    "kind": "freeTier"
+  },
+  "inxorastudio": {
+    "id": "inxorastudio",
+    "name": "InxoraStudio Labs",
+    "baseURL": "https://labs.inxorastudio.com/v1",
+    "notes": "inxorastudio (from extremerouter registry)",
+    "freeTier": true,
+    "modelsFetcher": {
+      "url": "https://labs.inxorastudio.com/api/ai/models",
+      "type": "inxora"
+    },
+    "kind": "freeTier"
+  },
+  "lemonade": {
+    "id": "lemonade",
+    "name": "Lemonade Server",
+    "baseURL": "http://localhost:13305/api/v1",
+    "notes": "lemonade (from extremerouter registry)",
+    "freeTier": false,
+    "kind": "local"
+  },
+  "liquid": {
+    "id": "liquid",
+    "name": "Liquid AI",
+    "baseURL": "https://inference.liquid.ai/v1",
+    "notes": "liquid (from extremerouter registry)",
+    "freeTier": false,
+    "modelIds": [
+      "liquid-lfm-40b"
+    ],
+    "kind": "hasFree"
+  },
+  "literouter": {
+    "id": "literouter",
+    "name": "LiteRouter",
+    "baseURL": "https://api.literouter.com/v1",
+    "notes": "literouter (from extremerouter registry)",
+    "freeTier": false,
+    "kind": "hasFree"
+  },
+  "llama-cpp": {
+    "id": "llama-cpp",
+    "name": "llama.cpp",
+    "baseURL": "http://127.0.0.1:8080/v1",
+    "notes": "llama-cpp (from extremerouter registry)",
+    "freeTier": false,
+    "kind": "local"
+  },
+  "llamafile": {
+    "id": "llamafile",
+    "name": "Llamafile",
+    "baseURL": "http://127.0.0.1:8080/v1",
+    "notes": "llamafile (from extremerouter registry)",
+    "freeTier": false,
+    "kind": "local"
+  },
+  "llm-kiwi": {
+    "id": "llm-kiwi",
+    "name": "LLM.Kiwi",
+    "baseURL": "https://api.llm.kiwi/v1",
+    "notes": "llm-kiwi (from extremerouter registry)",
+    "freeTier": false,
+    "modelIds": [
+      "auto",
+      "hrLLM"
+    ],
+    "kind": "hasFree"
+  },
+  "llm7": {
+    "id": "llm7",
+    "name": "LLM7",
+    "baseURL": "https://api.llm7.io/v1",
+    "notes": "llm7 (from extremerouter registry)",
+    "freeTier": false,
+    "modelIds": [
+      "gpt-4o-mini-2024-07-18",
+      "gpt-4.1-nano-2025-04-14",
+      "deepseek-r1-0528",
+      "qwen2.5-coder-32b-instruct"
+    ],
+    "kind": "hasFree"
+  },
+  "llmgateway": {
+    "id": "llmgateway",
+    "name": "LLM Gateway",
+    "baseURL": "https://api.llmgateway.io/v1",
+    "notes": "llmgateway (from extremerouter registry)",
+    "freeTier": false,
+    "kind": "hasFree"
+  },
+  "lm-studio": {
+    "id": "lm-studio",
+    "name": "LM Studio",
+    "baseURL": "http://localhost:1234/v1",
+    "notes": "lm-studio (from extremerouter registry)",
+    "freeTier": false,
+    "kind": "local"
+  },
+  "meganova-ai": {
+    "id": "meganova-ai",
+    "name": "MegaNova AI",
+    "baseURL": "https://api.meganova.ai/v1",
+    "notes": "meganova-ai (from extremerouter registry)",
+    "freeTier": false,
+    "modelIds": [
+      "XiaomiMiMo/MiMo-V2-Flash",
+      "MiniMaxAI/MiniMax-M2.1",
+      "MiniMaxAI/MiniMax-M2.5",
+      "moonshotai/Kimi-K2.5",
+      "moonshotai/Kimi-K2-Thinking",
+      "deepseek-ai/DeepSeek-V3.2"
+    ],
+    "kind": "hasFree"
+  },
+  "mimo-free": {
+    "id": "mimo-free",
+    "name": "MiMo Code Free",
+    "baseURL": "https://api.xiaomimimo.com/api/free-ai/openai",
+    "notes": "mimo-free (from extremerouter registry)",
+    "freeTier": true,
+    "modelIds": [
+      "mimo-auto"
+    ],
+    "modelsFetcher": {
+      "url": "https://models.dev/api.json",
+      "type": "mimo-free"
+    },
+    "kind": "freeTier"
+  },
+  "mixlayer": {
+    "id": "mixlayer",
+    "name": "Mixlayer",
+    "baseURL": "https://models.mixlayer.ai/v1",
+    "notes": "mixlayer (from extremerouter registry)",
+    "freeTier": false,
+    "modelIds": [
+      "qwen/qwen3.5-35b-a3b",
+      "qwen/qwen3.5-397b-a17b",
+      "qwen/qwen3.5-9b",
+      "qwen/qwen3.5-27b",
+      "qwen/qwen3.5-122b-a10b"
+    ],
+    "kind": "hasFree"
+  },
+  "mnn-ai": {
+    "id": "mnn-ai",
+    "name": "MNN AI",
+    "baseURL": "https://api.mnnai.ru/v1",
+    "notes": "mnn-ai (from extremerouter registry)",
+    "freeTier": false,
+    "kind": "hasFree"
+  },
+  "modal": {
+    "id": "modal",
+    "name": "Modal",
+    "baseURL": "https://api.modal.ai/v1",
+    "notes": "modal (from extremerouter registry)",
+    "freeTier": false,
+    "modelIds": [
+      "google/gemini-2.0-flash"
+    ],
+    "kind": "hasFree"
+  },
+  "modelscope": {
+    "id": "modelscope",
+    "name": "ModelScope",
+    "baseURL": "https://api-inference.modelscope.cn/v1",
+    "notes": "modelscope (from extremerouter registry)",
+    "freeTier": false,
+    "modelIds": [
+      "ZhipuAI/GLM-4.5",
+      "ZhipuAI/GLM-4.6",
+      "Qwen/Qwen3-235B-A22B-Instruct-2507",
+      "Qwen/Qwen3-Coder-30B-A3B-Instruct",
+      "Qwen/Qwen3-30B-A3B-Thinking-2507",
+      "Qwen/Qwen3-30B-A3B-Instruct-2507"
+    ],
+    "kind": "hasFree"
+  },
+  "morph": {
+    "id": "morph",
+    "name": "Morph",
+    "baseURL": "https://api.morphllm.com/v1",
+    "notes": "morph (from extremerouter registry)",
+    "freeTier": false,
+    "modelIds": [
+      "morph-v3-large",
+      "morph-v3-fast",
+      "morph-glm52-744b",
+      "morph-qwen35-397b",
+      "morph-qwen36-27b",
+      "morph-minimax3-428b",
+      "morph-dsv4flash"
+    ],
+    "kind": "hasFree"
+  },
+  "naga-ac": {
+    "id": "naga-ac",
+    "name": "Naga.ac",
+    "baseURL": "https://api.naga.ac/v1",
+    "notes": "naga-ac (from extremerouter registry)",
+    "freeTier": false,
+    "kind": "hasFree"
+  },
+  "naga-ai": {
+    "id": "naga-ai",
+    "name": "Naga AI",
+    "baseURL": "https://api.naga.ac/v1",
+    "notes": "naga-ai (from extremerouter registry)",
+    "freeTier": false,
+    "kind": "hasFree"
+  },
+  "nanobanana": {
+    "id": "nanobanana",
+    "name": "NanoBanana API",
+    "baseURL": "https://api.nanobananaapi.ai/v1",
+    "notes": "nanobanana (from extremerouter registry)",
+    "freeTier": false,
+    "kind": "hasFree"
+  },
+  "navy": {
+    "id": "navy",
+    "name": "NavyAI",
+    "baseURL": "https://api.navy/v1",
+    "notes": "navy (from extremerouter registry)",
+    "freeTier": false,
+    "modelIds": [
+      "llama-3.3-70b-instruct",
+      "gemma-4-31b-it",
+      "deepseek-v4-flash",
+      "deepseek-chat",
+      "mistral-small-latest",
+      "llama-4-scout"
+    ],
+    "kind": "hasFree"
+  },
+  "nous-research": {
+    "id": "nous-research",
+    "name": "Nous Research",
+    "baseURL": "https://inference-api.nousresearch.com/v1",
+    "notes": "nous-research (from extremerouter registry)",
+    "freeTier": false,
+    "modelIds": [
+      "Hermes-4-405B",
+      "Hermes-4-70B"
+    ],
+    "kind": "hasFree"
+  },
+  "novita": {
+    "id": "novita",
+    "name": "Novita AI",
+    "baseURL": "https://api.novita.ai/v3/openai",
+    "notes": "novita (from extremerouter registry)",
+    "freeTier": false,
+    "modelIds": [
+      "deepseek/deepseek-r1",
+      "deepseek/deepseek-v3",
+      "deepseek/deepseek-r1-distill-llama-70b",
+      "deepseek/deepseek-r1-distill-qwen-32b",
+      "meta-llama/llama-3.3-70b-instruct",
+      "meta-llama/llama-3.1-405b-instruct",
+      "qwen/qwen-2.5-72b-instruct",
+      "qwen/qwen-2.5-coder-32b-instruct",
+      "mistralai/mistral-nemo"
+    ],
+    "modelsFetcher": {
+      "url": "https://api.novita.ai/v3/openai/models",
+      "type": "openai"
+    },
+    "kind": "hasFree"
+  },
+  "nscale": {
+    "id": "nscale",
+    "name": "nScale",
+    "baseURL": "https://inference.api.nscale.com/v1",
+    "notes": "nscale (from extremerouter registry)",
+    "freeTier": false,
+    "kind": "hasFree"
+  },
+  "nvidia": {
+    "id": "nvidia",
+    "name": "NVIDIA NIM",
+    "baseURL": "https://integrate.api.nvidia.com/v1",
+    "notes": "nvidia (from extremerouter registry)",
+    "freeTier": true,
+    "modelIds": [
+      "minimaxai/minimax-m2.7",
+      "minimaxai/minimax-m3",
+      "z-ai/glm-5.2",
+      "deepseek-ai/deepseek-v4-pro",
+      "deepseek-ai/deepseek-v4-flash",
+      "moonshotai/kimi-k2.6",
+      "nvidia/nemotron-3-ultra-550b-a55b",
+      "nvidia/parakeet-ctc-1.1b-asr"
+    ],
+    "kind": "freeTier"
+  },
+  "ofoxai": {
+    "id": "ofoxai",
+    "name": "OfoxAI",
+    "baseURL": "https://api.ofox.ai/v1",
+    "notes": "ofoxai (from extremerouter registry)",
+    "freeTier": false,
+    "kind": "hasFree"
+  },
+  "ollama-cloud": {
+    "id": "ollama-cloud",
+    "name": "Ollama Cloud",
+    "baseURL": "https://ollama.com/v1",
+    "notes": "ollama-cloud (from extremerouter registry)",
+    "freeTier": false,
+    "modelIds": [
+      "gpt-oss:20b",
+      "gpt-oss:120b",
+      "deepseek-v4-pro",
+      "deepseek-v4-flash",
+      "kimi-k2.6",
+      "glm-5.1",
+      "glm-5.2",
+      "minimax-m3",
+      "minimax-m2.7",
+      "gemma4:31b",
+      "nemotron-3-super",
+      "qwen3.5:397b"
+    ],
+    "kind": "hasFree"
+  },
+  "oobabooga": {
+    "id": "oobabooga",
+    "name": "oobabooga",
+    "baseURL": "http://localhost:5000/v1",
+    "notes": "oobabooga (from extremerouter registry)",
+    "freeTier": false,
+    "kind": "local"
+  },
+  "openadapter": {
+    "id": "openadapter",
+    "name": "OpenAdapter",
+    "baseURL": "https://api.openadapter.in/v1",
+    "notes": "openadapter (from extremerouter registry)",
+    "freeTier": false,
+    "modelIds": [
+      "glm-4.7"
+    ],
+    "kind": "hasFree"
+  },
+  "openference-api": {
+    "id": "openference-api",
+    "name": "Openference API",
+    "baseURL": "https://api.openference.com/v1",
+    "notes": "openference-api (from extremerouter registry)",
+    "freeTier": false,
+    "kind": "hasFree"
+  },
+  "pioneer": {
+    "id": "pioneer",
+    "name": "Pioneer AI",
+    "baseURL": "https://api.pioneer.ai/v1",
+    "notes": "pioneer (from extremerouter registry)",
+    "freeTier": false,
+    "modelIds": [
+      "Qwen/Qwen3-32B",
+      "Qwen/Qwen3.6-27B",
+      "Qwen/Qwen3.5-9B",
+      "Qwen/Qwen3-8B",
+      "Qwen/Qwen3-4B-Base",
+      "Qwen/Qwen3-1.7B-Base",
+      "meta-llama/Llama-3.1-8B-Instruct",
+      "meta-llama/Llama-3.2-1B-Instruct",
+      "google/gemma-3-4b-pt",
+      "HuggingFaceTB/SmolLM3-3B-Base"
+    ],
+    "kind": "hasFree"
+  },
+  "poixe-ai": {
+    "id": "poixe-ai",
+    "name": "Poixe AI",
+    "baseURL": "https://api.poixe.com/v1",
+    "notes": "poixe-ai (from extremerouter registry)",
+    "freeTier": false,
+    "kind": "hasFree"
+  },
+  "poolside": {
+    "id": "poolside",
+    "name": "Poolside",
+    "baseURL": "https://inference.poolside.ai/v1",
+    "notes": "poolside (from extremerouter registry)",
+    "freeTier": false,
+    "modelIds": [
+      "poolside/laguna-xs-2.1",
+      "poolside/laguna-s-2.1"
+    ],
+    "kind": "hasFree"
+  },
+  "reka": {
+    "id": "reka",
+    "name": "Reka",
+    "baseURL": "https://api.reka.ai/v1",
+    "notes": "reka (from extremerouter registry)",
+    "freeTier": false,
+    "modelIds": [
+      "reka-flash-3",
+      "reka-flash",
+      "reka-edge-2603"
+    ],
+    "kind": "hasFree"
+  },
+  "requesty": {
+    "id": "requesty",
+    "name": "Requesty",
+    "baseURL": "https://router.requesty.ai/v1",
+    "notes": "requesty (from extremerouter registry)",
+    "freeTier": false,
+    "modelIds": [
+      "claude-sonnet-4-5@eu",
+      "claude-opus-4-7",
+      "gpt-5.1@eu",
+      "gpt-4.1-nano@eu",
+      "gemini-2.5-flash@eu",
+      "kimi-k3"
+    ],
+    "kind": "hasFree"
+  },
+  "routeway": {
+    "id": "routeway",
+    "name": "Routeway",
+    "baseURL": "https://api.routeway.ai/v1",
+    "notes": "routeway (from extremerouter registry)",
+    "freeTier": false,
+    "modelIds": [
+      "llama-3.3-70b-instruct:free",
+      "nemotron-3-nano-30b-a3b:free",
+      "nemotron-nano-9b-v2:free",
+      "step-3.7-flash:free",
+      "step-3.5-flash:free",
+      "laguna-m.1:free",
+      "laguna-xs.2:free",
+      "llama-3.2-3b-instruct:free"
+    ],
+    "kind": "hasFree"
+  },
+  "sambanova": {
+    "id": "sambanova",
+    "name": "SambaNova",
+    "baseURL": "https://api.sambanova.ai/v1",
+    "notes": "sambanova (from extremerouter registry)",
+    "freeTier": false,
+    "kind": "hasFree"
+  },
+  "scaleway": {
+    "id": "scaleway",
+    "name": "Scaleway",
+    "baseURL": "https://api.scaleway.ai/v1",
+    "notes": "scaleway (from extremerouter registry)",
+    "freeTier": false,
+    "modelIds": [
+      "qwen3-235b-a22b-instruct-2507",
+      "qwen3.5-397b-a17b",
+      "llama-3.3-70b-instruct",
+      "mistral-small-3.2-24b-instruct-2506",
+      "gpt-oss-120b",
+      "glm-5.2"
+    ],
+    "kind": "hasFree"
+  },
+  "speka": {
+    "id": "speka",
+    "name": "Speka AI",
+    "baseURL": "https://speka.me/v1",
+    "notes": "speka (from extremerouter registry)",
+    "freeTier": false,
+    "kind": "hasFree"
+  },
+  "theoldllm": {
+    "id": "theoldllm",
+    "name": "The Old LLM (Free)",
+    "baseURL": "https://theoldllm.vercel.app/api/chatgpt",
+    "notes": "theoldllm (from extremerouter registry)",
+    "freeTier": true,
+    "modelIds": [
+      "GPT_5_4",
+      "GPT_5_3",
+      "GPT_5_2",
+      "GPT_5_1",
+      "GPT_5",
+      "GPT_o4_mini",
+      "GPT_o3_mini",
+      "gemini_3_pro",
+      "gemini_2_5_pro",
+      "gemini_2_0_flash",
+      "gemini_1_5_flash",
+      "CLAUDE_4_6_OPUS",
+      "CLAUDE_4_6_SONNET",
+      "CLAUDE_4_5_HAIKU",
+      "openrouter_gpt_4_o",
+      "openrouter_gpt_4_o_mini",
+      "openrouter_grok_4",
+      "together_deepseek_v3",
+      "openrouter_deepseek_r1",
+      "sonar-pro"
+    ],
+    "kind": "free"
+  },
+  "tokenreply": {
+    "id": "tokenreply",
+    "name": "TokenReply",
+    "baseURL": "https://api.tokenreply.com/v1",
+    "notes": "tokenreply (from extremerouter registry)",
+    "freeTier": false,
+    "kind": "hasFree"
+  },
+  "unorouter": {
+    "id": "unorouter",
+    "name": "UnoRouter",
+    "baseURL": "https://api.unorouter.com/v1",
+    "notes": "unorouter (from extremerouter registry)",
+    "freeTier": false,
+    "kind": "hasFree"
+  },
+  "void-ai": {
+    "id": "void-ai",
+    "name": "Void AI",
+    "baseURL": "https://api.voidai.app/v1",
+    "notes": "void-ai (from extremerouter registry)",
+    "freeTier": false,
+    "kind": "hasFree"
+  },
+  "xinference": {
+    "id": "xinference",
+    "name": "XInference",
+    "baseURL": "http://localhost:9997/v1",
+    "notes": "xinference (from extremerouter registry)",
+    "freeTier": false,
+    "kind": "local"
+  },
+  "yolo-auto": {
+    "id": "yolo-auto",
+    "name": "Yolo-Auto",
+    "baseURL": "https://yolo-auto.com/v1",
+    "notes": "yolo-auto (from extremerouter registry)",
+    "freeTier": false,
+    "kind": "hasFree"
+  },
+  "zerolimitai": {
+    "id": "zerolimitai",
+    "name": "ZeroLimitAI",
+    "baseURL": "https://www.zerolimitai.com/api/v1",
+    "notes": "zerolimitai (from extremerouter registry)",
+    "freeTier": false,
+    "kind": "hasFree"
+  },
+  "zylo-api": {
+    "id": "zylo-api",
+    "name": "Zylo API",
+    "baseURL": "https://api.zyloai.net/v1",
+    "notes": "zylo-api (from extremerouter registry)",
+    "freeTier": false,
+    "kind": "hasFree"
+  }
+}

@@ -1,0 +1,87 @@
+<div id="tab-security" class="tab-panel" style="display:none">
+  <div class="page-header">
+    <div>
+      <div class="large-title">密钥与安全</div>
+      <div class="large-subtitle">API 密钥、访问控制与危险操作</div>
+    </div>
+  </div>
+
+  <div class="subtabs page-subtabs" data-page="security">
+    <div class="subtab active" data-sub="keys">API 密钥</div>
+    <div class="subtab" data-sub="access">访问设置</div>
+    <div class="subtab" data-sub="danger">危险操作</div>
+  </div>
+
+  <div class="page-subpage" data-subpage="keys">
+  <div class="section">
+    <div class="section-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg><span>API 密钥管理</span>
+      <span class="title-tools">
+        <button class="btn btn-sm btn-success" onclick="generateKey(this)">生成新密钥</button>
+      </span>
+    </div>
+    <div class="section-desc">生成的密钥可用于客户端访问代理 API（作为 x-api-key 或 Authorization 头）。</div>
+    <div class="section-body">
+      <div id="keysList"></div>
+      <div id="keyGenResult" class="mt-8" aria-live="polite"></div>
+    </div>
+  </div>
+  </div>
+
+  <div class="page-subpage" data-subpage="access" style="display:none">
+  <div class="section">
+    <div class="section-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>访问设置</div>
+    <div class="section-body">
+      <div class="form-row">
+        <div class="field">
+          <label>监听地址</label>
+          <select id="settingListenHost" onchange="saveListenHost()">
+            <option value="127.0.0.1">127.0.0.1（仅本机）</option>
+            <option value="0.0.0.0">0.0.0.0（所有网卡）</option>
+          </select>
+        </div>
+        <div class="field"><label>当前地址</label><input type="text" id="settingAddr" disabled></div>
+      </div>
+      <div id="listenWarn" class="warn-box" style="display:none">⚠️ 当前监听非本机回环地址（0.0.0.0 或局域网 IP），管理后台无鉴权，局域网内任何设备都可访问。请确认网络环境安全，或配合防火墙限制端口。</div>
+      <div id="localIPsRow" class="form-row" style="display:none">
+        <div class="field f1">
+          <label>本机 IP（局域网访问地址）</label>
+          <div id="localIPsList"></div>
+        </div>
+      </div>
+      <div class="form-row mt-12">
+        <div class="field f1">
+          <label>管理后台密码（<span id="passwordStatus">未启用</span>）</label>
+          <div class="gap-row">
+            <input type="password" id="settingPassword" placeholder="留空保存 = 清除密码" autocomplete="new-password" class="f1">
+            <button class="btn btn-primary" onclick="savePassword(this)">保存</button>
+          </div>
+          <div class="hint-sm mt-4">设置后访问管理后台需输入密码，默认无密码</div>
+        </div>
+      </div>
+      <div class="form-row mt-12">
+        <div class="field f1">
+          <label>后台登录会话</label>
+          <div class="gap-row-mid">
+            <button class="btn" onclick="clearAdminSessions(this)">清除全部登录会话</button>
+            <span class="hint-sm">强制所有浏览器（包括当前页面）重新登录，凭据数据不受影响</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  </div>
+
+  <div class="page-subpage" data-subpage="danger" style="display:none">
+  <div class="section danger-zone">
+    <div class="section-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>危险操作</div>
+    <div class="section-desc">以下操作会删除全部数据，且删除后无法恢复；每个按钮点击后都会先弹出确认框。</div>
+    <div class="section-body">
+      <div class="action-row">
+        <button class="btn btn-danger" onclick="deleteAllAccounts()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>删除全部账号</button>
+        <button class="btn btn-danger" onclick="deleteAllKeys()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>删除全部密钥</button>
+      </div>
+    </div>
+  </div>
+  </div>
+</div>
+

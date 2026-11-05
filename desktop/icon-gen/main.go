@@ -85,8 +85,8 @@ func drawIcon(size int) image.Image {
 	cx, cy := float64(size)/2, float64(size)/2
 
 	// 渐变色：左上 indigo → 右下 purple
-	top := [3]float64{79, 70, 229}   // #4F46E5
-	bot := [3]float64{124, 58, 237}  // #7C3AED
+	top := [3]float64{79, 70, 229}  // #4F46E5
+	bot := [3]float64{124, 58, 237} // #7C3AED
 	white := [4]uint8{255, 255, 255, 255}
 
 	// "C" 环参数

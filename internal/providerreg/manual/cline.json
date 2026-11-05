@@ -1,0 +1,27 @@
+{
+  "id": "cline",
+  "name": "Cline",
+  "baseURL": "https://api.cline.bot/api/v1",
+  "adapter": "cline",
+  "protocol": "cline",
+  "notes": "Built-in Cline provider with WorkOS login, refresh-token accounts, recommended/free model discovery, credential rotation, and model-scoped quota cooldowns.",
+  "freeTier": true,
+  "kind": "hasFree",
+  "authFlows": [
+    "cline-workos",
+    "cline-refresh-token"
+  ],
+  "capabilities": {
+    "modelDiscovery": "supported",
+    "freeModelDetection": "supported",
+    "removedModelDetection": "supported",
+    "reactiveQuota": "supported",
+    "proactiveQuota": "unsupported",
+    "quotaResetDetection": "supported",
+    "credentialRotation": "supported",
+    "egressPool": "supported",
+    "contextCompaction": "unsupported"
+  },
+  "missingThreshold": 1,
+  "runtimeBuiltin": true
+}

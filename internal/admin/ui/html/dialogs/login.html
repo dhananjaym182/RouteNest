@@ -1,0 +1,10 @@
+<div id="loginOverlay">
+  <div class="login-card">
+    <h2>RouteNest 管理后台</h2>
+    <p>该后台已启用访问密码，请输入密码登录</p>
+    <input type="password" id="loginPassword" placeholder="访问密码" autocomplete="current-password" onkeydown="if(event.key==='Enter')submitLogin()">
+    <button class="btn btn-primary btn-block" onclick="submitLogin()">登录</button>
+    <div id="loginError" class="login-err"></div>
+  </div>
+</div>
+

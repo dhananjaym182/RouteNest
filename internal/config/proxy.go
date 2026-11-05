@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"os"
 
-	"cline-go-proxy/internal/domain"
-	"cline-go-proxy/internal/platform"
+	"routenest/internal/domain"
+	"routenest/internal/platform"
 )
 
 // ProxyPath is the data file holding global proxy settings and combos.

@@ -1,0 +1,11 @@
+<div id="diffModal" class="overlay-modal overlay-top" onclick="if(event.target===this)resolveDiff(false)">
+  <div class="modal-card w560" role="dialog" aria-modal="true" aria-label="变更预览">
+    <div class="modal-title">变更预览</div>
+    <div class="modal-sub">仅以下字段发生变化，确认后保存：</div>
+    <div id="diffList" class="diff-list"></div>
+    <div class="modal-actions">
+      <button class="btn btn-sm" onclick="resolveDiff(false)">取消</button>
+      <button class="btn btn-sm btn-primary" onclick="resolveDiff(true)">确认保存</button>
+    </div>
+  </div>
+</div>

@@ -1,0 +1,1452 @@
+{
+  "success": true,
+  "data": {
+    "presets": [
+      {
+        "key": "agentrouter",
+        "name": "AgentRouter",
+        "baseURL": "https://agentrouter.org/v1",
+        "modelIDs": [
+          "glm-5.2",
+          "gpt-5.5",
+          "claude-opus-4-6",
+          "claude-opus-4-7",
+          "claude-opus-4-8"
+        ],
+        "modelsFetcher": {
+          "url": "https://agentrouter.org/api/pricing",
+          "type": "agentrouter"
+        },
+        "notes": "agentrouter (from extremerouter registry)",
+        "freeTier": true,
+        "kind": "freeTier"
+      },
+      {
+        "key": "ai21",
+        "name": "AI21 Labs",
+        "baseURL": "https://api.ai21.com/studio/v1",
+        "modelIDs": [
+          "jamba-large-1.7",
+          "jamba-mini-2"
+        ],
+        "notes": "ai21 (from extremerouter registry)",
+        "freeTier": false,
+        "kind": "hasFree"
+      },
+      {
+        "key": "aihorde",
+        "name": "AI Horde",
+        "baseURL": "https://oai.aihorde.net/v1",
+        "modelIDs": [
+          "aphrodite/TheDrummer/Cydonia-24B-v4.3",
+          "aphrodite/TheDrummer/Skyfall-31B-v4.2",
+          "google/gemma-4-31b"
+        ],
+        "notes": "aihorde (from extremerouter registry)",
+        "freeTier": true,
+        "kind": "free"
+      },
+      {
+        "key": "ainative",
+        "name": "AINative Studio",
+        "baseURL": "https://api.ainative.studio/api/v1",
+        "modelIDs": [
+          "qwen3-235b-cerebras",
+          "qwen3-32b",
+          "qwen3-14b",
+          "qwen3-8b",
+          "llama-4-maverick",
+          "llama3.1-8b-cerebras",
+          "deepseek-r1",
+          "nous-coder",
+          "gemini-flash"
+        ],
+        "notes": "ainative (from extremerouter registry)",
+        "freeTier": false,
+        "kind": "hasFree"
+      },
+      {
+        "key": "aion",
+        "name": "Aion Labs",
+        "baseURL": "https://api.aionlabs.ai/v1",
+        "modelIDs": [
+          "aion-labs/aion-3.0",
+          "aion-labs/aion-3.0-mini",
+          "aion-labs/aion-2.5",
+          "aion-labs/aion-2.0",
+          "aion-labs/aion-rp-llama-3.1-8b"
+        ],
+        "notes": "aion (from extremerouter registry)",
+        "freeTier": false,
+        "kind": "hasFree"
+      },
+      {
+        "key": "anyapi",
+        "name": "AnyAPI AI",
+        "baseURL": "https://api.anyapi.ai/v1",
+        "notes": "anyapi (from extremerouter registry)",
+        "freeTier": false,
+        "kind": "hasFree"
+      },
+      {
+        "key": "arcee-ai",
+        "name": "Arcee AI",
+        "baseURL": "https://api.arcee.ai/api/v1",
+        "modelIDs": [
+          "trinity-mini",
+          "trinity-large-thinking",
+          "trinity-large-preview"
+        ],
+        "notes": "arcee-ai (from extremerouter registry)",
+        "freeTier": false,
+        "kind": "hasFree"
+      },
+      {
+        "key": "auriko",
+        "name": "Auriko",
+        "baseURL": "https://api.auriko.ai/v1",
+        "modelIDs": [
+          "minimax-m2-7",
+          "claude-opus-4-7",
+          "deepseek-v4-flash",
+          "gemini-3.1-pro-preview",
+          "deepseek-v4-pro",
+          "claude-sonnet-4-6"
+        ],
+        "notes": "auriko (from extremerouter registry)",
+        "freeTier": false,
+        "kind": "hasFree"
+      },
+      {
+        "key": "baseten",
+        "name": "Baseten",
+        "baseURL": "https://inference.baseten.co/v1",
+        "modelIDs": [
+          "MiniMaxAI/MiniMax-M2.5",
+          "nvidia/Nemotron-120B-A12B",
+          "nvidia/NVIDIA-Nemotron-3-Ultra-550B-A55B",
+          "moonshotai/Kimi-K2.5",
+          "moonshotai/Kimi-K2.7-Code",
+          "moonshotai/Kimi-K3"
+        ],
+        "notes": "baseten (from extremerouter registry)",
+        "freeTier": false,
+        "kind": "hasFree"
+      },
+      {
+        "key": "bazaarlink",
+        "name": "BazaarLink",
+        "baseURL": "https://bazaarlink.ai/api/v1",
+        "modelIDs": [
+          "auto:free",
+          "claude-opus-4.7",
+          "claude-sonnet-4.6",
+          "claude-haiku-4.5",
+          "gpt-5.5",
+          "gpt-5.4",
+          "gpt-5.4-mini",
+          "gpt-5.4-nano",
+          "grok-4.3",
+          "grok-4.20",
+          "gemini-3.1-pro-preview",
+          "gemini-3-flash-preview",
+          "gemini-3.1-flash-lite-preview",
+          "gemma-4-31b-it",
+          "gemma-4-26b-a4b-it",
+          "deepseek-v3.2",
+          "kimi-k2.6",
+          "kimi-k2.5",
+          "glm-5.1",
+          "glm-5",
+          "mimo-v2.5-pro",
+          "mimo-v2.5",
+          "minimax-m3",
+          "minimax-m2.7",
+          "minimax-m2.5",
+          "llama-4-maverick",
+          "llama-4-scout",
+          "llama-3.3-70b-instruct",
+          "qwen3.6-plus",
+          "mistral-large-2512",
+          "mistral-medium-3.1",
+          "mistral-small-2603",
+          "nemotron-3-super-120b-a12b"
+        ],
+        "notes": "bazaarlink (from extremerouter registry)",
+        "freeTier": false,
+        "kind": "hasFree"
+      },
+      {
+        "key": "bluesminds",
+        "name": "BluesMinds",
+        "baseURL": "https://api.bluesminds.com/v1",
+        "modelIDs": [
+          "gpt-4o",
+          "gpt-4o-mini",
+          "gpt-4.1",
+          "gpt-4.1-mini",
+          "gpt-4.1-nano",
+          "claude-sonnet-4-5",
+          "claude-haiku-4-5",
+          "gemini-2.0-flash",
+          "gemini-2.0-flash-exp",
+          "deepseek-reasoner",
+          "deepseek-chat",
+          "qwen-plus",
+          "qwen-turbo",
+          "kimi-k2",
+          "kimi-k2-thinking",
+          "glm-4.7",
+          "glm-4-flash",
+          "minimax-m2.5",
+          "claude-opus-4-5",
+          "gemini-2.5-pro",
+          "grok-3",
+          "qwen-max"
+        ],
+        "notes": "bluesminds (from extremerouter registry)",
+        "freeTier": false,
+        "kind": "hasFree"
+      },
+      {
+        "key": "bynara",
+        "name": "Bynara",
+        "baseURL": "https://router.bynara.id/v1",
+        "modelIDs": [
+          "agnes-video-v2.0"
+        ],
+        "modelsFetcher": {
+          "url": "https://router.bynara.id/v1/models",
+          "type": "bynara"
+        },
+        "notes": "bynara (from extremerouter registry)",
+        "freeTier": true,
+        "kind": "freeTier"
+      },
+      {
+        "key": "byteplus",
+        "name": "BytePlus ModelArk",
+        "baseURL": "https://ark.ap-southeast.bytepluses.com/api/coding/v3",
+        "modelIDs": [
+          "seed-2-0-pro-260328",
+          "seed-2-0-code-preview-260328",
+          "seed-2-0-mini-260215",
+          "seed-2-0-lite-260228",
+          "kimi-k2-thinking-251104",
+          "glm-4-7-251222",
+          "gpt-oss-120b-250805"
+        ],
+        "notes": "byteplus (from extremerouter registry)",
+        "freeTier": true,
+        "kind": "freeTier"
+      },
+      {
+        "key": "bytez",
+        "name": "Bytez",
+        "baseURL": "https://api.bytez.com/v1",
+        "notes": "bytez (from extremerouter registry)",
+        "freeTier": false,
+        "kind": "hasFree"
+      },
+      {
+        "key": "cerebras",
+        "name": "Cerebras",
+        "baseURL": "https://api.cerebras.ai/v1",
+        "notes": "Free tier, very high throughput. Key: cloud.cerebras.ai",
+        "freeTier": true,
+        "kind": "freeTier"
+      },
+      {
+        "key": "charm-hyper",
+        "name": "Charm Hyper",
+        "baseURL": "https://hyper.charm.land/v1",
+        "notes": "charm-hyper (from extremerouter registry)",
+        "freeTier": false,
+        "kind": "hasFree"
+      },
+      {
+        "key": "chat-oripe",
+        "name": "Chat Oripe",
+        "baseURL": "https://api.oriper.com/v1",
+        "notes": "chat-oripe (from extremerouter registry)",
+        "freeTier": false,
+        "kind": "hasFree"
+      },
+      {
+        "key": "chatanywhere",
+        "name": "ChatAnywhere",
+        "baseURL": "https://api.chatanywhere.org/v1",
+        "notes": "chatanywhere (from extremerouter registry)",
+        "freeTier": false,
+        "kind": "hasFree"
+      },
+      {
+        "key": "cloudcode-one",
+        "name": "CloudCode.ONE",
+        "baseURL": "https://api.cloudcode.one/v1",
+        "modelIDs": [
+          "glm-4.7-flash",
+          "glm-4.6v-flash"
+        ],
+        "notes": "cloudcode-one (from extremerouter registry)",
+        "freeTier": false,
+        "kind": "hasFree"
+      },
+      {
+        "key": "cloudflare-ai",
+        "name": "Cloudflare",
+        "baseURL": "https://api.cloudflare.com/client/v4/accounts/{accountId}/ai/v1",
+        "modelIDs": [
+          "@cf/meta/llama-3.2-1b-instruct",
+          "@cf/meta/llama-3.2-3b-instruct",
+          "@cf/meta/llama-3.1-8b-instruct-fp8-fast",
+          "@cf/meta/llama-3.1-8b-instruct-awq",
+          "@cf/mistralai/mistral-small-3.1-24b-instruct",
+          "@cf/meta/llama-3.1-70b-instruct-fp8-fast",
+          "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+          "@cf/deepseek-ai/deepseek-r1-distill-qwen-32b",
+          "@cf/moonshotai/kimi-k2.5",
+          "@cf/moonshotai/kimi-k2.6",
+          "@cf/zai-org/glm-4.7-flash",
+          "@cf/qwen/qwq-32b",
+          "@cf/qwen/qwen2.5-coder-32b-instruct"
+        ],
+        "notes": "cloudflare-ai (from extremerouter registry)",
+        "freeTier": true,
+        "kind": "freeTier"
+      },
+      {
+        "key": "codebuddy-cn",
+        "name": "CodeBuddy CN (Free)",
+        "baseURL": "https://copilot.tencent.com/v2",
+        "modelIDs": [
+          "glm-5.3",
+          "glm-5.3-flash",
+          "glm-5.2",
+          "minimax-m3",
+          "kimi-k2.7"
+        ],
+        "notes": "浏览器授权轮询登录（state-poll，无需 API Key）；腾讯 CodeBuddy 国内站 /v2/chat/completions",
+        "freeTier": true,
+        "kind": "freeTier",
+        "loginFlow": true,
+        "authFlow": "codebuddy-cn"
+      },
+      {
+        "key": "codebuddy-intl",
+        "name": "CodeBuddy Intl (Free)",
+        "baseURL": "https://www.codebuddy.ai/v2",
+        "modelIDs": [
+          "glm-5.3",
+          "glm-5.3-flash",
+          "glm-5.2",
+          "minimax-m3",
+          "kimi-k3-1"
+        ],
+        "notes": "浏览器授权轮询登录（state-poll，无需 API Key）；CodeBuddy 国际站 /v2/chat/completions",
+        "freeTier": true,
+        "kind": "freeTier",
+        "loginFlow": true,
+        "authFlow": "codebuddy-intl"
+      },
+      {
+        "key": "dahl",
+        "name": "Dahl",
+        "baseURL": "https://inference.dahl.global/v1",
+        "modelIDs": [
+          "MiniMaxAI/MiniMax-M2.7",
+          "moonshotai/Kimi-K2.6"
+        ],
+        "notes": "dahl (from extremerouter registry)",
+        "freeTier": false,
+        "kind": "hasFree"
+      },
+      {
+        "key": "deepinfra",
+        "name": "DeepInfra",
+        "baseURL": "https://api.deepinfra.com/v1/openai",
+        "modelIDs": [
+          "anthropic/claude-4-opus",
+          "anthropic/claude-4-sonnet",
+          "openai/gpt-oss-120b",
+          "openai/gpt-oss-20b",
+          "meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8",
+          "meta-llama/Llama-4-Scout-17B-16E-Instruct",
+          "deepseek-ai/DeepSeek-V4-Pro",
+          "deepseek-ai/DeepSeek-V4-Flash",
+          "zai-org/GLM-5.1",
+          "moonshotai/Kimi-K2.6",
+          "MiniMaxAI/MiniMax-M2.5",
+          "Qwen/Qwen3.5-397B-A17B",
+          "Qwen/Qwen3.6-35B-A3B",
+          "google/gemma-4-31B-it",
+          "XiaomiMiMo/MiMo-V2.5-Pro"
+        ],
+        "notes": "deepinfra (from extremerouter registry)",
+        "freeTier": false,
+        "kind": "hasFree"
+      },
+      {
+        "key": "deepseek",
+        "name": "DeepSeek",
+        "baseURL": "https://api.deepseek.com/v1",
+        "notes": "Paid, very cheap. Key: platform.deepseek.com",
+        "freeTier": false,
+        "kind": "other"
+      },
+      {
+        "key": "dgrid",
+        "name": "DGrid Free",
+        "baseURL": "https://api.dgrid.ai/v1",
+        "modelIDs": [
+          "dgridai/free"
+        ],
+        "notes": "dgrid (from extremerouter registry)",
+        "freeTier": false,
+        "kind": "hasFree"
+      },
+      {
+        "key": "docker-model-runner",
+        "name": "Docker Model Runner",
+        "baseURL": "http://localhost:12434/v1",
+        "notes": "docker-model-runner (from extremerouter registry)",
+        "freeTier": false,
+        "kind": "local"
+      },
+      {
+        "key": "dxnt",
+        "name": "DXNT / DX Token",
+        "baseURL": "https://www.dxnt.com/v1",
+        "notes": "dxnt (from extremerouter registry)",
+        "freeTier": false,
+        "kind": "hasFree"
+      },
+      {
+        "key": "electronhub",
+        "name": "Electron Hub",
+        "baseURL": "https://api.electronhub.ai/v1",
+        "notes": "electronhub (from extremerouter registry)",
+        "freeTier": false,
+        "kind": "hasFree"
+      },
+      {
+        "key": "fastrouter",
+        "name": "FastRouter",
+        "baseURL": "https://api.fastrouter.ai/api/v1",
+        "modelIDs": [
+          "z-ai/glm-5",
+          "z-ai/glm-5.1",
+          "deepseek/deepseek-v4-pro",
+          "google/gemini-3.1-pro-preview",
+          "google/gemma-4-31b-it"
+        ],
+        "notes": "fastrouter (from extremerouter registry)",
+        "freeTier": false,
+        "kind": "hasFree"
+      },
+      {
+        "key": "free-ai",
+        "name": "Free.ai",
+        "baseURL": "https://api.free.ai/v1/chat/",
+        "notes": "free-ai (from extremerouter registry)",
+        "freeTier": false,
+        "kind": "hasFree"
+      },
+      {
+        "key": "freeinference",
+        "name": "FreeInference",
+        "baseURL": "https://freeinference.org/v1",
+        "notes": "freeinference (from extremerouter registry)",
+        "freeTier": false,
+        "kind": "hasFree"
+      },
+      {
+        "key": "freemodel-dev",
+        "name": "FreeModel.dev",
+        "baseURL": "https://api.freemodel.dev/v1",
+        "modelIDs": [
+          "gpt-5.5",
+          "gpt-5.4",
+          "gpt-5.4-mini",
+          "gpt-5.3-codex"
+        ],
+        "notes": "freemodel-dev (from extremerouter registry)",
+        "freeTier": false,
+        "kind": "hasFree"
+      },
+      {
+        "key": "freetheai",
+        "name": "FreeTheAi",
+        "baseURL": "https://api.freetheai.xyz/v1",
+        "modelIDs": [
+          "gpt-4o-mini",
+          "llama-3.3-70b-instruct",
+          "deepseek-chat"
+        ],
+        "notes": "freetheai (from extremerouter registry)",
+        "freeTier": false,
+        "kind": "hasFree"
+      },
+      {
+        "key": "friendliai",
+        "name": "FriendliAI",
+        "baseURL": "https://api.friendli.ai/serverless/v1",
+        "modelIDs": [
+          "MiniMaxAI/MiniMax-M2.5",
+          "google/gemma-4-31B-it",
+          "deepseek-ai/DeepSeek-V3.2",
+          "zai-org/GLM-5.1",
+          "zai-org/GLM-5.2"
+        ],
+        "notes": "friendliai (from extremerouter registry)",
+        "freeTier": false,
+        "kind": "hasFree"
+      },
+      {
+        "key": "g4f-gemini",
+        "name": "g4f.space — Gemini",
+        "baseURL": "https://g4f.space/api/gemini/v1",
+        "modelIDs": [
+          "models/gemini-2.5-flash",
+          "models/gemini-2.5-pro"
+        ],
+        "notes": "g4f-gemini (from extremerouter registry)",
+        "freeTier": true,
+        "kind": "free"
+      },
+      {
+        "key": "g4f-groq",
+        "name": "g4f.space — Groq",
+        "baseURL": "https://g4f.space/api/groq/v1",
+        "modelIDs": [
+          "llama-3.3-70b-versatile",
+          "llama-3.1-8b-instant"
+        ],
+        "notes": "g4f-groq (from extremerouter registry)",
+        "freeTier": true,
+        "kind": "free"
+      },
+      {
+        "key": "g4f-nvidia",
+        "name": "g4f.space — NVIDIA",
+        "baseURL": "https://g4f.space/api/nvidia/v1",
+        "modelIDs": [
+          "nvidia/nemotron-3-nano-30b-a3b",
+          "z-ai/glm-5.2",
+          "minimaxai/minimax-m2.7"
+        ],
+        "notes": "g4f-nvidia (from extremerouter registry)",
+        "freeTier": true,
+        "kind": "free"
+      },
+      {
+        "key": "g4f-ollama",
+        "name": "g4f.space — Ollama",
+        "baseURL": "https://g4f.space/api/ollama/v1",
+        "modelIDs": [
+          "gemma3:4b"
+        ],
+        "notes": "g4f-ollama (from extremerouter registry)",
+        "freeTier": true,
+        "kind": "free"
+      },
+      {
+        "key": "g4f-pollinations",
+        "name": "g4f.space — Pollinations",
+        "baseURL": "https://g4f.space/api/pollinations/v1",
+        "modelIDs": [
+          "openai",
+          "openai-fast"
+        ],
+        "notes": "g4f-pollinations (from extremerouter registry)",
+        "freeTier": true,
+        "kind": "free"
+      },
+      {
+        "key": "gemini",
+        "name": "Google AI Studio",
+        "baseURL": "https://generativelanguage.googleapis.com/v1beta/openai",
+        "notes": "Gemini free tier via OpenAI-compat layer. Key: aistudio.google.com/apikey",
+        "freeTier": true,
+        "kind": "freeTier"
+      },
+      {
+        "key": "github-copilot",
+        "name": "GitHub Copilot (Free plan)",
+        "baseURL": "https://api.githubcopilot.com",
+        "modelsFetcher": {
+          "url": "https://api.githubcopilot.com/models",
+          "type": "openai"
+        },
+        "notes": "设备码登录 GitHub → 自动兑换 Copilot 作业票（免 Key）；Copilot Free 计划含少量高级请求配额",
+        "freeTier": true,
+        "kind": "freeTier",
+        "loginFlow": true,
+        "authFlow": "github"
+      },
+      {
+        "key": "groq",
+        "name": "Groq",
+        "baseURL": "https://api.groq.com/openai/v1",
+        "notes": "Fast free tier (Llama/Qwen). Key: console.groq.com/keys",
+        "freeTier": true,
+        "kind": "freeTier"
+      },
+      {
+        "key": "hackclub",
+        "name": "Hack Club AI",
+        "baseURL": "https://ai.hackclub.com/proxy/v1",
+        "modelIDs": [
+          "meta-llama/llama-3.3-70b-instruct",
+          "mistralai/mistral-7b-instruct",
+          "deepseek-ai/deepseek-coder-33b"
+        ],
+        "notes": "hackclub (from extremerouter registry)",
+        "freeTier": true,
+        "kind": "free"
+      },
+      {
+        "key": "hcnsec",
+        "name": "Huancheng Public API",
+        "baseURL": "https://api.hcnsec.cn/v1",
+        "modelIDs": [
+          "deepseek-v3",
+          "deepseek-r1",
+          "qwq-32b"
+        ],
+        "modelsFetcher": {
+          "url": "https://api.hcnsec.cn/v1/models",
+          "type": "hcnsec"
+        },
+        "notes": "hcnsec (from extremerouter registry)",
+        "freeTier": true,
+        "kind": "freeTier"
+      },
+      {
+        "key": "helyxai",
+        "name": "Helyx AI",
+        "baseURL": "https://helyxai.space/v1",
+        "modelIDs": [
+          "DeepSeek-V4-Flash",
+          "gpt-5.6-luna",
+          "gemini-3.1-flash-lite",
+          "GLM-5.2",
+          "Qwen3-32B",
+          "MiniMax-M3",
+          "DeepSeek-V4-Pro",
+          "Mistral-4",
+          "gemma-4-31B-it",
+          "gpt-oss-120b",
+          "Kimi-K3",
+          "llama-3.1-8b-instruct",
+          "kling-video"
+        ],
+        "notes": "helyxai (from extremerouter registry)",
+        "freeTier": false,
+        "kind": "hasFree"
+      },
+      {
+        "key": "inception",
+        "name": "Inception",
+        "baseURL": "https://api.inceptionlabs.ai/v1",
+        "modelIDs": [
+          "mercury-2"
+        ],
+        "notes": "inception (from extremerouter registry)",
+        "freeTier": false,
+        "kind": "hasFree"
+      },
+      {
+        "key": "inference-net",
+        "name": "Inference.net",
+        "baseURL": "https://api.inference.net/v1",
+        "notes": "inference-net (from extremerouter registry)",
+        "freeTier": false,
+        "kind": "hasFree"
+      },
+      {
+        "key": "inferx",
+        "name": "InferX",
+        "baseURL": "https://model.inferx.net/endpoints/v1",
+        "modelIDs": [
+          "deepseek-v4-flash",
+          "deepseek-v4-flash-0731",
+          "Qwen3.6-35B-A3B-FP8",
+          "Qwen3.6-35B-A3B-fp8-no-thinking",
+          "Qwen3-Coder-Next-FP8",
+          "gemma-4-31B-it-fp8",
+          "glm-52",
+          "Agents-A1",
+          "Devstral-2-123B-Instruct-2512-int4-AutoRound",
+          "Ornith-1.0-35B-FP8",
+          "Qwen3.6-27B-FP8"
+        ],
+        "modelsFetcher": {
+          "url": "https://model.inferx.net/endpoints/v1/models",
+          "type": "openai"
+        },
+        "notes": "inferx (from extremerouter registry)",
+        "freeTier": false,
+        "kind": "hasFree"
+      },
+      {
+        "key": "infron",
+        "name": "Infron AI",
+        "baseURL": "https://llm.onerouter.pro/v1",
+        "modelsFetcher": {
+          "url": "https://llm.onerouter.pro/v1/models",
+          "type": "openai"
+        },
+        "notes": "infron (from extremerouter registry)",
+        "freeTier": true,
+        "kind": "freeTier"
+      },
+      {
+        "key": "inxorastudio",
+        "name": "InxoraStudio Labs",
+        "baseURL": "https://labs.inxorastudio.com/v1",
+        "modelsFetcher": {
+          "url": "https://labs.inxorastudio.com/api/ai/models",
+          "type": "inxora"
+        },
+        "notes": "inxorastudio (from extremerouter registry)",
+        "freeTier": true,
+        "kind": "freeTier"
+      },
+      {
+        "key": "kilocode",
+        "name": "Kilo Code (Free)",
+        "baseURL": "https://api.kilo.ai/api/openrouter",
+        "modelIDs": [
+          "anthropic/claude-sonnet-4-20250514",
+          "anthropic/claude-opus-4-20250514",
+          "google/gemini-2.5-pro",
+          "google/gemini-2.5-flash",
+          "openai/gpt-4.1",
+          "openai/o3",
+          "deepseek/deepseek-chat",
+          "deepseek/deepseek-reasoner"
+        ],
+        "notes": "设备码登录（无需 API Key）；登录后在编辑器「账号连接」选连接，组织头自动注入",
+        "freeTier": true,
+        "kind": "freeTier",
+        "loginFlow": true,
+        "authFlow": "kilocode"
+      },
+      {
+        "key": "kimi-coding",
+        "name": "Kimi for Coding (Free)",
+        "baseURL": "https://api.kimi.com/coding/v1",
+        "modelIDs": [
+          "kimi-k2.6",
+          "kimi-k2.5",
+          "kimi-k2.5-thinking",
+          "kimi-latest"
+        ],
+        "modelsFetcher": {
+          "url": "https://api.kimi.com/coding/v1/models",
+          "type": "openai"
+        },
+        "notes": "设备码登录 Kimi（标准 RFC8628，无需 API Key）；OpenAI 兼容 /coding/v1，含 k2 编码模型免费额度",
+        "freeTier": true,
+        "kind": "freeTier",
+        "loginFlow": true,
+        "authFlow": "kimi-coding"
+      },
+      {
+        "key": "lemonade",
+        "name": "Lemonade Server",
+        "baseURL": "http://localhost:13305/api/v1",
+        "notes": "lemonade (from extremerouter registry)",
+        "freeTier": false,
+        "kind": "local"
+      },
+      {
+        "key": "liquid",
+        "name": "Liquid AI",
+        "baseURL": "https://inference.liquid.ai/v1",
+        "modelIDs": [
+          "liquid-lfm-40b"
+        ],
+        "notes": "liquid (from extremerouter registry)",
+        "freeTier": false,
+        "kind": "hasFree"
+      },
+      {
+        "key": "literouter",
+        "name": "LiteRouter",
+        "baseURL": "https://api.literouter.com/v1",
+        "notes": "literouter (from extremerouter registry)",
+        "freeTier": false,
+        "kind": "hasFree"
+      },
+      {
+        "key": "llama-cpp",
+        "name": "llama.cpp",
+        "baseURL": "http://127.0.0.1:8080/v1",
+        "notes": "llama-cpp (from extremerouter registry)",
+        "freeTier": false,
+        "kind": "local"
+      },
+      {
+        "key": "llamafile",
+        "name": "Llamafile",
+        "baseURL": "http://127.0.0.1:8080/v1",
+        "notes": "llamafile (from extremerouter registry)",
+        "freeTier": false,
+        "kind": "local"
+      },
+      {
+        "key": "llm-kiwi",
+        "name": "LLM.Kiwi",
+        "baseURL": "https://api.llm.kiwi/v1",
+        "modelIDs": [
+          "auto",
+          "hrLLM"
+        ],
+        "notes": "llm-kiwi (from extremerouter registry)",
+        "freeTier": false,
+        "kind": "hasFree"
+      },
+      {
+        "key": "llm7",
+        "name": "LLM7",
+        "baseURL": "https://api.llm7.io/v1",
+        "modelIDs": [
+          "gpt-4o-mini-2024-07-18",
+          "gpt-4.1-nano-2025-04-14",
+          "deepseek-r1-0528",
+          "qwen2.5-coder-32b-instruct"
+        ],
+        "notes": "llm7 (from extremerouter registry)",
+        "freeTier": false,
+        "kind": "hasFree"
+      },
+      {
+        "key": "llmgateway",
+        "name": "LLM Gateway",
+        "baseURL": "https://api.llmgateway.io/v1",
+        "notes": "llmgateway (from extremerouter registry)",
+        "freeTier": false,
+        "kind": "hasFree"
+      },
+      {
+        "key": "lm-studio",
+        "name": "LM Studio",
+        "baseURL": "http://localhost:1234/v1",
+        "notes": "lm-studio (from extremerouter registry)",
+        "freeTier": false,
+        "kind": "local"
+      },
+      {
+        "key": "meganova-ai",
+        "name": "MegaNova AI",
+        "baseURL": "https://api.meganova.ai/v1",
+        "modelIDs": [
+          "XiaomiMiMo/MiMo-V2-Flash",
+          "MiniMaxAI/MiniMax-M2.1",
+          "MiniMaxAI/MiniMax-M2.5",
+          "moonshotai/Kimi-K2.5",
+          "moonshotai/Kimi-K2-Thinking",
+          "deepseek-ai/DeepSeek-V3.2"
+        ],
+        "notes": "meganova-ai (from extremerouter registry)",
+        "freeTier": false,
+        "kind": "hasFree"
+      },
+      {
+        "key": "mimo-free",
+        "name": "MiMo Code Free",
+        "baseURL": "https://api.xiaomimimo.com/api/free-ai/openai",
+        "modelIDs": [
+          "mimo-auto"
+        ],
+        "modelsFetcher": {
+          "url": "https://models.dev/api.json",
+          "type": "mimo-free"
+        },
+        "notes": "mimo-free (from extremerouter registry)",
+        "freeTier": true,
+        "kind": "freeTier"
+      },
+      {
+        "key": "mistral",
+        "name": "Mistral (La Plateforme)",
+        "baseURL": "https://api.mistral.ai/v1",
+        "notes": "Free experiment tier. Key: console.mistral.ai",
+        "freeTier": true,
+        "kind": "freeTier"
+      },
+      {
+        "key": "mixlayer",
+        "name": "Mixlayer",
+        "baseURL": "https://models.mixlayer.ai/v1",
+        "modelIDs": [
+          "qwen/qwen3.5-35b-a3b",
+          "qwen/qwen3.5-397b-a17b",
+          "qwen/qwen3.5-9b",
+          "qwen/qwen3.5-27b",
+          "qwen/qwen3.5-122b-a10b"
+        ],
+        "notes": "mixlayer (from extremerouter registry)",
+        "freeTier": false,
+        "kind": "hasFree"
+      },
+      {
+        "key": "mnn-ai",
+        "name": "MNN AI",
+        "baseURL": "https://api.mnnai.ru/v1",
+        "notes": "mnn-ai (from extremerouter registry)",
+        "freeTier": false,
+        "kind": "hasFree"
+      },
+      {
+        "key": "modal",
+        "name": "Modal",
+        "baseURL": "https://api.modal.ai/v1",
+        "modelIDs": [
+          "google/gemini-2.0-flash"
+        ],
+        "notes": "modal (from extremerouter registry)",
+        "freeTier": false,
+        "kind": "hasFree"
+      },
+      {
+        "key": "modelscope",
+        "name": "ModelScope",
+        "baseURL": "https://api-inference.modelscope.cn/v1",
+        "modelIDs": [
+          "ZhipuAI/GLM-4.5",
+          "ZhipuAI/GLM-4.6",
+          "Qwen/Qwen3-235B-A22B-Instruct-2507",
+          "Qwen/Qwen3-Coder-30B-A3B-Instruct",
+          "Qwen/Qwen3-30B-A3B-Thinking-2507",
+          "Qwen/Qwen3-30B-A3B-Instruct-2507"
+        ],
+        "notes": "modelscope (from extremerouter registry)",
+        "freeTier": false,
+        "kind": "hasFree"
+      },
+      {
+        "key": "morph",
+        "name": "Morph",
+        "baseURL": "https://api.morphllm.com/v1",
+        "modelIDs": [
+          "morph-v3-large",
+          "morph-v3-fast",
+          "morph-glm52-744b",
+          "morph-qwen35-397b",
+          "morph-qwen36-27b",
+          "morph-minimax3-428b",
+          "morph-dsv4flash"
+        ],
+        "notes": "morph (from extremerouter registry)",
+        "freeTier": false,
+        "kind": "hasFree"
+      },
+      {
+        "key": "naga-ac",
+        "name": "Naga.ac",
+        "baseURL": "https://api.naga.ac/v1",
+        "notes": "naga-ac (from extremerouter registry)",
+        "freeTier": false,
+        "kind": "hasFree"
+      },
+      {
+        "key": "naga-ai",
+        "name": "Naga AI",
+        "baseURL": "https://api.naga.ac/v1",
+        "notes": "naga-ai (from extremerouter registry)",
+        "freeTier": false,
+        "kind": "hasFree"
+      },
+      {
+        "key": "nanobanana",
+        "name": "NanoBanana API",
+        "baseURL": "https://api.nanobananaapi.ai/v1",
+        "notes": "nanobanana (from extremerouter registry)",
+        "freeTier": false,
+        "kind": "hasFree"
+      },
+      {
+        "key": "navy",
+        "name": "NavyAI",
+        "baseURL": "https://api.navy/v1",
+        "modelIDs": [
+          "llama-3.3-70b-instruct",
+          "gemma-4-31b-it",
+          "deepseek-v4-flash",
+          "deepseek-chat",
+          "mistral-small-latest",
+          "llama-4-scout"
+        ],
+        "notes": "navy (from extremerouter registry)",
+        "freeTier": false,
+        "kind": "hasFree"
+      },
+      {
+        "key": "nous-research",
+        "name": "Nous Research",
+        "baseURL": "https://inference-api.nousresearch.com/v1",
+        "modelIDs": [
+          "Hermes-4-405B",
+          "Hermes-4-70B"
+        ],
+        "notes": "nous-research (from extremerouter registry)",
+        "freeTier": false,
+        "kind": "hasFree"
+      },
+      {
+        "key": "novita",
+        "name": "Novita AI",
+        "baseURL": "https://api.novita.ai/v3/openai",
+        "modelIDs": [
+          "deepseek/deepseek-r1",
+          "deepseek/deepseek-v3",
+          "deepseek/deepseek-r1-distill-llama-70b",
+          "deepseek/deepseek-r1-distill-qwen-32b",
+          "meta-llama/llama-3.3-70b-instruct",
+          "meta-llama/llama-3.1-405b-instruct",
+          "qwen/qwen-2.5-72b-instruct",
+          "qwen/qwen-2.5-coder-32b-instruct",
+          "mistralai/mistral-nemo"
+        ],
+        "modelsFetcher": {
+          "url": "https://api.novita.ai/v3/openai/models",
+          "type": "openai"
+        },
+        "notes": "novita (from extremerouter registry)",
+        "freeTier": false,
+        "kind": "hasFree"
+      },
+      {
+        "key": "nscale",
+        "name": "nScale",
+        "baseURL": "https://inference.api.nscale.com/v1",
+        "notes": "nscale (from extremerouter registry)",
+        "freeTier": false,
+        "kind": "hasFree"
+      },
+      {
+        "key": "nvidia",
+        "name": "NVIDIA NIM",
+        "baseURL": "https://integrate.api.nvidia.com/v1",
+        "modelIDs": [
+          "minimaxai/minimax-m2.7",
+          "minimaxai/minimax-m3",
+          "z-ai/glm-5.2",
+          "deepseek-ai/deepseek-v4-pro",
+          "deepseek-ai/deepseek-v4-flash",
+          "moonshotai/kimi-k2.6",
+          "nvidia/nemotron-3-ultra-550b-a55b",
+          "nvidia/parakeet-ctc-1.1b-asr"
+        ],
+        "notes": "nvidia (from extremerouter registry)",
+        "freeTier": true,
+        "kind": "freeTier"
+      },
+      {
+        "key": "ofoxai",
+        "name": "OfoxAI",
+        "baseURL": "https://api.ofox.ai/v1",
+        "notes": "ofoxai (from extremerouter registry)",
+        "freeTier": false,
+        "kind": "hasFree"
+      },
+      {
+        "key": "ollama-cloud",
+        "name": "Ollama Cloud",
+        "baseURL": "https://ollama.com/v1",
+        "modelIDs": [
+          "gpt-oss:20b",
+          "gpt-oss:120b",
+          "deepseek-v4-pro",
+          "deepseek-v4-flash",
+          "kimi-k2.6",
+          "glm-5.1",
+          "glm-5.2",
+          "minimax-m3",
+          "minimax-m2.7",
+          "gemma4:31b",
+          "nemotron-3-super",
+          "qwen3.5:397b"
+        ],
+        "notes": "ollama-cloud (from extremerouter registry)",
+        "freeTier": false,
+        "kind": "hasFree"
+      },
+      {
+        "key": "ollama-local",
+        "name": "Local Ollama",
+        "baseURL": "http://127.0.0.1:11434/v1",
+        "notes": "Ollama 自带 OpenAI 兼容端点（/api 同服务），无需密钥，模型列表来自本机 /v1/models",
+        "freeTier": true,
+        "kind": "local"
+      },
+      {
+        "key": "oobabooga",
+        "name": "oobabooga",
+        "baseURL": "http://localhost:5000/v1",
+        "notes": "oobabooga (from extremerouter registry)",
+        "freeTier": false,
+        "kind": "local"
+      },
+      {
+        "key": "openadapter",
+        "name": "OpenAdapter",
+        "baseURL": "https://api.openadapter.in/v1",
+        "modelIDs": [
+          "glm-4.7"
+        ],
+        "notes": "openadapter (from extremerouter registry)",
+        "freeTier": false,
+        "kind": "hasFree"
+      },
+      {
+        "key": "openai",
+        "name": "OpenAI",
+        "baseURL": "https://api.openai.com/v1",
+        "notes": "Paid. Key: platform.openai.com",
+        "freeTier": false,
+        "kind": "other"
+      },
+      {
+        "key": "openference-api",
+        "name": "Openference API",
+        "baseURL": "https://api.openference.com/v1",
+        "notes": "openference-api (from extremerouter registry)",
+        "freeTier": false,
+        "kind": "hasFree"
+      },
+      {
+        "key": "openrouter",
+        "name": "OpenRouter",
+        "baseURL": "https://openrouter.ai/api/v1",
+        "headers": {
+          "HTTP-Referer": "https://cline.bot",
+          "X-Title": "RouteNest"
+        },
+        "notes": "300+ models; many :free variants. Key: openrouter.ai/keys",
+        "freeTier": true,
+        "kind": "freeTier"
+      },
+      {
+        "key": "pioneer",
+        "name": "Pioneer AI",
+        "baseURL": "https://api.pioneer.ai/v1",
+        "modelIDs": [
+          "Qwen/Qwen3-32B",
+          "Qwen/Qwen3.6-27B",
+          "Qwen/Qwen3.5-9B",
+          "Qwen/Qwen3-8B",
+          "Qwen/Qwen3-4B-Base",
+          "Qwen/Qwen3-1.7B-Base",
+          "meta-llama/Llama-3.1-8B-Instruct",
+          "meta-llama/Llama-3.2-1B-Instruct",
+          "google/gemma-3-4b-pt",
+          "HuggingFaceTB/SmolLM3-3B-Base"
+        ],
+        "notes": "pioneer (from extremerouter registry)",
+        "freeTier": false,
+        "kind": "hasFree"
+      },
+      {
+        "key": "poixe-ai",
+        "name": "Poixe AI",
+        "baseURL": "https://api.poixe.com/v1",
+        "notes": "poixe-ai (from extremerouter registry)",
+        "freeTier": false,
+        "kind": "hasFree"
+      },
+      {
+        "key": "poolside",
+        "name": "Poolside",
+        "baseURL": "https://inference.poolside.ai/v1",
+        "modelIDs": [
+          "poolside/laguna-xs-2.1",
+          "poolside/laguna-s-2.1"
+        ],
+        "notes": "poolside (from extremerouter registry)",
+        "freeTier": false,
+        "kind": "hasFree"
+      },
+      {
+        "key": "qoder",
+        "name": "Qoder",
+        "baseURL": "https://api3.qoder.sh",
+        "modelIDs": [
+          "qoder/auto",
+          "qoder/performance",
+          "qoder/efficient",
+          "qoder/lite",
+          "qoder/qmodel_38max",
+          "qoder/qmodel_latest",
+          "qoder/qmodel",
+          "qoder/qfmodel",
+          "qoder/kmodel_latest",
+          "qoder/kmodel",
+          "qoder/gmodel",
+          "qoder/gfmodel",
+          "qoder/dmodel",
+          "qoder/dfmodel",
+          "qoder/mmodel"
+        ],
+        "modelsFetcher": {
+          "url": "https://api3.qoder.sh/algo/api/v2/model/list",
+          "type": "qoder"
+        },
+        "notes": "浏览器设备码登录（COSY 签名，非 OpenAI 兼容）；推理走 /algo/api/v2/service/pro/sse/agent_chat_generation，模型目录来自 /algo/api/v2/model/list",
+        "freeTier": true,
+        "kind": "freeTier",
+        "loginFlow": true,
+        "authFlow": "qoder"
+      },
+      {
+        "key": "qoder-cn",
+        "name": "Qoder CN",
+        "baseURL": "https://api3.qoder.com.cn",
+        "modelIDs": [
+          "qoder/auto",
+          "qoder/performance",
+          "qoder/efficient",
+          "qoder/lite",
+          "qoder/qmodel_38max",
+          "qoder/qmodel_latest",
+          "qoder/qmodel",
+          "qoder/qfmodel",
+          "qoder/kmodel_latest",
+          "qoder/kmodel",
+          "qoder/gmodel",
+          "qoder/gfmodel",
+          "qoder/dmodel",
+          "qoder/dfmodel",
+          "qoder/mmodel"
+        ],
+        "modelsFetcher": {
+          "url": "https://api3.qoder.com.cn/algo/api/v2/model/list",
+          "type": "qoder"
+        },
+        "notes": "浏览器设备码登录（COSY 签名，非 OpenAI 兼容）；Qoder 国内站推理走 /algo/api/v2/service/pro/sse/agent_chat_generation，模型目录来自 /algo/api/v2/model/list",
+        "freeTier": true,
+        "kind": "freeTier",
+        "loginFlow": true,
+        "authFlow": "qoder-cn"
+      },
+      {
+        "key": "qwen-chat",
+        "name": "Qwen Chat (Free)",
+        "baseURL": "https://portal.qwen.ai/v1",
+        "modelIDs": [
+          "qwen3-coder-plus",
+          "qwen3-coder-flash",
+          "vision-model",
+          "coder-model"
+        ],
+        "notes": "设备码登录 Qwen Chat（PKCE，无需 API Key）；OpenAI 兼容端点",
+        "freeTier": true,
+        "kind": "freeTier",
+        "loginFlow": true,
+        "authFlow": "qwen"
+      },
+      {
+        "key": "reka",
+        "name": "Reka",
+        "baseURL": "https://api.reka.ai/v1",
+        "modelIDs": [
+          "reka-flash-3",
+          "reka-flash",
+          "reka-edge-2603"
+        ],
+        "notes": "reka (from extremerouter registry)",
+        "freeTier": false,
+        "kind": "hasFree"
+      },
+      {
+        "key": "requesty",
+        "name": "Requesty",
+        "baseURL": "https://router.requesty.ai/v1",
+        "modelIDs": [
+          "claude-sonnet-4-5@eu",
+          "claude-opus-4-7",
+          "gpt-5.1@eu",
+          "gpt-4.1-nano@eu",
+          "gemini-2.5-flash@eu",
+          "kimi-k3"
+        ],
+        "notes": "requesty (from extremerouter registry)",
+        "freeTier": false,
+        "kind": "hasFree"
+      },
+      {
+        "key": "routeway",
+        "name": "Routeway",
+        "baseURL": "https://api.routeway.ai/v1",
+        "modelIDs": [
+          "llama-3.3-70b-instruct:free",
+          "nemotron-3-nano-30b-a3b:free",
+          "nemotron-nano-9b-v2:free",
+          "step-3.7-flash:free",
+          "step-3.5-flash:free",
+          "laguna-m.1:free",
+          "laguna-xs.2:free",
+          "llama-3.2-3b-instruct:free"
+        ],
+        "notes": "routeway (from extremerouter registry)",
+        "freeTier": false,
+        "kind": "hasFree"
+      },
+      {
+        "key": "sambanova",
+        "name": "SambaNova",
+        "baseURL": "https://api.sambanova.ai/v1",
+        "notes": "sambanova (from extremerouter registry)",
+        "freeTier": false,
+        "kind": "hasFree"
+      },
+      {
+        "key": "scaleway",
+        "name": "Scaleway",
+        "baseURL": "https://api.scaleway.ai/v1",
+        "modelIDs": [
+          "qwen3-235b-a22b-instruct-2507",
+          "qwen3.5-397b-a17b",
+          "llama-3.3-70b-instruct",
+          "mistral-small-3.2-24b-instruct-2506",
+          "gpt-oss-120b",
+          "glm-5.2"
+        ],
+        "notes": "scaleway (from extremerouter registry)",
+        "freeTier": false,
+        "kind": "hasFree"
+      },
+      {
+        "key": "speka",
+        "name": "Speka AI",
+        "baseURL": "https://speka.me/v1",
+        "notes": "speka (from extremerouter registry)",
+        "freeTier": false,
+        "kind": "hasFree"
+      },
+      {
+        "key": "theoldllm",
+        "name": "The Old LLM (Free)",
+        "baseURL": "https://theoldllm.vercel.app/api/chatgpt",
+        "modelIDs": [
+          "GPT_5_4",
+          "GPT_5_3",
+          "GPT_5_2",
+          "GPT_5_1",
+          "GPT_5",
+          "GPT_o4_mini",
+          "GPT_o3_mini",
+          "gemini_3_pro",
+          "gemini_2_5_pro",
+          "gemini_2_0_flash",
+          "gemini_1_5_flash",
+          "CLAUDE_4_6_OPUS",
+          "CLAUDE_4_6_SONNET",
+          "CLAUDE_4_5_HAIKU",
+          "openrouter_gpt_4_o",
+          "openrouter_gpt_4_o_mini",
+          "openrouter_grok_4",
+          "together_deepseek_v3",
+          "openrouter_deepseek_r1",
+          "sonar-pro"
+        ],
+        "notes": "theoldllm (from extremerouter registry)",
+        "freeTier": true,
+        "kind": "free"
+      },
+      {
+        "key": "together",
+        "name": "Together AI",
+        "baseURL": "https://api.together.xyz/v1",
+        "notes": "Some free models (e.g. Llama Vision free). Key: api.together.ai",
+        "freeTier": true,
+        "kind": "freeTier"
+      },
+      {
+        "key": "tokenreply",
+        "name": "TokenReply",
+        "baseURL": "https://api.tokenreply.com/v1",
+        "notes": "tokenreply (from extremerouter registry)",
+        "freeTier": false,
+        "kind": "hasFree"
+      },
+      {
+        "key": "unorouter",
+        "name": "UnoRouter",
+        "baseURL": "https://api.unorouter.com/v1",
+        "notes": "unorouter (from extremerouter registry)",
+        "freeTier": false,
+        "kind": "hasFree"
+      },
+      {
+        "key": "vllm-local",
+        "name": "Local vLLM / Ollama",
+        "baseURL": "http://127.0.0.1:8000/v1",
+        "notes": "Self-hosted OpenAI-compatible server (no key needed usually)",
+        "freeTier": true,
+        "kind": "freeTier"
+      },
+      {
+        "key": "void-ai",
+        "name": "Void AI",
+        "baseURL": "https://api.voidai.app/v1",
+        "notes": "void-ai (from extremerouter registry)",
+        "freeTier": false,
+        "kind": "hasFree"
+      },
+      {
+        "key": "workbuddy",
+        "name": "WorkBuddy (Free)",
+        "baseURL": "https://www.workbuddy.ai/v2",
+        "modelIDs": [
+          "hy3",
+          "hy4-preview",
+          "glm-5.3",
+          "glm-5.3-flash",
+          "minimax-m3"
+        ],
+        "notes": "浏览器授权轮询登录（state-poll，无需 API Key）；WorkBuddy /v2/chat/completions，含混元预览模型",
+        "freeTier": true,
+        "kind": "freeTier",
+        "loginFlow": true,
+        "authFlow": "workbuddy"
+      },
+      {
+        "key": "xinference",
+        "name": "XInference",
+        "baseURL": "http://localhost:9997/v1",
+        "notes": "xinference (from extremerouter registry)",
+        "freeTier": false,
+        "kind": "local"
+      },
+      {
+        "key": "yolo-auto",
+        "name": "Yolo-Auto",
+        "baseURL": "https://yolo-auto.com/v1",
+        "notes": "yolo-auto (from extremerouter registry)",
+        "freeTier": false,
+        "kind": "hasFree"
+      },
+      {
+        "key": "zerolimitai",
+        "name": "ZeroLimitAI",
+        "baseURL": "https://www.zerolimitai.com/api/v1",
+        "notes": "zerolimitai (from extremerouter registry)",
+        "freeTier": false,
+        "kind": "hasFree"
+      },
+      {
+        "key": "zylo-api",
+        "name": "Zylo API",
+        "baseURL": "https://api.zyloai.net/v1",
+        "notes": "zylo-api (from extremerouter registry)",
+        "freeTier": false,
+        "kind": "hasFree"
+      }
+    ]
+  }
+}
+

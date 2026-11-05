@@ -1,8 +1,0 @@
-{
-  "id": "void-ai",
-  "name": "Void AI",
-  "baseURL": "https://api.voidai.app/v1",
-  "notes": "void-ai (from extremerouter registry)",
-  "freeTier": false,
-  "kind": "hasFree"
-}

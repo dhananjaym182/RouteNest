@@ -40,10 +40,35 @@ func TestRegistryAllReturnsCopy(t *testing.T) {
 	first := reg.IDs()[0]
 	p := all[first]
 	p.Name = "mutated"
+	p.Headers = map[string]string{"X-Test": "mutated"}
+	p.ModelIDs = []string{"mutated"}
+	p.ModelsFetcher = &ModelsFetcher{URL: "https://mutated.test/models", Type: "openai"}
 	all[first] = p
 	again, _ := reg.Get(first)
 	if again.Name == "mutated" {
 		t.Error("All must not alias the registry map")
+	}
+	if again.Headers["X-Test"] == "mutated" || (len(again.ModelIDs) == 1 && again.ModelIDs[0] == "mutated") || (again.ModelsFetcher != nil && again.ModelsFetcher.URL == "https://mutated.test/models") {
+		t.Error("All must deep-copy nested preset data")
+	}
+}
+
+func TestRegistryGetReturnsDeepCopy(t *testing.T) {
+	reg, err := New(map[string]Preset{"a": {
+		ID: "a", Name: "A", BaseURL: "https://example.test/v1",
+		Headers: map[string]string{"X-Test": "original"}, ModelIDs: []string{"m1"},
+		ModelsFetcher: &ModelsFetcher{URL: "https://example.test/models", Type: "openai"},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, _ := reg.Get("a")
+	p.Headers["X-Test"] = "changed"
+	p.ModelIDs[0] = "changed"
+	p.ModelsFetcher.URL = "https://changed.test/models"
+	again, _ := reg.Get("a")
+	if again.Headers["X-Test"] != "original" || again.ModelIDs[0] != "m1" || again.ModelsFetcher.URL != "https://example.test/models" {
+		t.Fatalf("Get returned aliased data: %+v", again)
 	}
 }
 

@@ -1,0 +1,6 @@
+{
+  "beta": {
+    "reason": "fixture: override applies to a generated entry",
+    "kind": "hasFree"
+  }
+}

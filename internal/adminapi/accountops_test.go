@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"cline-go-proxy/internal/domain"
+	"routenest/internal/domain"
 )
 
 type accountOpsFixture struct {

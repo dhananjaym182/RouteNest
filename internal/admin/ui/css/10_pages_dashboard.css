@@ -1,0 +1,53 @@
+/* ===== Dashboard：池容量 / 中性指标砖 / 关注清单 ===== */
+.metric-section{margin-bottom:var(--sp-6)}
+.metric-heading{font-size:var(--fs-base);font-weight:600;color:var(--text2);margin:0 0 10px 2px}
+.pool-hero{background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius);padding:var(--sp-4) var(--sp-5) var(--sp-5);box-shadow:var(--shadow-sm)}
+.pool-hero-top{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:14px}
+.pool-hero-title{display:flex;align-items:center;gap:8px;font-size:var(--fs-md);font-weight:600;color:var(--text)}
+.pool-hero-title svg{width:16px;height:16px;color:var(--text2)}
+.pool-requests{font-size:var(--fs-sm);color:var(--text2)}
+.pool-requests b{color:var(--text);font-size:var(--fs-md);font-weight:600;font-variant-numeric:tabular-nums}
+.cap-bar{display:flex;gap:2px;height:10px;border-radius:var(--radius-pill);background:var(--bar-track);overflow:hidden}
+.cap-seg{height:100%;border-radius:var(--radius-pill);width:0;transition:width 0.3s var(--ease)}
+.cap-seg.ok{background:var(--green)}
+.cap-seg.warn{background:var(--yellow)}
+.cap-seg.bad{background:var(--red)}
+.pool-chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
+.chip{display:inline-flex;align-items:center;gap:6px;padding:4px 12px;border-radius:var(--radius-pill);font-size:var(--fs-sm);color:var(--text2);background:var(--surface2);border:1px solid var(--border2);white-space:nowrap}
+.chip b{color:var(--text);font-weight:600;font-variant-numeric:tabular-nums}
+.chip .dot{width:7px;height:7px;border-radius:50%;background:var(--text3);flex-shrink:0}
+.chip .dot.green{background:var(--green)}.chip .dot.red{background:var(--red)}.chip .dot.yellow{background:var(--yellow)}.chip .dot.purple{background:var(--purple)}.chip .dot.cyan{background:var(--cyan)}
+.chip.ok .dot{background:var(--green)}
+.chip.warn .dot{background:var(--yellow)}
+.chip.bad .dot{background:var(--red)}
+.chip-btn{cursor:pointer;user-select:none;transition:border-color .15s,color .15s,background .15s}
+.chip-btn:hover{border-color:var(--accent)}
+.chip-btn.active{border-color:var(--accent);color:var(--accent);background:var(--accent-soft);font-weight:600}
+.tiles{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.stat-tile{min-width:0;display:flex;align-items:center;gap:12px;background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius);padding:14px 16px;box-shadow:var(--shadow-sm);transition:border-color 0.15s var(--ease)}
+.stat-tile:hover{border-color:var(--border)}
+.tile-icon{width:34px;height:34px;border-radius:9px;display:flex;align-items:center;justify-content:center;flex-shrink:0;background:var(--surface2);color:var(--text2)}
+.tile-icon svg{width:17px;height:17px}
+.tile-icon.blue{background:var(--accent-soft);color:var(--accent)}
+.tile-icon.green{background:var(--green-soft);color:var(--green)}
+.tile-icon.purple{background:var(--purple-soft);color:var(--purple)}
+.tile-icon.cyan{background:var(--cyan-soft);color:var(--cyan)}
+.tile-icon.amber{background:var(--yellow-soft);color:var(--yellow)}
+.tile-body{flex:1;min-width:0}
+.tile-num{font-size:22px;font-weight:700;line-height:1.15;font-variant-numeric:tabular-nums;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tile-label{font-size:var(--fs-sm);color:var(--text2);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tile-sub{font-size:var(--fs-xs);color:var(--text3);margin-top:2px;font-variant-numeric:tabular-nums}
+.attention-list{display:flex;flex-direction:column;background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius);overflow:hidden;box-shadow:var(--shadow-sm);min-height:52px}
+.attention-row{display:flex;align-items:center;gap:10px;padding:11px 16px;border-bottom:1px solid var(--border2);font-size:var(--fs-base);color:var(--text);min-width:0}
+.attention-row:last-child{border-bottom:none}
+.attention-row svg{width:15px;height:15px;flex-shrink:0;color:var(--text3)}
+.attention-row.a-bad svg{color:var(--red)}
+.attention-row.a-warn svg{color:var(--yellow)}
+.attention-row.a-info svg{color:var(--accent)}
+.attention-row .a-label{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.attention-row .a-count{font-weight:600;font-variant-numeric:tabular-nums;color:var(--text2);white-space:nowrap}
+.attention-row .a-link{cursor:pointer;color:var(--accent);font-size:var(--fs-sm);white-space:nowrap}
+.attention-row .a-link:hover{text-decoration:underline}
+.attention-empty{padding:14px 16px;font-size:var(--fs-base);color:var(--text3)}
+.attention-loading{display:flex;align-items:center;gap:8px;padding:14px 16px;font-size:var(--fs-base);color:var(--text3)}
+

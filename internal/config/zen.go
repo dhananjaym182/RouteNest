@@ -5,7 +5,7 @@ import (
 	"os"
 	"strings"
 
-	"cline-go-proxy/internal/platform"
+	"routenest/internal/platform"
 )
 
 // ZenPath is the data file holding the OpenCode Zen configuration.

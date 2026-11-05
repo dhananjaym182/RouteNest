@@ -21,7 +21,7 @@ NAME="routenest-desktop"
 VERSION=${VERSION:-$(git describe --tags --always 2>/dev/null || echo "dev")}
 GIT_COMMIT=${GIT_COMMIT:-$(git rev-parse --short HEAD 2>/dev/null || echo "")}
 BUILD_DATE=${BUILD_DATE:-$(date -u +%Y-%m-%dT%H:%M:%SZ)}
-LDFLAGS="-s -w -X main.appVersion=$VERSION -X main.appGitCommit=$GIT_COMMIT -X main.appBuildDate=$BUILD_DATE"
+LDFLAGS="-s -w -X routenest/internal/buildinfo.AppVersion=$VERSION -X routenest/internal/buildinfo.AppGitCommit=$GIT_COMMIT -X routenest/internal/buildinfo.AppBuildDate=$BUILD_DATE"
 
 if [ "$OS" = "windows" ]; then
   NAME="$NAME.exe"

@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"cline-go-proxy/internal/domain"
-	"cline-go-proxy/internal/httpx"
+	"routenest/internal/domain"
+	"routenest/internal/httpx"
 )
 
 func decodeResponse(t *testing.T, rec *httptest.ResponseRecorder) httpx.Response {

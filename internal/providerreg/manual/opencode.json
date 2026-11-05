@@ -1,0 +1,27 @@
+{
+  "id": "opencode",
+  "name": "OpenCode Zen",
+  "baseURL": "https://opencode.ai/inference/v1",
+  "adapter": "opencodezen",
+  "protocol": "opencode-zen",
+  "notes": "Built-in OpenCode Zen provider with public/session identity, free-model discovery, session rotation, context compaction, and egress cooldowns.",
+  "freeTier": true,
+  "kind": "free",
+  "authFlows": [
+    "opencode-public",
+    "opencode-session"
+  ],
+  "capabilities": {
+    "modelDiscovery": "supported",
+    "freeModelDetection": "supported",
+    "removedModelDetection": "supported",
+    "reactiveQuota": "supported",
+    "proactiveQuota": "unsupported",
+    "quotaResetDetection": "supported",
+    "credentialRotation": "supported",
+    "egressPool": "supported",
+    "contextCompaction": "supported"
+  },
+  "missingThreshold": 1,
+  "runtimeBuiltin": true
+}

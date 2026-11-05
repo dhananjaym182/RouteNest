@@ -3,7 +3,7 @@
 // ID globally, and unverified routes never qualify silently.
 package dispatch
 
-import "cline-go-proxy/internal/domain"
+import "routenest/internal/domain"
 
 // RouteAccess describes one concrete route candidate: the account/provider
 // route through which a model would be served.

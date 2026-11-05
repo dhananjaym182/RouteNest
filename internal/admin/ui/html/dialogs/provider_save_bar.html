@@ -1,0 +1,8 @@
+<!-- Provider 编辑器抽屉（fixed 浮层，与本页预设/导入弹窗同级） -->
+<div id="saveDiscardBar" class="save-discard-bar" role="region" aria-label="未保存的更改">
+  <span class="sdb-dot" aria-hidden="true"></span>
+  <span>未保存的更改</span>
+  <button type="button" class="btn btn-sm" id="saveBarDiff" hidden onclick="diffViaBar()">查看差异</button>
+  <button type="button" class="btn btn-sm" onclick="discardSaveBar()">放弃</button>
+  <button type="button" class="btn btn-sm btn-primary" onclick="saveViaBar()">保存更改</button>
+</div>

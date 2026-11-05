@@ -1,0 +1,297 @@
+package providers
+
+import (
+	"path/filepath"
+	"routenest/internal/accounts"
+	"routenest/internal/connections"
+	"testing"
+	"time"
+)
+
+// saveBudgetState 保存/恢复月度 token 预算相关的全部内存态，测试间互不污染。
+func saveBudgetState(t *testing.T) {
+	t.Helper()
+	Mu.Lock()
+	oldProviders, oldLoaded, oldCooldowns := CustomProviders, Loaded, Cooldowns
+	Mu.Unlock()
+	budgetMu.Lock()
+	oldDaily, oldRPM, oldTokens := providerDaily, providerRPM, providerTokens
+	budgetMu.Unlock()
+	t.Cleanup(func() {
+		Mu.Lock()
+		CustomProviders, Loaded, Cooldowns = oldProviders, oldLoaded, oldCooldowns
+		Mu.Unlock()
+		budgetMu.Lock()
+		providerDaily, providerRPM, providerTokens = oldDaily, oldRPM, oldTokens
+		budgetMu.Unlock()
+	})
+}
+
+// RecordTokenUsage 归集月度 token 用量。
+func TestRecordProviderTokenUsageAccruesMonthly(t *testing.T) {
+	saveBudgetState(t)
+	budgetMu.Lock()
+	providerTokens = map[string]map[string]int64{}
+	budgetMu.Unlock()
+
+	month := time.Now().UTC().Format("2006-01")
+	RecordTokenUsage("prov_tok", 1200, "monthly")
+	RecordTokenUsage("prov_tok", 800, "monthly")
+	RecordTokenUsage("prov_tok", -3, "monthly")   // 异常回报忽略
+	RecordTokenUsage("", 999, "monthly")          // 无归属忽略
+	RecordTokenUsage("prov_tok", 1000, "monthly") // 跨家不同计数
+
+	budgetMu.Lock()
+	got := providerTokens["prov_tok"][month]
+	_, emptyHasNoKey := providerTokens[""][""]
+	budgetMu.Unlock()
+	if got != 3000 {
+		t.Fatalf("month usage = %d, want 3000", got)
+	}
+	if emptyHasNoKey {
+		t.Fatal("empty providerID should not accrue")
+	}
+}
+
+// 日窗归集：用量落在 UTC 日键（"2006-01-02"），与月键隔离。
+func TestRecordProviderTokenUsageDailyWindow(t *testing.T) {
+	saveBudgetState(t)
+	budgetMu.Lock()
+	providerTokens = map[string]map[string]int64{
+		"prov_day": {"1999-12-31": 42}, // 昨日键：不参与今日判定
+	}
+	budgetMu.Unlock()
+
+	day := time.Now().UTC().Format("2006-01-02")
+	month := time.Now().UTC().Format("2006-01")
+	RecordTokenUsage("prov_day", 700, "daily")
+	RecordTokenUsage("prov_day", 300, "daily")
+	RecordTokenUsage("prov_day", -5, "daily") // 异常回报忽略
+
+	budgetMu.Lock()
+	gotDay := providerTokens["prov_day"][day]
+	gotMonth := providerTokens["prov_day"][month]
+	budgetMu.Unlock()
+	if gotDay != 1000 {
+		t.Fatalf("day usage = %d, want 1000", gotDay)
+	}
+	if gotMonth != 0 {
+		t.Fatalf("daily window must not touch month key, got %d", gotMonth)
+	}
+}
+
+// 月切换后旧月键自然废弃：仅当键相同时累加，新的月份用新键从头计。
+func TestRecordProviderTokenUsageMonthRollover(t *testing.T) {
+	saveBudgetState(t)
+	budgetMu.Lock()
+	providerTokens = map[string]map[string]int64{
+		"prov_roll": {"1999-12": 42}, // 过期月，不参与当月判定
+	}
+	budgetMu.Unlock()
+
+	// 预算判定只看当月键：上月 42 不应触发限制
+	if done := providerBudgetExceeded("prov_roll", "m", 0, 0, 100, "monthly"); done {
+		t.Fatal("last month's usage must not trip this month's quota")
+	}
+	RecordTokenUsage("prov_roll", 100, "monthly")
+	if done := providerBudgetExceeded("prov_roll", "m", 0, 0, 100, "monthly"); !done {
+		t.Fatal("usage >= limit must trip the quota")
+	}
+	budgetMu.Lock()
+	_, staleKept := providerTokens["prov_roll"]["1999-12"]
+	cur := providerTokens["prov_roll"][time.Now().UTC().Format("2006-01")]
+	budgetMu.Unlock()
+	if !staleKept || cur != 100 {
+		t.Fatalf("rollover: stale kept=%v cur=%d, want true/100", staleKept, cur)
+	}
+}
+
+// 日窗配额：同一天内耗尽即触发；跨 UTC 日后旧日键废弃、重新从零计。
+func TestProviderBudgetExhaustsDailyAndResetsNextDay(t *testing.T) {
+	saveBudgetState(t)
+	now := time.Now().UTC()
+	today := now.Format("2006-01-02")
+	yesterday := now.AddDate(0, 0, -1).Format("2006-01-02")
+	budgetMu.Lock()
+	providerTokens = map[string]map[string]int64{
+		"prov_d": {yesterday: 10_000, today: 10_000}, // 昨日已满 + 今日已满
+	}
+	budgetMu.Unlock()
+
+	// 日窗看今日键：今日 10000 >= 10000 → 超配
+	if done := providerBudgetExceeded("prov_d", "m", 0, 0, 10_000, "daily"); !done {
+		t.Fatal("same-day usage >= limit must trip daily quota")
+	}
+	// 月窗看月键：日键上的用量对月窗不可见 → 不超配
+	if done := providerBudgetExceeded("prov_d", "m", 0, 0, 10_000, "monthly"); done {
+		t.Fatal("daily-window usage must not trip a monthly quota")
+	}
+
+	// 模拟跨日：把“今日”用量改标到昨日，今日键清零 → 日窗重置
+	budgetMu.Lock()
+	providerTokens["prov_d"] = map[string]int64{yesterday: 20_000}
+	budgetMu.Unlock()
+	if done := providerBudgetExceeded("prov_d", "m", 0, 0, 10_000, "daily"); done {
+		t.Fatal("yesterday's exhausted quota must not carry into a new UTC day")
+	}
+	// 新的一天重新计量：12000 >= 10000 → 超配
+	RecordTokenUsage("prov_d", 12_000, "daily")
+	if done := providerBudgetExceeded("prov_d", "m", 0, 0, 10_000, "daily"); !done {
+		t.Fatal("new-day usage >= limit must trip daily quota again")
+	}
+}
+
+// 空窗口值视同 monthly（与 HandleSave 归一化后一致）。
+func TestProviderBudgetEmptyWindowDefaultsMonthly(t *testing.T) {
+	saveBudgetState(t)
+	month := time.Now().UTC().Format("2006-01")
+	budgetMu.Lock()
+	providerTokens = map[string]map[string]int64{
+		"prov_e": {month: 500},
+	}
+	budgetMu.Unlock()
+
+	if done := providerBudgetExceeded("prov_e", "m", 0, 0, 500, ""); !done {
+		t.Fatal("empty tokenWindow must fall back to monthly key")
+	}
+}
+
+// ResolveForModel：token 配额耗尽的 provider 不入候选。
+func TestResolveSkipsTokenQuotaExhausted(t *testing.T) {
+	saveBudgetState(t)
+	Mu.Lock()
+	CustomProviders = []*CustomProvider{
+		{ID: "prov_q", Name: "Q", ModelIDs: []string{"m"}, Enabled: true, TokenLimit: 1000},
+		{ID: "prov_qd", Name: "QD", ModelIDs: []string{"m"}, Enabled: true, TokenLimit: 1000, TokenWindow: "daily"},
+		{ID: "prov_ok", Name: "OK", ModelIDs: []string{"m"}, Enabled: true, TokenLimit: 1000},
+		{ID: "prov_free", Name: "FREE", ModelIDs: []string{"m"}, Enabled: true}, // 0 = 不启用
+	}
+	Loaded = true
+	Cooldowns = map[string]time.Time{}
+	Mu.Unlock()
+	budgetMu.Lock()
+	providerTokens = map[string]map[string]int64{
+		"prov_q":  {time.Now().UTC().Format("2006-01"): 1000},    // 月窗用满
+		"prov_qd": {time.Now().UTC().Format("2006-01-02"): 1000}, // 日窗用满
+	}
+	budgetMu.Unlock()
+
+	got := ResolveForModel("m")
+	names := []string{}
+	for _, p := range got {
+		names = append(names, p.ID)
+	}
+	if len(names) != 2 || names[0] == "prov_q" || names[1] == "prov_q" ||
+		names[0] == "prov_qd" || names[1] == "prov_qd" {
+		t.Fatalf("resolved = %v, want prov_ok + prov_free and no prov_q/prov_qd", names)
+	}
+}
+
+// 零/未配置 token 上限永不踢出 provider。
+func TestResolveZeroTokenLimitNeverSkips(t *testing.T) {
+	saveBudgetState(t)
+	Mu.Lock()
+	CustomProviders = []*CustomProvider{
+		{ID: "prov_z", Name: "Z", ModelIDs: []string{"m"}, Enabled: true},
+	}
+	Loaded = true
+	Cooldowns = map[string]time.Time{}
+	Mu.Unlock()
+	budgetMu.Lock()
+	providerTokens = map[string]map[string]int64{
+		"prov_z": {time.Now().UTC().Format("2006-01"): 99_999_999}, // 远超任何数
+	}
+	budgetMu.Unlock()
+
+	if got := ResolveForModel("m"); len(got) != 1 || got[0].ID != "prov_z" {
+		t.Fatalf("resolved = %+v, want prov_z kept (tokenLimit 0 = 不启用)", got)
+	}
+}
+
+// 健康快照暴露本窗口 token 用量与 limits.tokens / limits.tokenWindow。
+func TestProviderHealthSnapshotTokenFields(t *testing.T) {
+	saveBudgetState(t)
+	Mu.Lock()
+	CustomProviders = []*CustomProvider{
+		{ID: "prov_h", Name: "H", TokenLimit: 5_000_000}, // 空窗口 = monthly
+		{ID: "prov_hd", Name: "HD", TokenLimit: 100, TokenWindow: "daily"},
+		{ID: "prov_h2", Name: "H2"},
+	}
+	Loaded = true
+	Cooldowns = map[string]time.Time{}
+	Mu.Unlock()
+	now := time.Now().UTC()
+	budgetMu.Lock()
+	providerTokens = map[string]map[string]int64{
+		"prov_h":  {now.Format("2006-01"): 12345, now.Format("2006-01-02"): 999},
+		"prov_hd": {now.Format("2006-01"): 777, now.Format("2006-01-02"): 4567},
+	}
+	budgetMu.Unlock()
+
+	h := providerHealthSnapshot()
+	if h["prov_h"].Tokens != 12345 {
+		t.Fatalf("prov_h tokens = %d, want 12345 (month key)", h["prov_h"].Tokens)
+	}
+	if h["prov_hd"].Tokens != 4567 {
+		t.Fatalf("prov_hd tokens = %d, want 4567 (day key)", h["prov_hd"].Tokens)
+	}
+	if h["prov_h2"].Tokens != 0 {
+		t.Fatalf("prov_h2 tokens = %d, want 0", h["prov_h2"].Tokens)
+	}
+	if lim, _ := h["prov_h"].Limits["tokens"].(int64); lim != 5_000_000 {
+		t.Fatalf("prov_h limits.tokens = %v, want 5000000", h["prov_h"].Limits["tokens"])
+	}
+	if tw, _ := h["prov_h"].Limits["tokenWindow"].(string); tw != "monthly" {
+		t.Fatalf("prov_h limits.tokenWindow = %v, want monthly", h["prov_h"].Limits["tokenWindow"])
+	}
+	if tw, _ := h["prov_hd"].Limits["tokenWindow"].(string); tw != "daily" {
+		t.Fatalf("prov_hd limits.tokenWindow = %v, want daily", h["prov_hd"].Limits["tokenWindow"])
+	}
+	if lim, _ := h["prov_h2"].Limits["tokens"].(int64); lim != 0 {
+		t.Fatalf("prov_h2 limits.tokens = %v, want 0", h["prov_h2"].Limits["tokens"])
+	}
+}
+
+// SaveCustomProvider 归一化 tokenWindow：空 → "monthly"，"daily"/"monthly" 保留，
+// 其余值拒绝。
+func TestSaveCustomProviderTokenWindowNormalization(t *testing.T) {
+	// 落盘路径全部隔离到临时目录（save 会写 provider 文件并同步模型池）。
+	oldProvPath, oldPoolPath, oldConnPath := FilePath, accounts.PoolPath, connections.FilePath
+	FilePath = filepath.Join(t.TempDir(), ".routenest-providers.json")
+	accounts.PoolPath = filepath.Join(t.TempDir(), ".routenest-accounts.json")
+	connections.FilePath = filepath.Join(t.TempDir(), ".routenest-connections.json")
+	oldProvs, oldLoaded := CustomProviders, Loaded
+	oldPool := accounts.Pool
+	t.Cleanup(func() {
+		FilePath, accounts.PoolPath, connections.FilePath = oldProvPath, oldPoolPath, oldConnPath
+		CustomProviders, Loaded, accounts.Pool = oldProvs, oldLoaded, oldPool
+	})
+
+	save := func(p CustomProvider) (CustomProvider, error) {
+		return SaveCustomProvider(p)
+	}
+
+	// 空窗口 → monthly
+	got, err := save(CustomProvider{Name: "A", BaseURL: "https://a.example.com", TokenLimit: 100})
+	if err != nil {
+		t.Fatalf("empty window: %v", err)
+	}
+	if got.TokenWindow != "monthly" {
+		t.Fatalf("empty tokenWindow = %q, want monthly", got.TokenWindow)
+	}
+
+	// daily 保留
+	got, err = save(CustomProvider{Name: "B", BaseURL: "https://b.example.com", TokenLimit: 100, TokenWindow: "daily"})
+	if err != nil {
+		t.Fatalf("daily window: %v", err)
+	}
+	if got.TokenWindow != "daily" {
+		t.Fatalf("daily tokenWindow = %q, want daily", got.TokenWindow)
+	}
+
+	// 未知值 → 拒绝
+	if _, err := save(CustomProvider{Name: "C", BaseURL: "https://c.example.com", TokenWindow: "weekly"}); err == nil {
+		t.Fatal("unknown tokenWindow must be rejected")
+	}
+
+}

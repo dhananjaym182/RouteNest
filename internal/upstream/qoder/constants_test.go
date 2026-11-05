@@ -3,7 +3,7 @@ package qoder
 import "testing"
 
 // TestURLBuildersTolerateChatSuffix pins the mirror of
-// normalizePresetBaseURL / providerProtocol: a provider created with the full
+// providerreg.NormalizeBaseURL / providerProtocol: a provider created with the full
 // chat endpoint must still produce correctly signed bare-host URLs.
 func TestURLBuildersTolerateChatSuffix(t *testing.T) {
 	for _, base := range []string{

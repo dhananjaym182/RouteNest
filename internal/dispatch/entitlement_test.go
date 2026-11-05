@@ -3,7 +3,7 @@ package dispatch
 import (
 	"testing"
 
-	"cline-go-proxy/internal/domain"
+	"routenest/internal/domain"
 )
 
 func TestFreeOnlyEligible(t *testing.T) {

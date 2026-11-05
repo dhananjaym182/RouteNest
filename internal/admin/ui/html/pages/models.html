@@ -1,0 +1,73 @@
+<div id="tab-models" class="tab-panel system-page" style="display:none">
+  <div class="page-header">
+    <div>
+      <div class="page-kicker">Provider 系统</div>
+      <div class="large-title">模型</div>
+      <div class="large-subtitle">按 Provider 查看模型授权，再管理客户端可见性与模型元数据。</div>
+    </div>
+    <div class="action-row">
+      <button type="button" class="btn btn-sm" onclick="loadGlobal(true);loadModels()">刷新</button>
+      <button type="button" class="btn btn-sm" onclick="switchTab('routing')">路由策略</button>
+    </div>
+  </div>
+
+  <div class="section system-section">
+    <div class="section-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M8 8h8M8 12h8M8 16h5"/></svg><span>全局模型授权</span>
+      <span class="title-tools">
+        <button type="button" class="btn btn-sm" id="globalOfferingsToggle" onclick="toggleGlobalOfferings()" aria-expanded="false" aria-controls="globalOfferings">展开全部</button>
+      </span>
+    </div>
+    <div class="section-desc">同一模型可由多个 Provider 独立提供。访问类别未知时保持未知，不按免费处理。</div>
+    <div class="system-toolbar">
+      <div class="field system-filter-field">
+        <label for="globalModelProviderFilter">Provider 筛选</label>
+        <select id="globalModelProviderFilter" onchange="setGlobalFilter(this.value)"></select>
+      </div>
+      <div class="system-note">授权已验证与访问类别分开显示。</div>
+    </div>
+    <div id="globalOfferings" class="section-body system-inventory" aria-live="polite"></div>
+  </div>
+
+  <div class="section legacy-workspace">
+    <div class="section-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="9" x2="15" y2="9"/><line x1="9" y1="15" x2="15" y2="15"/></svg><span>模型目录</span>
+      <span class="title-tools">
+        <span><span>上次同步</span>: <span id="modelSyncTime">-</span></span>
+      </span>
+    </div>
+    <div class="section-desc">模型按 Provider 添加并自动归属：在 Provider 编辑器中使用「选择模型」「手动输入模型 ID」或「导入预览」即可添加。本页用于启用 / 停用、调整计费与上下文窗口、筛选和批量操作。停用的模型不会出现在客户端模型列表（/v1/models）中，直接请求也会被拒绝。</div>
+    <div class="section-body">
+      <div id="modelStatsBar" class="model-stats-bar"></div>
+      <div class="model-toolbar">
+        <input type="text" id="modelSearch" placeholder="搜索模型 ID..." aria-label="搜索模型" oninput="onModelFilterChange('search', this.value)">
+        <select id="modelFilterProvider" onchange="onModelFilterChange('provider', this.value)"><option value="">全部来源</option></select>
+        <select id="modelFilterCost" onchange="onModelFilterChange('cost', this.value)">
+          <option value="">全部计费</option>
+          <option value="free">免费</option>
+          <option value="pass">付费</option>
+        </select>
+        <select id="modelFilterStatus" onchange="onModelFilterChange('status', this.value)">
+          <option value="">全部状态</option>
+          <option value="enabled">已启用</option>
+          <option value="disabled">已停用</option>
+          <option value="failed">测试失败</option>
+          <option value="delisted">已下架</option>
+        </select>
+        <button class="btn btn-sm" onclick="switchTab('providers')" title="在 Provider 编辑器中添加模型，自动归属该 Provider">添加模型 → Provider 页</button>
+        <div class="toolbar-more" id="modelBulkMore">
+          <button class="btn btn-sm" onclick="toggleToolbarMore(event)" aria-haspopup="true" aria-expanded="false" id="toolbarMoreBtn">更多操作 ▾</button>
+          <div class="toolbar-more-menu">
+            <button class="btn btn-sm" onclick="setAllModelGroups(true)">展开全部</button>
+            <button class="btn btn-sm" onclick="setAllModelGroups(false)">折叠全部</button>
+            <button class="btn btn-sm" id="bulkEnableFreeBtn" onclick="bulkModelToggle('free')">启用全部免费</button>
+            <button class="btn btn-sm" id="bulkDisablePaidBtn" onclick="bulkModelToggle('paid')">停用全部付费</button>
+            <button class="btn btn-sm" id="bulkEnableFilteredBtn" onclick="bulkToggleFiltered(false)">启用当前筛选</button>
+            <button class="btn btn-sm" id="bulkDisableFilteredBtn" onclick="bulkToggleFiltered(true)">停用当前筛选</button>
+          </div>
+        </div>
+        <button class="sync-btn" id="syncModelsBtn" onclick="syncModels()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="ic-sm"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg><span>从 Cline 同步模型</span></button>
+        <button class="sync-btn" id="syncOcModelsBtn" onclick="syncOcModels()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="ic-sm"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg><span>从 OpenCode Zen 同步模型</span></button>
+      </div>
+      <div id="modelsList" class="model-list"><div class="sk-stack"><span class="skeleton"></span><span class="skeleton w70"></span><span class="skeleton w45"></span><span class="skeleton w70"></span></div></div>
+    </div>
+  </div>
+</div>

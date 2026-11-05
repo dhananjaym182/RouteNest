@@ -1,0 +1,542 @@
+package accounts
+
+import (
+	"fmt"
+	"log"
+	"strings"
+	"sync"
+	"time"
+
+	"routenest/internal/dispatch"
+	"routenest/internal/platform"
+	poolstore "routenest/internal/store/accounts"
+)
+
+var (
+	// Pool is the in-memory account pool. It is exported for the packages that
+	// still share the pool lock; new model access goes through internal/models.
+	Pool     *AccountPool
+	PoolMu   sync.Mutex
+	PoolPath string
+)
+
+// poolPathMu guards first-use resolution of PoolPath. Kept separate from PoolMu
+// so the path can be resolved before the pool lock is taken.
+var poolPathMu sync.Mutex
+
+// ensurePoolPath resolves the accounts file path on first use, so importing this
+// package performs no data-directory I/O. Tests that assign PoolPath keep it.
+func ensurePoolPath() {
+	poolPathMu.Lock()
+	defer poolPathMu.Unlock()
+	if PoolPath == "" {
+		PoolPath = platform.ResolveDataPath(".routenest-accounts.json", nil)
+	}
+}
+
+func LoadPool() *AccountPool {
+	ensurePoolPath()
+	PoolMu.Lock()
+	defer PoolMu.Unlock()
+
+	if Pool != nil {
+		return Pool
+	}
+
+	p, err := poolstore.Load(PoolPath)
+	if err != nil {
+		platform.BackupCorruptFile(PoolPath, err)
+	}
+	Pool = p
+	return Pool
+}
+
+func SavePool() {
+	ensurePoolPath()
+	if err := poolstore.Save(PoolPath, Pool); err != nil {
+		log.Printf("Failed to save accounts to %s: %v", PoolPath, err)
+	}
+}
+
+// AddAccount 添加账号。同一邮箱（不区分大小写，来自 Cline userInfo，即同一
+// Cline 账号）已存在时**原地更新凭据**：重新授权/重复导入不该产生重复条目 ——
+// 保留原 AccountID、创建时间与用量统计，只更新令牌并置回 active。
+// 已存在的同邮箱重复条目（历史遗留）一并合并进首个条目后移除（用量计数求和）。
+func AddAccount(acc *Account) {
+	p := LoadPool()
+	PoolMu.Lock()
+	newEmail := strings.TrimSpace(acc.Email)
+	var kept *Account
+	var dups []*Account
+	for _, a := range p.Accounts {
+		if newEmail != "" && strings.EqualFold(strings.TrimSpace(a.Email), newEmail) {
+			if kept == nil {
+				kept = a
+			} else {
+				dups = append(dups, a)
+			}
+		}
+	}
+	if kept != nil {
+		kept.RefreshToken = acc.RefreshToken
+		kept.AccessToken = acc.AccessToken
+		kept.ExpiresAt = acc.ExpiresAt
+		kept.Status = "active"
+		if len(dups) > 0 {
+			for _, d := range dups {
+				kept.UsageCount += d.UsageCount
+				kept.PromptTokens += d.PromptTokens
+				kept.CompletionTokens += d.CompletionTokens
+				kept.TotalTokens += d.TotalTokens
+				kept.CachedTokens += d.CachedTokens
+			}
+			out := p.Accounts[:0]
+			for _, a := range p.Accounts {
+				isDup := false
+				for _, d := range dups {
+					if a == d {
+						isDup = true
+						break
+					}
+				}
+				if !isDup {
+					out = append(out, a)
+				}
+			}
+			p.Accounts = out
+			log.Printf("Account %s: merged %d duplicate entr(y/ies), stats preserved", acc.Email, len(dups))
+		}
+		log.Printf("Account re-authorized in place: %s (AccountID/stats preserved)", acc.Email)
+	} else {
+		p.Accounts = append(p.Accounts, acc)
+	}
+	PoolMu.Unlock()
+	SavePool()
+}
+
+// FindAccountByRefreshToken 按 refreshToken 查找已有账号（不存在返回 nil）。
+// 用于导入时的去重：同一个 refreshToken 只应存在一个账号。
+func FindAccountByRefreshToken(refreshToken string) *Account {
+	refreshToken = strings.TrimSpace(refreshToken)
+	if refreshToken == "" {
+		return nil
+	}
+	p := LoadPool()
+	PoolMu.Lock()
+	defer PoolMu.Unlock()
+
+	for _, a := range p.Accounts {
+		if strings.TrimSpace(a.RefreshToken) == refreshToken {
+			return a
+		}
+	}
+	return nil
+}
+
+// AccountExists 判断该 refreshToken 是否已在账号池中。
+func AccountExists(refreshToken string) bool {
+	return FindAccountByRefreshToken(refreshToken) != nil
+}
+
+// IsDuplicateImportToken 判断待导入的 refreshToken 是否应跳过（导入去重）：
+// 账号池中已存在同一 refreshToken，或本批次内已处理过（seen）。
+// seen 由调用方维护、在此更新，用于同一批次内的去重。
+func IsDuplicateImportToken(refreshToken string, seen map[string]bool) bool {
+	if seen[refreshToken] || AccountExists(refreshToken) {
+		return true
+	}
+	seen[refreshToken] = true
+	return false
+}
+
+func RemoveAccount(accountID string) bool {
+	p := LoadPool()
+	PoolMu.Lock()
+	defer PoolMu.Unlock()
+
+	for i, a := range p.Accounts {
+		if a.AccountID == accountID {
+			p.Accounts = append(p.Accounts[:i], p.Accounts[i+1:]...)
+			SavePool()
+			return true
+		}
+	}
+	return false
+}
+
+func GetAccountByID(accountID string) *Account {
+	p := LoadPool()
+	PoolMu.Lock()
+	defer PoolMu.Unlock()
+
+	for _, a := range p.Accounts {
+		if a.AccountID == accountID {
+			return a
+		}
+	}
+	return nil
+}
+
+func RefreshAccountToken(acc *Account) error {
+	resp, err := refreshClineToken(acc.RefreshToken)
+	if err != nil {
+		if isRefreshRejected(err) {
+			// cline 自家 refresh 端点拒绝 ≠ 账号真失效：refresh token 本质是
+			// WorkOS token，走 WorkOS authenticate 端点仍可能自愈，不必重新授权。
+			if wos := refreshViaWorkOS(acc.RefreshToken); wos != nil {
+				ApplyWorkOSTokens(acc, wos)
+				return nil
+			}
+			acc.Status = "expired"
+			SavePool()
+			// 双通道都拒绝 = WorkOS 会话已被服务端终结（invalid_grant: Session
+			// has already ended / token revoked），刷新救不回，必须重新授权
+			return fmt.Errorf("refresh token rejected by both Cline and WorkOS (session ended or revoked) — account requires re-authorization: 管理页「导入账号」→ OAuth 登录")
+		}
+		acc.Status = "cooldown"
+		acc.CooldownUntil = time.Now().Add(5 * time.Minute)
+		SavePool()
+		return fmt.Errorf("token refresh failed (transient): %w", err)
+	}
+
+	acc.AccessToken = "workos:" + resp.Data.AccessToken
+	if resp.Data.RefreshToken != "" {
+		acc.RefreshToken = resp.Data.RefreshToken
+	}
+	acc.ExpiresAt = parseExpiry(resp.Data.ExpiresAt) - 60000
+	acc.Status = "active"
+	SavePool()
+	return nil
+}
+
+// ApplyWorkOSTokens 用 WorkOS 直接刷新到的令牌续命账号：优先回 cline
+// /auth/register 换正式 cline 令牌；注册也失败时直接用 workos 前缀令牌
+// （Cline 上游接受），轮换出的新 refresh token 一并落盘。
+func ApplyWorkOSTokens(acc *Account, wos *authenticateResp) {
+	if cline, err := registerWithCline(wos.AccessToken, wos.RefreshToken); err == nil && cline.Data.AccessToken != "" {
+		acc.AccessToken = "workos:" + cline.Data.AccessToken
+		if cline.Data.RefreshToken != "" {
+			acc.RefreshToken = cline.Data.RefreshToken
+		}
+		acc.ExpiresAt = parseExpiry(cline.Data.ExpiresAt) - 60000
+	} else {
+		acc.AccessToken = "workos:" + wos.AccessToken
+		if wos.RefreshToken != "" {
+			acc.RefreshToken = wos.RefreshToken
+		}
+		acc.ExpiresAt = time.Now().Add(time.Hour).UnixMilli() - 60000
+	}
+	acc.Status = "active"
+	SavePool()
+	log.Printf("  account %s: token refreshed via WorkOS fallback (no re-auth needed)", acc.Email)
+}
+
+func PickAccount() *Account {
+	p := LoadPool()
+	PoolMu.Lock()
+	defer PoolMu.Unlock()
+	return pickAccountLocked(p)
+}
+
+// PickAccountForModel 按轮询/策略挑选一个「该模型未处于模型级冷却」的账号；
+// 所有 active 账号对该模型都冷却时回退到普通 PickAccount（请求会得到模型级 429 提示）。
+// 空模型名等同于 PickAccount。
+func PickAccountForModel(model string) *Account {
+	return PickAccountForModelWithFallback(model, true)
+}
+
+func PickAccountForModelStrict(model string) *Account {
+	return PickAccountForModelWithFallback(model, false)
+}
+
+func PickAccountForModelWithFallback(model string, fallbackToActive bool) *Account {
+	if model == "" {
+		return PickAccount()
+	}
+
+	p := LoadPool()
+	PoolMu.Lock()
+	defer PoolMu.Unlock()
+
+	active := make([]*Account, 0)
+	for _, a := range p.Accounts {
+		if a.Status == "active" {
+			active = append(active, a)
+		}
+	}
+	if len(active) == 0 {
+		return nil
+	}
+
+	// 该模型未冷却的账号列表
+	eligible := make([]*Account, 0, len(active))
+	for _, a := range active {
+		until, cool := a.ModelCooldowns[model]
+		if !cool || time.Now().After(until) {
+			if cool {
+				delete(a.ModelCooldowns, model)
+			}
+			eligible = append(eligible, a)
+		}
+	}
+
+	if len(eligible) == 0 {
+		if fallbackToActive {
+			return pickAccountLocked(p)
+		}
+		return nil
+	}
+
+	cfg := currentConfig()
+	var acc *Account
+	switch cfg.Strategy {
+	case "fill":
+		acc = eligible[0]
+	case "random":
+		n := time.Now().UnixNano() % int64(len(eligible))
+		acc = eligible[n]
+	default: // round_robin
+		if p.CurrentIdx >= len(eligible) {
+			p.CurrentIdx = 0
+		}
+		acc = eligible[p.CurrentIdx]
+		p.CurrentIdx = (p.CurrentIdx + 1) % len(eligible)
+	}
+	SavePool()
+	return acc
+}
+
+// PickAccountForModelLeastUsed 在所有「模型未冷却」的 active 账号中，选择该模型
+// 历史用量最少的账号（并清掉已过期的冷却记录）。等量时按轮询索引取，保持原有
+// 公平性；全部不可用返回 nil。供回退链上的非首选模型使用：流量应摊到较少
+// 使用的账号上，而不是每次都砸在第一个可用账号。
+func PickAccountForModelLeastUsed(model string) *Account {
+	if model == "" {
+		return PickAccount()
+	}
+
+	p := LoadPool()
+	PoolMu.Lock()
+	defer PoolMu.Unlock()
+
+	var best *Account
+	var bestCount int64
+	for _, a := range p.Accounts {
+		if a.Status != "active" {
+			continue
+		}
+		if until, cool := a.ModelCooldowns[model]; cool {
+			if time.Now().After(until) {
+				delete(a.ModelCooldowns, model)
+			} else {
+				continue // 该账号此模型冷却中
+			}
+		}
+		var cnt int64
+		if st, ok := a.ModelStats[model]; ok {
+			cnt = st.UsageCount
+		}
+		if best == nil || cnt < bestCount {
+			best, bestCount = a, cnt
+		}
+	}
+	if best == nil {
+		return nil
+	}
+	SavePool()
+	return best
+}
+
+// SortModelsByAvailability 将回退链按「可用性优先」重排：
+//  1. 有未冷却账号的模型在前；
+//  2. 同组内按该模型的账号总用量升序——把流量摊到用得少的模型上，
+//     避免每次都选第一个可用模型、把它的额度打到冷却。
+//  3. 稳定排序：可用性与用量相同时保持管理员配置的优先级顺序。
+func SortModelsByAvailability(chain []string) []string {
+	p := LoadPool()
+	PoolMu.Lock()
+	defer PoolMu.Unlock()
+
+	now := time.Now()
+	cands := make([]dispatch.ModelAvailability, 0, len(chain))
+	for _, m := range chain {
+		avail := false
+		minUsage := int64(-1)
+		for _, a := range p.Accounts {
+			if a.Status != "active" {
+				continue
+			}
+			if until, cool := a.ModelCooldowns[m]; cool {
+				if now.After(until) {
+					delete(a.ModelCooldowns, m)
+				} else {
+					continue
+				}
+			}
+			avail = true
+			var cnt int64
+			if st, ok := a.ModelStats[m]; ok {
+				cnt = st.UsageCount
+			}
+			if minUsage < 0 || cnt < minUsage {
+				minUsage = cnt
+			}
+		}
+		cands = append(cands, dispatch.ModelAvailability{Model: m, Available: avail, MinUsage: minUsage})
+	}
+	out := dispatch.OrderByAvailability(cands)
+	SavePool()
+	return out
+}
+
+// pickAccountLocked 在已持有 PoolMu 的前提下执行普通轮询挑选（供 PickAccountForModel 回退用）。
+func pickAccountLocked(p *AccountPool) *Account {
+	active := make([]*Account, 0)
+	for _, a := range p.Accounts {
+		if a.Status == "active" {
+			active = append(active, a)
+		}
+	}
+	if len(active) == 0 {
+		return nil
+	}
+	cfg := currentConfig()
+	var acc *Account
+	switch cfg.Strategy {
+	case "fill":
+		acc = active[0]
+	case "random":
+		n := time.Now().UnixNano() % int64(len(active))
+		acc = active[n]
+	default:
+		if p.CurrentIdx >= len(active) {
+			p.CurrentIdx = 0
+		}
+		acc = active[p.CurrentIdx]
+		p.CurrentIdx = (p.CurrentIdx + 1) % len(active)
+	}
+	SavePool()
+	return acc
+}
+
+func EnsureAccountToken(acc *Account) (string, error) {
+	if acc.AccessToken != "" && time.Now().UnixMilli() < acc.ExpiresAt {
+		return acc.AccessToken, nil
+	}
+
+	if err := RefreshAccountToken(acc); err != nil {
+		return "", err
+	}
+
+	return acc.AccessToken, nil
+}
+
+func ListAccounts() []*Account {
+	p := LoadPool()
+	PoolMu.Lock()
+	defer PoolMu.Unlock()
+
+	result := make([]*Account, len(p.Accounts))
+	for i, a := range p.Accounts {
+		// Don't expose tokens
+		cp := &Account{
+			AccountID:        a.AccountID,
+			Email:            a.Email,
+			Status:           a.Status,
+			CooldownUntil:    a.CooldownUntil,
+			LastUsed:         a.LastUsed,
+			UsageCount:       a.UsageCount,
+			PromptTokens:     a.PromptTokens,
+			CompletionTokens: a.CompletionTokens,
+			TotalTokens:      a.TotalTokens,
+			CachedTokens:     a.CachedTokens,
+			CreatedAt:        a.CreatedAt,
+		}
+		// 按模型细分统计（脱敏拷贝）
+		if len(a.ModelStats) > 0 {
+			cp.ModelStats = make(map[string]*ModelStat, len(a.ModelStats))
+			for mid, st := range a.ModelStats {
+				sc := *st
+				cp.ModelStats[mid] = &sc
+			}
+		}
+		// 模型级冷却（脱敏拷贝）
+		if len(a.ModelCooldowns) > 0 {
+			cp.ModelCooldowns = make(map[string]time.Time, len(a.ModelCooldowns))
+			for mid, until := range a.ModelCooldowns {
+				cp.ModelCooldowns[mid] = until
+			}
+		}
+		result[i] = cp
+	}
+	return result
+}
+
+func AddAccountFromDeviceAuth() (*Account, error) {
+	fmt.Println()
+	fmt.Println("=== Add New Cline Account (OAuth) ===")
+	fmt.Println()
+
+	device, err := workosDeviceAuth()
+	if err != nil {
+		return nil, err
+	}
+
+	authURL := device.VerificationURIComplete
+	if authURL == "" {
+		authURL = device.VerificationURI
+	}
+
+	fmt.Println("  1. Open this URL in your browser:")
+	fmt.Println("     " + authURL)
+	fmt.Println("  2. Enter code: " + device.UserCode)
+	fmt.Println("  3. Log in with Google, GitHub, or email")
+	fmt.Println()
+
+	_ = openBrowser(authURL)
+	fmt.Println("  Waiting for authorization...")
+
+	interval := device.Interval
+	if interval < 5 {
+		interval = 5
+	}
+	expiresIn := device.ExpiresIn
+	if expiresIn <= 0 {
+		expiresIn = 300
+	}
+
+	workosTok, err := pollWorkosToken(device.DeviceCode, interval, expiresIn)
+	if err != nil {
+		return nil, err
+	}
+
+	fmt.Println("  WorkOS authorized. Registering with Cline...")
+
+	cline, err := registerWithCline(workosTok.AccessToken, workosTok.RefreshToken)
+	if err != nil {
+		return nil, err
+	}
+
+	if cline.Data.RefreshToken == "" {
+		return nil, fmt.Errorf("cline registration missing refresh token")
+	}
+
+	email := "unknown"
+	if cline.Data.UserInfo != nil && cline.Data.UserInfo.Email != "" {
+		email = cline.Data.UserInfo.Email
+	}
+
+	acc := &Account{
+		AccountID:    fmt.Sprintf("acc_%d", time.Now().UnixMilli()),
+		Email:        email,
+		RefreshToken: cline.Data.RefreshToken,
+		AccessToken:  "workos:" + cline.Data.AccessToken,
+		ExpiresAt:    parseExpiry(cline.Data.ExpiresAt) - 60000,
+		Status:       "active",
+		CreatedAt:    time.Now(),
+	}
+
+	AddAccount(acc)
+	fmt.Printf("  Account added! Email: %s\n", email)
+	return acc, nil
+}

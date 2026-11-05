@@ -1,0 +1,39 @@
+{
+  "alpha": {
+    "id": "alpha",
+    "name": "Alpha",
+    "baseURL": "https://alpha.example/v1",
+    "headers": {
+      "X-Test": "1"
+    },
+    "notes": "alpha (from extremerouter registry)",
+    "freeTier": true,
+    "modelIds": [
+      "alpha-free",
+      "zeta-model"
+    ],
+    "kind": "free"
+  },
+  "beta": {
+    "id": "beta",
+    "name": "Beta",
+    "baseURL": "https://beta.example/v1",
+    "notes": "beta (from extremerouter registry)",
+    "freeTier": true,
+    "modelIds": [
+      "beta-chat"
+    ],
+    "kind": "hasFree"
+  },
+  "gamma": {
+    "id": "gamma",
+    "name": "Gamma Local",
+    "baseURL": "http://localhost:9000/v1",
+    "notes": "gamma (from extremerouter registry)",
+    "freeTier": false,
+    "modelIds": [
+      "gamma-7b"
+    ],
+    "kind": "local"
+  }
+}

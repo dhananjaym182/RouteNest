@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"cline-go-proxy/internal/domain"
+	"routenest/internal/domain"
 )
 
 func TestDefaultProxy(t *testing.T) {

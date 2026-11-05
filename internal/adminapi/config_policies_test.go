@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	configpkg "cline-go-proxy/internal/config"
+	configpkg "routenest/internal/config"
 )
 
 func TestConfigGetExposesTuningPolicies(t *testing.T) {

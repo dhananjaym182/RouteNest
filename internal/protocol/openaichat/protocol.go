@@ -1,6 +1,6 @@
 package openaichat
 
-import "cline-go-proxy/internal/protocol"
+import "routenest/internal/protocol"
 
 // Protocol describes the OpenAI chat/completions wire shape.
 type Protocol struct{}

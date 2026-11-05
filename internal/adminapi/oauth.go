@@ -6,8 +6,8 @@ import (
 	"sync"
 	"time"
 
-	"cline-go-proxy/internal/domain"
-	"cline-go-proxy/internal/httpx"
+	"routenest/internal/domain"
+	"routenest/internal/httpx"
 )
 
 // DeviceAuthorization is the provider-agnostic device-code grant.

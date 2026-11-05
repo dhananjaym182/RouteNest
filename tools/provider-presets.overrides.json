@@ -1,0 +1,7 @@
+{
+  "mimo-free": {
+    "reason": "Manual correction from commit cc24c2f: the upstream chat base is /openai (the source includes /chat), and the tier is freeTier rather than free.",
+    "baseURL": "https://api.xiaomimimo.com/api/free-ai/openai",
+    "kind": "freeTier"
+  }
+}

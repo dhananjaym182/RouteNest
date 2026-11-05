@@ -1,0 +1,164 @@
+package buildinfo
+
+import (
+	"context"
+	"encoding/json"
+	"net/http"
+	"strconv"
+	"strings"
+	"sync"
+	"time"
+)
+
+// GitHub Release 更新检查：结果缓存 6 小时，?force=1 强制刷新。
+// 「关于」页读取本接口显示 current/latest/是否可更新。
+
+var versionCheckURL = "https://api.github.com/repos/dhananjaym182/RouteNest/releases/latest"
+
+const versionCheckTTL = 6 * time.Hour
+
+// HTTPClient 是更新检查使用的出站客户端。main 侧在 http.go 的 init 中注入共享的
+// 代理感知 httpClient（与其它出站请求一致，走 cline 出口代理池）；未注入时回退到 http.DefaultClient。
+var HTTPClient *http.Client
+
+func outbound() *http.Client {
+	if HTTPClient != nil {
+		return HTTPClient
+	}
+	return http.DefaultClient
+}
+
+type versionCheckCache struct {
+	mu        sync.Mutex
+	latest    string
+	htmlURL   string
+	published string
+	err       string
+	checkedAt time.Time
+}
+
+var versionState = &versionCheckCache{}
+
+type githubReleaseJSON struct {
+	TagName     string `json:"tag_name"`
+	HTMLURL     string `json:"html_url"`
+	PublishedAt string `json:"published_at"`
+}
+
+// refresh 拉取最新版本信息并更新缓存；force=false 且缓存新鲜时直接返回。
+func (v *versionCheckCache) refresh(force bool) {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	if !force && !v.checkedAt.IsZero() && time.Since(v.checkedAt) < versionCheckTTL {
+		return
+	}
+	v.checkedAt = time.Now()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, versionCheckURL, nil)
+	if err != nil {
+		v.recordFetchError(err)
+		return
+	}
+	req.Header.Set("Accept", "application/vnd.github+json")
+	resp, err := outbound().Do(req)
+	if err != nil {
+		v.recordFetchError(err)
+		return
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		v.recordFetchError(errStatus(resp.StatusCode))
+		return
+	}
+	var rel githubReleaseJSON
+	if err := json.NewDecoder(resp.Body).Decode(&rel); err != nil {
+		v.recordFetchError(err)
+		return
+	}
+	v.err = ""
+	v.latest = strings.TrimSpace(rel.TagName)
+	v.htmlURL = rel.HTMLURL
+	v.published = rel.PublishedAt
+}
+
+// 失败也做短缓存语义：保留旧 latest，仅记录错误，避免错误信息覆盖历史结果。
+func (v *versionCheckCache) recordFetchError(err error) {
+	v.err = err.Error()
+}
+
+type statusError int
+
+func errStatus(code int) error { return statusError(code) }
+
+func (e statusError) Error() string { return "version check upstream status " + strconv.Itoa(int(e)) }
+
+// parseSemver 解析 v1.2.3（可带 -rc 后缀，后缀忽略），返回数值三元组。
+func parseSemver(s string) ([3]int, bool) {
+	s = strings.TrimPrefix(strings.TrimSpace(s), "v")
+	if i := strings.IndexAny(s, "-+"); i >= 0 {
+		s = s[:i]
+	}
+	parts := strings.Split(s, ".")
+	if len(parts) == 0 || parts[0] == "" {
+		return [3]int{}, false
+	}
+	var out [3]int
+	for i := 0; i < 3; i++ {
+		if i >= len(parts) {
+			continue
+		}
+		n, err := strconv.Atoi(parts[i])
+		if err != nil {
+			return out, false
+		}
+		out[i] = n
+	}
+	return out, true
+}
+
+// versionNewer 判断 latest 是否比 current 新；current 非 semver（如 dev）不提示更新。
+func versionNewer(current, latest string) bool {
+	c, ok := parseSemver(current)
+	if !ok {
+		return false
+	}
+	l, ok := parseSemver(latest)
+	if !ok {
+		return false
+	}
+	for i := 0; i < 3; i++ {
+		if l[i] != c[i] {
+			return l[i] > c[i]
+		}
+	}
+	return false
+}
+
+// VersionStatus is the cached release check, ready for the admin console.
+type VersionStatus struct {
+	Current         string
+	Latest          string
+	ReleaseURL      string
+	PublishedAt     string
+	CheckedAtMillis int64
+	UpdateAvailable bool
+	Error           string
+}
+
+// CurrentVersionStatus refreshes the cached release check when force is set or
+// the cache is stale, and reports it.
+func CurrentVersionStatus(force bool) VersionStatus {
+	versionState.refresh(force)
+	versionState.mu.Lock()
+	defer versionState.mu.Unlock()
+	return VersionStatus{
+		Current:         AppVersion,
+		Latest:          versionState.latest,
+		ReleaseURL:      versionState.htmlURL,
+		PublishedAt:     versionState.published,
+		CheckedAtMillis: versionState.checkedAt.UnixMilli(),
+		UpdateAvailable: versionState.latest != "" && versionNewer(AppVersion, versionState.latest),
+		Error:           versionState.err,
+	}
+}

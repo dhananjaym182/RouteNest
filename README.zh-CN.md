@@ -22,7 +22,7 @@ RouteNest 是一个自托管、Go 驱动的 AI 网关，面向编码代理与 AI
 ## RouteNest 提供的能力
 
 - **多账号路由** — 选择并轮换已配置的账号，具备冷却与可重试错误处理。
-- **服务商目录** — 110 个服务商预设定义，并支持自定义 OpenAI 兼容端点。可用性与协议支持因服务商而异。
+- **服务商目录** — 109 个服务商预设定义，并支持自定义 OpenAI 兼容端点。可用性与协议支持因服务商而异。
 - **多种 API 格式** — OpenAI Chat Completions、受支持的 Responses API 功能，以及 Anthropic Messages 端点。
 - **模型组合** — 定义有序模型列表，在符合条件的上游失败时回退。
 - **模型发现** — 同步受支持的模型目录，配置自定义模型 ID，并选择默认模型。
@@ -178,13 +178,13 @@ Cline 文档说明：Cline API 不支持免费模型，免费模型仅限 Cline 
 
 ## 服务商覆盖
 
-随附注册表包含 **110 个服务商预设定义**：
+随附注册表包含 **109 个服务商预设定义**：
 
 | 来源 | 数量 | 说明 |
 | --- | --- | --- |
-| 内置预设 | 17 | OpenRouter、Groq、Cerebras、Google AI Studio、Mistral、Together AI、DeepSeek、OpenAI、vLLM、Ollama、Kilo Code、GitHub Copilot、Qwen Chat、Kimi for Coding、CodeBuddy 国内/国际、WorkBuddy |
-| 导入预设 | 93 | 来源于 ExtremeRouter 服务商注册表；包含免费、免费额度、带免费额度的 API Key 与本地运行时条目 |
-| **合计** | **110** | **其中 35 个带有 `freeTier` 服务商级提示** |
+| RouteNest 维护预设 | 19 | OpenRouter、Groq、Cerebras、Google AI Studio、Mistral、Together AI、DeepSeek、OpenAI、vLLM、Ollama、Qoder 国内/国际、Kilo Code、GitHub Copilot、Qwen Chat、Kimi for Coding、CodeBuddy 国内/国际、WorkBuddy |
+| ExtremeRouter 导入预设 | 90 | 包含免费、免费额度、带免费额度的 API Key 与本地运行时条目 |
+| **合计** | **109** | **其中 34 个带有 `freeTier` 服务商级提示** |
 
 `freeTier` 与 `kind` 是注册表中的展示/分组提示，不是按模型授予的访问权限。预设包含种子模型 ID，以及（在定义时）目录抓取器。注册表条目并不表示服务当前可访问、账号有权使用某个模型，或服务商特定功能可用。
 
@@ -240,7 +240,14 @@ Cline 文档说明：Cline API 不支持免费模型，免费模型仅限 Cline 
 
 ## 数据与升级
 
-数据按以下顺序查找：可执行文件目录、工作目录、`~/.routenest/`。设置 `ROUTENEST_DATA_DIR` 可把所有数据文件固定到一个目录（`ROUTENEST_DATA_DIR` 未设置时仍兼容旧的 `CLINE2API_DATA_DIR`）。
+RouteNest 默认把状态存放在操作系统的用户配置目录：
+
+- Linux：`$XDG_CONFIG_HOME/routenest`，通常为 `~/.config/routenest`
+- macOS：`~/Library/Application Support/routenest`
+- Windows：`%AppData%\routenest`
+
+设置 `ROUTENEST_DATA_DIR` 可指定目录（例如 Docker 挂载卷）。旧的
+`CLINE2API_DATA_DIR` 仍作为低优先级兼容变量。
 
 | 文件 | 用途 |
 | --- | --- |
@@ -254,9 +261,16 @@ Cline 文档说明：Cline API 不支持免费模型，免费模型仅限 Cline 
 | `.routenest-proxy.json` | Cline 出口代理池 |
 | `.routenest-zen.json` | OpenCode Zen 配置与出口代理池 |
 | `.routenest-request-logs.json` | 请求日志 |
+| `capture-logs/` | 交互式 OAuth 抓包输出，可能包含授权流量 |
 | `override.md` | 可选的 System Prompt 覆盖，从工作目录读取 |
 
-数据目录首次使用时，会把可执行文件目录、工作目录或 `~/.cline2api/` 中的旧 `.cline-*` 数据文件以新的 `.routenest-*` 名称复制进去（前提是目标文件尚不存在），旧部署可原地升级；`ROUTENEST_DATA_DIR` 未设置时仍兼容旧的 `CLINE2API_DATA_DIR` 环境变量。
+首次使用时，RouteNest 会把可执行文件目录、工作目录、`~/.routenest/`
+与 `~/.cline2api/` 中缺失的当前 `.routenest-*` 文件和旧 `.cline-*`
+文件复制到所选目录。已存在的目标文件优先；迁移可重复执行，源文件保留作恢复备份。
+
+在类 Unix 系统上，数据目录和抓包目录权限为 `0700`，已知状态文件为
+`0600`。如果无法创建安全的默认配置目录，RouteNest 会以明确错误停止启动，
+不再回退到可执行文件旁写入凭据。
 
 > 数据文件包含明文 refreshToken、服务商密钥与生成的 API 密钥。请安全备份，不要公开，也不要提交到 Git。
 
@@ -295,21 +309,28 @@ sudo apt install libgtk-3-dev libwebkit2gtk-4.1-dev
 ## 项目结构
 
 ```
-main.go, desktop_main.go   CLI 与桌面端入口
-proxy.go, responses.go     HTTP 路由、协议桥接、SSE
-combos.go, providers.go    模型组合、预设与服务商派发
-admin*.go                  管理 REST API
-adminui/                   内嵌管理控制台
-internal/                  配置、协议适配器、上游客户端、存储
+main.go, desktop_main.go   精简的 CLI 与桌面端入口
+internal/app/              两个入口共享的服务装配
+internal/proxycore/        HTTP 路由、协议桥接、Responses 与 SSE
+internal/routing/          模型发现、策略与上游调用
+internal/providers/, zen/  服务商注册表与 OpenCode Zen 集成
+internal/egress/           共享 HTTP 传输、代理与重试策略
+internal/combos/           具名模型组合与回退执行
+internal/compaction/       上下文管理与压缩
+internal/admin/            管理 API 与 internal/admin/ui/ 内嵌界面
+internal/accounts/, connections/, requestlog/, store/   持久状态
 desktop/                   Wails 外壳与构建脚本
-Dockerfile, docker-compose.yml
+docs/, scripts/            参考文档与运维脚本
 ```
+
+Go 模块路径为 `routenest`。仓库根目录只保留两个 `package main` 入口，
+服务装配与实现代码均位于 `internal/`。
 
 ## 署名与许可证
 
 RouteNest 是 [Cline2API](https://github.com/luawei1/cline2api) 的独立分支，原作者为 luawei1，以 MIT 许可证分发。上游版权声明保留在 [LICENSE](LICENSE) 中。
 
-93 个导入的服务商预设定义来源于 ExtremeRouter 服务商注册表（MIT）。相应的版权与许可证声明保留在 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) 中。
+90 个导入的服务商预设定义来源于 ExtremeRouter 服务商注册表（MIT）。相应的版权与许可证声明保留在 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) 中。
 
 RouteNest 与 Cline、OpenCode、Qoder 以及目录中列出的任何服务商均无关联，也未获得其认可。请仅使用你有权使用的账号与凭据，并遵守各服务商的服务条款。服务商名称与商标归其各自所有者所有。
 

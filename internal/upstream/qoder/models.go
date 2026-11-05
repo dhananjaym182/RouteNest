@@ -235,10 +235,10 @@ func modelConfigFor(ctx context.Context, hc *http.Client, creds Creds, modelKey 
 		}
 	}
 	if refreshErr != nil {
-		return catalogEntry{}, fmt.Errorf("qoder: model_config for %q is unavailable: the model catalog could not supply a model_config (refresh failed: %v)", modelKey, refreshErr)
+		return catalogEntry{}, fmt.Errorf("qoder: model_config for %q is unavailable: the model catalog could not supply a model_config (refresh failed: %w)", modelKey, refreshErr)
 	}
 	if firstErr != nil {
-		return catalogEntry{}, fmt.Errorf("qoder: model_config for %q is unavailable: the model catalog could not supply a model_config (%v)", modelKey, firstErr)
+		return catalogEntry{}, fmt.Errorf("qoder: model_config for %q is unavailable: the model catalog could not supply a model_config (%w)", modelKey, firstErr)
 	}
 	return catalogEntry{}, fmt.Errorf("qoder: model_config for %q is unavailable: the model catalog could not supply a model_config (the model may not be offered to this account)", modelKey)
 }

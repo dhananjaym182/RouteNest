@@ -9,8 +9,13 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"routenest/internal/accounts"
+	"routenest/internal/admin"
+	"routenest/internal/app"
 	"strconv"
 	"time"
+
+	"routenest/internal/proxycore"
 
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
@@ -21,6 +26,7 @@ import (
 const defaultDesktopPort = 3457
 
 func main() {
+	app.Configure()
 	selfCheck := flag.Bool("selfcheck", false, "Start embedded proxy, wait for /health, and exit")
 	port := flag.Int("port", configuredDesktopPort(), "Proxy server port")
 	host := flag.String("host", configuredDesktopHost(), "Proxy server listen host (0.0.0.0 = all interfaces)")
@@ -28,7 +34,7 @@ func main() {
 
 	proxyErr := make(chan error, 1)
 	go func() {
-		proxyErr <- startProxy(*host, *port)
+		proxyErr <- proxycore.Start(*host, *port, admin.RegisterRoutes)
 	}()
 
 	if err := waitForEmbeddedProxy(*port, 15*time.Second, proxyErr); err != nil {
@@ -40,7 +46,7 @@ func main() {
 		return
 	}
 
-	if !isLoopbackHost(*host) {
+	if !proxycore.IsLoopbackHost(*host) {
 		log.Printf("警告: 监听 %s 非本机回环地址，桌面窗口可能无法自动连接，建议使用 127.0.0.1 或 0.0.0.0", *host)
 	}
 
@@ -60,7 +66,7 @@ func configuredDesktopHost() string {
 	if value := os.Getenv("CLINE_PROXY_HOST"); value != "" {
 		return value
 	}
-	if value := loadPool().ListenHost; value != "" {
+	if value := accounts.LoadPool().ListenHost; value != "" {
 		return value
 	}
 	return "127.0.0.1"
@@ -104,7 +110,7 @@ func runDesktopWindow(port int) error {
 			Handler: desktopRedirectHandler(port),
 		},
 		BackgroundColour: &options.RGBA{R: 248, G: 250, B: 252, A: 255},
-		OnStartup:       func(_ context.Context) {},
+		OnStartup:        func(_ context.Context) {},
 		Windows: &windows.Options{
 			WebviewIsTransparent: false,
 			WindowIsTranslucent:  false,

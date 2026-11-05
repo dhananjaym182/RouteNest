@@ -1,8 +1,0 @@
-{
-  "id": "mnn-ai",
-  "name": "MNN AI",
-  "baseURL": "https://api.mnnai.ru/v1",
-  "notes": "mnn-ai (from extremerouter registry)",
-  "freeTier": false,
-  "kind": "hasFree"
-}

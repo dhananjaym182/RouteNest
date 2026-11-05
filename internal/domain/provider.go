@@ -36,3 +36,23 @@ type CustomProvider struct {
 	TokenWindow string    `json:"tokenWindow,omitempty"`
 	CreatedAt   time.Time `json:"createdAt"`
 }
+
+// ProviderInstance is a redacted runtime projection of one routable upstream.
+// Secrets, credential references and raw proxy URLs are deliberately excluded.
+// Existing persistence continues to use CustomProvider during migration.
+type ProviderInstance struct {
+	ID             ProviderInstanceID         `json:"id"`
+	DefinitionID   ProviderDefinitionID       `json:"definitionId,omitempty"`
+	AdapterID      string                     `json:"adapter"`
+	Name           string                     `json:"name"`
+	BaseURL        string                     `json:"baseURL"`
+	Enabled        bool                       `json:"enabled"`
+	RuntimeBuiltin bool                       `json:"runtimeBuiltin"`
+	Deletable      bool                       `json:"deletable"`
+	FreeTier       bool                       `json:"freeTier"`
+	Kind           string                     `json:"kind,omitempty"`
+	Priority       int                        `json:"priority,omitempty"`
+	Weight         int                        `json:"weight,omitempty"`
+	TimeoutSec     int                        `json:"timeoutSec,omitempty"`
+	Capabilities   map[string]CapabilityState `json:"capabilities"`
+}

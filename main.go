@@ -9,16 +9,21 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"routenest/internal/accounts"
+	"routenest/internal/admin"
+	"routenest/internal/app"
+	"routenest/internal/proxycore"
 	"runtime"
 	"time"
 )
 
 func main() {
+	app.Configure()
 	loginMode := flag.Bool("login", false, "Run OAuth device login flow and add account to pool")
 	captureMode := flag.Bool("capture", false, "Run interactive OAuth capture (records ALL traffic)")
 	port := flag.Int("port", 3457, "Proxy server port")
 	host := flag.String("host", configuredHost(), "Proxy server listen host (0.0.0.0 = all interfaces)")
-	addAccount := flag.Bool("add-account", false, "Add a new account via OAuth to the pool")
+	addAccountMode := flag.Bool("add-account", false, "Add a new account via OAuth to the pool")
 	showList := flag.Bool("list", false, "List all accounts in the pool")
 	startMode := flag.Bool("start", false, "Build, start proxy, and open admin panel in browser")
 	flag.Parse()
@@ -29,14 +34,14 @@ func main() {
 	}
 
 	if *captureMode {
-		if err := doFullCapture(); err != nil {
+		if err := proxycore.Capture(); err != nil {
 			log.Fatalf("Capture failed: %v", err)
 		}
 		return
 	}
 
-	if *loginMode || *addAccount {
-		acc, err := addAccountFromDeviceAuth()
+	if *loginMode || *addAccountMode {
+		acc, err := accounts.AddAccountFromDeviceAuth()
 		if err != nil {
 			log.Fatalf("Login failed: %v", err)
 		}
@@ -49,9 +54,9 @@ func main() {
 	}
 
 	if *showList {
-		accounts := listAccounts()
+		accounts := accounts.ListAccounts()
 		if len(accounts) == 0 {
-			fmt.Println("No accounts in pool. Use --add-account to add one.")
+			fmt.Println("No accounts in accounts.Pool. Use --add-account to add one.")
 			return
 		}
 		fmt.Printf("\n=== Account Pool (%d accounts) ===\n\n", len(accounts))
@@ -63,7 +68,7 @@ func main() {
 		return
 	}
 
-	if err := startProxy(*host, *port); err != nil && err != http.ErrServerClosed {
+	if err := proxycore.Start(*host, *port, admin.RegisterRoutes); err != nil && err != http.ErrServerClosed {
 		log.Fatalf("Proxy failed: %v", err)
 		os.Exit(1)
 	}
@@ -76,7 +81,7 @@ func configuredHost() string {
 	if v := os.Getenv("CLINE_PROXY_HOST"); v != "" {
 		return v
 	}
-	if v := loadPool().ListenHost; v != "" {
+	if v := accounts.LoadPool().ListenHost; v != "" {
 		return v
 	}
 	return "127.0.0.1"
@@ -122,7 +127,7 @@ func buildAndStart(host string, port int) {
 		fmt.Println("Proxy started.")
 	}
 
-	url := fmt.Sprintf("http://%s:%d/admin/", effectiveAdminHost(host), port)
+	url := fmt.Sprintf("http://%s:%d/admin/", proxycore.EffectiveAdminHost(host), port)
 	fmt.Printf("\nAdmin panel: %s\n", url)
 
 	switch runtime.GOOS {

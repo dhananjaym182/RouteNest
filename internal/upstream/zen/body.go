@@ -7,7 +7,7 @@ import (
 	"strings"
 	"sync"
 
-	"cline-go-proxy/internal/protocol/openaichat"
+	"routenest/internal/protocol/openaichat"
 )
 
 // AnonymousCoreTools are the tool names the anonymous free tier expects. The
@@ -115,21 +115,6 @@ func FingerprintTools() []any {
 		}
 	}
 	return out
-}
-
-// AnonymousToolset returns gate tool definitions for names. Unknown names yield
-// nothing; the upstream gate only accepts read and shell.
-func AnonymousToolset(names []string) []any {
-	if names == nil {
-		names = AnonymousCoreTools
-	}
-	tools := make([]any, 0, len(names))
-	for _, name := range names {
-		if tool := FingerprintTool(name); tool != nil {
-			tools = append(tools, tool)
-		}
-	}
-	return tools
 }
 
 // EnsureAnonymousTools makes the body carry the exact read/shell definitions.

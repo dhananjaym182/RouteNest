@@ -2,6 +2,7 @@ package modelcatalog
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -9,11 +10,16 @@ import (
 	"strconv"
 	"strings"
 
-	"cline-go-proxy/internal/platform"
-	"cline-go-proxy/internal/providerreg"
+	"routenest/internal/platform"
+	"routenest/internal/providerreg"
 )
 
-const maxCatalogBody = 2 << 20
+// MaxCatalogBody bounds one catalogue response. The admin probe previously read
+// 64 KiB; the unified limit is larger so long catalogues are not truncated.
+const MaxCatalogBody = 2 << 20
+
+// errorSnippetLimit bounds upstream body text placed in error messages.
+const errorSnippetLimit = 300
 
 // ParseModels decodes an OpenAI- or OpenRouter-shaped model list. It accepts
 // {"data":[...]}, {"models":[...]}, or both, de-duplicates IDs, and rejects an
@@ -24,7 +30,7 @@ func ParseModels(body []byte) ([]Entry, error) {
 		Models []map[string]any `json:"models"`
 	}
 	if err := json.Unmarshal(body, &payload); err != nil {
-		return nil, fmt.Errorf("unexpected response format")
+		return nil, ErrUnexpectedFormat
 	}
 	var out []Entry
 	seen := map[string]bool{}
@@ -89,7 +95,7 @@ func ParseModels(body []byte) ([]Entry, error) {
 		}
 	}
 	if len(out) == 0 {
-		return nil, fmt.Errorf("upstream returned no models")
+		return nil, ErrNoModels
 	}
 	return out, nil
 }
@@ -140,76 +146,170 @@ func firstNum(vals ...any) *float64 {
 	return nil
 }
 
-// Discover fetches {baseURL}/models, retrying /v1/models on 404 and then the
-// preset catalog endpoint when fetcherBase is non-empty. The caller owns the
-// HTTP client and its transport policy.
-func Discover(client *http.Client, baseURL, apiKey string, headers map[string]string, fetcherBase string) ([]Entry, error) {
-	baseURL = strings.TrimRight(baseURL, "/")
-	if baseURL == "" {
+// Request describes one catalogue read. The unified path serves every caller:
+// admin probes, import previews and periodic rechecks.
+type Request struct {
+	// Client performs the HTTP calls; the caller owns its transport and timeout.
+	Client *http.Client
+	// BaseURL is the provider base URL. Its /models list is tried first.
+	BaseURL string
+	// APIKey is sent as a Bearer token when non-empty.
+	APIKey string
+	// Headers are sent on every request. An empty value deletes the header,
+	// including a default such as Authorization.
+	Headers map[string]string
+	// FetcherBase is an optional preset catalogue base, tried only when the
+	// primary read fails.
+	FetcherBase string
+	// FetcherType is the preset's catalogue fetcher type. Empty means the
+	// generic OpenAI-shaped list. Discover consults StrategyFor before making a
+	// request, so an unsupported or adapter-owned format is a deliberate
+	// decision rather than a URL guess.
+	FetcherType string
+}
+
+// ErrNoModels is returned when a catalogue read succeeds but lists no model.
+var ErrNoModels = errors.New("upstream returned no models")
+
+// ErrUnexpectedFormat is returned when a catalogue body has no model list.
+var ErrUnexpectedFormat = errors.New("unexpected response format")
+
+// Discover reads the model catalogue. It tries BaseURL/models and retries
+// /v1/models on 404. If that read fails for any reason, it tries FetcherBase
+// the same way. When both fail, the primary error is returned, because it
+// describes the endpoint the operator configured. Error text never contains the
+// API key or long header values.
+func Discover(req Request) ([]Entry, error) {
+	base := strings.TrimRight(strings.TrimSpace(req.BaseURL), "/")
+	if base == "" {
 		return nil, fmt.Errorf("baseURL is empty")
 	}
-	fetch := func(u string) (int, []byte, error) {
-		req, err := http.NewRequest(http.MethodGet, u, nil)
-		if err != nil {
-			return 0, nil, err
+	if req.FetcherType != "" {
+		strategy, ok := StrategyFor(req.FetcherType)
+		if !ok {
+			return nil, fmt.Errorf("unknown catalogue fetcher type %q", req.FetcherType)
 		}
-		req.Header.Set("Accept", "application/json")
-		if apiKey != "" {
-			req.Header.Set("Authorization", "Bearer "+apiKey)
-		}
-		for k, v := range headers {
-			if strings.TrimSpace(v) != "" {
-				req.Header.Set(strings.TrimSpace(k), v)
-			}
-		}
-		resp, err := client.Do(req)
-		if err != nil {
-			return 0, nil, err
-		}
-		defer resp.Body.Close()
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, maxCatalogBody))
-		return resp.StatusCode, body, nil
-	}
-	tryBase := func(b string) ([]Entry, error) {
-		status, body, err := fetch(b + "/models")
-		if err != nil {
-			return nil, fmt.Errorf("request failed: %v", err)
-		}
-		if status == http.StatusNotFound {
-			s2, b2, e2 := fetch(b + "/v1/models")
-			if e2 == nil && s2 == http.StatusOK {
-				status, body = s2, b2
-			}
-		}
-		if status != http.StatusOK {
-			return nil, fmt.Errorf("HTTP %d: %s", status, platform.Truncate(strings.TrimSpace(string(body)), 200))
-		}
-		return ParseModels(body)
-	}
-	bases := []string{baseURL}
-	if fetcherBase != "" && fetcherBase != baseURL {
-		bases = append(bases, fetcherBase)
-	}
-	var entries []Entry
-	var lastErr error
-	for _, b := range bases {
-		entries, lastErr = tryBase(b)
-		if lastErr == nil {
-			break
+		switch strategy.Status {
+		case StatusSigned:
+			// A signed catalogue needs the protocol adapter (Qoder) and the
+			// bound connection; it cannot be read by the OpenAI-shaped path.
+			return nil, fmt.Errorf("catalogue fetcher type %q is served by its protocol adapter", req.FetcherType)
+		case StatusUnsupported:
+			// The reference format for this type is not an OpenAI list. Ignoring
+			// the preset catalogue base is the documented, deliberate behaviour.
+			req.FetcherBase = ""
 		}
 	}
-	if lastErr != nil {
-		return nil, lastErr
+	entries, primaryErr := listFrom(req, base)
+	if primaryErr == nil {
+		return entries, nil
+	}
+	if fb := strings.TrimRight(strings.TrimSpace(req.FetcherBase), "/"); fb != "" && fb != base {
+		if fallback, err := listFrom(req, fb); err == nil {
+			return fallback, nil
+		}
+	}
+	return nil, errors.New(redact(primaryErr.Error(), secretsOf(req)...))
+}
+
+// listFrom reads one base and parses its model list.
+func listFrom(req Request, base string) ([]Entry, error) {
+	status, body, err := fetchCatalog(req, base+"/models")
+	if err != nil {
+		return nil, fmt.Errorf("request failed: %v", err)
+	}
+	if status == http.StatusNotFound {
+		if s2, b2, e2 := fetchCatalog(req, base+"/v1/models"); e2 == nil && s2 == http.StatusOK {
+			status, body = s2, b2
+		}
+	}
+	if status != http.StatusOK {
+		return nil, fmt.Errorf("HTTP %d: %s", status, snippet(body))
+	}
+	entries, err := ParseModels(body)
+	if err != nil {
+		if errors.Is(err, ErrUnexpectedFormat) {
+			return nil, fmt.Errorf("%w: %s", ErrUnexpectedFormat, snippet(body))
+		}
+		return nil, err
 	}
 	sort.Slice(entries, func(i, j int) bool { return entries[i].ID < entries[j].ID })
 	return entries, nil
 }
 
-// FetcherBaseFor returns a preset's catalog base URL for this provider baseURL.
-// Only fetcher URLs ending in /models are trusted; other formats are ignored
-// rather than guessed. The zen source is hardcoded: its catalog path is owned
-// by the dedicated zen transport, so no preset row is required.
-func FetcherBaseFor(baseURL string) string {
+// fetchCatalog performs one GET with the request's auth and headers.
+func fetchCatalog(req Request, rawURL string) (int, []byte, error) {
+	httpReq, err := http.NewRequest(http.MethodGet, rawURL, nil)
+	if err != nil {
+		return 0, nil, err
+	}
+	httpReq.Header.Set("Accept", "application/json")
+	if req.APIKey != "" {
+		httpReq.Header.Set("Authorization", "Bearer "+req.APIKey)
+	}
+	for k, v := range req.Headers {
+		k = strings.TrimSpace(k)
+		if k == "" {
+			continue
+		}
+		if strings.TrimSpace(v) == "" {
+			httpReq.Header.Del(k)
+			continue
+		}
+		httpReq.Header.Set(k, v)
+	}
+	resp, err := req.Client.Do(httpReq)
+	if err != nil {
+		return 0, nil, err
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, MaxCatalogBody))
+	return resp.StatusCode, body, nil
+}
+
+// snippet returns a trimmed prefix of an upstream body for error text.
+func snippet(body []byte) string {
+	return platform.Truncate(strings.TrimSpace(string(body)), errorSnippetLimit)
+}
+
+// secretsOf lists values that must not appear in error text: the API key and
+// long header values (short values would match ordinary words and digits).
+func secretsOf(req Request) []string {
+	var out []string
+	if len(req.APIKey) >= 4 {
+		out = append(out, req.APIKey)
+	}
+	for _, v := range req.Headers {
+		if len(v) >= 8 {
+			out = append(out, v)
+		}
+	}
+	return out
+}
+
+// Redact replaces each secret in s with a fixed mask. Empty secrets are ignored.
+func Redact(s string, secrets ...string) string {
+	return redact(s, secrets...)
+}
+
+func redact(s string, secrets ...string) string {
+	for _, sec := range secrets {
+		if sec != "" {
+			s = strings.ReplaceAll(s, sec, redactedMask)
+		}
+	}
+	return s
+}
+
+const redactedMask = "***"
+
+// CatalogueSourceFor returns a preset's catalogue base URL and fetcher type for
+// this provider baseURL. A base is returned only when the preset catalog is an
+// OpenAI-shaped /models endpoint different from the primary one; the type is
+// returned for every matching preset so unsupported or adapter-owned formats are
+// an explicit strategy decision. The zen source is hardcoded: its catalog path is
+// owned by the dedicated zen transport, so no preset row is required.
+func CatalogueSourceFor(baseURL string) (base, fetcherType string) {
 	norm := func(u string) string {
 		u = strings.ToLower(strings.TrimRight(strings.TrimSpace(u), "/"))
 		u = strings.TrimSuffix(u, "/chat/completions")
@@ -217,21 +317,43 @@ func FetcherBaseFor(baseURL string) string {
 	}
 	target := norm(baseURL)
 	if target == "" {
-		return ""
+		return "", ""
 	}
 	if target == "https://opencode.ai" {
-		return "https://opencode.ai/zen/v1"
+		// The zen path is a plain OpenAI-shaped list; keep the generic strategy.
+		return "https://opencode.ai/zen/v1", ""
 	}
-	for _, p := range providerreg.Builtin().All() {
-		if p.ModelsFetcher == nil || !strings.HasSuffix(strings.ToLower(p.ModelsFetcher.URL), "/models") {
+	// IDs() is sorted, so two presets with the same base URL resolve
+	// deterministically instead of depending on map iteration order.
+	for _, id := range providerreg.Builtin().IDs() {
+		p, ok := providerreg.Builtin().Get(id)
+		if !ok || p.ModelsFetcher == nil {
 			continue
 		}
-		if norm(p.BaseURL) == target {
-			fb := strings.TrimRight(strings.TrimSuffix(strings.TrimRight(p.ModelsFetcher.URL, "/"), "/models"), "/")
-			if fb != "" && fb != target {
-				return fb
-			}
+		if norm(p.BaseURL) != target {
+			continue
+		}
+		if !strings.HasSuffix(strings.ToLower(p.ModelsFetcher.URL), "/models") {
+			// The format is not an OpenAI list. Report the type so the strategy
+			// table makes the "ignore this catalogue" decision explicitly.
+			return "", p.ModelsFetcher.Type
+		}
+		fb := strings.TrimRight(strings.TrimSuffix(strings.TrimRight(p.ModelsFetcher.URL, "/"), "/models"), "/")
+		if fb == target {
+			// The preset catalogue is the primary /models endpoint; no separate
+			// fallback is needed, but the type still selects the strategy.
+			return "", p.ModelsFetcher.Type
+		}
+		if fb != "" {
+			return fb, p.ModelsFetcher.Type
 		}
 	}
-	return ""
+	return "", ""
+}
+
+// FetcherBaseFor returns a preset's catalog base URL for this provider baseURL.
+// It is the base-only form of CatalogueSourceFor.
+func FetcherBaseFor(baseURL string) string {
+	base, _ := CatalogueSourceFor(baseURL)
+	return base
 }

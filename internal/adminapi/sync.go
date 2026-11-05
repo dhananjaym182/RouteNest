@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"cline-go-proxy/internal/httpx"
+	"routenest/internal/httpx"
 )
 
 // Sync serves model-catalog synchronization and provider health rechecks.

@@ -3,7 +3,7 @@ package openaichat
 import (
 	"testing"
 
-	"cline-go-proxy/internal/protocol"
+	"routenest/internal/protocol"
 )
 
 var _ protocol.Protocol = Protocol{}

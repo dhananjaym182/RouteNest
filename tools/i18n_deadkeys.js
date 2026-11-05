@@ -1,34 +1,34 @@
-// List I18N dict keys whose zh text appears nowhere outside the dict block itself.
+// Dead-key gate: a dictionary key whose Chinese text appears nowhere outside the
+// dictionary is unused copy. It either belongs to a removed control or was
+// superseded by different wording; both are deleted, not allowlisted.
+//
+// A key also counts as used when another script calls t('...') with it, including
+// dynamic label tables that are translated later.
+//
 // Usage: node tools/i18n_deadkeys.js
-const fs = require('fs');
-const dir = __dirname + '/../adminui';
-const body = fs.readFileSync(dir + '/body.html', 'utf8');
-const jsFiles = fs.readdirSync(dir + '/js').map(f => fs.readFileSync(dir + '/js/' + f, 'utf8'));
-const core = jsFiles[jsFiles.findIndex(s => s.includes('const I18N'))];
-const m = core.match(/const I18N\s*=\s*\{([\s\S]*?)\n\};/);
-if (!m) { console.error('dict block not found'); process.exit(1); }
-const keyRe = /^\s*'((?:[^'\\]|\\')+)':\s*'/gm;
-const keys = [];
-let k;
-while ((k = keyRe.exec(m[1]))) keys.push({ key: k[1].replace(/\\'/g, "'"), idx: k.index + m.index });
-const others = [body, ...jsFiles.filter(s => s !== core)];
-// keys can also be used inside 01_core.js outside the dict block itself
-const coreRest = core.replace(m[1], '');
-others.push(coreRest);
-const ctxOf = (key) => {
-  for (const src of others) {
-    if (src.includes("'" + key + "'") || src.includes('"' + key + '"') || src.includes(key)) return false;
-  }
-  return true;
-};
-let dead = [];
-for (const { key } of keys) if (ctxOf(key)) dead.push(key);
-console.log('DEAD KEYS: ' + dead.length);
-dead.forEach(d => console.log('  ' + JSON.stringify(d)));
-// also: duplicate identical keys
-const all = m[1].match(/^\s*'((?:[^'\\]|\\')+)':/gm) || [];
-const seen = new Map();
-for (const a of all) { seen.set(a.trim(), (seen.get(a.trim()) || 0) + 1); }
-const dups = [...seen].filter(([, n]) => n > 1);
-console.log('DUP KEYS: ' + dups.length);
-dups.forEach(([kk, n]) => console.log('  ' + kk + ' x' + n));
+const fs = require("fs");
+const { parseDict, uiJSFiles, dictFile, ROOT, reportDuplicates } = require("./i18n_lib");
+
+const body = require("./admin_ui_body").adminBody(ROOT);
+const dict = dictFile();
+const others = [body];
+for (const f of uiJSFiles()) {
+  if (f !== dict) others.push(fs.readFileSync(f, "utf8"));
+}
+
+const { entries, dups } = parseDict();
+const dead = [];
+for (const e of entries) {
+  // A key is used when its text appears anywhere outside the dictionary: as a
+  // t('...') argument, in a dynamic label table, or as static markup text.
+  const used =
+    body.includes(e.key) || others.some((src) => src.includes(e.key));
+  if (!used) dead.push(e.key);
+}
+
+let ok = reportDuplicates(dups);
+console.log("DEAD KEYS: " + dead.length);
+for (const d of dead) console.error("  " + JSON.stringify(d));
+if (dead.length) ok = false;
+
+process.exit(ok ? 0 : 1);

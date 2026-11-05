@@ -1,0 +1,20 @@
+<div id="tab-quota" class="tab-panel" style="display:none">
+  <div class="page-header">
+    <div>
+      <div class="large-title">配额与预算</div>
+      <div class="large-subtitle">Provider 每分钟 / 每日预算用量、冷却恢复与账号 Token 总量</div>
+    </div>
+    <div class="action-row">
+      <button class="btn btn-sm" onclick="loadQuota(true)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>刷新</button>
+    </div>
+  </div>
+  <div class="section">
+    <div class="section-body flush">
+      <div id="quotaSummary" class="quota-summary"></div>
+    </div>
+  </div>
+  <div id="quotaList">
+    <div class="sk-stack p-16"><span class="skeleton"></span><span class="skeleton w70"></span></div>
+  </div>
+</div>
+

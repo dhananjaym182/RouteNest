@@ -1,0 +1,22 @@
+<div id="tab-combos" class="tab-panel" style="display:none">
+  <div class="page-header">
+    <div>
+      <div class="large-title">模型组合</div>
+      <div class="large-subtitle">把多个模型按优先级编排成回退链：命中组合按序尝试，失败（限流/不可用）自动切到下一个，停用条目直接跳过</div>
+    </div>
+    <div class="action-row">
+      <button class="btn btn-sm" onclick="loadCombos()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>刷新</button>
+      <button class="btn btn-sm btn-primary" onclick="showComboEditor()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>新建组合</button>
+    </div>
+  </div>
+  <div id="combosStats" class="model-stats-bar"></div>
+  <div class="section">
+    <div class="section-body">
+      <!-- 测试数据清理：暂无「清空全部组合」接口（/admin/api/combos/* 仅 list/save/delete/toggle/clone）。
+           调试用组合请在列表中逐个 Delete 按钮删除；不影响的组合可先 toggle 停用保留配置。 -->
+      <div id="combosList"><div class="sk-stack"><span class="skeleton"></span><span class="skeleton w70"></span><span class="skeleton w45"></span></div></div>
+    </div>
+  </div>
+</div>
+
+<!-- 组合编辑器抽屉（body 级浮层，不随标签页隐藏） -->

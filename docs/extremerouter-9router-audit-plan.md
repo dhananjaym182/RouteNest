@@ -1,27 +1,24 @@
-# Audit and implementation plan: ExtremeRouter / 9router → Cline2API (Go)
+# Audit and implementation plan: ExtremeRouter / 9router → RouteNest (Go)
 
 Status: draft audit plan, not yet reviewed.
 Scope notes:
 - 9router provenance in this codebase is historical: `src/lib/dataMigration.js` migrates legacy `~/.9router` / `%APPDATA%/9router` data into ExtremeRouter. READMEs also cite [9router](https://github.com/9router/9router) as the routing lineage.
 - The working copy here is ExtremeRouter at `/home/dhan3713/extremerouter`.
-- Cline2API is Go at `/home/dhan3713/cline2api` (module `cline-go-proxy`, Go 1.25, Echo via Wails transitive dep, SQLite via `modernc.org/sqlite` indirect dep).
+- RouteNest is Go at `/home/dhan3713/RouteNest` (module `routenest`, Go 1.25, Echo via Wails transitive dep, SQLite via `modernc.org/sqlite` indirect dep).
 
 This is a plan for the audit deliverable only. No edits, dependency installs, migrations, or config changes are proposed yet.
 
 ## 1. Existing Go architecture
 
-Files already present in cline2api:
-- `providers.go` — custom OpenAI-compatible provider registry, cold-down, sticky sessions, provider budget (RPM/daily), outcome scoring, fallback into combo/cline.
-- `combos.go` — named model combos with ordered entries and source pinning (`cline`, `zen`, `provider`).
-- `proxy.go` — dispatch/routing, combo execution, Anthropic streaming combos, upstream attribution.
-- `responses.go` — OpenAI Responses proxy path and related handling.
-- `pool.go` — model pool / account pool, enable/disable, defaults.
-- `models_sync.go` — sync of remote/provider/zen models into the pool.
-- `auth.go`, `capture.go`, `context_management.go`, `compact.go` — auth, capture, context/compact handling.
-- `request_logs.go` — request log storage and attribution.
-- `admin.go`, `admin_html.go`, `admin_model_test_api.go` — admin HTTP and inline HTML UI, including provider/combo UIs.
-- `cline_proxy.go`, `zen.go`, `zen_proxy.go` — Cline and OpenCode Zen upstream handling.
-- `types.go`, `main.go`, `go.mod` — types and bootstrap.
+Current RouteNest owners for those concerns:
+- `internal/providers/` — custom OpenAI-compatible registry, cooldowns, budgets, scoring and provider fallback.
+- `internal/combos/` — named model combos with ordered entries and source pinning (`cline`, `zen`, `provider`).
+- `internal/routing/` and `internal/proxycore/` — dispatch/model policy plus HTTP, Responses, Anthropic and SSE handling.
+- `internal/accounts/` and `internal/connections/` — account and device-login state.
+- `internal/zen/` and `internal/egress/` — OpenCode Zen and shared Cline egress transport.
+- `internal/compaction/` and `internal/requestlog/` — context management and request-log persistence.
+- `internal/admin/` — admin routes and the embedded UI under `internal/admin/ui/`.
+- `internal/app/`, `main.go`, `desktop_main.go` — composition and thin entry points.
 
 Confirmed Go capabilities from the repository:
 - OpenAI-compatible custom providers with per-provider cooldown and budget checks before dispatch.

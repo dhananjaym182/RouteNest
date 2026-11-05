@@ -1,0 +1,55 @@
+/* ===== 导入分级预览：把高度让给勾选列表（仅此弹窗） =====
+   标题 / 统计条 / 搜索 / 过滤 / 底部操作栏不收缩，列表 flex 填满剩余空间；
+   .modal-card-col 的 max-height 保证整体不超出视口，列表内部滚动、页脚始终可见。 */
+#importPreviewModal .modal-card{overflow-y:auto}
+#importPreviewModal .modal-title,
+#importPreviewModal #importPreviewSummary,
+#importPreviewModal .modal-search-row,
+#importPreviewModal .import-filter-row,
+#importPreviewModal .modal-actions{flex-shrink:0}
+/* 说明段落移除后收紧留白，让统计 / 搜索 / 过滤三行贴着标题 */
+#importPreviewModal #importPreviewSummary{margin-bottom:6px}
+#importPreviewModal .import-filter-row{margin-top:6px}
+#importPreviewModal .combo-picker-list{flex:1 1 auto;min-height:0;max-height:min(560px,64vh);margin-top:8px}
+/* 窄屏：列表退回普通块，卡片自身可滚动，避免列表被压到无法使用 */
+@media (max-width:760px){
+  #importPreviewModal .combo-picker-list{flex:0 1 auto;max-height:min(52vh,420px)}
+}
+
+/* 弹窗遮罩统一由 .overlay-modal / .overlay-top 提供（见弹窗层标准化区块） */
+
+.preset-group-title{position:sticky;top:0;z-index:1;background:var(--surface);padding:7px 10px;font-size:11px;font-weight:700;color:var(--text2);border-bottom:1px solid var(--border2)}
+.preset-group-title .preset-group-desc{font-weight:400;color:var(--text3);margin-left:6px}
+.preset-group-title .grp-scope{font-weight:400;color:var(--text3);margin-left:6px;font-size:10.5px}
+.preset-row{display:flex;align-items:center;gap:8px;padding:8px 10px;border-bottom:1px solid var(--border2);cursor:pointer;font-size:13px}
+.preset-row:last-child{border-bottom:none}
+.preset-row:hover{background:var(--surface2)}
+.preset-name{font-weight:600;color:var(--text);white-space:nowrap}
+.preset-key{font-family:ui-monospace,'SF Mono','Cascadia Code','Consolas',monospace;font-size:11px;color:var(--text3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1 1 auto;min-width:0}
+/* 组合测试结果行：优先级序号 / 模型 / 上游徽章 / 测试结论 / 行内操作 */
+.combo-test-row{display:flex;align-items:center;gap:8px;padding:8px 10px;border-bottom:1px solid var(--border2);font-size:13px;flex-wrap:wrap}
+.combo-test-row:last-child{border-bottom:none}
+.combo-test-row.combo-test-disabled{opacity:0.55}
+.combo-test-verdict{display:inline-flex;align-items:center;gap:4px;font-size:11px;white-space:nowrap;font-variant-numeric:tabular-nums}
+.combo-test-error{font-size:11px;color:var(--text2);max-width:180px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.combo-test-row .combo-entry-actions{margin-left:auto}
+.prov-row-test-out,.prov-row-recheck-out,.conn-row-test-out{font-size:11px;max-width:150px;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin:2px 0}
+.prov-row-test-out:empty,.prov-row-recheck-out:empty,.conn-row-test-out:empty{display:none}
+@media (max-width:760px){
+  .combo-test-error{max-width:100%}
+  .combos-list{overflow-x:auto} /* 触面核对：新增「测试」后行更宽，表格窄屏可横向滚动而非撑破 */
+}
+/* 行内测试追加后放宽两处表格操作列（5 个紧凑按钮 + 结果位不折行） */
+.combos-list .action-table th:last-child,.combos-list .action-table td:last-child{width:var(--action-col-wide);min-width:var(--action-col-wide)}
+/* 连接池表仅 2 按钮 → 收窄到紧凑预算 */
+#connectionsList .action-table th:first-child,#connectionsList .action-table td:first-child{width:34px;min-width:34px;text-align:center}
+#connectionsList .action-table th:last-child,#connectionsList .action-table td:last-child{width:var(--action-col-mid);min-width:var(--action-col-mid)}
+
+/* 斑马行：连接列表现行 alt（JS 控制，与展开子行无冲突），hover 仍其后覆盖 */
+.action-table tbody tr.alt{background:var(--row-alt)}
+.action-table tbody tr.alt:hover{background:var(--surface2)}
+/* table 全局 fixed 列宽（styles.css:254）在连接表会引发真实文本重叠：
+   fixed 布局忽略单元格 min-width，"0/2,000,000" 这类 nowrap 内容会横向绘制到相邻列。
+   → 连接表改 auto 布局。Provider 侧已弃表换卡片（prov-cards），重叠压力从根上消除。 */
+#connectionsList .action-table{table-layout:auto}
+

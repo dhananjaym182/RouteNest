@@ -1,6 +1,8 @@
 package platform
 
 import (
+	"bytes"
+	"fmt"
 	"log"
 	"os"
 	"path/filepath"
@@ -23,7 +25,10 @@ const LegacyDataDirEnv = "CLINE2API_DATA_DIR"
 var legacyDataFiles = []string{
 	".cline-accounts.json",
 	".cline-config.json",
+	".cline-connections.json",
 	".cline-providers.json",
+	".cline-providers-cooldowns.json",
+	".cline-providers-sync.json",
 	".cline-request-logs.json",
 	".cline-zen.json",
 	".cline-proxy.json",
@@ -69,12 +74,18 @@ var migrateOnce sync.Once
 // MigrateLegacyDataFilesOnce runs the migration for the first data directory
 // selected in this process. It is idempotent.
 func MigrateLegacyDataFilesOnce(dir string, legacyDirs func() []string) {
-	migrateOnce.Do(func() { MigrateLegacyDataFiles(dir, legacyDirs) })
+	migrateOnce.Do(func() {
+		if err := MigrateDataFiles(dir, legacyDirs); err != nil {
+			panicDataDir(fmt.Errorf("migrate existing state: %w", err))
+		}
+	})
 }
 
 var (
 	testDataDirOnce sync.Once
 	testDataDir     string
+	userConfigDir   = os.UserConfigDir
+	isTesting       = testing.Testing
 )
 
 // TestIsolatedDataDir lazily creates a temporary directory used by go test so
@@ -91,6 +102,35 @@ func TestIsolatedDataDir() string {
 	return testDataDir
 }
 
+func createDataDir(dir string) error {
+	if strings.TrimSpace(dir) == "" {
+		return fmt.Errorf("empty directory path")
+	}
+	if err := SecureDataPermissions(dir); err != nil {
+		return fmt.Errorf("secure %s: %w", dir, err)
+	}
+	return nil
+}
+
+func panicDataDir(err error) {
+	panic("RouteNest data directory: " + err.Error())
+}
+
+func defaultDataDir() (string, error) {
+	base, err := userConfigDir()
+	if err != nil {
+		return "", fmt.Errorf("resolve user config directory: %w", err)
+	}
+	if strings.TrimSpace(base) == "" {
+		return "", fmt.Errorf("resolve user config directory: empty path")
+	}
+	dir := filepath.Join(base, "routenest")
+	if err := createDataDir(dir); err != nil {
+		return "", err
+	}
+	return dir, nil
+}
+
 // EnvDataDir returns the configured data directory, creating it if needed.
 // ROUTENEST_DATA_DIR wins; the legacy CLINE2API_DATA_DIR is still honored as a
 // fallback for existing deployments.
@@ -102,8 +142,8 @@ func EnvDataDir() string {
 	if dir == "" {
 		return ""
 	}
-	if err := os.MkdirAll(dir, 0700); err != nil {
-		log.Printf("Failed to create data dir %s: %v", dir, err)
+	if err := createDataDir(dir); err != nil {
+		panicDataDir(err)
 	}
 	return dir
 }
@@ -138,53 +178,26 @@ func resolveExistingInDir(dir, filename string) (string, bool) {
 //  1. ROUTENEST_DATA_DIR (falling back to legacy CLINE2API_DATA_DIR,
 //     migrating legacy files on first use);
 //  2. a per-test temporary directory when running under go test;
-//  3. executable directory, working directory, then ~/.routenest, with legacy
-//     names (same location, or ~/.cline2api for the home directory) migrated
-//     in place when only those exist;
-//  4. executable directory as the creation fallback.
+//  3. the OS-native user config directory + "routenest".
+//
+// Executable, working and legacy home directories are migration sources only;
+// new state is never created there by default.
 func ResolveDataPath(filename string, legacyDirs func() []string) string {
 	if dir := EnvDataDir(); dir != "" {
 		MigrateLegacyDataFilesOnce(dir, legacyDirs)
 		return filepath.Join(dir, filename)
 	}
-	if testing.Testing() {
+	if isTesting() {
 		if dir := TestIsolatedDataDir(); dir != "" {
 			return filepath.Join(dir, filename)
 		}
 	}
-	if exe, err := os.Executable(); err == nil {
-		if p, ok := resolveExistingInDir(filepath.Dir(exe), filename); ok {
-			return p
-		}
+	dir, err := defaultDataDir()
+	if err != nil {
+		panicDataDir(err)
 	}
-	if pwd, err := os.Getwd(); err == nil {
-		if p, ok := resolveExistingInDir(pwd, filename); ok {
-			return p
-		}
-	}
-	if home, err := os.UserHomeDir(); err == nil {
-		if p, ok := resolveExistingInDir(filepath.Join(home, ".routenest"), filename); ok {
-			return p
-		}
-		// Legacy home data directory from before the rename.
-		if legacy, ok := LegacyDataFileName(filename); ok {
-			src := filepath.Join(home, ".cline2api", legacy)
-			if data, err := os.ReadFile(src); err == nil {
-				dst := filepath.Join(home, ".routenest", filename)
-				if err := os.MkdirAll(filepath.Dir(dst), 0700); err == nil {
-					if err := WriteFileAtomic(dst, data, 0600); err == nil {
-						log.Printf("Migrated legacy %s from %s to %s", legacy, src, dst)
-						return dst
-					}
-				}
-			}
-		}
-	}
-	if exe, err := os.Executable(); err == nil {
-		return filepath.Join(filepath.Dir(exe), filename)
-	}
-	pwd, _ := os.Getwd()
-	return filepath.Join(pwd, filename)
+	MigrateLegacyDataFilesOnce(dir, legacyDirs)
+	return filepath.Join(dir, filename)
 }
 
 // CurrentDataDir returns the directory where new data files will be created.
@@ -192,16 +205,24 @@ func CurrentDataDir() string {
 	if dir := EnvDataDir(); dir != "" {
 		return dir
 	}
-	if exe, err := os.Executable(); err == nil {
-		return filepath.Dir(exe)
+	if isTesting() {
+		if dir := TestIsolatedDataDir(); dir != "" {
+			return dir
+		}
 	}
-	pwd, _ := os.Getwd()
-	return pwd
+	dir, err := defaultDataDir()
+	if err != nil {
+		panicDataDir(err)
+	}
+	return dir
 }
 
 // LegacyDataCandidates returns de-duplicated absolute paths that may contain
-// data files from an older installation: exe directory, working directory,
-// the current home data directory and the legacy ~/.cline2api directory.
+// data files from an older installation: the executable directory, the working
+// directory, ~/.routenest and ~/.cline2api. This matches the documented sources
+// in README. The OS config directory is deliberately not a source: when
+// ROUTENEST_DATA_DIR selects another directory, copying from the config directory
+// would duplicate live credentials into it.
 func LegacyDataCandidates(legacyDirs func() []string) []string {
 	if legacyDirs != nil {
 		return legacyDirs()
@@ -231,50 +252,71 @@ func LegacyDataCandidates(legacyDirs func() []string) []string {
 	return out
 }
 
-// MigrateLegacyDataFiles copies known LEGACY data files (".cline-*") from
-// legacy locations into dir under their current "routenest" names, only when
-// the destination does not already exist. It is idempotent.
-func MigrateLegacyDataFiles(dir string, legacyDirs func() []string) {
-	if err := os.MkdirAll(dir, 0700); err != nil {
-		log.Printf("Failed to create data dir %s for migration: %v", dir, err)
-		return
+// MigrateDataFiles copies known current and legacy state files into dir. It
+// never overwrites a destination or removes a source, and verifies each copy.
+func MigrateDataFiles(dir string, legacyDirs func() []string) error {
+	if err := createDataDir(dir); err != nil {
+		return err
 	}
-	absDir, err := filepath.Abs(dir)
-	if err != nil {
-		absDir = dir
+	sources := append([]string{dir}, LegacyDataCandidates(legacyDirs)...)
+	seenSources := make(map[string]bool, len(sources))
+	uniqueSources := sources[:0]
+	for _, source := range sources {
+		abs, err := filepath.Abs(source)
+		if err != nil {
+			abs = source
+		}
+		if !seenSources[abs] {
+			seenSources[abs] = true
+			uniqueSources = append(uniqueSources, abs)
+		}
 	}
-	for _, legacy := range legacyDataFiles {
-		name := CurrentDataFileName(legacy)
+
+	for _, name := range CurrentDataFiles() {
 		dst := filepath.Join(dir, name)
 		if FileExists(dst) {
 			continue
 		}
-		// Legacy file may live beside its renamed successor in dir itself
-		// (e.g. data dir == exe dir for a pre-rename deployment).
-		if data, err := os.ReadFile(filepath.Join(dir, legacy)); err == nil {
-			if err := WriteFileAtomic(dst, data, 0600); err != nil {
-				log.Printf("Failed to migrate legacy %s in %s to %s: %v", legacy, dir, dst, err)
-			} else {
-				log.Printf("Migrated legacy %s in %s to %s", legacy, dir, dst)
-			}
-			continue
-		}
-		for _, d := range LegacyDataCandidates(legacyDirs) {
-			if d == absDir {
-				continue
-			}
-			src := filepath.Join(d, legacy)
-			data, err := os.ReadFile(src)
-			if err != nil {
-				continue
-			}
-			if err := WriteFileAtomic(dst, data, 0600); err != nil {
-				log.Printf("Failed to migrate %s from %s to %s: %v", legacy, d, dst, err)
+		legacy, _ := LegacyDataFileName(name)
+		copied := false
+		for _, sourceDir := range uniqueSources {
+			for _, sourceName := range []string{name, legacy} {
+				src := filepath.Join(sourceDir, sourceName)
+				if src == dst {
+					continue
+				}
+				data, err := os.ReadFile(src)
+				if err != nil {
+					continue
+				}
+				if err := WriteFileAtomic(dst, data, 0600); err != nil {
+					return fmt.Errorf("copy %s to %s: %w", src, dst, err)
+				}
+				got, err := os.ReadFile(dst)
+				if err != nil || !bytes.Equal(got, data) {
+					_ = os.Remove(dst)
+					if err != nil {
+						return fmt.Errorf("verify %s: %w", dst, err)
+					}
+					return fmt.Errorf("verify %s: copied bytes differ", dst)
+				}
+				log.Printf("Migrated RouteNest state from %s to %s (source preserved)", src, dst)
+				copied = true
 				break
 			}
-			log.Printf("Migrated %s from %s to %s", legacy, d, dst)
-			break
+			if copied {
+				break
+			}
 		}
+	}
+	return nil
+}
+
+// MigrateLegacyDataFiles is retained for callers and tests from before current
+// state filenames were included in migration.
+func MigrateLegacyDataFiles(dir string, legacyDirs func() []string) {
+	if err := MigrateDataFiles(dir, legacyDirs); err != nil {
+		log.Printf("Failed to migrate RouteNest state into %s: %v", dir, err)
 	}
 }
 

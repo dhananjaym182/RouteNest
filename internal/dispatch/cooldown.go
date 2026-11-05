@@ -4,10 +4,11 @@
 package dispatch
 
 import (
-	"fmt"
 	"net/http"
 	"strings"
 	"time"
+
+	"routenest/internal/providerstate"
 )
 
 // RateLimitedByBody reports explicit quota/rate-limit keywords. It distinguishes
@@ -47,20 +48,7 @@ func ParseRetryAfter(h string) time.Duration {
 
 // ParseRetryAfterAt parses Retry-After relative to now. Invalid values return 0.
 func ParseRetryAfterAt(h string, now time.Time) time.Duration {
-	h = strings.TrimSpace(h)
-	if h == "" {
-		return 0
-	}
-	var secs int
-	if _, err := fmt.Sscanf(h, "%d", &secs); err == nil && secs > 0 {
-		return time.Duration(secs) * time.Second
-	}
-	if t, err := http.ParseTime(h); err == nil {
-		if d := t.Sub(now); d > 0 {
-			return d
-		}
-	}
-	return 0
+	return providerstate.ParseRetryAfterAt(h, now)
 }
 
 // ProviderCooldownUntil decides how long a provider:model pair should cool down

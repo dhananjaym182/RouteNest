@@ -1,0 +1,86 @@
+package providers
+
+import (
+	"net"
+	"net/http"
+	"net/url"
+	"strings"
+	"sync"
+	"time"
+
+	"routenest/internal/domain"
+	"routenest/internal/egress"
+	"routenest/internal/transport"
+)
+
+// providerTransportCache keeps one transport per normalized egress spec so a
+// provider override does not construct a fresh connection pool per request.
+var providerTransportCache sync.Map // spec -> http.RoundTripper
+
+// providerTransportFor resolves a provider's egress override:
+//   - "" inherits the global transport (including test overrides),
+//   - "direct"/"none" bypasses both the app proxy pool and environment proxies,
+//   - a proxy URL dials through only that proxy.
+//
+// Explicit overrides run through the global egress resolver when it is
+// installed; an empty override stays on the legacy global transport so the
+// existing pool hooks and TLS behavior are unchanged.
+func providerTransportFor(providerID, spec string) (http.RoundTripper, error) {
+	if strings.TrimSpace(spec) != "" && egress.HasDefault() {
+		decision, err := egress.Default().Resolve(
+			domain.ProviderInstanceID(providerID),
+			egress.Override{ProxyURL: spec},
+			nil,
+		)
+		if err != nil {
+			return nil, err
+		}
+		if decision.Mode == egress.ModeDirect {
+			spec = "direct"
+		} else if decision.Proxy != nil {
+			spec = decision.Proxy.String()
+		}
+	}
+	norm, err := transport.NormalizeProxySpec(spec)
+	if err != nil {
+		return nil, err
+	}
+	if norm == "" {
+		return TransportProvider(), nil
+	}
+	if cached, ok := providerTransportCache.Load(norm); ok {
+		return cached.(http.RoundTripper), nil
+	}
+	tr := isolatedTransport(norm)
+	actual, _ := providerTransportCache.LoadOrStore(norm, http.RoundTripper(tr))
+	return actual.(http.RoundTripper), nil
+}
+
+// isolatedTransport builds a transport that does not consult the Cline egress
+// accounts.Pool. A direct provider must also ignore HTTPS_PROXY, which the global
+// transport's Proxy hook intentionally honors when the pool is empty.
+func isolatedTransport(spec string) *http.Transport {
+	var tr *http.Transport
+	if base, ok := TransportProvider().(*http.Transport); ok {
+		tr = base.Clone()
+	} else {
+		tr = &http.Transport{
+			MaxIdleConns:          100,
+			MaxIdleConnsPerHost:   10,
+			IdleConnTimeout:       90 * time.Second,
+			TLSHandshakeTimeout:   10 * time.Second,
+			ExpectContinueTimeout: 1 * time.Second,
+			ResponseHeaderTimeout: 5 * time.Minute,
+		}
+	}
+	dialer := &net.Dialer{Timeout: 12 * time.Second, KeepAlive: 30 * time.Second}
+	tr.Proxy = nil
+	tr.DialContext = dialer.DialContext
+	tr.DialTLSContext = nil
+	if spec != "direct" {
+		if u, err := url.Parse(spec); err == nil {
+			tr.Proxy = http.ProxyURL(u)
+		}
+	}
+	return tr
+}

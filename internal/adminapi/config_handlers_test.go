@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"cline-go-proxy/internal/config"
+	"routenest/internal/config"
 )
 
 func TestOpencodeConfigMasksProxies(t *testing.T) {

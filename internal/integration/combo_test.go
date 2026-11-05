@@ -1,0 +1,715 @@
+package integration
+
+// Phase 1 —— 具名模型组合 + 有序回退的测试。
+// 覆盖：校验、持久化、有序回退、可重试/永久错误分类、跳过停用条目、不触发全局
+// free 链、显式应急回退、跨源派发、同模型 provider 冗余、发现层暴露、请求日志归因、
+// 流式预提交回退与「有内容后不再重开」。另含并发配置访问的竞态用例（-race）。
+
+import (
+	"encoding/json"
+	"io"
+	"net/http"
+	"routenest/internal/admin"
+	"routenest/internal/combos"
+	"routenest/internal/config"
+	"routenest/internal/egress"
+	"routenest/internal/platform"
+	"routenest/internal/routing"
+	"routenest/internal/zen"
+	"strings"
+	"sync"
+	"testing"
+	"time"
+)
+
+// ============================ 测试辅助 ============================
+
+func comboTestAccount(id string) *Account {
+	return &Account{
+		AccountID: id, Email: id + "@example.com", AccessToken: id + "-token",
+		ExpiresAt: time.Now().Add(time.Hour).UnixMilli(), Status: "active",
+	}
+}
+
+func installPool(t *testing.T, models []Model, accs ...*Account) {
+	t.Helper()
+	old := getTestPool()
+	t.Cleanup(func() { setTestPool(old) })
+	if len(accs) == 0 {
+		accs = []*Account{comboTestAccount("acc1")}
+	}
+	setTestPool(&AccountPool{Accounts: accs, Models: models})
+}
+
+func installConfig(t *testing.T, cfg *admin.ProxyConfig) {
+	t.Helper()
+	t.Setenv(platform.DataDirEnv, t.TempDir()) // 配置落盘隔离到临时目录
+	old := admin.GetProxyConfig()
+	t.Cleanup(func() { admin.SetProxyConfig(old) })
+	admin.SetProxyConfig(cfg)
+}
+
+func installTransport(t *testing.T, fn func(req *http.Request) *http.Response) {
+	t.Helper()
+	old := egress.Client.Transport
+	t.Cleanup(func() { egress.Client.Transport = old })
+	egress.Client.Transport = freeModelRoundTripper(func(req *http.Request) (*http.Response, error) {
+		return fn(req), nil
+	})
+}
+
+func stubResp(req *http.Request, status int, body string) *http.Response {
+	return &http.Response{
+		StatusCode: status,
+		Body:       io.NopCloser(strings.NewReader(body)),
+		Header:     make(http.Header),
+		Request:    req,
+	}
+}
+
+func stubSSE(req *http.Request, body string) *http.Response {
+	return &http.Response{
+		StatusCode: http.StatusOK,
+		Body:       io.NopCloser(strings.NewReader(body)),
+		Header:     http.Header{"Content-Type": []string{"text/event-stream"}},
+		Request:    req,
+	}
+}
+
+func readReqModel(req *http.Request) string {
+	if req == nil || req.Body == nil {
+		return ""
+	}
+	b, _ := io.ReadAll(req.Body)
+	var p map[string]any
+	_ = json.Unmarshal(b, &p)
+	m, _ := p["model"].(string)
+	return m
+}
+
+func chatParams(model string) map[string]any {
+	return map[string]any{
+		"model":      model,
+		"max_tokens": 16,
+		"messages":   []any{map[string]any{"role": "user", "content": "hi"}},
+	}
+}
+
+const okCompletion = `{"id":"ok","object":"chat.completion","choices":[{"index":0,"message":{"role":"assistant","content":"ok"},"finish_reason":"stop"}],"usage":{"prompt_tokens":1,"completion_tokens":1,"total_tokens":2}}`
+
+// ============================ 校验 ============================
+
+func TestComboValidate(t *testing.T) {
+	installPool(t, []Model{
+		{ID: "m-a", Cost: "free", Status: "active", Source: "remote"},
+		{ID: "m-b", Cost: "free", Status: "active", Source: "remote"},
+	})
+
+	valid := ModelCombo{ID: "premium", Name: "Premium", Enabled: true,
+		Entries: []ComboEntry{{Model: "m-a"}, {Model: "m-b", Disabled: true}}}
+	if err := combos.ValidateCombo(valid, nil); err != nil {
+		t.Fatalf("valid combo rejected: %v", err)
+	}
+
+	cases := []struct {
+		name     string
+		c        ModelCombo
+		existing []ModelCombo
+	}{
+		{"empty id", ModelCombo{Name: "x", Entries: []ComboEntry{{Model: "m-a"}}}, nil},
+		{"bad chars", ModelCombo{ID: "bad/id", Name: "x", Entries: []ComboEntry{{Model: "m-a"}}}, nil},
+		{"reserved alias free", ModelCombo{ID: "free", Name: "x", Entries: []ComboEntry{{Model: "m-a"}}}, nil},
+		{"collides with model id", ModelCombo{ID: "m-a", Name: "x", Entries: []ComboEntry{{Model: "m-b"}}}, nil},
+		{"empty name", ModelCombo{ID: "x", Entries: []ComboEntry{{Model: "m-a"}}}, nil},
+		{"duplicate id", ModelCombo{ID: "premium", Name: "x", Entries: []ComboEntry{{Model: "m-a"}}},
+			[]ModelCombo{{ID: "premium", Name: "Other"}}},
+		{"duplicate name", ModelCombo{ID: "other", Name: "Premium", Entries: []ComboEntry{{Model: "m-a"}}},
+			[]ModelCombo{{ID: "premium", Name: "Premium"}}},
+		{"no entries", ModelCombo{ID: "x", Name: "x"}, nil},
+		{"duplicate entry", ModelCombo{ID: "x", Name: "x", Entries: []ComboEntry{{Model: "m-a"}, {Model: "m-a"}}}, nil},
+		{"unknown reference", ModelCombo{ID: "x", Name: "x", Entries: []ComboEntry{{Model: "nope"}}}, nil},
+		{"free entry", ModelCombo{ID: "x", Name: "x", Entries: []ComboEntry{{Model: "free"}}}, nil},
+		{"enabled with no enabled entry", ModelCombo{ID: "x", Name: "x", Enabled: true,
+			Entries: []ComboEntry{{Model: "m-a", Disabled: true}}}, nil},
+	}
+	for _, tc := range cases {
+		if err := combos.ValidateCombo(tc.c, tc.existing); err == nil {
+			t.Errorf("%s: expected validation error, got nil", tc.name)
+		}
+	}
+}
+
+// ============================ 持久化 ============================
+
+func TestComboPersistenceAndReload(t *testing.T) {
+	installPool(t, []Model{{ID: "m-a", Cost: "free", Status: "active", Source: "remote"}})
+	t.Setenv(platform.DataDirEnv, t.TempDir())
+	old := admin.GetProxyConfig()
+	t.Cleanup(func() { admin.SetProxyConfig(old) })
+
+	config.Mu.Lock()
+	config.Held().Combos = nil
+	config.Mu.Unlock()
+	admin.SaveProxyConfigLocked()
+
+	if _, err := combos.UpsertCombo(ModelCombo{ID: "c1", Name: "C1", Enabled: true, Entries: []ComboEntry{{Model: "m-a"}}}); err != nil {
+		t.Fatalf("upsert: %v", err)
+	}
+	loaded := admin.LoadProxyConfigFromDisk()
+	if len(loaded.Combos) != 1 || loaded.Combos[0].ID != "c1" {
+		t.Fatalf("reload got %+v, want combo c1", loaded.Combos)
+	}
+	// 重新加载（模拟重启）后仍可解析
+	if c, ok := combos.FindEnabledCombo("c1"); !ok || c.Name != "C1" {
+		t.Fatalf("combos.FindEnabledCombo after reload = %+v ok=%v", c, ok)
+	}
+	// 删除后持久化
+	if !combos.DeleteCombo("c1") {
+		t.Fatal("combos.DeleteCombo returned false")
+	}
+	if got := admin.LoadProxyConfigFromDisk(); len(got.Combos) != 0 {
+		t.Fatalf("after delete reload got %+v", got.Combos)
+	}
+}
+
+// ============================ 有序回退 ============================
+
+func TestRunComboFirstEntrySucceeds(t *testing.T) {
+	installPool(t, nil)
+	installConfig(t, admin.DefaultProxyConfig())
+	var seen []string
+	installTransport(t, func(req *http.Request) *http.Response {
+		seen = append(seen, readReqModel(req))
+		return stubResp(req, http.StatusOK, okCompletion)
+	})
+
+	combo := ModelCombo{ID: "c", Name: "C", Enabled: true,
+		Entries: []ComboEntry{{Model: "combo-a"}, {Model: "combo-b"}}}
+	run := combos.RunCombo(chatParams("c"), combo, false, "")
+	if run.Err != nil {
+		t.Fatalf("run err: %v", run.Err)
+	}
+	if run.Model != "combo-a" {
+		t.Fatalf("served %q, want combo-a", run.Model)
+	}
+	if len(seen) != 1 || seen[0] != "combo-a" {
+		t.Fatalf("upstream attempts = %v, want [combo-a] only", seen)
+	}
+}
+
+func TestRunComboRetryableFallback(t *testing.T) {
+	installPool(t, nil)
+	installConfig(t, admin.DefaultProxyConfig())
+	installTransport(t, func(req *http.Request) *http.Response {
+		if readReqModel(req) == "combo-a" {
+			return stubResp(req, http.StatusInternalServerError, `{"error":"boom"}`)
+		}
+		return stubResp(req, http.StatusOK, okCompletion)
+	})
+
+	combo := ModelCombo{ID: "c", Name: "C", Enabled: true,
+		Entries: []ComboEntry{{Model: "combo-a"}, {Model: "combo-b"}}}
+	run := combos.RunCombo(chatParams("c"), combo, false, "")
+	if run.Err != nil {
+		t.Fatalf("run err: %v", run.Err)
+	}
+	if run.Model != "combo-b" {
+		t.Fatalf("served %q, want combo-b", run.Model)
+	}
+	if len(run.Trace) != 2 {
+		t.Fatalf("trace = %+v, want 2 entries", run.Trace)
+	}
+	if run.Trace[0].Outcome != "failed" || run.Trace[0].Status != 500 {
+		t.Fatalf("trace[0] = %+v, want failed/500", run.Trace[0])
+	}
+	if run.Trace[1].Outcome != "success" {
+		t.Fatalf("trace[1] = %+v, want success", run.Trace[1])
+	}
+	// 请求日志归因
+	var rl RequestLog
+	combos.ApplyTrace(&rl, combo, run)
+	if rl.RequestedModel != "c" || rl.Model != "combo-b" {
+		t.Fatalf("log requested=%q actual=%q, want c/combo-b", rl.RequestedModel, rl.Model)
+	}
+	if !rl.FallbackUsed || rl.FallbackCount != 1 {
+		t.Fatalf("fallback used=%v count=%d, want true/1", rl.FallbackUsed, rl.FallbackCount)
+	}
+}
+
+func TestRunComboPermanentErrorStops(t *testing.T) {
+	installPool(t, nil)
+	installConfig(t, admin.DefaultProxyConfig())
+	var seen []string
+	installTransport(t, func(req *http.Request) *http.Response {
+		seen = append(seen, readReqModel(req))
+		return stubResp(req, http.StatusBadRequest, `{"error":"bad request"}`)
+	})
+
+	combo := ModelCombo{ID: "c", Name: "C", Enabled: true,
+		Entries: []ComboEntry{{Model: "combo-a"}, {Model: "combo-b"}}}
+	run := combos.RunCombo(chatParams("c"), combo, false, "")
+	if run.Err == nil {
+		t.Fatal("expected error for permanent failure")
+	}
+	if len(seen) != 1 || seen[0] != "combo-a" {
+		t.Fatalf("upstream attempts = %v, want only combo-a (no pointless retry)", seen)
+	}
+}
+
+func TestRunComboPreservesConfiguredOrder(t *testing.T) {
+	acc := comboTestAccount("acc1")
+	acc.ModelStats = map[string]*ModelStat{
+		"combo-a": {UsageCount: 1000},
+		"combo-b": {UsageCount: 0},
+	}
+	installPool(t, nil, acc)
+	installConfig(t, admin.DefaultProxyConfig())
+	var seen []string
+	installTransport(t, func(req *http.Request) *http.Response {
+		seen = append(seen, readReqModel(req))
+		return stubResp(req, http.StatusOK, okCompletion)
+	})
+
+	// combo-b 看起来「更优」（用量低），但配置顺序 combo-a 在前 —— 不得重排。
+	combo := ModelCombo{ID: "c", Name: "C", Enabled: true,
+		Entries: []ComboEntry{{Model: "combo-a"}, {Model: "combo-b"}}}
+	run := combos.RunCombo(chatParams("c"), combo, false, "")
+	if run.Model != "combo-a" {
+		t.Fatalf("served %q, want combo-a (configured order must win)", run.Model)
+	}
+	if len(seen) != 1 {
+		t.Fatalf("attempts = %v, want only combo-a", seen)
+	}
+}
+
+func TestRunComboSkipsDisabledEntries(t *testing.T) {
+	installPool(t, []Model{
+		{ID: "combo-b", Cost: "free", Status: "active", Source: "remote", Disabled: true},
+	})
+	installConfig(t, admin.DefaultProxyConfig())
+	installTransport(t, func(req *http.Request) *http.Response {
+		return stubResp(req, http.StatusOK, okCompletion)
+	})
+
+	combo := ModelCombo{ID: "c", Name: "C", Enabled: true, Entries: []ComboEntry{
+		{Model: "combo-a", Disabled: true}, // 条目停用
+		{Model: "combo-b"},                 // 池内模型被管理员停用
+		{Model: "combo-c"},                 // 可用
+	}}
+	run := combos.RunCombo(chatParams("c"), combo, false, "")
+	if run.Err != nil {
+		t.Fatalf("run err: %v", run.Err)
+	}
+	if run.Model != "combo-c" {
+		t.Fatalf("served %q, want combo-c", run.Model)
+	}
+	skipped := 0
+	for _, a := range run.Trace {
+		if a.Outcome == "skipped" {
+			skipped++
+		}
+	}
+	if skipped != 2 {
+		t.Fatalf("skipped = %d, want 2; trace=%+v", skipped, run.Trace)
+	}
+}
+
+func TestRunComboDoesNotInvokeGlobalChainByDefault(t *testing.T) {
+	installPool(t, []Model{{ID: "combo-free", Cost: "free", Status: "active", Source: "remote"}})
+	cfg := admin.DefaultProxyConfig()
+	cfg.ModelChain = []string{"combo-free"} // 全局回退链存在，但组合默认不得使用
+	installConfig(t, cfg)
+	var seen []string
+	installTransport(t, func(req *http.Request) *http.Response {
+		m := readReqModel(req)
+		seen = append(seen, m)
+		if m == "combo-a" {
+			return stubResp(req, http.StatusInternalServerError, `{"error":"boom"}`)
+		}
+		return stubResp(req, http.StatusOK, okCompletion)
+	})
+
+	combo := ModelCombo{ID: "c", Name: "C", Enabled: true, Entries: []ComboEntry{{Model: "combo-a"}}}
+	run := combos.RunCombo(chatParams("c"), combo, false, "")
+	if run.Err == nil {
+		t.Fatal("expected failure (no emergency fallback enabled)")
+	}
+	if len(seen) != 1 || seen[0] != "combo-a" {
+		t.Fatalf("upstream attempts = %v, want only combo-a (global free chain must NOT run)", seen)
+	}
+}
+
+func TestRunComboEmergencyFallbackOptIn(t *testing.T) {
+	installPool(t, []Model{{ID: "combo-free", Cost: "free", Status: "active", Source: "remote"}})
+	cfg := admin.DefaultProxyConfig()
+	cfg.ModelChain = []string{"combo-free"}
+	installConfig(t, cfg)
+	installTransport(t, func(req *http.Request) *http.Response {
+		if readReqModel(req) == "combo-a" {
+			return stubResp(req, http.StatusInternalServerError, `{"error":"boom"}`)
+		}
+		return stubResp(req, http.StatusOK, okCompletion)
+	})
+
+	combo := ModelCombo{ID: "c", Name: "C", Enabled: true, EmergencyFallback: true,
+		Entries: []ComboEntry{{Model: "combo-a"}}}
+	run := combos.RunCombo(chatParams("c"), combo, false, "")
+	if run.Err != nil {
+		t.Fatalf("run err: %v", run.Err)
+	}
+	if run.Model != "combo-free" {
+		t.Fatalf("served %q, want combo-free (emergency fallback)", run.Model)
+	}
+}
+
+// ============================ 跨源 / provider 冗余 ============================
+
+func TestComboEntryUsesProviderPath(t *testing.T) {
+	installPool(t, nil)
+	installProviders(t, &CustomProvider{
+		ID: "prov_combo1", Name: "P1", BaseURL: "http://prov1.test/v1",
+		APIKey: "sk", ModelIDs: []string{"prov-x"}, Enabled: true, Priority: 10,
+	})
+	installConfig(t, admin.DefaultProxyConfig())
+
+	providerCalls, clineCalls := 0, 0
+	installTransport(t, func(req *http.Request) *http.Response {
+		if req.URL.Host == "prov1.test" {
+			providerCalls++
+			return stubResp(req, http.StatusOK, okCompletion)
+		}
+		clineCalls++
+		return stubResp(req, http.StatusOK, okCompletion)
+	})
+
+	combo := ModelCombo{ID: "c", Name: "C", Enabled: true,
+		Entries: []ComboEntry{{Model: "prov-x"}, {Model: "cline-y"}}}
+	run := combos.RunCombo(chatParams("c"), combo, false, "")
+	if run.Err != nil {
+		t.Fatalf("run err: %v", run.Err)
+	}
+	if run.Model != "prov-x" || run.Upstream != zen.UpstreamProvider {
+		t.Fatalf("served model=%q upstream=%q, want prov-x/provider", run.Model, run.Upstream)
+	}
+	if providerCalls != 1 || clineCalls != 0 {
+		t.Fatalf("providerCalls=%d clineCalls=%d, want 1/0", providerCalls, clineCalls)
+	}
+}
+
+func TestComboSpansSourcesFallback(t *testing.T) {
+	installPool(t, nil)
+	installProviders(t, &CustomProvider{
+		ID: "prov_combo2", Name: "P2", BaseURL: "http://prov2.test/v1",
+		APIKey: "sk", ModelIDs: []string{"prov-x"}, Enabled: true, Priority: 10,
+	})
+	installConfig(t, admin.DefaultProxyConfig())
+
+	providerCalls := 0
+	installTransport(t, func(req *http.Request) *http.Response {
+		m := readReqModel(req)
+		if req.URL.Host == "prov2.test" {
+			providerCalls++
+			return stubResp(req, http.StatusInternalServerError, `{"error":"down"}`)
+		}
+		// cline 侧：第一个条目 prov-x 也失败，第二个条目 cline-y 成功
+		if m == "prov-x" {
+			return stubResp(req, http.StatusInternalServerError, `{"error":"down"}`)
+		}
+		return stubResp(req, http.StatusOK, okCompletion)
+	})
+
+	combo := ModelCombo{ID: "c", Name: "C", Enabled: true,
+		Entries: []ComboEntry{{Model: "prov-x"}, {Model: "cline-y"}}}
+	run := combos.RunCombo(chatParams("c"), combo, false, "")
+	if run.Err != nil {
+		t.Fatalf("run err: %v", run.Err)
+	}
+	if run.Model != "cline-y" || run.Upstream != zen.UpstreamCline {
+		t.Fatalf("served model=%q upstream=%q, want cline-y/cline", run.Model, run.Upstream)
+	}
+	if providerCalls != 1 {
+		t.Fatalf("providerCalls=%d, want 1 (provider path attempted for entry 1)", providerCalls)
+	}
+}
+
+func TestComboSameModelProviderRedundancy(t *testing.T) {
+	installPool(t, nil)
+	installProviders(t,
+		&CustomProvider{ID: "prov_r1", Name: "R1", BaseURL: "http://r1.test/v1",
+			APIKey: "sk", ModelIDs: []string{"m-r"}, Enabled: true, Priority: 1},
+		&CustomProvider{ID: "prov_r2", Name: "R2", BaseURL: "http://r2.test/v1",
+			APIKey: "sk", ModelIDs: []string{"m-r"}, Enabled: true, Priority: 2},
+	)
+	installConfig(t, admin.DefaultProxyConfig())
+
+	installTransport(t, func(req *http.Request) *http.Response {
+		if req.URL.Host == "r1.test" {
+			return stubResp(req, http.StatusInternalServerError, `{"error":"down"}`)
+		}
+		return stubResp(req, http.StatusOK, okCompletion)
+	})
+
+	combo := ModelCombo{ID: "c", Name: "C", Enabled: true, Entries: []ComboEntry{{Model: "m-r"}}}
+	run := combos.RunCombo(chatParams("c"), combo, false, "")
+	if run.Err != nil {
+		t.Fatalf("run err: %v", run.Err)
+	}
+	if run.Model != "m-r" || run.Upstream != zen.UpstreamProvider {
+		t.Fatalf("served model=%q upstream=%q, want m-r/provider via redundancy group", run.Model, run.Upstream)
+	}
+}
+
+// ============================ 发现层 ============================
+
+func TestBuildModelsListExposesCombos(t *testing.T) {
+	installPool(t, []Model{
+		{ID: "m-a", Cost: "free", Status: "active", Source: "remote"},
+		{ID: "m-b", Cost: "free", Status: "active", Source: "remote", Disabled: true},
+	})
+	cfg := admin.DefaultProxyConfig()
+	cfg.Combos = []ModelCombo{
+		{ID: "c-on", Name: "On", Enabled: true, Entries: []ComboEntry{{Model: "m-a"}}},
+		{ID: "c-off", Name: "Off", Enabled: false, Entries: []ComboEntry{{Model: "m-a"}}},
+	}
+	installConfig(t, cfg)
+
+	list := routing.BuildModelsList(false)
+	byID := map[string]map[string]any{}
+	for _, m := range list {
+		byID[m["id"].(string)] = m
+	}
+	if _, ok := byID["m-a"]; !ok {
+		t.Fatal("enabled model m-a missing from list")
+	}
+	if _, ok := byID["m-b"]; ok {
+		t.Fatal("disabled model m-b must not be listed")
+	}
+	c, ok := byID["c-on"]
+	if !ok {
+		t.Fatal("enabled combo c-on missing from list")
+	}
+	if c["owned_by"] != "combo" {
+		t.Fatalf("combo owned_by = %v, want combo", c["owned_by"])
+	}
+	if _, ok := byID["c-off"]; ok {
+		t.Fatal("disabled combo c-off must not be listed")
+	}
+}
+
+func TestComboDisabledResolution(t *testing.T) {
+	installPool(t, nil)
+	cfg := admin.DefaultProxyConfig()
+	cfg.Combos = []ModelCombo{{ID: "c-off", Name: "Off", Enabled: false, Entries: []ComboEntry{{Model: "m-a"}}}}
+	installConfig(t, cfg)
+
+	if _, ok := combos.FindCombo("c-off"); !ok {
+		t.Fatal("combos.FindCombo should find disabled combo")
+	}
+	if _, ok := combos.FindEnabledCombo("c-off"); ok {
+		t.Fatal("combos.FindEnabledCombo must not return a disabled combo")
+	}
+}
+
+// ============================ 并发 ============================
+
+func TestComboConcurrentConfigAccess(t *testing.T) {
+	installPool(t, []Model{{ID: "m-a", Cost: "free", Status: "active", Source: "remote"}})
+	t.Setenv(platform.DataDirEnv, t.TempDir())
+	old := admin.GetProxyConfig()
+	t.Cleanup(func() { admin.SetProxyConfig(old) })
+
+	var wg sync.WaitGroup
+	for i := 0; i < 8; i++ {
+		wg.Add(1)
+		go func(n int) {
+			defer wg.Done()
+			id := "c" + string(rune('a'+n))
+			for j := 0; j < 20; j++ {
+				_, _ = combos.UpsertCombo(ModelCombo{ID: id, Name: id, Enabled: true, Entries: []ComboEntry{{Model: "m-a"}}})
+				_ = combos.ListCombos()
+				_, _ = combos.FindCombo(id)
+			}
+		}(i)
+	}
+	wg.Wait()
+	if got := combos.ListCombos(); len(got) != 8 {
+		t.Fatalf("after concurrency got %d combos, want 8", len(got))
+	}
+}
+
+// ============================ 回归（review 修复） ============================
+
+// 回归 H1：zen 故障转移窗口内，组合条目的分类必须是 zen-degraded（跳过），
+// 不能沿用 zen.RouteModel 的 cline 降级（否则会把 zen 模型 ID 原样发给 Cline → 400）。
+func TestComboRouteKindZenDegraded(t *testing.T) {
+	installPool(t, []Model{{ID: "deepseek-v4-flash-free", Source: "zen", Cost: "free", Status: "active"}})
+
+	zen.ConfigMu.Lock()
+	oldZC := zen.Config
+	zen.Config = zen.DefaultConfig() // Enabled/Failover=true
+	zen.ConfigMu.Unlock()
+	t.Cleanup(func() {
+		zen.ConfigMu.Lock()
+		zen.Config = oldZC
+		zen.ConfigMu.Unlock()
+	})
+
+	zen.StateMu.Lock()
+	oldCount, oldUntil := zen.FailCount, zen.FailUntil
+	zen.StateMu.Unlock()
+	t.Cleanup(func() {
+		zen.StateMu.Lock()
+		zen.FailCount, zen.FailUntil = oldCount, oldUntil
+		zen.StateMu.Unlock()
+	})
+
+	const model = "deepseek-v4-flash-free"
+
+	// 健康：zen.RouteModel 判 zen，组合分类也是 zen。
+	zen.StateMu.Lock()
+	zen.FailCount, zen.FailUntil = 0, time.Time{}
+	zen.StateMu.Unlock()
+	if k := combos.RouteKind(model); k != "zen" {
+		t.Fatalf("healthy combos.RouteKind = %q, want zen", k)
+	}
+
+	// 降级窗口：zen.RouteModel 降级为 cline，但组合必须判 zen-degraded。
+	zen.StateMu.Lock()
+	zen.FailCount = 99
+	zen.FailUntil = time.Now().Add(time.Minute)
+	zen.StateMu.Unlock()
+	if got := zen.RouteModel(model); got != "cline" {
+		t.Fatalf("routeModel in failover window = %q, want cline", got)
+	}
+	if k := combos.RouteKind(model); k != "zen-degraded" {
+		t.Fatalf("degraded combos.RouteKind = %q, want zen-degraded", k)
+	}
+}
+
+// 回归 M1：启用中的组合若唯一条目的模型被管理员停用，保存时必须报错
+// （否则组合可以保存成功但永远不可服务）。
+func TestComboValidateRejectsEnabledComboWithOnlyDisabledModel(t *testing.T) {
+	installPool(t, []Model{{ID: "m-off", Cost: "free", Status: "active", Source: "remote", Disabled: true}})
+	err := combos.ValidateCombo(ModelCombo{ID: "c", Name: "C", Enabled: true,
+		Entries: []ComboEntry{{Model: "m-off"}}}, nil)
+	if err == nil {
+		t.Fatal("expected error: enabled combo whose only entry model is admin-disabled")
+	}
+}
+
+// 回归 L5：对 64 字符 ID 执行克隆不得生成超长 ID 而被校验拒绝。
+func TestComboCloneTruncatesLongID(t *testing.T) {
+	installPool(t, []Model{{ID: "m-a", Cost: "free", Status: "active", Source: "remote"}})
+	t.Setenv(platform.DataDirEnv, t.TempDir())
+	old := admin.GetProxyConfig()
+	t.Cleanup(func() { admin.SetProxyConfig(old) })
+
+	longID := strings.Repeat("a", combos.IDMaxLen) // 64 字符
+	if len(longID) != combos.IDMaxLen {
+		t.Fatalf("setup: len=%d", len(longID))
+	}
+	if _, err := combos.UpsertCombo(ModelCombo{ID: longID, Name: "Long", Enabled: true,
+		Entries: []ComboEntry{{Model: "m-a"}}}); err != nil {
+		t.Fatalf("upsert long-id combo: %v", err)
+	}
+	cp, err := combos.CloneCombo(longID)
+	if err != nil {
+		t.Fatalf("clone: %v", err)
+	}
+	if len(cp.ID) > combos.IDMaxLen {
+		t.Fatalf("cloned id length %d exceeds max %d (%q)", len(cp.ID), combos.IDMaxLen, cp.ID)
+	}
+}
+
+// ==== 确定性 payload 400 快速失败：invalid-request 不该在账号池/模型链上空转 ====
+// 回归：客户端工具声明缺 description 时上游网关对每个账号/模型都返回同一 400
+// "Invalid input"，此前逐账号/逐模型各撞 ~7 次注定失败的往返。
+
+func TestCallSingleModelDeterministic400StopsAccountLoop(t *testing.T) {
+	acc1, acc2 := comboTestAccount("acc-1"), comboTestAccount("acc-2")
+	installPool(t, []Model{{ID: "combo-a", Cost: "free", Status: "active", Source: "remote"}}, acc1, acc2)
+	installConfig(t, admin.DefaultProxyConfig())
+	attempts := 0
+	installTransport(t, func(req *http.Request) *http.Response {
+		attempts++
+		return stubResp(req, http.StatusBadRequest,
+			`{"error":{"message":"Invalid input: expected string, received null","param":"tools.0.function.description"}}`)
+	})
+	_, _, _, _, err := combos.CallSingleModel(chatParams("combo-a"), ComboEntry{Model: "combo-a"}, false, "")
+	if err == nil {
+		t.Fatal("expected upstream error to surface")
+	}
+	if attempts != 1 {
+		t.Fatalf("upstream attempts = %d, want 1 (deterministic 400 must not rotate accounts)", attempts)
+	}
+}
+
+func TestCallFreeClineAPIDeterministic400FailsFast(t *testing.T) {
+	installPool(t, []Model{
+		{ID: "free-a", Cost: "free", Status: "active", Source: "remote"},
+		{ID: "free-b", Cost: "free", Status: "active", Source: "remote"},
+	}, comboTestAccount("free-1"), comboTestAccount("free-2"))
+	cfg := admin.DefaultProxyConfig()
+	cfg.ModelChain = []string{"free-a", "free-b"}
+	installConfig(t, cfg)
+	attempts := 0
+	installTransport(t, func(req *http.Request) *http.Response {
+		attempts++
+		return stubResp(req, http.StatusBadRequest,
+			`{"error":"Invalid input: expected string, received null","param":"tools.0.function.description"}`)
+	})
+	_, _, err := routing.CallFreeClineAPI(chatParams("free"), false)
+	if err == nil {
+		t.Fatal("expected upstream error to surface")
+	}
+	if attempts != 1 {
+		t.Fatalf("upstream attempts = %d, want 1 (deterministic 400 must abort the whole free chain)", attempts)
+	}
+}
+
+func TestIsDeterministicRequestErrorClassification(t *testing.T) {
+	det := egress.NewAPIError(http.StatusBadRequest,
+		`{"error":"Invalid input: expected string, received null","param":"tools.0.function.description"}`)
+	if !routing.IsDeterministicRequestError(det) {
+		t.Error("invalid-input 400 must be classified deterministic")
+	}
+	ir := egress.NewAPIError(http.StatusBadRequest,
+		`{"error":{"type":"invalid_request_error","message":"bad tool schema"}}`)
+	if !routing.IsDeterministicRequestError(ir) {
+		t.Error("invalid_request_error 400 must be classified deterministic")
+	}
+	not400 := egress.NewAPIError(http.StatusInternalServerError, "Invalid input")
+	if routing.IsDeterministicRequestError(not400) {
+		t.Error("only status-400 errors count as deterministic")
+	}
+	// 上下文超限 400 显式排除：必须保留 truncate+retry/continue 行为
+	cts := egress.NewAPIError(http.StatusBadRequest,
+		`prompt is too long: maximum context length exceeded`)
+	if routing.IsDeterministicRequestError(cts) {
+		t.Error("context-length 400 must NOT be deterministic (truncate/retry must stay available)")
+	}
+	if routing.IsDeterministicRequestError(nil) {
+		t.Error("nil error must not be deterministic")
+	}
+}
+
+// 对照组：上下文超限 400 仍走「截断后继续下一个条目」路径，不能被快速失败误伤。
+func TestRunComboContextLength400ContinuesToNextEntry(t *testing.T) {
+	installPool(t, nil)
+	installConfig(t, admin.DefaultProxyConfig())
+	installTransport(t, func(req *http.Request) *http.Response {
+		if readReqModel(req) == "combo-a" {
+			return stubResp(req, http.StatusBadRequest, `{"error":"request context length exceeded"}`)
+		}
+		return stubResp(req, http.StatusOK, okCompletion)
+	})
+	combo := ModelCombo{ID: "c", Name: "C", Enabled: true,
+		Entries: []ComboEntry{{Model: "combo-a"}, {Model: "combo-b"}}}
+	run := combos.RunCombo(chatParams("c"), combo, false, "")
+	if run.Err != nil {
+		t.Fatalf("context-length 400 must continue to next entry, got err: %v", run.Err)
+	}
+	if run.Model != "combo-b" {
+		t.Fatalf("served %q, want combo-b", run.Model)
+	}
+}
