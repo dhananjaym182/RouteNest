@@ -36,7 +36,7 @@ func TestPresetsEndpointGolden(t *testing.T) {
 	}
 
 	var pretty bytes.Buffer
-	if err := json.Indent(&pretty, rec.Body.Bytes(), "", "  "); err != nil {
+	if err := json.Indent(&pretty, bytes.TrimSpace(rec.Body.Bytes()), "", "  "); err != nil {
 		t.Fatalf("response is not JSON: %v", err)
 	}
 	got := append(pretty.Bytes(), '\n')
