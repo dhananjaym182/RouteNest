@@ -84,8 +84,10 @@ else
   echo "no instance was running"
 fi
 
-# setsid: 独立会话启动，避免脚本所在 shell 退出时被一并回收
-setsid nohup "$BIN" > "$LOG" 2>&1 < /dev/null &
+# Keep the caller's controlling terminal during startup so a fresh installation
+# can deliver its one-time administrator bootstrap secret through /dev/tty.
+# nohup still keeps the service alive after the update shell exits.
+nohup "$BIN" > "$LOG" 2>&1 < /dev/null &
 sleep 1
 NEW_PID=$(pgrep -x routenest | head -1 || true)
 [ -n "$NEW_PID" ] || { tail -20 "$LOG" >&2; die "failed to start $BIN"; }
