@@ -9,18 +9,15 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-
-	"routenest/internal/admin"
 )
 
 // presetsRoute serves GET /admin/api/providers/presets through the public route table.
 func presetsRoute(t *testing.T) *httptest.ResponseRecorder {
 	t.Helper()
 	installPool(t, nil)
-	mux := http.NewServeMux()
-	admin.RegisterRoutes(mux)
+	harness := newAdminRouteTestHarness(t)
 	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/admin/api/providers/presets", nil))
+	harness.mux.ServeHTTP(rec, harness.request(http.MethodGet, "/admin/api/providers/presets", ""))
 	return rec
 }
 

@@ -3,9 +3,8 @@ package integration
 // Route inventory characterization (plan Phase 0, item 1).
 //
 // Two layers:
-//  1. Static inventory: every mux.HandleFunc("<literal>", ...) registration in
-//     the public server (internal/proxycore/server.go, proxy.go) and admin registrar
-//     (internal/admin/admin.go), with the wrapper chain and handler name.
+//  1. Static inventory: public mux registrations plus the fail-closed admin
+//     method/path policy registry exposed by admin.AdminRoutePolicies.
 //     Public routes are built inline inside proxycore.Start, which binds a port
 //     and starts background loops, so they cannot be probed from a test.
 //  2. Live probe: a fixed allowlist of read-only admin GET routes and one
@@ -44,7 +43,6 @@ var updateRouteGolden = flag.Bool("update-route-golden", false, "rewrite route i
 var registrationSources = []string{
 	"../proxycore/proxy.go",
 	"../proxycore/server.go",
-	"../admin/admin.go",
 }
 
 // routeMethods is the reviewed method contract for every registered path. The
@@ -59,11 +57,29 @@ var routeMethods = map[string]string{
 	"/admin/api/accounts/add":              "POST",
 	"/admin/api/accounts/delete":           "POST",
 	"/admin/api/accounts/delete-all":       "POST",
-	"/admin/api/accounts/export":           "GET|POST",
+	"/admin/api/accounts/export":           "POST",
 	"/admin/api/accounts/refresh-all":      "POST",
 	"/admin/api/accounts/reset":            "POST",
 	"/admin/api/accounts/test":             "POST",
-	"/admin/api/admin-sessions/clear":      "POST",
+	"/admin/api/auth/audit":                "GET",
+	"/admin/api/auth/bootstrap":            "POST",
+	"/admin/api/auth/legacy/rotate":        "POST",
+	"/admin/api/auth/oidc/callback":        "GET",
+	"/admin/api/auth/oidc/start":           "POST",
+	"/admin/api/auth/password":             "POST",
+	"/admin/api/auth/saml/acs":             "POST",
+	"/admin/api/auth/saml/metadata":        "GET",
+	"/admin/api/auth/saml/start":           "POST",
+	"/admin/api/auth/session":              "GET",
+	"/admin/api/auth/sessions":             "GET",
+	"/admin/api/auth/sessions/revoke":      "POST",
+	"/admin/api/auth/sso/providers":        "GET|PUT",
+	"/admin/api/auth/sso/providers/delete": "POST",
+	"/admin/api/auth/status":               "GET",
+	"/admin/api/auth/users":                "GET|POST",
+	"/admin/api/auth/users/delete":         "POST",
+	"/admin/api/auth/users/password":       "POST",
+	"/admin/api/auth/users/update":         "POST",
 	"/admin/api/batch-import":              "POST",
 	"/admin/api/cline-proxy/config":        "GET",
 	"/admin/api/cline-proxy/config/update": "POST",
@@ -87,6 +103,7 @@ var routeMethods = map[string]string{
 	"/admin/api/keys/delete":               "POST",
 	"/admin/api/keys/generate":             "POST",
 	"/admin/api/login":                     "POST",
+	"/admin/api/listener-operation":        "GET",
 	"/admin/api/logout":                    "POST",
 	"/admin/api/models":                    "GET",
 	"/admin/api/models/add":                "POST",
@@ -104,11 +121,10 @@ var routeMethods = map[string]string{
 	"/admin/api/models/toggle":             "POST",
 	"/admin/api/oauth/start":               "POST",
 	"/admin/api/oauth/status":              "GET",
-	"/admin/api/open-external":             "GET",
+	"/admin/api/open-external":             "POST",
 	"/admin/api/opencode/config":           "GET",
 	"/admin/api/opencode/config/update":    "POST",
 	"/admin/api/opencode/models/sync":      "POST",
-	"/admin/api/password":                  "POST",
 	"/admin/api/providers":                 "GET",
 	"/admin/api/providers/cooldown-reset":  "POST",
 	"/admin/api/providers/delete":          "POST",
@@ -215,6 +231,32 @@ func staticRouteInventory(t *testing.T) []string {
 			return true
 		})
 	}
+	seen["/admin/"] = "admin.go"
+	lines = append(lines, "/admin/\tGET\tadmin.go\twrap=adminSecurity.staticHandler\thandler=adminStaticHandler")
+	adminMethods := map[string][]string{}
+	for _, policy := range admin.AdminRoutePolicies() {
+		adminMethods[policy.Path] = append(adminMethods[policy.Path], policy.Method)
+		permissions := "public"
+		if len(policy.Permissions) > 0 {
+			values := make([]string, len(policy.Permissions))
+			for i, permission := range policy.Permissions {
+				values[i] = string(permission)
+			}
+			permissions = strings.Join(values, "+")
+		}
+		lines = append(lines, fmt.Sprintf("%s\t%s\troutes.go\twrap=security[%s,csrf=%s]\thandler=registry", policy.Path, policy.Method, permissions, policy.CSRF))
+	}
+	for path, methods := range adminMethods {
+		sort.Strings(methods)
+		actual := strings.Join(methods, "|")
+		expected, ok := routeMethods[path]
+		if !ok {
+			t.Errorf("admin route %s has no entry in routeMethods", path)
+		} else if actual != expected {
+			t.Errorf("admin route %s methods = %s, want %s", path, actual, expected)
+		}
+		seen[path] = "routes.go"
+	}
 	for path := range routeMethods {
 		if _, ok := seen[path]; !ok {
 			t.Errorf("routeMethods lists %s, which no registration source registers", path)
@@ -237,6 +279,15 @@ func TestRouteInventoryStatic(t *testing.T) {
 // state or contact an upstream when the data directory is empty.
 var probeRoutes = []string{
 	"/admin/",
+	"/admin/api/auth/status",
+	"/admin/api/auth/session",
+	"/admin/api/auth/sessions",
+	"/admin/api/auth/users",
+	"/admin/api/auth/audit",
+	"/admin/api/auth/sso/providers",
+	"/admin/api/auth/oidc/callback",
+	"/admin/api/auth/saml/metadata",
+	"/admin/api/listener-operation",
 	"/admin/api/providers/presets",
 	"/admin/api/providers",
 	"/admin/api/connections",
@@ -262,13 +313,11 @@ var probeRoutes = []string{
 // probed or listed here, so a new endpoint cannot be added without deciding
 // whether it is safe to characterize.
 var unprobedGETRoutes = map[string]string{
-	"/admin/api/accounts/export":          "returns a credential-bearing download body",
 	"/admin/api/connections/login/status": "requires a live login session id",
 	"/admin/api/dashboard/overview":       "covered by internal/admin dashboard tests; reads mutable counters",
 	"/admin/api/models/import/batch":      "requires a staged import id",
 	"/admin/api/models/import/pending":    "returns staged import state",
 	"/admin/api/oauth/status":             "requires a device-flow session id, starts no safe read",
-	"/admin/api/open-external":            "opens the host browser",
 	"/admin/api/stats":                    "covered by internal/admin tests; reads mutable counters",
 	"/admin/api/version-check":            "may contact the release host when the cache is cold",
 }
@@ -299,9 +348,13 @@ func TestRouteProbeCoversEveryGETRoute(t *testing.T) {
 
 func probeLine(t *testing.T, mux http.Handler, method, path, body string) string {
 	t.Helper()
-	req := httptest.NewRequest(method, path, strings.NewReader(body))
+	req := httptest.NewRequest(method, "http://127.0.0.1:3457"+path, strings.NewReader(body))
+	req.RemoteAddr = "127.0.0.1:41000"
 	if body != "" {
 		req.Header.Set("Content-Type", "application/json")
+	}
+	if method != http.MethodGet && method != http.MethodHead {
+		req.Header.Set("Origin", "http://127.0.0.1:3457")
 	}
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, req)
@@ -340,7 +393,7 @@ func jsonEnvelopeShape(body []byte) string {
 
 func TestRouteProbeAdminAPI(t *testing.T) {
 	mux := http.NewServeMux()
-	admin.RegisterRoutes(mux)
+	integrationAdminRegistrar(t, "http://127.0.0.1:3457")(mux)
 
 	var lines []string
 	for _, p := range probeRoutes {

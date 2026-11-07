@@ -827,14 +827,15 @@ async function loadConfig() {
       if (!listenSel.dataset.inited) {
         listenSel.dataset.inited = '1';
         let opts = '<option value="127.0.0.1">' + t('127.0.0.1（仅本机）') + '</option>';
-        opts += '<option value="0.0.0.0">' + t('0.0.0.0（所有网卡）') + '</option>';
-        opts += ips.map(ip => '<option value="' + esc(ip) + '">' + esc(ip) + t('（本机网卡）') + '</option>').join('');
+        if (c.host && ['', '127.0.0.1', 'localhost', '::1'].indexOf(c.host) === -1) {
+          opts += '<option value="' + esc(c.host) + '" disabled>' + esc(c.host) + t('（需可信代理配置）') + '</option>';
+        }
         listenSel.innerHTML = opts;
       }
       if (c.host) listenSel.value = c.host;
     }
-    // 后台密码状态
-    if (c.hasPassword !== undefined) _('passwordStatus').textContent = c.hasPassword ? t('已启用') : t('未启用');
+    // 管理员认证始终启用；不提供恢复匿名访问的开关。
+    if (_('passwordStatus')) _('passwordStatus').textContent = t('已启用（不可关闭）');
     // 非回环监听安全警告（0.0.0.0 / 局域网 IP 都会暴露管理后台）
     const h = c.host || '';
     const safeHosts = ['', '127.0.0.1', 'localhost', '::1'];

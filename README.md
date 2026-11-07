@@ -59,7 +59,7 @@ Windows SmartScreen may warn because the build is not code-signed. Choose **More
 
 ### Run the binary
 
-Requires Go 1.25 or newer to build:
+Requires Go 1.26.10 or newer to build:
 
 ```bash
 go build -o routenest .
@@ -284,7 +284,7 @@ back to writing secrets beside the executable.
 
 ## Build from source
 
-The CLI binary requires Go 1.25 or newer. Building the desktop app also requires the platform toolchain listed below.
+The CLI binary requires Go 1.26.10 or newer. Building the desktop app also requires the platform toolchain listed below.
 
 ### Binary
 

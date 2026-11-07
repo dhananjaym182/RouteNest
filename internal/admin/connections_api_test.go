@@ -323,16 +323,10 @@ func installEmptyAdminPool(t *testing.T) {
 // Authentication: once an admin password is set, connection routes refuse
 // requests without a session.
 func TestConnectionRoutesRequireAdminSession(t *testing.T) {
-	installEmptyAdminPool(t)
-	accounts.PoolMu.Lock()
-	accounts.Pool.AdminPasswordHash = "hash-not-empty"
-	accounts.Pool.AdminPasswordSalt = "salt"
-	accounts.PoolMu.Unlock()
-	mux := http.NewServeMux()
-	RegisterRoutes(mux)
-	for _, path := range []string{"/admin/api/connections", "/admin/api/connections/test"} {
+	mux, _ := newAdminAuthTestMux(t)
+	for path, method := range map[string]string{"/admin/api/connections": http.MethodGet, "/admin/api/connections/test": http.MethodPost} {
 		rec := httptest.NewRecorder()
-		mux.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, path, strings.NewReader(`{}`)))
+		mux.ServeHTTP(rec, adminTestRequest(method, path, `{}`))
 		if rec.Code != http.StatusUnauthorized {
 			t.Errorf("%s without a session: status %d, want 401", path, rec.Code)
 		}

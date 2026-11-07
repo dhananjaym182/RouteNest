@@ -53,10 +53,18 @@ func LoadPool() *AccountPool {
 }
 
 func SavePool() {
-	ensurePoolPath()
-	if err := poolstore.Save(PoolPath, Pool); err != nil {
+	if err := SavePoolStrict(); err != nil {
 		log.Printf("Failed to save accounts to %s: %v", PoolPath, err)
 	}
+}
+
+// SavePoolStrict persists the current pool and returns any durability error to
+// callers that must fail closed. Most legacy call sites use SavePool's
+// best-effort logging, while security migrations must not acknowledge success
+// unless the old credential authority was durably replaced.
+func SavePoolStrict() error {
+	ensurePoolPath()
+	return poolstore.Save(PoolPath, Pool)
 }
 
 // AddAccount 添加账号。同一邮箱（不区分大小写，来自 Cline userInfo，即同一

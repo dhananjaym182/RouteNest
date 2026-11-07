@@ -17,6 +17,7 @@ import (
 	"routenest/internal/requestlog"
 	"routenest/internal/routing"
 	"routenest/internal/zen"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -45,43 +46,123 @@ func RestartListener(host string, port int) error {
 	if host == "" {
 		host = "127.0.0.1"
 	}
-	addr := fmt.Sprintf("%s:%d", host, port)
-	ListenHost = host
-	ListenPort = port
-
+	if !IsLoopbackHost(host) {
+		return fmt.Errorf("non-loopback listener requires trusted-proxy/TLS configuration")
+	}
+	addr := listenerAddress(host, port)
 	ServerMu.Lock()
 	old := CurrentServer
-	server := &http.Server{Addr: addr, Handler: ServerMux}
-	CurrentServer = server
+	mux := ServerMux
+	oldHost, oldPort := ListenHost, ListenPort
 	ServerMu.Unlock()
+	if mux == nil {
+		return fmt.Errorf("listener route table is unavailable")
+	}
+	if old != nil && host == oldHost && port == oldPort {
+		return nil
+	}
 
 	if old != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-		_ = old.Shutdown(ctx)
+		err := old.Shutdown(ctx)
 		cancel()
+		if err != nil {
+			return fmt.Errorf("stop old listener: %w", err)
+		}
+	}
+
+	listener, err := net.Listen("tcp", addr)
+	if err != nil {
+		if rollbackErr := restoreListener(oldHost, oldPort, mux); rollbackErr != nil {
+			return fmt.Errorf("bind new listener: %v; rollback failed: %w", err, rollbackErr)
+		}
+		return fmt.Errorf("bind new listener: %w", err)
+	}
+	server := &http.Server{Addr: addr, Handler: mux}
+	ServerMu.Lock()
+	CurrentServer = server
+	ListenHost = host
+	ListenPort = port
+	ServerMu.Unlock()
+	serveListener(server, listener)
+	if err := probeListener(addr); err != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		_ = server.Shutdown(ctx)
+		cancel()
+		if rollbackErr := restoreListener(oldHost, oldPort, mux); rollbackErr != nil {
+			return fmt.Errorf("new listener readiness failed: %v; rollback failed: %w", err, rollbackErr)
+		}
+		return fmt.Errorf("new listener readiness failed: %w", err)
 	}
 
 	fmt.Println("")
 	fmt.Println(strings.Repeat("=", 58))
 	fmt.Printf("  Listener restarted: %s\n", addr)
-	if !IsLoopbackHost(host) {
-		for _, ip := range DetectLocalIPs() {
-			fmt.Printf("  http://%s:%d (LAN)\n", ip, port)
-		}
-		fmt.Println("  !!! 监听非本机地址，管理后台无鉴权，请确认网络环境安全")
-	}
 	fmt.Println(strings.Repeat("=", 58))
-	return server.ListenAndServe()
+	return nil
+}
+
+func serveListener(server *http.Server, listener net.Listener) {
+	go func() {
+		if err := server.Serve(listener); err != nil && err != http.ErrServerClosed {
+			log.Printf("listener stopped unexpectedly: %v", err)
+		}
+	}()
+}
+
+func probeListener(addr string) error {
+	deadline := time.Now().Add(2 * time.Second)
+	var lastErr error
+	for time.Now().Before(deadline) {
+		conn, err := net.DialTimeout("tcp", addr, 200*time.Millisecond)
+		if err == nil {
+			_ = conn.Close()
+			return nil
+		}
+		lastErr = err
+		time.Sleep(25 * time.Millisecond)
+	}
+	return lastErr
+}
+
+func restoreListener(host string, port int, mux http.Handler) error {
+	if host == "" || port <= 0 {
+		ServerMu.Lock()
+		CurrentServer = nil
+		ServerMu.Unlock()
+		return nil
+	}
+	addr := listenerAddress(host, port)
+	listener, err := net.Listen("tcp", addr)
+	if err != nil {
+		ServerMu.Lock()
+		CurrentServer = nil
+		ServerMu.Unlock()
+		return err
+	}
+	server := &http.Server{Addr: addr, Handler: mux}
+	ServerMu.Lock()
+	CurrentServer = server
+	ListenHost = host
+	ListenPort = port
+	ServerMu.Unlock()
+	serveListener(server, listener)
+	return probeListener(addr)
 }
 
 // EffectiveAdminHost 返回管理后台/浏览器实际可用的访问地址：
 // host 为空或通配地址（0.0.0.0 / ::）时展示回环 127.0.0.1，否则返回 host 本身。
 func EffectiveAdminHost(host string) string {
+	host = strings.Trim(strings.TrimSpace(host), "[]")
 	switch host {
 	case "", "0.0.0.0", "::":
 		return "127.0.0.1"
 	}
 	return host
+}
+
+func listenerAddress(host string, port int) string {
+	return net.JoinHostPort(strings.Trim(host, "[]"), strconv.Itoa(port))
 }
 
 // DetectLocalIPs 检测本机所有可用 IPv4 地址（排除回环、链路本地和未启用的网卡）。
@@ -109,6 +190,7 @@ func DetectLocalIPs() []string {
 
 // IsLoopbackHost 判断监听地址是否为回环（127.x / localhost），用于安全提示。
 func IsLoopbackHost(host string) bool {
+	host = strings.Trim(strings.TrimSpace(host), "[]")
 	switch host {
 	case "", "localhost", "127.0.0.1":
 		return true
@@ -244,7 +326,7 @@ func Start(host string, port int, registerAdmin func(*http.ServeMux)) error {
 	if host == "" {
 		host = "127.0.0.1"
 	}
-	addr := fmt.Sprintf("%s:%d", host, port)
+	addr := listenerAddress(host, port)
 	ListenHost = host
 	ListenPort = port
 	ServerMux = mux
@@ -269,7 +351,7 @@ func Start(host string, port int, registerAdmin func(*http.ServeMux)) error {
 		for _, ip := range DetectLocalIPs() {
 			fmt.Printf("  http://%s:%d (LAN)\n", ip, port)
 		}
-		fmt.Println("  !!! 监听非本机地址，管理后台无鉴权，请确认网络环境安全")
+		fmt.Println("  Non-loopback administration requires the configured canonical HTTPS and trusted-proxy boundary")
 	}
 	fmt.Println("  API Key: any value")
 	fmt.Printf("  Model:   %s\n", routing.DefaultModel())

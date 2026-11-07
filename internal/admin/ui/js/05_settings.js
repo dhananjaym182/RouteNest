@@ -482,9 +482,15 @@ function fillTuning(c) {
 async function saveListenHost() {
   const host = _('settingListenHost').value;
   if (!host) return;
+  if (['127.0.0.1', 'localhost', '::1'].indexOf(host) === -1) {
+    toast(t('非回环监听需要先配置 HTTPS 公共地址和可信代理，当前更改已拒绝'), 'error');
+    return;
+  }
   try {
     const d = await api('POST', '/config/update', { host });
-    const safe = ['127.0.0.1', 'localhost', '::1', '0.0.0.0'].indexOf(host) !== -1;
+    const operation = d.data && d.data.listenerOperation;
+    if (operation && operation.id) await waitForListenerOperation(operation.id);
+    const safe = ['127.0.0.1', 'localhost', '::1'].indexOf(host) !== -1;
     if (safe) {
       toast(t('已保存，正在重启监听...'), 'success');
       setTimeout(() => location.reload(), 1500);
@@ -495,34 +501,257 @@ async function saveListenHost() {
   } catch (e) { toast(t('保存失败: ') + e.message, 'error'); }
 }
 
-// 保存/清除管理后台密码（留空 = 清除）
+async function waitForListenerOperation(id) {
+  const deadline = Date.now() + 10000;
+  while (Date.now() < deadline) {
+    await new Promise(resolve => setTimeout(resolve, 200));
+    const response = await api('GET', '/listener-operation?id=' + encodeURIComponent(id));
+    const operation = response.data && response.data.operation;
+    if (!operation || operation.status === 'pending') continue;
+    if (operation.status === 'succeeded') return operation;
+    throw new Error(operation.error || t('监听切换失败'));
+  }
+  throw new Error(t('监听切换超时'));
+}
+
+// 修改当前本地管理员密码。成功后服务端撤销该用户的全部会话。
 async function savePassword(btn) {
-  const pwd = _('settingPassword').value;
-  if (pwd && pwd.length < 4) { toast(t('密码至少 4 位'), 'error'); return; }
+  const oldPassword = _('settingCurrentPassword').value;
+  const newPassword = _('settingPassword').value;
+  const confirm = _('settingPasswordConfirm').value;
+  if (!oldPassword) { toast(t('请输入当前密码'), 'error'); return; }
+  if (newPassword.length < 12) { toast(t('新密码至少 12 位'), 'error'); return; }
+  if (newPassword !== confirm) { toast(t('两次输入的密码不一致'), 'error'); return; }
   const orig = btn ? btn.innerHTML : '';
   if (btn) { btn.disabled = true; btn.innerHTML = '<span class="loading"></span> ' + t('保存中...'); }
   try {
-    await api('POST', '/password', { password: pwd });
+    await api('POST', '/auth/password', { oldPassword: oldPassword, newPassword: newPassword });
+    _('settingCurrentPassword').value = '';
     _('settingPassword').value = '';
-    toast(pwd ? t('密码已设置，后台需要重新登录') : t('已清除密码'), 'success');
-    await loadConfig();
+    _('settingPasswordConfirm').value = '';
+    toast(t('密码已更新，全部会话已撤销，请重新登录'), 'success');
+    setTimeout(() => location.reload(), 500);
   } catch (e) { toast(t('保存失败: ') + e.message, 'error'); }
   finally { if (btn) { btn.disabled = false; btn.innerHTML = orig; } }
 }
 
-// 清除全部后台登录会话（含当前浏览器）：共享机器上强制重新登录，不动凭据数据
-async function clearAdminSessions(btn) {
-  if (!(await showConfirm(t('确认清除全部后台登录会话？所有浏览器（包括当前页面）都需要重新登录。')))) return;
-  const orig = btn ? btn.innerHTML : '';
-  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="loading"></span>'; }
+async function loadAdminSessions() {
+  const host = _('adminSessionsList');
+  if (!host) return;
   try {
-    await api('POST', '/admin-sessions/clear');
-    toast(t('已清除全部登录会话'), 'success');
-    setTimeout(() => location.reload(), 400); // 当前会话同被作废，重载后进入登录页
+    const response = await api('GET', '/auth/sessions');
+    const sessions = (response.data && response.data.sessions) || [];
+    host.innerHTML = sessions.length ? sessions.map(session =>
+      '<div class="action-row">' +
+        '<div class="f1"><strong>' + esc(session.method || 'local') + '</strong>' +
+        (session.current ? ' <span class="model-tag free">' + t('当前会话') + '</span>' : '') +
+        '<div class="hint-sm">' + esc(session.provider || session.userID || '') + ' · ' + esc(session.expiresAt || '') + '</div></div>' +
+        '<button class="btn btn-sm btn-danger" onclick="revokeAdminSession(\'' + esc(session.id) + '\',' + (session.current ? 'true' : 'false') + ')">' + t('撤销') + '</button>' +
+      '</div>'
+    ).join('') : '<div class="empty-state">' + t('没有活动会话') + '</div>';
   } catch (e) {
-    toast(t('操作失败: ') + e.message, 'error');
-    if (btn) { btn.disabled = false; btn.innerHTML = orig; }
+    host.innerHTML = '<div class="error-box">' + esc(e.message) + '</div>';
   }
+}
+
+async function revokeAdminSession(sessionHash, current) {
+  if (!(await showConfirm(t('确认撤销此管理员会话？')))) return;
+  try {
+    await api('POST', '/auth/sessions/revoke', { sessionHash: sessionHash });
+    toast(t('会话已撤销'), 'success');
+    if (current) { location.reload(); return; }
+    await loadAdminSessions();
+  } catch (e) { toast(t('操作失败: ') + e.message, 'error'); }
+}
+
+// ========== 单点登录提供方：只编辑配置与密钥引用 ==========
+let _ssoProviderViews = [];
+let _ssoProvidersLoadID = 0;
+const SSO_FEDERATED_ROLES = ['viewer', 'provider_admin', 'credential_admin', 'security_admin'];
+
+async function loadSSOProviders() {
+  const host = _('ssoProvidersList');
+  if (!host) return;
+  const loadID = ++_ssoProvidersLoadID;
+  try {
+    const response = await api('GET', '/auth/sso/providers');
+    const data = response.data || {};
+    const providers = Array.isArray(data) ? data : data.providers;
+    if (!Array.isArray(providers)) throw new Error(t('提供方响应无效'));
+    if (loadID !== _ssoProvidersLoadID) return;
+    _ssoProviderViews = providers;
+    host.textContent = '';
+    if (!providers.length) {
+      const empty = document.createElement('div'); empty.className = 'empty-state';
+      empty.textContent = t('尚未配置 SSO 提供方'); host.appendChild(empty);
+    }
+    providers.forEach(provider => {
+      const row = document.createElement('div'); row.className = 'action-row';
+      const info = document.createElement('div'); info.className = 'f1';
+      const title = document.createElement('strong'); title.textContent = provider.id + ' · ' + String(provider.type || '').toUpperCase();
+      const status = document.createElement('span');
+      status.className = 'model-tag' + (provider.enabled && provider.ready ? ' free' : (provider.enabled ? ' pass' : ''));
+      status.textContent = !provider.enabled ? t('停用') : (provider.ready ? t('已就绪') : t('未就绪'));
+      const reason = document.createElement('div'); reason.className = 'hint-sm';
+      reason.textContent = provider.reason || (provider.enabled && provider.ready ? t('登录入口可用') : t('登录入口未开放'));
+      info.appendChild(title); info.appendChild(status); info.appendChild(reason); row.appendChild(info);
+      const actions = document.createElement('div'); actions.className = 'form-actions';
+      const edit = document.createElement('button'); edit.type = 'button'; edit.className = 'btn btn-sm'; edit.textContent = t('编辑');
+      edit.addEventListener('click', () => editSSOProvider(provider.id));
+      const toggle = document.createElement('button'); toggle.type = 'button'; toggle.className = 'btn btn-sm';
+      toggle.textContent = provider.enabled ? t('停用') : t('启用');
+      toggle.addEventListener('click', () => setSSOProviderEnabled(provider.id, toggle));
+      const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'btn btn-sm btn-danger'; remove.textContent = t('删除');
+      remove.addEventListener('click', () => deleteSSOProvider(provider.id, remove));
+      actions.appendChild(edit); actions.appendChild(toggle); actions.appendChild(remove); row.appendChild(actions); host.appendChild(row);
+    });
+  } catch (e) {
+    if (loadID !== _ssoProvidersLoadID) return;
+    host.textContent = '';
+    const error = document.createElement('div'); error.className = 'error-box'; error.textContent = e.message;
+    host.appendChild(error);
+  }
+}
+
+function ssoProviderConfiguration(view) {
+  if (!view || (view.type !== 'oidc' && view.type !== 'saml')) throw new Error(t('提供方配置不可用'));
+  let stored = view.configuration || view;
+  if (typeof stored === 'string') stored = JSON.parse(stored);
+  if (!stored || !stored[view.type] || typeof stored[view.type] !== 'object') throw new Error(t('提供方配置不可用'));
+  const config = { id: view.id, type: view.type, enabled: view.enabled === true };
+  config[view.type] = JSON.parse(JSON.stringify(stored[view.type]));
+  return config;
+}
+
+function newSSOProvider(type) { fillSSOProviderEditor({ id: '', type: type === 'saml' ? 'saml' : 'oidc', enabled: false }, false); }
+
+function editSSOProvider(id) {
+  try { fillSSOProviderEditor(ssoProviderConfiguration(_ssoProviderViews.find(provider => provider.id === id)), true); }
+  catch (e) { toast(e.message, 'error'); }
+}
+
+function fillSSOSecretReference(prefix, reference) {
+  const valid = reference && (reference.kind === 'env' || reference.kind === 'file');
+  _(prefix + 'Kind').value = valid ? reference.kind : 'env';
+  _(prefix + 'Name').value = valid && typeof reference.name === 'string' ? reference.name : '';
+}
+
+function fillSSOProviderEditor(config, existing) {
+  const oidc = config.oidc || {}, saml = config.saml || {}, protocol = config.type === 'saml' ? saml : oidc;
+  const values = {
+    ssoProviderID: config.id || '', ssoProviderType: config.type, ssoProviderEnabled: String(config.enabled === true),
+    ssoOIDCIssuer: oidc.issuer || '', ssoOIDCClientID: oidc.clientID || '', ssoOIDCRedirectURL: oidc.redirectURL || '',
+    ssoOIDCScopes: (oidc.scopes || []).join(', '), ssoOIDCUsernameClaim: oidc.usernameClaim || '', ssoOIDCGroupsClaim: oidc.groupsClaim || '',
+    ssoSAMLMetadataURL: saml.metadataURL || '', ssoSAMLEntityID: saml.entityID || '', ssoSAMLMetadataEndpoint: saml.metadataEndpoint || '',
+    ssoSAMLACSURL: saml.acsURL || '', ssoSAMLUsernameAttribute: saml.usernameAttribute || '', ssoSAMLGroupsAttribute: saml.groupsAttribute || '',
+    ssoDefaultRoles: JSON.stringify(protocol.defaultRoles || [], null, 2), ssoGroupRoleMap: JSON.stringify(protocol.groupRoleMap || {}, null, 2)
+  };
+  Object.keys(values).forEach(id => { _(id).value = values[id]; });
+  fillSSOSecretReference('ssoOIDCSecret', oidc.clientSecret);
+  fillSSOSecretReference('ssoSAMLCertificate', saml.certificate);
+  fillSSOSecretReference('ssoSAMLPrivateKey', saml.privateKey);
+  _('ssoProviderID').disabled = !!existing; _('ssoProviderType').disabled = !!existing;
+  _('ssoProviderEditorTitle').textContent = t(existing ? '编辑 SSO 提供方' : '添加 SSO 提供方');
+  _('ssoProviderError').textContent = '';
+  setSSOProviderType();
+  _('ssoProviderEditor').style.display = '';
+  (existing ? _('ssoProviderEnabled') : _('ssoProviderID')).focus();
+}
+
+function setSSOProviderType() {
+  const saml = _('ssoProviderType').value === 'saml';
+  _('ssoOIDCFields').style.display = saml ? 'none' : '';
+  _('ssoSAMLFields').style.display = saml ? '' : 'none';
+}
+
+function closeSSOProviderEditor() { _('ssoProviderEditor').style.display = 'none'; _('ssoProviderError').textContent = ''; }
+
+function readSSORoleMapping() {
+  let defaults, mapping;
+  try {
+    defaults = JSON.parse(_('ssoDefaultRoles').value.trim() || '[]');
+    mapping = JSON.parse(_('ssoGroupRoleMap').value.trim() || '{}');
+  } catch (e) { throw new Error(t('角色映射必须是有效 JSON')); }
+  const validRoles = roles => Array.isArray(roles) && roles.every(role => SSO_FEDERATED_ROLES.includes(role));
+  if (!validRoles(defaults) || !mapping || typeof mapping !== 'object' || Array.isArray(mapping)) throw new Error(t('默认角色须为数组，组映射须为对象；只能使用可用角色'));
+  let count = defaults.length;
+  Object.keys(mapping).forEach(group => {
+    if (!group.trim() || !validRoles(mapping[group])) throw new Error(t('每个组名必须对应一个可用角色数组'));
+    count += mapping[group].length;
+  });
+  if (!count) throw new Error(t('至少配置一个默认角色或组角色映射'));
+  return { defaultRoles: defaults, groupRoleMap: mapping };
+}
+
+function readSSOSecretReference(prefix, required) {
+  const name = _(prefix + 'Name').value.trim(), kind = _(prefix + 'Kind').value;
+  if (!name) {
+    if (required) throw new Error(t('请填写 Client Secret 的环境变量名或文件路径'));
+    return null;
+  }
+  if (kind !== 'env' && kind !== 'file') throw new Error(t('密钥仅支持 env 或 file 引用'));
+  return { kind: kind, name: name };
+}
+
+function collectSSOProvider() {
+  const value = id => _(id).value.trim();
+  const id = value('ssoProviderID'), type = value('ssoProviderType');
+  if (!/^[a-z][a-z0-9_-]{0,63}$/.test(id)) throw new Error(t('提供方 ID 格式无效'));
+  const config = { id: id, type: type, enabled: value('ssoProviderEnabled') === 'true' };
+  const roles = readSSORoleMapping();
+  if (type === 'oidc') {
+    const issuer = value('ssoOIDCIssuer'), clientID = value('ssoOIDCClientID'), redirectURL = value('ssoOIDCRedirectURL');
+    if (!issuer || !clientID || !redirectURL) throw new Error(t('请填写 Issuer、Client ID 和回调 URL'));
+    config.oidc = Object.assign({ issuer: issuer, clientID: clientID, redirectURL: redirectURL,
+      clientSecret: readSSOSecretReference('ssoOIDCSecret', true), scopes: value('ssoOIDCScopes').split(/[,\s]+/).filter(Boolean),
+      usernameClaim: value('ssoOIDCUsernameClaim'), groupsClaim: value('ssoOIDCGroupsClaim') }, roles);
+  } else if (type === 'saml') {
+    const metadataURL = value('ssoSAMLMetadataURL'), entityID = value('ssoSAMLEntityID');
+    const metadataEndpoint = value('ssoSAMLMetadataEndpoint'), acsURL = value('ssoSAMLACSURL');
+    if (!metadataURL || !entityID || !metadataEndpoint || !acsURL) throw new Error(t('请填写 SAML Metadata、Entity ID 和 ACS 地址'));
+    const certificate = readSSOSecretReference('ssoSAMLCertificate', false), privateKey = readSSOSecretReference('ssoSAMLPrivateKey', false);
+    if (!!certificate !== !!privateKey) throw new Error(t('SP 证书与私钥引用必须成对配置'));
+    config.saml = Object.assign({ metadataURL: metadataURL, entityID: entityID, metadataEndpoint: metadataEndpoint, acsURL: acsURL,
+      usernameAttribute: value('ssoSAMLUsernameAttribute'), groupsAttribute: value('ssoSAMLGroupsAttribute') }, roles);
+    if (certificate) { config.saml.certificate = certificate; config.saml.privateKey = privateKey; }
+  } else { throw new Error(t('提供方协议无效')); }
+  return config;
+}
+
+async function saveSSOProvider(button) {
+  const error = _('ssoProviderError'); error.textContent = '';
+  let config;
+  try { config = collectSSOProvider(); } catch (e) { error.textContent = e.message; return; }
+  button.disabled = true;
+  try {
+    await api('PUT', '/auth/sso/providers', config);
+    toast(t('SSO 提供方已保存'), 'success'); closeSSOProviderEditor(); await loadSSOProviders();
+  } catch (e) { error.textContent = e.message; }
+  finally { button.disabled = false; }
+}
+
+async function setSSOProviderEnabled(id, button) {
+  const view = _ssoProviderViews.find(provider => provider.id === id);
+  if (!view) return;
+  if (view.enabled && !(await showConfirm(t('确定停用此 SSO 提供方？')))) return;
+  button.disabled = true;
+  try {
+    const config = ssoProviderConfiguration(view); config.enabled = !view.enabled;
+    await api('PUT', '/auth/sso/providers', config);
+    toast(t('SSO 提供方已更新'), 'success'); await loadSSOProviders();
+  } catch (e) { toast(e.message, 'error'); }
+  finally { button.disabled = false; }
+}
+
+async function deleteSSOProvider(id, button) {
+  if (!(await showConfirm(t('确定删除此 SSO 提供方？')))) return;
+  button.disabled = true;
+  try {
+    await api('POST', '/auth/sso/providers/delete', { id: id });
+    if (_('ssoProviderID').value === id) closeSSOProviderEditor();
+    toast(t('SSO 提供方已删除'), 'success'); await loadSSOProviders();
+  } catch (e) { toast(e.message, 'error'); }
+  finally { button.disabled = false; }
 }
 
 function addHeaderRow() {

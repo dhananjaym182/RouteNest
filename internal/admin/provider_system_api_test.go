@@ -10,8 +10,8 @@ import (
 	"time"
 
 	"routenest/internal/accounts"
+	"routenest/internal/adminapi"
 	"routenest/internal/domain"
-	"routenest/internal/httpx"
 	"routenest/internal/providers"
 	"routenest/internal/providerstate"
 )
@@ -208,42 +208,22 @@ func TestProviderSystemHandlersRejectNonGET(t *testing.T) {
 }
 
 func TestProviderSystemRoutesRequireAdminSession(t *testing.T) {
-	accounts.PoolMu.Lock()
-	oldPool, oldPath := accounts.Pool, accounts.PoolPath
-	accounts.PoolPath = t.TempDir() + "/.routenest-accounts.json"
-	accounts.Pool = &domain.AccountPool{}
-	accounts.PoolMu.Unlock()
-	t.Cleanup(func() {
-		setAdminPassword("")
-		accounts.PoolMu.Lock()
-		accounts.Pool, accounts.PoolPath = oldPool, oldPath
-		accounts.PoolMu.Unlock()
-	})
-
-	setAdminPassword("secret")
-	mux := http.NewServeMux()
-	registerProviderSystemRoutes(mux, func(handler http.HandlerFunc) http.HandlerFunc {
-		return requireAdminAuth(httpx.CORS(handler))
-	})
+	mux, _ := newAdminAuthTestMux(t)
 
 	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/admin/api/provider-instances", nil))
+	mux.ServeHTTP(rec, adminTestRequest(http.MethodGet, "/admin/api/provider-instances", ""))
 	if rec.Code != http.StatusUnauthorized {
 		t.Fatalf("unauthenticated status = %d, want 401", rec.Code)
 	}
 
 	loginRec := httptest.NewRecorder()
-	handleAdminLogin(loginRec, httptest.NewRequest(http.MethodPost, "/admin/api/login",
-		strings.NewReader(`{"password":"secret"}`)))
+	mux.ServeHTTP(loginRec, adminTestRequest(http.MethodPost, "/admin/api/auth/bootstrap",
+		`{"secret":"one time bootstrap secret","password":"permanent admin password"}`))
 	if loginRec.Code != http.StatusOK {
-		t.Fatalf("login status = %d: %s", loginRec.Code, loginRec.Body.String())
+		t.Fatalf("bootstrap status = %d: %s", loginRec.Code, loginRec.Body.String())
 	}
-	cookies := loginRec.Result().Cookies()
-	if len(cookies) != 1 {
-		t.Fatalf("login cookies = %+v", cookies)
-	}
-	req := httptest.NewRequest(http.MethodGet, "/admin/api/provider-instances", nil)
-	req.AddCookie(cookies[0])
+	req := adminTestRequest(http.MethodGet, "/admin/api/provider-instances", "")
+	req.AddCookie(cookieNamed(t, loginRec, adminapi.SessionCookieName))
 	rec = httptest.NewRecorder()
 	mux.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {

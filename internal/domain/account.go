@@ -75,7 +75,10 @@ type AccountPool struct {
 	Models       []Model    `json:"models,omitempty"`
 	DefaultModel string     `json:"defaultModel,omitempty"`
 	ListenHost   string     `json:"listenHost,omitempty"`
-	// AdminPasswordHash and AdminPasswordSalt are set by the admin UI.
+	// AdminPasswordHash and AdminPasswordSalt are legacy migration fields. After
+	// a successful adminauth rotation both contain an unmatchable non-empty
+	// sentinel so older binaries fail locked rather than restoring anonymous
+	// administration.
 	AdminPasswordHash string `json:"adminPasswordHash,omitempty"`
 	AdminPasswordSalt string `json:"adminPasswordSalt,omitempty"`
 }

@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
+	"strconv"
 	"strings"
 
 	configpkg "routenest/internal/config"
@@ -20,7 +22,7 @@ type Config struct {
 	Models             func() []domain.Model
 	DefaultModel       func() string
 	SetDefaultModel    func(string)
-	SetListenHost      func(string)
+	SetListenHost      func(string) error
 	LocalIPs           func() []string
 	ListenHost         func() string
 	ListenPort         func() int
@@ -32,8 +34,12 @@ type Config struct {
 	HasPassword        func() bool
 	// RestartListener rebinds the HTTP listener to a new host on the same port.
 	RestartListener func(host string, port int) error
-	Translate       func(*http.Request, string) string
-	Logf            func(string, ...any)
+	// FatalListenerFailure terminates the process when both a listener change
+	// and its rollback fail, leaving no trustworthy administration endpoint.
+	FatalListenerFailure func(error)
+	ListenerOperations   *ListenerOperationStore
+	Translate            func(*http.Request, string) string
+	Logf                 func(string, ...any)
 }
 
 func (h *Config) msg(r *http.Request, key string) string {
@@ -57,7 +63,7 @@ func (h *Config) address(host string) string {
 	if h.EffectiveAdminHost != nil {
 		host = h.EffectiveAdminHost(host)
 	}
-	return fmt.Sprintf("%s:%d", host, port)
+	return net.JoinHostPort(strings.Trim(host, "[]"), strconv.Itoa(port))
 }
 
 // Get handles GET /admin/api/config.
@@ -107,6 +113,20 @@ func (h *Config) Get(w http.ResponseWriter, r *http.Request) {
 		data["hasPassword"] = h.HasPassword()
 	}
 	httpx.WriteAPI(w, http.StatusOK, httpx.Response{Success: true, Data: data})
+}
+
+func (h *Config) ListenerOperation(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		httpx.WriteAPI(w, http.StatusMethodNotAllowed, httpx.Response{Error: h.msg(r, "method_not_allowed")})
+		return
+	}
+	id := strings.TrimSpace(r.URL.Query().Get("id"))
+	operation, ok := h.ListenerOperations.Get(id)
+	if !ok {
+		httpx.WriteAPI(w, http.StatusNotFound, httpx.Response{Error: "listener operation not found"})
+		return
+	}
+	httpx.WriteAPI(w, http.StatusOK, httpx.Response{Success: true, Data: map[string]any{"operation": operation}})
 }
 
 // Update handles POST /admin/api/config with a partial configuration patch.
@@ -326,48 +346,75 @@ func (h *Config) Update(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	currentHost := ""
+	if h.ListenHost != nil {
+		currentHost = h.ListenHost()
+	}
+	var listenerOperation ListenerOperation
 	if req.Host != "" {
-		valid := req.Host == "127.0.0.1" || req.Host == "0.0.0.0" || req.Host == "localhost" || req.Host == "::1"
-		if !valid && h.LocalIPs != nil {
-			for _, ip := range h.LocalIPs() {
-				if ip == req.Host {
-					valid = true
-					break
-				}
-			}
-		}
+		valid := req.Host == "127.0.0.1" || req.Host == "localhost" || req.Host == "::1"
 		if !valid {
 			httpx.WriteAPI(w, http.StatusBadRequest, httpx.Response{Error: h.msg(r, "invalid_host")})
 			return
 		}
-		if h.SetListenHost != nil {
-			h.SetListenHost(req.Host)
+		if req.Host != currentHost {
+			if h.ListenerOperations == nil || h.RestartListener == nil || h.SetListenHost == nil {
+				httpx.WriteAPI(w, http.StatusServiceUnavailable, httpx.Response{Error: "listener reconfiguration unavailable"})
+				return
+			}
+			var operationErr error
+			listenerOperation, operationErr = h.ListenerOperations.Start(req.Host)
+			if operationErr != nil {
+				httpx.WriteAPI(w, http.StatusServiceUnavailable, httpx.Response{Error: operationErr.Error()})
+				return
+			}
+			restarting = true
 		}
-		restarting = true
 	}
 
 	if changed && h.SetProxy != nil {
 		h.SetProxy(cfg)
 	}
 
-	// Restart is asynchronous, so the reported host is the one currently bound.
-	host := ""
-	if h.ListenHost != nil {
-		host = h.ListenHost()
-	}
-	if restarting && h.RestartListener != nil {
+	// Restart is asynchronous. Persistence happens only after the new listener
+	// binds and passes its local readiness probe; persistence failure rolls the
+	// active listener back to the prior host.
+	host := currentHost
+	if restarting {
 		port := 0
 		if h.ListenPort != nil {
 			port = h.ListenPort()
 		}
+		oldHost, newHost, operationID := currentHost, req.Host, listenerOperation.ID
 		go func() {
-			if err := h.RestartListener(req.Host, port); err != nil && err != http.ErrServerClosed {
+			if err := h.RestartListener(newHost, port); err != nil {
+				h.ListenerOperations.Fail(operationID, err)
 				h.logf("Listener restart failed: %v", err)
+				return
 			}
+			if err := h.SetListenHost(newHost); err != nil {
+				rollbackErr := h.RestartListener(oldHost, port)
+				if rollbackErr != nil {
+					err = fmt.Errorf("persist listener host: %v; rollback failed: %w", err, rollbackErr)
+				} else {
+					err = fmt.Errorf("persist listener host: %w", err)
+				}
+				h.ListenerOperations.Fail(operationID, err)
+				h.logf("Listener persistence failed: %v", err)
+				if rollbackErr != nil && h.FatalListenerFailure != nil {
+					h.FatalListenerFailure(err)
+				}
+				return
+			}
+			h.ListenerOperations.Succeed(operationID)
 		}()
 	}
 
-	httpx.WriteAPI(w, http.StatusOK, httpx.Response{Success: true, Data: map[string]any{
+	status := http.StatusOK
+	if restarting {
+		status = http.StatusAccepted
+	}
+	data := map[string]any{
 		"strategy":                  cfg.Strategy,
 		"dispatchMode":              cfg.DispatchMode,
 		"headers":                   cfg.Headers,
@@ -387,7 +434,11 @@ func (h *Config) Update(w http.ResponseWriter, r *http.Request) {
 		"maxRequestBodyBytes":       cfg.MaxRequestBodyBytes,
 		"passthroughHeaders":        cfg.PassthroughHeaders,
 		"nonstreamKeepaliveSeconds": cfg.NonstreamKeepaliveSeconds,
-	}})
+	}
+	if restarting {
+		data["listenerOperation"] = listenerOperation
+	}
+	httpx.WriteAPI(w, status, httpx.Response{Success: true, Data: data})
 }
 
 // valueOr picks the patch value when present, else the current config value.

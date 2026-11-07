@@ -1,9 +1,23 @@
 <div id="loginOverlay">
-  <div class="login-card">
-    <h2>RouteNest 管理后台</h2>
-    <p>该后台已启用访问密码，请输入密码登录</p>
-    <input type="password" id="loginPassword" placeholder="访问密码" autocomplete="current-password" onkeydown="if(event.key==='Enter')submitLogin()">
-    <button class="btn btn-primary btn-block" onclick="submitLogin()">登录</button>
-    <div id="loginError" class="login-err"></div>
+  <div class="login-card" role="dialog" aria-modal="true" aria-labelledby="loginTitle" aria-describedby="loginHelp" style="max-height:calc(100vh - 40px);overflow-y:auto">
+    <h2 id="loginTitle">RouteNest 管理后台</h2>
+    <p id="loginHelp">请输入管理员用户名和密码。</p>
+    <div id="loginSSOProviders" style="display:none" aria-label="单点登录">
+      <div id="loginSSOButtons"></div>
+    </div>
+    <div id="loginLocalHelp" class="hint-sm mt-12">本地应急管理员登录</div>
+    <div id="loginUsernameRow">
+      <input type="text" id="loginUsername" value="admin" placeholder="管理员用户名" aria-label="管理员用户名" autocomplete="username">
+    </div>
+    <div id="bootstrapSecretRow" style="display:none">
+      <input type="password" id="bootstrapSecret" placeholder="一次性本机密钥" autocomplete="off">
+    </div>
+    <input type="password" id="loginPassword" placeholder="当前密码" aria-label="当前密码" autocomplete="current-password" onkeydown="if(event.key==='Enter')submitLogin()">
+    <div id="loginNewPasswordRow" style="display:none">
+      <input type="password" id="loginNewPassword" placeholder="新的永久密码（至少 12 位）" autocomplete="new-password">
+      <input type="password" id="loginConfirmPassword" placeholder="再次输入新的永久密码" autocomplete="new-password" onkeydown="if(event.key==='Enter')submitLogin()">
+    </div>
+    <button id="loginSubmit" class="btn btn-primary btn-block" onclick="submitLogin()">登录</button>
+    <div id="loginError" class="login-err" aria-live="polite"></div>
   </div>
 </div>

@@ -1,13 +1,16 @@
 package admin
 
 import (
-	"log"
+	"context"
+	"fmt"
 	"net/http"
 	"routenest/internal/zen"
 	"time"
 
 	"routenest/internal/accounts"
 	"routenest/internal/adminapi"
+	"routenest/internal/adminauth"
+	"routenest/internal/adminsso"
 	"routenest/internal/buildinfo"
 	"routenest/internal/config"
 	"routenest/internal/egress"
@@ -22,30 +25,6 @@ type apiResponse = APIResponse
 
 func writeAPI(w http.ResponseWriter, status int, resp apiResponse) {
 	httpx.WriteAPI(w, status, resp)
-}
-
-// 管理后台登录会话（内存态，程序重启后需重新登录）。
-var adminSessions = adminapi.NewSessionStore()
-
-const adminSessionCookie = adminapi.SessionCookieName
-
-// adminAuth 连接根接线与 adminapi：密码状态来自账号池，错误文案走 i18n。
-var adminAuth = &adminapi.Auth{
-	Sessions:    adminSessions,
-	PasswordSet: func() bool { return accounts.LoadPool().AdminPasswordHash != "" },
-	Unauthorized: func(w http.ResponseWriter, r *http.Request, reason string) {
-		writeAPI(w, http.StatusUnauthorized, apiResponse{Error: i18n.TAPI(r, reason)})
-	},
-}
-
-// adminAuthHandlers connect login/logout/password endpoints to the pool-backed
-// password store while adminapi owns the wire behavior.
-var adminAuthHandlers = &adminapi.AuthHandlers{
-	Sessions:       adminSessions,
-	PasswordSet:    func() bool { return accounts.LoadPool().AdminPasswordHash != "" },
-	VerifyPassword: verifyAdminPassword,
-	SetPassword:    setAdminPassword,
-	Translate:      func(r *http.Request, key string) string { return i18n.TAPI(r, key) },
 }
 
 // adminKeys/adminMonitoring connect the root composition to adminapi handlers
@@ -109,220 +88,200 @@ var adminClineEgress = &adminapi.ClineEgress{
 }
 
 func RegisterRoutes(mux *http.ServeMux) {
-	mux.HandleFunc("/admin/", adminStaticHandler)
-	// Routes that need no login.
-	registerPublicRoutes(mux)
-	// Every other API route requires admin auth once a password is set.
-	auth := func(h http.HandlerFunc) http.HandlerFunc {
-		return requireAdminAuth(httpx.CORS(h))
+	runtime, err := configuredAdminSecurity()
+	if err != nil {
+		panic("register admin routes: " + err.Error())
 	}
-	registerSessionRoutes(mux, auth)
-	registerAccountsRoutes(mux, auth)
-	registerKeysRoutes(mux, auth)
-	registerModelsRoutes(mux, auth)
-	registerUpstreamsRoutes(mux, auth)
-	registerConfigRoutes(mux, auth)
-	registerProvidersRoutes(mux, auth)
-	registerProviderSystemRoutes(mux, auth)
-	registerConnectionsRoutes(mux, auth)
-	registerCombosRoutes(mux, auth)
-	registerObservabilityRoutes(mux, auth)
-	registerMiscRoutes(mux, auth)
+	registerRoutesWithSecurity(mux, runtime)
 }
 
-// authWrap applies admin authentication and CORS to one handler.
-type authWrap func(http.HandlerFunc) http.HandlerFunc
-
-// registerPublicRoutes registers the routes that need no admin login.
-func registerPublicRoutes(mux *http.ServeMux) {
-	mux.HandleFunc("/admin/api/login", httpx.CORS(handleAdminLogin))
-	mux.HandleFunc("/admin/api/logout", httpx.CORS(handleAdminLogout))
+// RouteSecurityOptions configures the canonical request boundary when an
+// embedding or test supplies its own durable adminauth service. This does not
+// bypass authentication; it installs the same route registry and middleware as
+// the production ConfigureSecurity path.
+type RouteSecurityOptions struct {
+	CanonicalURL      string
+	TrustedProxyCIDRs []string
+	ProxyMode         bool
+	EnableHSTS        bool
 }
 
-// registerSessionRoutes registers the admin session and password management.
-func registerSessionRoutes(mux *http.ServeMux, auth authWrap) {
-	mux.HandleFunc("/admin/api/admin-sessions/clear", auth(handleAdminSessionsClear))
-	mux.HandleFunc("/admin/api/password", auth(handleAdminPassword))
-}
-
-// registerAccountsRoutes registers the Cline account pool, OAuth onboarding and batch import.
-func registerAccountsRoutes(mux *http.ServeMux, auth authWrap) {
-	mux.HandleFunc("/admin/api/accounts", auth(handleAdminAccounts))
-	mux.HandleFunc("/admin/api/accounts/add", auth(handleAdminAccountAdd))
-	mux.HandleFunc("/admin/api/accounts/delete", auth(handleAdminAccountDelete))
-	mux.HandleFunc("/admin/api/accounts/export", auth(handleExportAccounts))
-	mux.HandleFunc("/admin/api/oauth/start", auth(handleOAuthStart))
-	mux.HandleFunc("/admin/api/oauth/status", auth(handleOAuthStatus))
-	mux.HandleFunc("/admin/api/sso/import", auth(handleSSOImport))
-	mux.HandleFunc("/admin/api/batch-import", auth(handleBatchImport))
-	mux.HandleFunc("/admin/api/accounts/refresh-all", auth(handleAdminRefreshAll))
-	mux.HandleFunc("/admin/api/accounts/delete-all", auth(handleAdminDeleteAll))
-	mux.HandleFunc("/admin/api/accounts/reset", auth(handleAdminAccountReset))
-	mux.HandleFunc("/admin/api/accounts/test", auth(handleAdminAccountTest))
-}
-
-// registerKeysRoutes registers the client API keys.
-func registerKeysRoutes(mux *http.ServeMux, auth authWrap) {
-	mux.HandleFunc("/admin/api/keys", auth(handleAdminGetKeys))
-	mux.HandleFunc("/admin/api/keys/generate", auth(handleAdminGenerateKey))
-	mux.HandleFunc("/admin/api/keys/delete", auth(handleAdminDeleteKey))
-}
-
-// registerModelsRoutes registers the model catalogue: list, sync, custom models, capability and policy edits, quick test.
-func registerModelsRoutes(mux *http.ServeMux, auth authWrap) {
-	mux.HandleFunc("/admin/api/models", auth(handleAdminModels))
-	mux.HandleFunc("/admin/api/models/sync", auth(handleAdminModelSync))
-	mux.HandleFunc("/admin/api/models/add", auth(handleAdminModelAdd))
-	mux.HandleFunc("/admin/api/models/delete", auth(handleAdminModelDelete))
-	mux.HandleFunc("/admin/api/models/context", auth(handleAdminModelContext))
-	mux.HandleFunc("/admin/api/models/capabilities", auth(handleAdminModelCapabilities))
-	mux.HandleFunc("/admin/api/models/toggle", auth(HandleAdminModelToggle))
-	mux.HandleFunc("/admin/api/models/test", auth(HandleAdminModelTest))
-}
-
-// registerUpstreamsRoutes registers the built-in upstreams: OpenCode zen and Cline egress configuration.
-func registerUpstreamsRoutes(mux *http.ServeMux, auth authWrap) {
-	mux.HandleFunc("/admin/api/opencode/config", auth(handleOpenCodeConfig))
-	mux.HandleFunc("/admin/api/opencode/config/update", auth(handleOpenCodeConfigUpdate))
-	mux.HandleFunc("/admin/api/opencode/models/sync", auth(handleOpenCodeModelSync))
-	mux.HandleFunc("/admin/api/cline-proxy/config", auth(handleClineProxyConfig))
-	mux.HandleFunc("/admin/api/cline-proxy/config/update", auth(handleClineProxyConfigUpdate))
-}
-
-// registerConfigRoutes registers the global proxy configuration.
-func registerConfigRoutes(mux *http.ServeMux, auth authWrap) {
-	mux.HandleFunc("/admin/api/config", auth(handleAdminConfig))
-	mux.HandleFunc("/admin/api/config/update", auth(handleAdminUpdateConfig))
-}
-
-// registerProvidersRoutes registers the custom provider source instances, presets, discovery, recheck, import and tiers.
-func registerProvidersRoutes(mux *http.ServeMux, auth authWrap) {
-	mux.HandleFunc("/admin/api/providers", auth(handleProvidersList))
-	mux.HandleFunc("/admin/api/providers/save", auth(handleProviderSave))
-	mux.HandleFunc("/admin/api/providers/delete", auth(handleProviderDelete))
-	mux.HandleFunc("/admin/api/providers/test", auth(handleProviderTest))
-	mux.HandleFunc("/admin/api/providers/models", auth(HandleProviderModels))
-	mux.HandleFunc("/admin/api/providers/presets", auth(handleProviderPresets))
-	mux.HandleFunc("/admin/api/providers/recheck", auth(adminSync.ProviderRecheck))
-	mux.HandleFunc("/admin/api/providers/sync-status", auth(adminSync.ProviderStatus))
-	mux.HandleFunc("/admin/api/models/import/preview", auth(handleModelImportPreview))
-	mux.HandleFunc("/admin/api/models/import/apply", auth(handleModelImportApply))
-	mux.HandleFunc("/admin/api/models/import/pending", auth(handleModelImportPending))
-	mux.HandleFunc("/admin/api/models/import/batch", auth(handleModelImportBatch))
-	mux.HandleFunc("/admin/api/models/import/discard", auth(handleModelImportDiscard))
-	mux.HandleFunc("/admin/api/models/cost", auth(handleModelCost))
-	mux.HandleFunc("/admin/api/providers/cooldown-reset", auth(handleProviderCooldownReset))
-	mux.HandleFunc("/admin/api/account-health", auth(handleAccountHealth))
-}
-
-// registerProviderSystemRoutes registers the additive global provider-system
-// projections. Legacy source-specific endpoints remain the compatibility API.
-func registerProviderSystemRoutes(mux *http.ServeMux, auth authWrap) {
-	mux.HandleFunc("/admin/api/provider-instances", auth(handleProviderInstances))
-	mux.HandleFunc("/admin/api/credentials", auth(handleProviderCredentials))
-	mux.HandleFunc("/admin/api/model-offerings", auth(handleModelOfferings))
-	mux.HandleFunc("/admin/api/provider-state", auth(handleProviderState))
-	mux.HandleFunc("/admin/api/egress-profiles", auth(handleEgressProfiles))
-}
-
-// registerConnectionsRoutes registers the provider login connections.
-func registerConnectionsRoutes(mux *http.ServeMux, auth authWrap) {
-	mux.HandleFunc("/admin/api/connections", auth(handleConnectionsList))
-	mux.HandleFunc("/admin/api/connections/login/start", auth(handleConnectionLoginStart))
-	mux.HandleFunc("/admin/api/connections/login/status", auth(handleConnectionLoginStatus))
-	mux.HandleFunc("/admin/api/connections/import", auth(handleConnectionImport))
-	mux.HandleFunc("/admin/api/connections/import-batch", auth(handleConnectionImportBatch))
-	mux.HandleFunc("/admin/api/connections/delete", auth(handleConnectionDelete))
-	mux.HandleFunc("/admin/api/connections/test", auth(handleConnectionTest))
-}
-
-// registerCombosRoutes registers the named model combinations.
-func registerCombosRoutes(mux *http.ServeMux, auth authWrap) {
-	mux.HandleFunc("/admin/api/combos", auth(handleCombosList))
-	mux.HandleFunc("/admin/api/combos/save", auth(handleComboSave))
-	mux.HandleFunc("/admin/api/combos/delete", auth(handleComboDelete))
-	mux.HandleFunc("/admin/api/combos/toggle", auth(handleComboToggle))
-	mux.HandleFunc("/admin/api/combos/clone", auth(handleComboClone))
-	mux.HandleFunc("/admin/api/combos/test", auth(HandleComboTest))
-}
-
-// registerObservabilityRoutes registers the dashboard, statistics, request logs and version checks.
-func registerObservabilityRoutes(mux *http.ServeMux, auth authWrap) {
-	mux.HandleFunc("/admin/api/stats", auth(handleAdminStats))
-	mux.HandleFunc("/admin/api/dashboard/overview", auth(handleDashboardOverview))
-	mux.HandleFunc("/admin/api/request-logs", auth(handleAdminRequestLogs))
-	mux.HandleFunc("/admin/api/request-logs/clear", auth(handleRequestLogsClear))
-	mux.HandleFunc("/admin/api/version-check", auth(handleAdminVersionCheck))
-}
-
-// registerMiscRoutes registers the miscellaneous admin actions.
-func registerMiscRoutes(mux *http.ServeMux, auth authWrap) {
-	mux.HandleFunc("/admin/api/open-external", auth(handleOpenExternal))
-}
-
-// requireAdminAuth 后台访问鉴权中间件：未设置密码直接放行，否则校验会话 cookie。
-func requireAdminAuth(next http.HandlerFunc) http.HandlerFunc {
-	return adminAuth.Middleware(next)
-}
-
-// hashAdminPassword 生成加盐密码哈希：hex(sha256(salt+password))。
-func hashAdminPassword(saltHex, password string) string {
-	return adminapi.HashPassword(saltHex, password)
-}
-
-// setAdminPassword 设置/修改/清除后台密码（空 = 清除），并清空所有会话强制重新登录。
-func setAdminPassword(password string) {
-	p := accounts.LoadPool()
-	accounts.PoolMu.Lock()
-	if password == "" {
-		p.AdminPasswordHash = ""
-		p.AdminPasswordSalt = ""
-	} else {
-		salt, err := adminapi.NewSalt()
-		if err != nil {
-			salt = time.Now().Format("20060102150405")
-		}
-		p.AdminPasswordSalt = salt
-		p.AdminPasswordHash = hashAdminPassword(p.AdminPasswordSalt, password)
+func RegisterRoutesWithService(mux *http.ServeMux, service *adminauth.Service, opts RouteSecurityOptions) error {
+	if mux == nil || service == nil {
+		return fmt.Errorf("admin mux and security service are required")
 	}
-	accounts.PoolMu.Unlock()
-	accounts.SavePool()
-	adminSessions.Clear()
-}
-
-// verifyAdminPassword 校验后台密码（未设置密码时返回 false）。
-func verifyAdminPassword(password string) bool {
-	p := accounts.LoadPool()
-	accounts.PoolMu.Lock()
-	defer accounts.PoolMu.Unlock()
-	return adminapi.VerifyPassword(p.AdminPasswordSalt, p.AdminPasswordHash, password)
-}
-
-// POST /admin/api/login  body: {password}
-func handleAdminLogin(w http.ResponseWriter, r *http.Request) {
-	adminAuthHandlers.Login(w, r)
-}
-
-// POST /admin/api/logout
-func handleAdminLogout(w http.ResponseWriter, r *http.Request) {
-	adminAuthHandlers.Logout(w, r)
-}
-
-// POST /admin/api/admin-sessions/clear 清空全部后台登录会话（含当前浏览器），
-// 用于共享机器上强制所有人重新登录。
-func handleAdminSessionsClear(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		writeAPI(w, http.StatusMethodNotAllowed, apiResponse{Error: i18n.TAPI(r, "method_not_allowed")})
-		return
+	requestOptions, err := requestSecurityOptions(SecurityOptions{
+		ListenHost:        "127.0.0.1",
+		ListenPort:        1,
+		CanonicalURL:      opts.CanonicalURL,
+		TrustedProxyCIDRs: opts.TrustedProxyCIDRs,
+		ProxyMode:         opts.ProxyMode,
+	})
+	if err != nil {
+		return err
 	}
-	adminSessions.Clear()
-	log.Printf("admin: cleared all admin login sessions")
-	writeAPI(w, http.StatusOK, apiResponse{Success: true})
+	sso, err := adminsso.NewManager(context.Background(), adminsso.ManagerOptions{Service: service, CanonicalURL: requestOptions.CanonicalURL})
+	if err != nil {
+		return err
+	}
+	registerRoutesWithSecurity(mux, &adminSecurityRuntime{service: service, sso: sso, requestOptions: requestOptions, enableHSTS: opts.EnableHSTS})
+	return nil
 }
 
-// POST /admin/api/password  body: {password}（空 = 清除密码，恢复无密码访问）
-func handleAdminPassword(w http.ResponseWriter, r *http.Request) {
-	adminAuthHandlers.Password(w, r)
+func registerRoutesWithSecurity(mux *http.ServeMux, runtime *adminSecurityRuntime) {
+	registry := newAdminRouteRegistry()
+	registerSessionRoutes(registry)
+	registerAccountsRoutes(registry)
+	registerKeysRoutes(registry)
+	registerModelsRoutes(registry)
+	registerUpstreamsRoutes(registry)
+	registerConfigRoutes(registry)
+	registerProvidersRoutes(registry)
+	registerProviderSystemRoutes(registry)
+	registerConnectionsRoutes(registry)
+	registerCombosRoutes(registry)
+	registerObservabilityRoutes(registry)
+	registerMiscRoutes(registry)
+	mux.Handle("/admin/api/", runtime.handler(registry))
+	mux.Handle("/admin/", runtime.staticHandler(http.HandlerFunc(adminStaticHandler)))
+}
+
+func registerPublicRoute(registry *adminRouteRegistry, method, path string, csrf csrfMode, handler http.HandlerFunc) {
+	registry.MustHandle(adminRouteDefinition{Method: method, Path: path, Public: true, CSRF: csrf, Handler: handler})
+}
+
+func registerProtectedRoute(registry *adminRouteRegistry, method, path string, csrf csrfMode, handler http.HandlerFunc, permissions ...adminauth.Permission) {
+	registry.MustHandle(adminRouteDefinition{Method: method, Path: path, Permissions: permissions, CSRF: csrf, Handler: handler})
+}
+
+func registerSessionRoutes(registry *adminRouteRegistry) {
+	registerPublicRoute(registry, http.MethodGet, "/admin/api/auth/status", csrfSafe, handleAdminAuthStatus)
+	registerPublicRoute(registry, http.MethodPost, "/admin/api/auth/bootstrap", csrfLocalEntry, handleAdminBootstrap)
+	registerPublicRoute(registry, http.MethodPost, "/admin/api/login", csrfLocalEntry, handleAdminLoginSecure)
+	registerPublicRoute(registry, http.MethodPost, "/admin/api/auth/legacy/rotate", csrfLocalEntry, handleAdminLegacyRotation)
+	registerProtectedRoute(registry, http.MethodGet, "/admin/api/auth/session", csrfSafe, handleAdminCurrentSession, adminauth.PermissionView)
+	registerProtectedRoute(registry, http.MethodPost, "/admin/api/logout", csrfSession, handleAdminLogoutSecure, adminauth.PermissionView)
+	registerProtectedRoute(registry, http.MethodPost, "/admin/api/auth/password", csrfSession, handleAdminPasswordRotation, adminauth.PermissionView)
+	registerProtectedRoute(registry, http.MethodGet, "/admin/api/auth/sessions", csrfSafe, handleAdminSessions, adminauth.PermissionSecurityWrite)
+	registerProtectedRoute(registry, http.MethodPost, "/admin/api/auth/sessions/revoke", csrfSession, handleAdminSessionRevoke, adminauth.PermissionSecurityWrite)
+	registerProtectedRoute(registry, http.MethodGet, "/admin/api/auth/users", csrfSafe, handleAdminUsers, adminauth.PermissionSecurityWrite)
+	registerProtectedRoute(registry, http.MethodPost, "/admin/api/auth/users", csrfSession, handleAdminUserCreate, adminauth.PermissionSecurityWrite)
+	registerProtectedRoute(registry, http.MethodPost, "/admin/api/auth/users/update", csrfSession, handleAdminUserUpdate, adminauth.PermissionSecurityWrite)
+	registerProtectedRoute(registry, http.MethodPost, "/admin/api/auth/users/password", csrfSession, handleAdminUserPasswordReset, adminauth.PermissionSecurityWrite)
+	registerProtectedRoute(registry, http.MethodPost, "/admin/api/auth/users/delete", csrfSession, handleAdminUserDelete, adminauth.PermissionSecurityWrite)
+	registerProtectedRoute(registry, http.MethodGet, "/admin/api/auth/audit", csrfSafe, handleAdminAudit, adminauth.PermissionSecurityWrite)
+	registerProtectedRoute(registry, http.MethodGet, "/admin/api/auth/sso/providers", csrfSafe, handleAdminSSOProviders, adminauth.PermissionSecurityWrite)
+	registerProtectedRoute(registry, http.MethodPut, "/admin/api/auth/sso/providers", csrfSession, handleAdminSSOProviderSave, adminauth.PermissionSecurityWrite)
+	registerProtectedRoute(registry, http.MethodPost, "/admin/api/auth/sso/providers/delete", csrfSession, handleAdminSSOProviderDelete, adminauth.PermissionSecurityWrite)
+	registerPublicRoute(registry, http.MethodPost, "/admin/api/auth/oidc/start", csrfSSOStart, handleAdminOIDCStart)
+	registerPublicRoute(registry, http.MethodGet, "/admin/api/auth/oidc/callback", csrfOIDCCallback, handleAdminOIDCCallback)
+	registerPublicRoute(registry, http.MethodGet, "/admin/api/auth/saml/metadata", csrfSafe, handleAdminSAMLMetadata)
+	registerPublicRoute(registry, http.MethodPost, "/admin/api/auth/saml/start", csrfSSOStart, handleAdminSAMLStart)
+	registerPublicRoute(registry, http.MethodPost, "/admin/api/auth/saml/acs", csrfSAMLACS, handleAdminSAMLACS)
+}
+
+func registerAccountsRoutes(registry *adminRouteRegistry) {
+	registerProtectedRoute(registry, http.MethodGet, "/admin/api/accounts", csrfSafe, handleAdminAccounts, adminauth.PermissionCredentialWrite)
+	registerProtectedRoute(registry, http.MethodPost, "/admin/api/accounts/add", csrfSession, handleAdminAccountAdd, adminauth.PermissionCredentialWrite)
+	registerProtectedRoute(registry, http.MethodPost, "/admin/api/accounts/delete", csrfSession, handleAdminAccountDelete, adminauth.PermissionCredentialWrite)
+	registerProtectedRoute(registry, http.MethodPost, "/admin/api/accounts/export", csrfSession, handleExportAccounts, adminauth.PermissionCredentialExport)
+	registerProtectedRoute(registry, http.MethodPost, "/admin/api/oauth/start", csrfSession, handleOAuthStart, adminauth.PermissionCredentialWrite)
+	registerProtectedRoute(registry, http.MethodGet, "/admin/api/oauth/status", csrfSafe, handleOAuthStatus, adminauth.PermissionCredentialWrite)
+	registerProtectedRoute(registry, http.MethodPost, "/admin/api/sso/import", csrfSession, handleSSOImport, adminauth.PermissionCredentialWrite)
+	registerProtectedRoute(registry, http.MethodPost, "/admin/api/batch-import", csrfSession, handleBatchImport, adminauth.PermissionCredentialWrite)
+	registerProtectedRoute(registry, http.MethodPost, "/admin/api/accounts/refresh-all", csrfSession, handleAdminRefreshAll, adminauth.PermissionCredentialWrite)
+	registerProtectedRoute(registry, http.MethodPost, "/admin/api/accounts/delete-all", csrfSession, handleAdminDeleteAll, adminauth.PermissionCredentialWrite, adminauth.PermissionDangerousExecute)
+	registerProtectedRoute(registry, http.MethodPost, "/admin/api/accounts/reset", csrfSession, handleAdminAccountReset, adminauth.PermissionCredentialWrite)
+	registerProtectedRoute(registry, http.MethodPost, "/admin/api/accounts/test", csrfSession, handleAdminAccountTest, adminauth.PermissionCredentialWrite)
+}
+
+func registerKeysRoutes(registry *adminRouteRegistry) {
+	registerProtectedRoute(registry, http.MethodGet, "/admin/api/keys", csrfSafe, handleAdminGetKeys, adminauth.PermissionCredentialWrite)
+	registerProtectedRoute(registry, http.MethodPost, "/admin/api/keys/generate", csrfSession, handleAdminGenerateKey, adminauth.PermissionCredentialWrite)
+	registerProtectedRoute(registry, http.MethodPost, "/admin/api/keys/delete", csrfSession, handleAdminDeleteKey, adminauth.PermissionCredentialWrite)
+}
+
+func registerModelsRoutes(registry *adminRouteRegistry) {
+	registerProtectedRoute(registry, http.MethodGet, "/admin/api/models", csrfSafe, handleAdminModels, adminauth.PermissionView)
+	registerProtectedRoute(registry, http.MethodPost, "/admin/api/models/sync", csrfSession, handleAdminModelSync, adminauth.PermissionProviderWrite)
+	registerProtectedRoute(registry, http.MethodPost, "/admin/api/models/add", csrfSession, handleAdminModelAdd, adminauth.PermissionProviderWrite)
+	registerProtectedRoute(registry, http.MethodPost, "/admin/api/models/delete", csrfSession, handleAdminModelDelete, adminauth.PermissionProviderWrite)
+	registerProtectedRoute(registry, http.MethodPost, "/admin/api/models/context", csrfSession, handleAdminModelContext, adminauth.PermissionProviderWrite)
+	registerProtectedRoute(registry, http.MethodPost, "/admin/api/models/capabilities", csrfSession, handleAdminModelCapabilities, adminauth.PermissionProviderWrite)
+	registerProtectedRoute(registry, http.MethodPost, "/admin/api/models/toggle", csrfSession, HandleAdminModelToggle, adminauth.PermissionProviderWrite)
+	registerProtectedRoute(registry, http.MethodPost, "/admin/api/models/test", csrfSession, HandleAdminModelTest, adminauth.PermissionProviderWrite)
+}
+
+func registerUpstreamsRoutes(registry *adminRouteRegistry) {
+	registerProtectedRoute(registry, http.MethodGet, "/admin/api/opencode/config", csrfSafe, handleOpenCodeConfig, adminauth.PermissionView)
+	registerProtectedRoute(registry, http.MethodPost, "/admin/api/opencode/config/update", csrfSession, handleOpenCodeConfigUpdate, adminauth.PermissionProviderWrite)
+	registerProtectedRoute(registry, http.MethodPost, "/admin/api/opencode/models/sync", csrfSession, handleOpenCodeModelSync, adminauth.PermissionProviderWrite)
+	registerProtectedRoute(registry, http.MethodGet, "/admin/api/cline-proxy/config", csrfSafe, handleClineProxyConfig, adminauth.PermissionView)
+	registerProtectedRoute(registry, http.MethodPost, "/admin/api/cline-proxy/config/update", csrfSession, handleClineProxyConfigUpdate, adminauth.PermissionProviderWrite)
+}
+
+func registerConfigRoutes(registry *adminRouteRegistry) {
+	registerProtectedRoute(registry, http.MethodGet, "/admin/api/config", csrfSafe, handleAdminConfig, adminauth.PermissionView)
+	registerProtectedRoute(registry, http.MethodPost, "/admin/api/config/update", csrfSession, handleAdminUpdateConfig, adminauth.PermissionProviderWrite, adminauth.PermissionSecurityWrite)
+	registerProtectedRoute(registry, http.MethodGet, "/admin/api/listener-operation", csrfSafe, handleAdminListenerOperation, adminauth.PermissionSecurityWrite)
+}
+
+func registerProvidersRoutes(registry *adminRouteRegistry) {
+	registerProtectedRoute(registry, http.MethodGet, "/admin/api/providers", csrfSafe, handleProvidersList, adminauth.PermissionView)
+	registerProtectedRoute(registry, http.MethodPost, "/admin/api/providers/save", csrfSession, handleProviderSave, adminauth.PermissionProviderWrite)
+	registerProtectedRoute(registry, http.MethodPost, "/admin/api/providers/delete", csrfSession, handleProviderDelete, adminauth.PermissionProviderWrite)
+	registerProtectedRoute(registry, http.MethodPost, "/admin/api/providers/test", csrfSession, handleProviderTest, adminauth.PermissionProviderWrite)
+	registerProtectedRoute(registry, http.MethodPost, "/admin/api/providers/models", csrfSession, HandleProviderModels, adminauth.PermissionProviderWrite)
+	registerProtectedRoute(registry, http.MethodGet, "/admin/api/providers/presets", csrfSafe, handleProviderPresets, adminauth.PermissionView)
+	registerProtectedRoute(registry, http.MethodPost, "/admin/api/providers/recheck", csrfSession, adminSync.ProviderRecheck, adminauth.PermissionProviderWrite)
+	registerProtectedRoute(registry, http.MethodGet, "/admin/api/providers/sync-status", csrfSafe, adminSync.ProviderStatus, adminauth.PermissionView)
+	registerProtectedRoute(registry, http.MethodPost, "/admin/api/models/import/preview", csrfSession, handleModelImportPreview, adminauth.PermissionProviderWrite)
+	registerProtectedRoute(registry, http.MethodPost, "/admin/api/models/import/apply", csrfSession, handleModelImportApply, adminauth.PermissionProviderWrite)
+	registerProtectedRoute(registry, http.MethodGet, "/admin/api/models/import/pending", csrfSafe, handleModelImportPending, adminauth.PermissionView)
+	registerProtectedRoute(registry, http.MethodGet, "/admin/api/models/import/batch", csrfSafe, handleModelImportBatch, adminauth.PermissionView)
+	registerProtectedRoute(registry, http.MethodPost, "/admin/api/models/import/discard", csrfSession, handleModelImportDiscard, adminauth.PermissionProviderWrite)
+	registerProtectedRoute(registry, http.MethodPost, "/admin/api/models/cost", csrfSession, handleModelCost, adminauth.PermissionProviderWrite)
+	registerProtectedRoute(registry, http.MethodPost, "/admin/api/providers/cooldown-reset", csrfSession, handleProviderCooldownReset, adminauth.PermissionProviderWrite)
+	registerProtectedRoute(registry, http.MethodGet, "/admin/api/account-health", csrfSafe, handleAccountHealth, adminauth.PermissionCredentialWrite)
+}
+
+func registerProviderSystemRoutes(registry *adminRouteRegistry) {
+	registerProtectedRoute(registry, http.MethodGet, "/admin/api/provider-instances", csrfSafe, handleProviderInstances, adminauth.PermissionView)
+	registerProtectedRoute(registry, http.MethodGet, "/admin/api/credentials", csrfSafe, handleProviderCredentials, adminauth.PermissionCredentialWrite)
+	registerProtectedRoute(registry, http.MethodGet, "/admin/api/model-offerings", csrfSafe, handleModelOfferings, adminauth.PermissionView)
+	registerProtectedRoute(registry, http.MethodGet, "/admin/api/provider-state", csrfSafe, handleProviderState, adminauth.PermissionView)
+	registerProtectedRoute(registry, http.MethodGet, "/admin/api/egress-profiles", csrfSafe, handleEgressProfiles, adminauth.PermissionView)
+}
+
+func registerConnectionsRoutes(registry *adminRouteRegistry) {
+	registerProtectedRoute(registry, http.MethodGet, "/admin/api/connections", csrfSafe, handleConnectionsList, adminauth.PermissionCredentialWrite)
+	registerProtectedRoute(registry, http.MethodPost, "/admin/api/connections/login/start", csrfSession, handleConnectionLoginStart, adminauth.PermissionCredentialWrite)
+	registerProtectedRoute(registry, http.MethodGet, "/admin/api/connections/login/status", csrfSafe, handleConnectionLoginStatus, adminauth.PermissionCredentialWrite)
+	registerProtectedRoute(registry, http.MethodPost, "/admin/api/connections/import", csrfSession, handleConnectionImport, adminauth.PermissionCredentialWrite)
+	registerProtectedRoute(registry, http.MethodPost, "/admin/api/connections/import-batch", csrfSession, handleConnectionImportBatch, adminauth.PermissionCredentialWrite)
+	registerProtectedRoute(registry, http.MethodPost, "/admin/api/connections/delete", csrfSession, handleConnectionDelete, adminauth.PermissionCredentialWrite)
+	registerProtectedRoute(registry, http.MethodPost, "/admin/api/connections/test", csrfSession, handleConnectionTest, adminauth.PermissionCredentialWrite)
+}
+
+func registerCombosRoutes(registry *adminRouteRegistry) {
+	registerProtectedRoute(registry, http.MethodGet, "/admin/api/combos", csrfSafe, handleCombosList, adminauth.PermissionView)
+	registerProtectedRoute(registry, http.MethodPost, "/admin/api/combos/save", csrfSession, handleComboSave, adminauth.PermissionProviderWrite)
+	registerProtectedRoute(registry, http.MethodPost, "/admin/api/combos/delete", csrfSession, handleComboDelete, adminauth.PermissionProviderWrite)
+	registerProtectedRoute(registry, http.MethodPost, "/admin/api/combos/toggle", csrfSession, handleComboToggle, adminauth.PermissionProviderWrite)
+	registerProtectedRoute(registry, http.MethodPost, "/admin/api/combos/clone", csrfSession, handleComboClone, adminauth.PermissionProviderWrite)
+	registerProtectedRoute(registry, http.MethodPost, "/admin/api/combos/test", csrfSession, HandleComboTest, adminauth.PermissionProviderWrite)
+}
+
+func registerObservabilityRoutes(registry *adminRouteRegistry) {
+	registerProtectedRoute(registry, http.MethodGet, "/admin/api/stats", csrfSafe, handleAdminStats, adminauth.PermissionView)
+	registerProtectedRoute(registry, http.MethodGet, "/admin/api/dashboard/overview", csrfSafe, handleDashboardOverview, adminauth.PermissionView)
+	registerProtectedRoute(registry, http.MethodGet, "/admin/api/request-logs", csrfSafe, handleAdminRequestLogs, adminauth.PermissionView)
+	registerProtectedRoute(registry, http.MethodPost, "/admin/api/request-logs/clear", csrfSession, handleRequestLogsClear, adminauth.PermissionSecurityWrite, adminauth.PermissionDangerousExecute)
+	registerProtectedRoute(registry, http.MethodGet, "/admin/api/version-check", csrfSafe, handleAdminVersionCheck, adminauth.PermissionView)
+}
+
+func registerMiscRoutes(registry *adminRouteRegistry) {
+	registerProtectedRoute(registry, http.MethodPost, "/admin/api/open-external", csrfSession, handleOpenExternal, adminauth.PermissionView)
 }
 
 func adminStaticHandler(w http.ResponseWriter, r *http.Request) {
@@ -459,6 +418,10 @@ func handleAdminConfig(w http.ResponseWriter, r *http.Request) {
 // POST /admin/api/config  body: { strategy?, headers?, defaultModel?, host? }
 func handleAdminUpdateConfig(w http.ResponseWriter, r *http.Request) {
 	adminConfig.Update(w, r)
+}
+
+func handleAdminListenerOperation(w http.ResponseWriter, r *http.Request) {
+	adminConfig.ListenerOperation(w, r)
 }
 
 // GET /admin/api/models

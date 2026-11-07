@@ -1,10 +1,30 @@
 // ========== API 请求 ==========
+function adminCookie(name) {
+  const prefix = name + '=';
+  for (const part of document.cookie.split(';')) {
+    const value = part.trim();
+    if (value.startsWith(prefix)) return decodeURIComponent(value.slice(prefix.length));
+  }
+  return '';
+}
+
+async function adminFetch(method, path, body) {
+  const opts = { method, headers: {}, credentials: 'same-origin' };
+  if (body !== undefined && body !== null) {
+    opts.headers['Content-Type'] = 'application/json';
+    opts.body = JSON.stringify(body);
+  }
+  if (method !== 'GET' && method !== 'HEAD' && method !== 'OPTIONS') {
+    const csrf = adminCookie('routenest_admin_csrf');
+    if (csrf) opts.headers['X-RouteNest-CSRF'] = csrf;
+  }
+  return fetch(API + path, opts);
+}
+
 async function api(method, path, body) {
-  const opts = { method, headers: {} };
-  if (body) { opts.headers['Content-Type'] = 'application/json'; opts.body = JSON.stringify(body); }
   let res;
   try {
-    res = await fetch(API + path, opts);
+    res = await adminFetch(method, path, body);
     setGatewayReachability(true);
   } catch (e) {
     setGatewayReachability(false);
@@ -14,7 +34,7 @@ async function api(method, path, body) {
     showLogin();
     throw new Error(t('需要登录'));
   }
-  const data = await res.json();
+  const data = await res.json().catch(() => ({ error: 'invalid_response' }));
   if (!data.success && data.error) throw new Error(data.error);
   return data;
 }
@@ -31,37 +51,175 @@ function setGatewayReachability(ok) {
 }
 
 // ========== 后台登录 ==========
-function showLogin() {
+let _adminAuthMode = 'login';
+let _adminAuthStatus = null;
+let _adminPrincipal = null;
+
+function setAdminAuthMode(mode) {
+  _adminAuthMode = mode || 'login';
+  const bootstrap = _adminAuthMode === 'bootstrap' || _adminAuthMode === 'recovery';
+  const legacy = _adminAuthMode === 'legacy';
+  const usernameRow = _('loginUsernameRow');
+  const secretRow = _('bootstrapSecretRow');
+  const newPasswordRow = _('loginNewPasswordRow');
+  if (usernameRow) usernameRow.style.display = bootstrap ? 'none' : '';
+  if (secretRow) secretRow.style.display = bootstrap ? '' : 'none';
+  if (newPasswordRow) newPasswordRow.style.display = (bootstrap || legacy) ? '' : 'none';
+  if (_('loginLocalHelp')) _('loginLocalHelp').style.display = bootstrap ? 'none' : '';
+  const title = _('loginTitle'), help = _('loginHelp'), button = _('loginSubmit');
+  if (_adminAuthMode === 'bootstrap') {
+    if (title) title.textContent = t('初始化管理员');
+    if (help) help.textContent = t('输入本机终端或桌面弹窗中显示的一次性密钥，并设置永久密码。');
+    if (button) button.textContent = t('完成初始化');
+  } else if (_adminAuthMode === 'recovery') {
+    if (title) title.textContent = t('完成离线恢复');
+    if (help) help.textContent = t('输入本机离线恢复密钥，并设置新的永久密码。');
+    if (button) button.textContent = t('完成恢复');
+  } else if (_adminAuthMode === 'legacy') {
+    if (title) title.textContent = t('升级管理员密码');
+    if (help) help.textContent = t('旧密码验证成功后必须升级为至少 12 位的新密码。');
+    if (button) button.textContent = t('升级并登录');
+  } else {
+    if (title) title.textContent = 'RouteNest ' + t('管理后台');
+    if (help) help.textContent = t('请输入管理员用户名和密码。');
+    if (button) button.textContent = t('登录');
+  }
+  renderSSOLoginProviders();
+}
+
+function showLogin(mode) {
+  if (mode) setAdminAuthMode(mode);
   const ov = _('loginOverlay');
   if (ov && ov.style.display !== 'flex') {
     ov.style.display = 'flex';
-    setTimeout(() => _('loginPassword').focus(), 50);
+    setTimeout(() => {
+      const target = (_adminAuthMode === 'bootstrap' || _adminAuthMode === 'recovery') ? _('bootstrapSecret') : _('loginPassword');
+      if (target) target.focus();
+    }, 50);
   }
 }
 
-async function submitLogin() {
-  const pwd = _('loginPassword').value;
-  if (!pwd) return;
+function renderSSOLoginProviders() {
+  const host = _('loginSSOProviders'), buttons = _('loginSSOButtons');
+  if (!host || !buttons) return;
+  buttons.textContent = '';
+  const providers = (_adminAuthStatus && _adminAuthStatus.ssoProviders) || [];
+  const available = Array.isArray(providers) && _adminAuthMode === 'login' ? providers.filter(provider =>
+    provider.enabled === true && provider.ready === true && (provider.type === 'oidc' || provider.type === 'saml')
+  ) : [];
+  host.style.display = available.length ? '' : 'none';
+  available.forEach(provider => {
+    const button = document.createElement('button');
+    button.type = 'button'; button.className = 'btn btn-block';
+    button.textContent = t('使用单点登录') + ' · ' + provider.id + ' (' + provider.type.toUpperCase() + ')';
+    button.addEventListener('click', () => startSSOLogin(provider));
+    buttons.appendChild(button);
+  });
+}
+
+async function startSSOLogin(provider) {
+  if (!provider || !provider.enabled || !provider.ready || _adminAuthMode !== 'login') return;
+  if (provider.type !== 'oidc' && provider.type !== 'saml') return;
+  const buttons = _('loginSSOButtons').querySelectorAll('button');
+  buttons.forEach(button => { button.disabled = true; });
   _('loginError').textContent = '';
   try {
-    const res = await fetch(API + '/login', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ password: pwd })
+    const response = await fetch(API + '/auth/' + provider.type + '/start', {
+      method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ provider: provider.id, returnLocation: location.pathname + location.search + location.hash })
     });
-    const data = await res.json();
+    const envelope = await response.json().catch(() => ({}));
+    const result = envelope.data || envelope;
+    if (!response.ok || envelope.success === false || !result.redirectURL) throw new Error(envelope.error || t('单点登录暂不可用'));
+    const redirect = new URL(result.redirectURL, location.href);
+    if ((redirect.protocol !== 'https:' && redirect.protocol !== 'http:') || redirect.username || redirect.password) throw new Error(t('单点登录地址无效'));
+    location.assign(redirect.href);
+  } catch (e) { _('loginError').textContent = e.message || t('单点登录失败，请重试'); }
+  finally { buttons.forEach(button => { button.disabled = false; }); }
+}
+
+async function submitLogin() {
+  const username = (_('loginUsername') && _('loginUsername').value.trim()) || 'admin';
+  const pwd = (_('loginPassword') && _('loginPassword').value) || '';
+  const secret = (_('bootstrapSecret') && _('bootstrapSecret').value) || '';
+  const newPassword = (_('loginNewPassword') && _('loginNewPassword').value) || '';
+  const confirm = (_('loginConfirmPassword') && _('loginConfirmPassword').value) || '';
+  const rotating = _adminAuthMode === 'bootstrap' || _adminAuthMode === 'recovery' || _adminAuthMode === 'legacy';
+  if ((!rotating && !pwd) || ((_adminAuthMode === 'bootstrap' || _adminAuthMode === 'recovery') && !secret)) return;
+  if (rotating && (newPassword.length < 12 || newPassword !== confirm)) {
+    _('loginError').textContent = newPassword.length < 12 ? t('永久密码至少 12 位') : t('两次输入的密码不一致');
+    return;
+  }
+  _('loginError').textContent = '';
+  try {
+    let path = '/login', body = { username: username, password: pwd };
+    if (_adminAuthMode === 'bootstrap' || _adminAuthMode === 'recovery') {
+      path = '/auth/bootstrap'; body = { secret: secret, password: newPassword };
+    } else if (_adminAuthMode === 'legacy') {
+      path = '/auth/legacy/rotate'; body = { username: username, oldPassword: pwd, newPassword: newPassword };
+    }
+    const res = await fetch(API + path, {
+      method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    const data = await res.json().catch(() => ({}));
     if (res.ok && data.success) {
       location.reload();
+    } else if (data.error === 'password_rotation_required') {
+      setAdminAuthMode('legacy');
+      _('loginError').textContent = t('此安装仍使用旧密码格式，请设置新的永久密码。');
     } else {
       _('loginError').textContent = data.error || t('登录失败');
-      _('loginPassword').value = '';
+      if (_('loginPassword')) _('loginPassword').value = '';
     }
   } catch (e) { _('loginError').textContent = t('网络错误，请重试'); }
+}
+
+function renderAdminPrincipal(principal) {
+  _adminPrincipal = principal || null;
+  const identity = _('adminIdentity');
+  const roles = _('adminRoles');
+  if (identity) identity.textContent = principal ? (principal.username + ' · ' + principal.method) : t('未登录');
+  if (roles) roles.textContent = principal && principal.roles ? principal.roles.join(', ') : '—';
+}
+
+async function initializeAdminAuth() {
+  try {
+    const statusResponse = await fetch(API + '/auth/status', { credentials: 'same-origin' });
+    const statusEnvelope = await statusResponse.json();
+    if (!statusResponse.ok || !statusEnvelope.success) throw new Error(statusEnvelope.error || 'security_unavailable');
+    _adminAuthStatus = statusEnvelope.data || {};
+    renderSSOLoginProviders();
+    if (_adminAuthStatus.bootstrapRequired) { showLogin('bootstrap'); return false; }
+    if (_adminAuthStatus.recoveryRequired) { showLogin('recovery'); return false; }
+    const sessionResponse = await fetch(API + '/auth/session', { credentials: 'same-origin' });
+    if (sessionResponse.status === 401) {
+      showLogin(_adminAuthStatus.legacyRotationRequired ? 'legacy' : 'login');
+      return false;
+    }
+    const sessionEnvelope = await sessionResponse.json();
+    if (!sessionResponse.ok || !sessionEnvelope.success) throw new Error(sessionEnvelope.error || 'session_unavailable');
+    renderAdminPrincipal(sessionEnvelope.data.principal);
+    return true;
+  } catch (e) {
+    setGatewayReachability(false);
+    showLogin('login');
+    _('loginError').textContent = t('安全服务不可用: ') + e.message;
+    return false;
+  }
+}
+
+async function logoutAdmin() {
+  try {
+    await api('POST', '/logout', {});
+  } catch (e) {}
+  location.reload();
 }
 
 // 用系统默认浏览器打开外部链接（桌面 WebView 内导航不会跳外部浏览器，需走后端）
 async function openExternal(url) {
   try {
-    await api('GET', '/open-external?url=' + encodeURIComponent(url));
+    await api('POST', '/open-external', { url: url });
     toast(t('已在系统浏览器中打开'), 'success');
   } catch (e) { toast(t('打开失败: ') + e.message, 'error'); }
 }

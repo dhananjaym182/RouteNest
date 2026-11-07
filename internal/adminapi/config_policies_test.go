@@ -53,7 +53,7 @@ func TestConfigGetExposesBuildInfo(t *testing.T) {
 		t.Fatal("build should be omitted when callback absent")
 	}
 
-	h.Build = func() map[string]any { return map[string]any{"commit": "abc1234", "goVersion": "go1.25.0"} }
+	h.Build = func() map[string]any { return map[string]any{"commit": "abc1234", "goVersion": "go1.26.0"} }
 	rec = httptest.NewRecorder()
 	h.Get(rec, httptest.NewRequest(http.MethodGet, "/admin/api/config", nil))
 	data := decodeEnvelope(t, rec).Data.(map[string]any)

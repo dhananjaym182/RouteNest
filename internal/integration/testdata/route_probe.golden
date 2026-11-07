@@ -1,20 +1,29 @@
 GET /admin/ -> 200 ct=text/html; charset=utf-8 shape=non-json
-GET /admin/api/providers/presets -> 200 ct=application/json shape={data,success} data{presets}
-GET /admin/api/providers -> 200 ct=application/json shape={data,success} data{accountHealth,health,providers}
-GET /admin/api/connections -> 200 ct=application/json shape={data,success} data{connections,flowLabels,flows}
-GET /admin/api/models -> 200 ct=application/json shape={data,success} data{lastSync,models}
-GET /admin/api/config -> 200 ct=application/json shape={data,success} data{address,build,defaultModel,dispatchMode,excludedModels,hasPassword,headers,host,localIPs,maxRequestBodyBytes,modelAliases,modelChain,nonstreamKeepaliveSeconds,onlyFree,passthroughHeaders,poolPath,requestErrorRules,retry,runtimeState,sessionAffinity,strategy,stream,version,zenHeaders}
-GET /admin/api/keys -> 200 ct=application/json shape={data,success} data{keys}
-GET /admin/api/accounts -> 200 ct=application/json shape={data,success} data{accounts,poolIndex,total}
-GET /admin/api/combos -> 200 ct=application/json shape={data,success} data{combos,modelCatalog,reservedAliases}
-GET /admin/api/request-logs -> 200 ct=application/json shape={data,success} data{hasMore,items,nextCursor}
-GET /admin/api/account-health -> 200 ct=application/json shape={data,success} data{accounts}
-GET /admin/api/providers/sync-status -> 200 ct=application/json shape={data,success} data{providers}
-GET /admin/api/opencode/config -> 200 ct=application/json shape={data,success} data{baseURL,compaction,enabled,failover,failoverCount,failoverMinutes,key,lastSync,maxConcurrency,proxies,proxyCooldowns,proxyStrategy,retries,runtime,syncedModels,zenHeaders}
-GET /admin/api/cline-proxy/config -> 200 ct=application/json shape={data,success} data{proxies,proxyStrategy}
-GET /admin/api/provider-instances -> 200 ct=application/json shape={data,success} data{instances}
-GET /admin/api/credentials -> 200 ct=application/json shape={data,success} data{credentials}
-GET /admin/api/model-offerings -> 200 ct=application/json shape={data,success} data{offerings}
-GET /admin/api/provider-state -> 200 ct=application/json shape={data,success} data{observations,runtimeState}
-GET /admin/api/egress-profiles -> 200 ct=application/json shape={data,success} data{globalProfileId,profiles}
+GET /admin/api/auth/status -> 200 ct=application/json shape={data,success} data{bootstrapRequired,initialized,legacyRotationRequired,readiness,recoveryRequired}
+GET /admin/api/auth/session -> 401 ct=application/json shape={error,success}
+GET /admin/api/auth/sessions -> 401 ct=application/json shape={error,success}
+GET /admin/api/auth/users -> 401 ct=application/json shape={error,success}
+GET /admin/api/auth/audit -> 401 ct=application/json shape={error,success}
+GET /admin/api/auth/sso/providers -> 401 ct=application/json shape={error,success}
+GET /admin/api/auth/oidc/callback -> 400 ct=application/json shape={error,success}
+GET /admin/api/auth/saml/metadata -> 400 ct=application/json shape={error,success}
+GET /admin/api/listener-operation -> 401 ct=application/json shape={error,success}
+GET /admin/api/providers/presets -> 401 ct=application/json shape={error,success}
+GET /admin/api/providers -> 401 ct=application/json shape={error,success}
+GET /admin/api/connections -> 401 ct=application/json shape={error,success}
+GET /admin/api/models -> 401 ct=application/json shape={error,success}
+GET /admin/api/config -> 401 ct=application/json shape={error,success}
+GET /admin/api/keys -> 401 ct=application/json shape={error,success}
+GET /admin/api/accounts -> 401 ct=application/json shape={error,success}
+GET /admin/api/combos -> 401 ct=application/json shape={error,success}
+GET /admin/api/request-logs -> 401 ct=application/json shape={error,success}
+GET /admin/api/account-health -> 401 ct=application/json shape={error,success}
+GET /admin/api/providers/sync-status -> 401 ct=application/json shape={error,success}
+GET /admin/api/opencode/config -> 401 ct=application/json shape={error,success}
+GET /admin/api/cline-proxy/config -> 401 ct=application/json shape={error,success}
+GET /admin/api/provider-instances -> 401 ct=application/json shape={error,success}
+GET /admin/api/credentials -> 401 ct=application/json shape={error,success}
+GET /admin/api/model-offerings -> 401 ct=application/json shape={error,success}
+GET /admin/api/provider-state -> 401 ct=application/json shape={error,success}
+GET /admin/api/egress-profiles -> 401 ct=application/json shape={error,success}
 POST /admin/api/login -> 400 ct=application/json shape={error,success}

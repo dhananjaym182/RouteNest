@@ -21,6 +21,7 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/options"
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
 	"github.com/wailsapp/wails/v2/pkg/options/windows"
+	wailsruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 const defaultDesktopPort = 3457
@@ -31,6 +32,34 @@ func main() {
 	port := flag.Int("port", configuredDesktopPort(), "Proxy server port")
 	host := flag.String("host", configuredDesktopHost(), "Proxy server listen host (0.0.0.0 = all interfaces)")
 	flag.Parse()
+
+	securityOptions := admin.SecurityOptions{ListenHost: *host, ListenPort: *port}
+	var nativeBootstrapSecret string
+	if !*selfCheck {
+		secret, err := admin.GenerateBootstrapSecret()
+		if err != nil {
+			log.Fatal(err)
+		}
+		securityOptions.BootstrapPassword = secret
+		nativeBootstrapSecret = secret
+	}
+	if err := admin.ConfigureSecurity(securityOptions); err != nil {
+		log.Fatalf("Administrator security failed: %v", err)
+	}
+	defer func() {
+		if err := admin.CloseSecurity(); err != nil {
+			log.Printf("Administrator security shutdown failed: %v", err)
+		}
+	}()
+	if nativeBootstrapSecret != "" {
+		required, err := admin.SecurityBootstrapRequired()
+		if err != nil {
+			log.Fatal(err)
+		}
+		if !required {
+			nativeBootstrapSecret = ""
+		}
+	}
 
 	proxyErr := make(chan error, 1)
 	go func() {
@@ -50,7 +79,7 @@ func main() {
 		log.Printf("警告: 监听 %s 非本机回环地址，桌面窗口可能无法自动连接，建议使用 127.0.0.1 或 0.0.0.0", *host)
 	}
 
-	if err := runDesktopWindow(*port); err != nil {
+	if err := runDesktopWindow(*port, nativeBootstrapSecret); err != nil {
 		log.Fatal(err)
 	}
 }
@@ -99,7 +128,7 @@ func waitForEmbeddedProxy(port int, timeout time.Duration, proxyErr <-chan error
 	return fmt.Errorf("代理启动超时（%s）：%v", url, lastErr)
 }
 
-func runDesktopWindow(port int) error {
+func runDesktopWindow(port int, bootstrapSecret string) error {
 	return wails.Run(&options.App{
 		Title:     "RouteNest",
 		Width:     1280,
@@ -110,7 +139,18 @@ func runDesktopWindow(port int) error {
 			Handler: desktopRedirectHandler(port),
 		},
 		BackgroundColour: &options.RGBA{R: 248, G: 250, B: 252, A: 255},
-		OnStartup:        func(_ context.Context) {},
+		OnStartup: func(ctx context.Context) {
+			if bootstrapSecret == "" {
+				return
+			}
+			go func() {
+				_, _ = wailsruntime.MessageDialog(ctx, wailsruntime.MessageDialogOptions{
+					Type:    wailsruntime.InfoDialog,
+					Title:   "RouteNest administrator bootstrap",
+					Message: "One-time bootstrap secret:\n\n" + bootstrapSecret + "\n\nUse it in the local RouteNest login window and immediately set a permanent password. This secret will not be shown again.",
+				})
+			}()
+		},
 		Windows: &windows.Options{
 			WebviewIsTransparent: false,
 			WindowIsTranslucent:  false,

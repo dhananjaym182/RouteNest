@@ -3,7 +3,6 @@ package admin_test
 import (
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"sync"
 	"testing"
 
@@ -16,8 +15,8 @@ import (
 func TestConfigUpdatesPublishWholeConfigurations(t *testing.T) {
 	installConfig(t, admin.DefaultProxyConfig())
 	installPool(t, nil) // no admin password, so the update is not rejected with 401
-	mux := http.NewServeMux()
-	admin.RegisterRoutes(mux)
+	harness := newAdminRouteTestHarness(t)
+	mux := harness.mux
 
 	var wg sync.WaitGroup
 	stop := make(chan struct{})
@@ -45,8 +44,7 @@ func TestConfigUpdatesPublishWholeConfigurations(t *testing.T) {
 	strategies := []string{"round_robin", "random"}
 	for i := 0; i < 60; i++ {
 		body := `{"strategy":"` + strategies[i%2] + `"}`
-		req := httptest.NewRequest(http.MethodPost, "/admin/api/config/update", strings.NewReader(body))
-		req.Header.Set("Content-Type", "application/json")
+		req := harness.request(http.MethodPost, "/admin/api/config/update", body)
 		rec := httptest.NewRecorder()
 		mux.ServeHTTP(rec, req)
 		if rec.Code != http.StatusOK {

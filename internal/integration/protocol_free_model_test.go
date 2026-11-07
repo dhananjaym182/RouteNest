@@ -63,8 +63,9 @@ func protocolTestServer(t *testing.T) string {
 	})
 
 	serverErr := make(chan error, 1)
+	registerAdmin := integrationAdminRegistrar(t, "http://127.0.0.1:"+strconv.Itoa(port))
 	go func() {
-		serverErr <- proxycore.Start("127.0.0.1", port, admin.RegisterRoutes)
+		serverErr <- proxycore.Start("127.0.0.1", port, registerAdmin)
 	}()
 
 	baseURL := "http://127.0.0.1:" + strconv.Itoa(port)

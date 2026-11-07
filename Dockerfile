@@ -1,8 +1,8 @@
-FROM golang:1.26-alpine AS builder
+FROM golang:1.26.10-alpine AS builder
 
 WORKDIR /build
-COPY go.mod ./
-RUN go mod download 2>/dev/null || true
+COPY go.mod go.sum ./
+RUN go mod download
 COPY . .
 ARG APP_VERSION=dev
 ARG GIT_COMMIT=

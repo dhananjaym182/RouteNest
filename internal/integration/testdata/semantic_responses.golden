@@ -53,151 +53,18 @@
   ],
   "object": "list"
 }
-== GET /admin/api/models status=OK
+== GET /admin/api/models status=Unauthorized
 {
-  "data": {
-    "lastSync": {
-      "added": null,
-      "changed": false,
-      "removed": null,
-      "syncedAt": "",
-      "total": 0
-    },
-    "models": [
-      {
-        "context": 200000,
-        "cost": "pass",
-        "custom": false,
-        "id": "remote/alpha",
-        "output": 8192,
-        "provider": "cline",
-        "source": "remote",
-        "status": "active"
-      },
-      {
-        "cost": "free",
-        "custom": false,
-        "delisted": true,
-        "id": "remote/gone",
-        "provider": "cline",
-        "source": "remote",
-        "status": "active"
-      },
-      {
-        "cost": "free",
-        "custom": false,
-        "id": "zen/free",
-        "provider": "opencode",
-        "source": "zen",
-        "status": "active"
-      },
-      {
-        "cost": "pass",
-        "custom": true,
-        "id": "custom/beta",
-        "provider": "custom",
-        "status": "active",
-        "thinkingLevels": [
-          "low",
-          "high"
-        ]
-      },
-      {
-        "cost": "pass",
-        "custom": true,
-        "disabled": true,
-        "id": "custom/off",
-        "provider": "custom",
-        "status": "active"
-      },
-      {
-        "cost": "pass",
-        "custom": false,
-        "id": "fixture/one",
-        "provider": "Fixture Provider",
-        "source": "provider",
-        "status": "active"
-      }
-    ]
-  },
-  "success": true
+  "error": "login_required",
+  "success": false
 }
-== GET /admin/api/providers status=OK
+== GET /admin/api/providers status=Unauthorized
 {
-  "data": {
-    "accountHealth": "\u003cruntime-history\u003e",
-    "health": {
-      "pfix": {
-        "avgLatencyMs": 0,
-        "cooldowns": [],
-        "daily": 0,
-        "limits": {
-          "daily": 0,
-          "rpm": 0,
-          "tokenWindow": "monthly",
-          "tokens": 0
-        },
-        "rate": 0,
-        "recent": [],
-        "rpm": 0,
-        "samples": 0,
-        "tokens": 0
-      }
-    },
-    "providers": [
-      {
-        "apiKey": "fixture-key",
-        "baseURL": "http://127.0.0.1:9",
-        "createdAt": "\u003ctime\u003e",
-        "enabled": true,
-        "free": false,
-        "id": "pfix",
-        "modelIds": [
-          "fixture/one"
-        ],
-        "name": "Fixture Provider",
-        "priority": 0
-      }
-    ]
-  },
-  "success": true
+  "error": "login_required",
+  "success": false
 }
-== GET /admin/api/connections status=OK
+== GET /admin/api/connections status=Unauthorized
 {
-  "data": {
-    "connections": [
-      {
-        "accessToken": "",
-        "authType": "",
-        "createdAt": "\u003ctime\u003e",
-        "email": "fixture@example.invalid",
-        "id": "\u003cconnection-id\u003e",
-        "provider": "qwen",
-        "status": "active"
-      }
-    ],
-    "flowLabels": {
-      "codebuddy-cn": "CodeBuddy CN (Free)",
-      "codebuddy-intl": "CodeBuddy Intl (Free)",
-      "github": "GitHub Copilot (Free plan)",
-      "kilocode": "Kilo Code (Free)",
-      "kimi-coding": "Kimi for Coding (Free)",
-      "qoder": "Qoder",
-      "qoder-cn": "Qoder CN",
-      "qwen": "Qwen Chat (Free)",
-      "workbuddy": "WorkBuddy (Free)"
-    },
-    "flows": [
-      "codebuddy-cn",
-      "codebuddy-intl",
-      "github",
-      "kilocode",
-      "kimi-coding",
-      "qoder",
-      "qoder-cn",
-      "qwen",
-      "workbuddy"
-    ]
-  },
-  "success": true
+  "error": "login_required",
+  "success": false
 }

@@ -1,6 +1,7 @@
 package adminapi
 
 import (
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -16,6 +17,7 @@ type configFixture struct {
 	defaultModel string
 	host         string
 	restarted    chan string
+	persisted    chan string
 }
 
 func newConfigHandler() (*Config, *configFixture) {
@@ -24,6 +26,7 @@ func newConfigHandler() (*Config, *configFixture) {
 		defaultModel: "m1",
 		host:         "127.0.0.1",
 		restarted:    make(chan string, 1),
+		persisted:    make(chan string, 1),
 	}
 	h := &Config{
 		Proxy: func() *configpkg.Proxy { return f.cfg },
@@ -35,10 +38,14 @@ func newConfigHandler() (*Config, *configFixture) {
 		},
 		DefaultModel:    func() string { return f.defaultModel },
 		SetDefaultModel: func(m string) { f.defaultModel = m },
-		SetListenHost:   func(host string) { f.host = host },
-		LocalIPs:        func() []string { return []string{"192.168.1.5"} },
-		ListenHost:      func() string { return f.host },
-		ListenPort:      func() int { return 8050 },
+		SetListenHost: func(host string) error {
+			f.host = host
+			f.persisted <- host
+			return nil
+		},
+		LocalIPs:   func() []string { return []string{"192.168.1.5"} },
+		ListenHost: func() string { return f.host },
+		ListenPort: func() int { return 8050 },
 		EffectiveAdminHost: func(host string) string {
 			if host == "" || host == "0.0.0.0" || host == "::" {
 				return "localhost"
@@ -55,7 +62,8 @@ func newConfigHandler() (*Config, *configFixture) {
 			f.restarted <- host
 			return nil
 		},
-		Translate: func(_ *http.Request, key string) string { return key },
+		ListenerOperations: NewListenerOperationStore(),
+		Translate:          func(_ *http.Request, key string) string { return key },
 	}
 	return h, f
 }
@@ -84,6 +92,20 @@ func TestConfigGet(t *testing.T) {
 	ips := data["localIPs"].([]any)
 	if len(ips) != 1 || ips[0] != "192.168.1.5" {
 		t.Fatalf("localIPs = %v", data["localIPs"])
+	}
+}
+
+func TestConfigGetFormatsIPv6Address(t *testing.T) {
+	h, fixture := newConfigHandler()
+	fixture.host = "::1"
+	recorder := httptest.NewRecorder()
+	h.Get(recorder, httptest.NewRequest(http.MethodGet, "/admin/api/config", nil))
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d", recorder.Code)
+	}
+	data := decodeEnvelope(t, recorder).Data.(map[string]any)
+	if data["address"] != "[::1]:8050" {
+		t.Fatalf("IPv6 address = %v", data["address"])
 	}
 }
 
@@ -200,20 +222,55 @@ func TestConfigUpdateHostValidationAndRestart(t *testing.T) {
 	}
 
 	rec = httptest.NewRecorder()
-	h.Update(rec, httptest.NewRequest(http.MethodPost, "/admin/api/config", strings.NewReader(`{"host":"192.168.1.5"}`)))
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200", rec.Code)
-	}
-	if f.host != "192.168.1.5" {
-		t.Fatalf("host = %q", f.host)
+	h.Update(rec, httptest.NewRequest(http.MethodPost, "/admin/api/config", strings.NewReader(`{"host":"localhost"}`)))
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("status = %d, want 202", rec.Code)
 	}
 	select {
 	case got := <-f.restarted:
-		if got != "192.168.1.5" {
+		if got != "localhost" {
 			t.Fatalf("restarted with %q", got)
 		}
 	case <-time.After(time.Second):
 		t.Fatal("listener restart was not triggered")
+	}
+	select {
+	case got := <-f.persisted:
+		if got != "localhost" {
+			t.Fatalf("persisted host = %q", got)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("listener host was not persisted")
+	}
+}
+
+func TestConfigUpdateEscalatesWhenPersistenceAndRollbackFail(t *testing.T) {
+	h, fixture := newConfigHandler()
+	fixture.persisted = make(chan string, 1)
+	restarts := 0
+	h.RestartListener = func(string, int) error {
+		restarts++
+		if restarts == 1 {
+			return nil
+		}
+		return errors.New("rollback bind failed")
+	}
+	h.SetListenHost = func(string) error { return errors.New("disk unavailable") }
+	fatal := make(chan error, 1)
+	h.FatalListenerFailure = func(err error) { fatal <- err }
+
+	recorder := httptest.NewRecorder()
+	h.Update(recorder, httptest.NewRequest(http.MethodPost, "/admin/api/config", strings.NewReader(`{"host":"localhost"}`)))
+	if recorder.Code != http.StatusAccepted {
+		t.Fatalf("status = %d, want 202", recorder.Code)
+	}
+	select {
+	case err := <-fatal:
+		if !strings.Contains(err.Error(), "rollback failed") || !strings.Contains(err.Error(), "disk unavailable") {
+			t.Fatalf("fatal listener error = %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("fatal listener failure was not escalated")
 	}
 }
 

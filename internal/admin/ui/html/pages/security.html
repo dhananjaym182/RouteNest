@@ -38,12 +38,11 @@
           <label>监听地址</label>
           <select id="settingListenHost" onchange="saveListenHost()">
             <option value="127.0.0.1">127.0.0.1（仅本机）</option>
-            <option value="0.0.0.0">0.0.0.0（所有网卡）</option>
           </select>
         </div>
         <div class="field"><label>当前地址</label><input type="text" id="settingAddr" disabled></div>
       </div>
-      <div id="listenWarn" class="warn-box" style="display:none">⚠️ 当前监听非本机回环地址（0.0.0.0 或局域网 IP），管理后台无鉴权，局域网内任何设备都可访问。请确认网络环境安全，或配合防火墙限制端口。</div>
+      <div id="listenWarn" class="warn-box" style="display:none">当前配置请求非回环监听。RouteNest 会拒绝启动或切换，直到配置规范的 HTTPS 公共地址与可信反向代理 CIDR。</div>
       <div id="localIPsRow" class="form-row" style="display:none">
         <div class="field f1">
           <label>本机 IP（局域网访问地址）</label>
@@ -52,22 +51,138 @@
       </div>
       <div class="form-row mt-12">
         <div class="field f1">
-          <label>管理后台密码（<span id="passwordStatus">未启用</span>）</label>
-          <div class="gap-row">
-            <input type="password" id="settingPassword" placeholder="留空保存 = 清除密码" autocomplete="new-password" class="f1">
+          <label>当前管理员</label>
+          <div class="gap-row-mid">
+            <div class="f1">
+              <strong id="adminIdentity">加载中…</strong>
+              <div class="hint-sm">角色：<span id="adminRoles">—</span></div>
+            </div>
+            <button class="btn" onclick="logoutAdmin()">退出登录</button>
+          </div>
+        </div>
+      </div>
+      <div class="form-row mt-12">
+        <div class="field f1">
+          <label>本地管理员密码（<span id="passwordStatus">已启用（不可关闭）</span>）</label>
+          <div class="form-row">
+            <input type="password" id="settingCurrentPassword" placeholder="当前密码" autocomplete="current-password" class="f1">
+            <input type="password" id="settingPassword" placeholder="新密码（至少 12 位）" autocomplete="new-password" class="f1">
+            <input type="password" id="settingPasswordConfirm" placeholder="再次输入新密码" autocomplete="new-password" class="f1">
             <button class="btn btn-primary" onclick="savePassword(this)">保存</button>
           </div>
-          <div class="hint-sm mt-4">设置后访问管理后台需输入密码，默认无密码</div>
+          <div class="hint-sm mt-4">密码更新会撤销该管理员的全部会话。管理员认证不能在线关闭。</div>
         </div>
       </div>
       <div class="form-row mt-12">
         <div class="field f1">
           <label>后台登录会话</label>
           <div class="gap-row-mid">
-            <button class="btn" onclick="clearAdminSessions(this)">清除全部登录会话</button>
-            <span class="hint-sm">强制所有浏览器（包括当前页面）重新登录，凭据数据不受影响</span>
+            <button class="btn" onclick="loadAdminSessions()">刷新会话</button>
+            <span class="hint-sm">会话在服务端持久化并可单独撤销；原始令牌不会显示。</span>
+          </div>
+          <div id="adminSessionsList" class="mt-8"></div>
+        </div>
+      </div>
+      <div class="form-row mt-12">
+        <div class="field f1">
+          <label>管理员用户与角色</label>
+          <div class="gap-row-mid">
+            <button type="button" class="btn" onclick="loadAdminUsers()">刷新用户</button>
+            <button type="button" class="btn btn-primary" onclick="openAdminUserEditor()">添加本地管理员</button>
+            <span class="hint-sm">角色变更、停用和密码重置会立即撤销该用户的全部会话；本地应急管理员不可修改。</span>
+          </div>
+          <div id="adminUsersList" class="mt-8"></div>
+          <div id="adminUserEditor" class="security-note mt-12" style="display:none">
+            <div class="gap-row-mid mb-8"><strong id="adminUserEditorTitle" class="f1">添加本地管理员</strong><button type="button" class="btn btn-sm" onclick="closeAdminUserEditor()">取消</button></div>
+            <input type="hidden" id="adminUserID"><input type="hidden" id="adminUserRevision"><input type="hidden" id="adminUserProvider">
+            <div id="adminUserIdentityFields" class="form-row">
+              <div class="field"><label for="adminUserUsername">用户名</label><input type="text" id="adminUserUsername" maxlength="128" autocomplete="off"></div>
+              <div class="field"><label for="adminUserPassword">永久密码（至少 12 位）</label><input type="password" id="adminUserPassword" autocomplete="new-password"></div>
+            </div>
+            <div class="field mt-8"><label>角色</label><div class="gap-row-mid admin-user-roles">
+              <label><input type="checkbox" value="viewer"> viewer</label>
+              <label><input type="checkbox" value="provider_admin"> provider_admin</label>
+              <label><input type="checkbox" value="credential_admin"> credential_admin</label>
+              <label><input type="checkbox" value="security_admin"> security_admin</label>
+            </div></div>
+            <label class="mt-8"><input type="checkbox" id="adminUserDisabled"> 停用此管理员</label>
+            <div id="adminUserError" class="login-err" role="alert"></div>
+            <div class="form-actions"><button type="button" class="btn btn-primary" onclick="saveAdminUser(this)">保存管理员</button><button type="button" class="btn" onclick="closeAdminUserEditor()">取消</button></div>
           </div>
         </div>
+      </div>
+    </div>
+  </div>
+  <div class="section">
+    <div class="section-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2m20 0v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/><circle cx="9" cy="7" r="4"/></svg>单点登录（SSO）
+      <span class="title-tools"><button type="button" class="btn btn-sm" onclick="loadSSOProviders()">刷新提供方</button></span>
+    </div>
+    <div class="section-desc">启用且就绪的提供方显示在登录页，本地应急管理员入口始终保留。</div>
+    <div class="section-body">
+      <div id="ssoProvidersList" aria-live="polite"><div class="empty-state">加载中…</div></div>
+      <div class="form-actions">
+        <button type="button" class="btn btn-primary" onclick="newSSOProvider('oidc')">添加 OIDC</button>
+        <button type="button" class="btn" onclick="newSSOProvider('saml')">添加 SAML</button>
+      </div>
+      <div id="ssoProviderEditor" class="security-note mt-16" style="display:none">
+        <div class="gap-row-mid mb-12">
+          <strong id="ssoProviderEditorTitle" class="f1">配置 SSO 提供方</strong>
+          <button type="button" class="btn btn-sm" onclick="closeSSOProviderEditor()">取消</button>
+        </div>
+        <div class="form-row">
+          <div class="field"><label for="ssoProviderID">提供方 ID</label><input type="text" id="ssoProviderID" maxlength="64" placeholder="company-sso" autocomplete="off" spellcheck="false"><div class="hint-sm mt-4">使用小写字母、数字、下划线或连字符，并以字母开头。</div></div>
+          <div class="field"><label for="ssoProviderType">协议</label><select id="ssoProviderType" onchange="setSSOProviderType()"><option value="oidc">OIDC</option><option value="saml">SAML</option></select></div>
+          <div class="field"><label for="ssoProviderEnabled">登录入口</label><select id="ssoProviderEnabled"><option value="false">停用</option><option value="true">启用</option></select></div>
+        </div>
+        <div id="ssoOIDCFields">
+          <div class="form-row">
+            <div class="field"><label for="ssoOIDCIssuer">OIDC Issuer（HTTPS）</label><input type="url" id="ssoOIDCIssuer" placeholder="https://id.example.com" autocomplete="off"></div>
+            <div class="field"><label for="ssoOIDCClientID">Client ID</label><input type="text" id="ssoOIDCClientID" autocomplete="off" spellcheck="false"></div>
+          </div>
+          <div class="form-row">
+            <div class="field"><label for="ssoOIDCRedirectURL">OIDC 回调 URL</label><input type="url" id="ssoOIDCRedirectURL" autocomplete="off"><div class="hint-sm mt-4">填写与身份提供方注册及后台公共地址一致的回调地址。</div></div>
+            <div class="field"><label for="ssoOIDCScopes">Scopes（逗号或空格分隔）</label><input type="text" id="ssoOIDCScopes" placeholder="openid, profile, email" autocomplete="off" spellcheck="false"></div>
+          </div>
+          <div class="form-row">
+            <div class="field"><label for="ssoOIDCUsernameClaim">用户名 Claim（可选）</label><input type="text" id="ssoOIDCUsernameClaim" autocomplete="off" spellcheck="false"></div>
+            <div class="field"><label for="ssoOIDCGroupsClaim">组 Claim（可选）</label><input type="text" id="ssoOIDCGroupsClaim" autocomplete="off" spellcheck="false"></div>
+          </div>
+          <div class="form-row">
+            <div class="field"><label for="ssoOIDCSecretKind">Client Secret 引用来源</label><select id="ssoOIDCSecretKind"><option value="env">环境变量（env）</option><option value="file">文件（file）</option></select></div>
+            <div class="field"><label for="ssoOIDCSecretName">环境变量名或文件路径</label><input type="text" id="ssoOIDCSecretName" autocomplete="off" spellcheck="false"></div>
+          </div>
+        </div>
+        <div id="ssoSAMLFields" style="display:none">
+          <div class="form-row">
+            <div class="field"><label for="ssoSAMLMetadataURL">IdP Metadata URL（HTTPS）</label><input type="url" id="ssoSAMLMetadataURL" autocomplete="off"></div>
+            <div class="field"><label for="ssoSAMLEntityID">SP Entity ID</label><input type="url" id="ssoSAMLEntityID" autocomplete="off"></div>
+          </div>
+          <div class="form-row">
+            <div class="field"><label for="ssoSAMLMetadataEndpoint">SP Metadata URL</label><input type="url" id="ssoSAMLMetadataEndpoint" autocomplete="off"></div>
+            <div class="field"><label for="ssoSAMLACSURL">ACS URL</label><input type="url" id="ssoSAMLACSURL" autocomplete="off"></div>
+          </div>
+          <div class="form-row">
+            <div class="field"><label for="ssoSAMLUsernameAttribute">用户名 Attribute（可选）</label><input type="text" id="ssoSAMLUsernameAttribute" autocomplete="off" spellcheck="false"></div>
+            <div class="field"><label for="ssoSAMLGroupsAttribute">组 Attribute（可选）</label><input type="text" id="ssoSAMLGroupsAttribute" autocomplete="off" spellcheck="false"></div>
+          </div>
+          <div class="form-row">
+            <div class="field"><label for="ssoSAMLCertificateKind">SP 证书引用来源（可选）</label><select id="ssoSAMLCertificateKind"><option value="env">环境变量（env）</option><option value="file">文件（file）</option></select></div>
+            <div class="field"><label for="ssoSAMLCertificateName">证书环境变量名或文件路径</label><input type="text" id="ssoSAMLCertificateName" autocomplete="off" spellcheck="false"></div>
+          </div>
+          <div class="form-row">
+            <div class="field"><label for="ssoSAMLPrivateKeyKind">SP 私钥引用来源（可选）</label><select id="ssoSAMLPrivateKeyKind"><option value="env">环境变量（env）</option><option value="file">文件（file）</option></select></div>
+            <div class="field"><label for="ssoSAMLPrivateKeyName">私钥环境变量名或文件路径</label><input type="text" id="ssoSAMLPrivateKeyName" autocomplete="off" spellcheck="false"></div>
+          </div>
+          <div class="hint-sm mb-12">SP 证书与私钥引用必须成对配置。</div>
+        </div>
+        <div class="hint-sm mb-12">密钥只保存环境变量名或文件路径；请勿输入密钥内容。界面不会读取或显示解析后的密钥。</div>
+        <div class="form-row">
+          <div class="field"><label for="ssoDefaultRoles">默认角色（JSON 数组）</label><textarea id="ssoDefaultRoles" rows="3" spellcheck="false">[]</textarea></div>
+          <div class="field"><label for="ssoGroupRoleMap">组到角色映射（JSON 对象）</label><textarea id="ssoGroupRoleMap" rows="3" spellcheck="false" placeholder='{"operators":["provider_admin"]}'>{}</textarea></div>
+        </div>
+        <div class="hint-sm">可用角色：viewer、provider_admin、credential_admin、security_admin。至少配置一个角色；break_glass 仅用于本地应急管理员。</div>
+        <div id="ssoProviderError" class="login-err" role="alert"></div>
+        <div class="form-actions"><button type="button" class="btn btn-primary" onclick="saveSSOProvider(this)">保存提供方</button><button type="button" class="btn" onclick="closeSSOProviderEditor()">取消</button></div>
       </div>
     </div>
   </div>

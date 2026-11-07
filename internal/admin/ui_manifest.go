@@ -11,6 +11,7 @@ var adminUIJSAssets = []string{
 	"ui/js/03_shell.js",
 	"ui/js/04_accounts.js",
 	"ui/js/05_settings.js",
+	"ui/js/06_security_users.js",
 	"ui/js/06_providers_custom.js",
 	"ui/js/07_providers_detail.js",
 	"ui/js/08_providers_detect.js",

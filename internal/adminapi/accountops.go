@@ -187,19 +187,36 @@ func (h *AccountOps) Export(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// OpenExternal handles GET /admin/api/open-external?url=... by handing an
-// http(s) URL to the OS default browser.
+// OpenExternal handles POST /admin/api/open-external with {"url":"..."} by
+// handing an http(s) URL to the OS default browser. Keeping the target out of
+// the query string avoids leaking it through request logs and browser history.
 func (h *AccountOps) OpenExternal(w http.ResponseWriter, r *http.Request) {
-	url := r.URL.Query().Get("url")
-	if url == "" {
+	if r.Method != http.MethodPost {
+		httpx.WriteAPI(w, http.StatusMethodNotAllowed, httpx.Response{Error: h.msg(r, "method_not_allowed")})
+		return
+	}
+	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 4096))
+	if err != nil {
+		httpx.WriteAPI(w, http.StatusBadRequest, httpx.Response{Error: h.msg(r, "invalid_json")})
+		return
+	}
+	defer r.Body.Close()
+	var request struct {
+		URL string `json:"url"`
+	}
+	if err := json.Unmarshal(body, &request); err != nil {
+		httpx.WriteAPI(w, http.StatusBadRequest, httpx.Response{Error: h.msg(r, "invalid_json")})
+		return
+	}
+	if request.URL == "" {
 		httpx.WriteAPI(w, http.StatusBadRequest, httpx.Response{Error: h.msg(r, "url_required")})
 		return
 	}
-	if !hasHTTPPrefix(url) {
+	if !hasHTTPPrefix(request.URL) {
 		httpx.WriteAPI(w, http.StatusBadRequest, httpx.Response{Error: h.msg(r, "url_http_only")})
 		return
 	}
-	if err := h.OpenBrowser(url); err != nil {
+	if err := h.OpenBrowser(request.URL); err != nil {
 		httpx.WriteAPI(w, http.StatusInternalServerError, httpx.Response{Error: err.Error()})
 		return
 	}

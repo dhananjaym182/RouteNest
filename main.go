@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -14,6 +15,8 @@ import (
 	"routenest/internal/app"
 	"routenest/internal/proxycore"
 	"runtime"
+	"strconv"
+	"strings"
 	"time"
 )
 
@@ -67,6 +70,14 @@ func main() {
 		fmt.Println()
 		return
 	}
+	if err := admin.ConfigureSecurity(admin.SecurityOptions{ListenHost: *host, ListenPort: *port}); err != nil {
+		log.Fatalf("Administrator security failed: %v", err)
+	}
+	defer func() {
+		if err := admin.CloseSecurity(); err != nil {
+			log.Printf("Administrator security shutdown failed: %v", err)
+		}
+	}()
 
 	if err := proxycore.Start(*host, *port, admin.RegisterRoutes); err != nil && err != http.ErrServerClosed {
 		log.Fatalf("Proxy failed: %v", err)
@@ -127,7 +138,7 @@ func buildAndStart(host string, port int) {
 		fmt.Println("Proxy started.")
 	}
 
-	url := fmt.Sprintf("http://%s:%d/admin/", proxycore.EffectiveAdminHost(host), port)
+	url := "http://" + net.JoinHostPort(strings.Trim(proxycore.EffectiveAdminHost(host), "[]"), strconv.Itoa(port)) + "/admin/"
 	fmt.Printf("\nAdmin panel: %s\n", url)
 
 	switch runtime.GOOS {

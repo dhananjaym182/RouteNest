@@ -210,14 +210,14 @@ func TestAccountOpsOpenExternal(t *testing.T) {
 
 	for _, raw := range []string{"", "ftp://x", "javascript:alert(1)"} {
 		rec := httptest.NewRecorder()
-		h.OpenExternal(rec, httptest.NewRequest(http.MethodGet, "/admin/api/open-external?url="+raw, nil))
+		h.OpenExternal(rec, httptest.NewRequest(http.MethodPost, "/admin/api/open-external", strings.NewReader(`{"url":"`+raw+`"}`)))
 		if rec.Code != http.StatusBadRequest {
 			t.Fatalf("url %q status = %d, want 400", raw, rec.Code)
 		}
 	}
 
 	rec := httptest.NewRecorder()
-	h.OpenExternal(rec, httptest.NewRequest(http.MethodGet, "/admin/api/open-external?url=https%3A%2F%2Fexample.com", nil))
+	h.OpenExternal(rec, httptest.NewRequest(http.MethodPost, "/admin/api/open-external", strings.NewReader(`{"url":"https://example.com"}`)))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", rec.Code)
 	}
@@ -231,7 +231,7 @@ func TestAccountOpsOpenExternalBrowserError(t *testing.T) {
 	f.openErr = errors.New("no browser")
 
 	rec := httptest.NewRecorder()
-	h.OpenExternal(rec, httptest.NewRequest(http.MethodGet, "/admin/api/open-external?url=http%3A%2F%2Fexample.com", nil))
+	h.OpenExternal(rec, httptest.NewRequest(http.MethodPost, "/admin/api/open-external", strings.NewReader(`{"url":"http://example.com"}`)))
 	if rec.Code != http.StatusInternalServerError {
 		t.Fatalf("status = %d, want 500", rec.Code)
 	}

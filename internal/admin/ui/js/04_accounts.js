@@ -240,11 +240,7 @@ async function exportSelectedAccounts() {
   const ids = [..._checkedAccounts];
   if (!ids.length) { toast(t('请先勾选要导出的账号'), 'info'); return; }
   try {
-    const res = await fetch(API + '/accounts/export', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ids: ids })
-    });
+    const res = await adminFetch('POST', '/accounts/export', { ids: ids });
     if (!res.ok) throw new Error('HTTP ' + res.status);
     const blob = await res.blob();
     const url = URL.createObjectURL(blob);
@@ -581,7 +577,7 @@ async function exportAccounts(btn) {
   const orig = btn ? btn.innerHTML : '';
   if (btn) { btn.disabled = true; btn.innerHTML = '<span class="loading"></span>'; }
   try {
-    const res = await fetch(API + '/accounts/export');
+    const res = await adminFetch('POST', '/accounts/export', {});
     const blob = await res.blob();
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');

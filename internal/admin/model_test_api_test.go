@@ -447,10 +447,9 @@ func TestQuickModelTestTokenBudget(t *testing.T) {
 // request reaches the same adapter and auth wrapper as the console.
 func postAdminRoute(t *testing.T, path, body string) (int, admin.APIResponse) {
 	t.Helper()
-	mux := http.NewServeMux()
-	admin.RegisterRoutes(mux)
+	harness := newAdminRouteTestHarness(t)
 	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, httptest.NewRequest("POST", path, strings.NewReader(body)))
+	harness.mux.ServeHTTP(rec, harness.request(http.MethodPost, path, body))
 	var resp admin.APIResponse
 	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
 		t.Fatalf("decode response: %v (body=%s)", err, rec.Body.String())

@@ -14,6 +14,8 @@ import (
 	"routenest/internal/proxycore"
 )
 
+var adminListenerOperations = adminapi.NewListenerOperationStore()
+
 var adminConfig = &adminapi.Config{
 	Proxy: SnapshotProxyConfig,
 	SetProxy: func(cfg *ProxyConfig) {
@@ -28,12 +30,19 @@ var adminConfig = &adminapi.Config{
 		accounts.PoolMu.Unlock()
 		accounts.SavePool()
 	},
-	SetListenHost: func(host string) {
+	SetListenHost: func(host string) error {
 		p := accounts.LoadPool()
 		accounts.PoolMu.Lock()
+		old := p.ListenHost
 		p.ListenHost = host
 		accounts.PoolMu.Unlock()
-		accounts.SavePool()
+		if err := accounts.SavePoolStrict(); err != nil {
+			accounts.PoolMu.Lock()
+			p.ListenHost = old
+			accounts.PoolMu.Unlock()
+			return err
+		}
+		return nil
 	},
 	LocalIPs:           proxycore.DetectLocalIPs,
 	ListenHost:         func() string { return proxycore.ListenHost },
@@ -54,6 +63,10 @@ var adminConfig = &adminapi.Config{
 	PoolPath:        accounts.PoolPath,
 	HasPassword:     func() bool { return accounts.LoadPool().AdminPasswordHash != "" },
 	RestartListener: proxycore.RestartListener,
-	Translate:       func(r *http.Request, key string) string { return i18n.TAPI(r, key) },
-	Logf:            log.Printf,
+	FatalListenerFailure: func(err error) {
+		log.Panicf("administrator listener rollback failed; terminating for supervisor recovery: %v", err)
+	},
+	ListenerOperations: adminListenerOperations,
+	Translate:          func(r *http.Request, key string) string { return i18n.TAPI(r, key) },
+	Logf:               log.Printf,
 }
