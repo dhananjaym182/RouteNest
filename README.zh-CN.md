@@ -8,7 +8,7 @@ RouteNest 是一个自托管、Go 驱动的 AI 网关，面向编码代理与 AI
 
 它提供服务商预设、账号管理、模型发现、有序回退、请求日志与内置管理控制台。
 
-[![Go](https://img.shields.io/badge/Go-1.25-00ADD8?logo=go&logoColor=white)](https://go.dev)
+[![Go](https://img.shields.io/badge/Go-1.26-00ADD8?logo=go&logoColor=white)](https://go.dev)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux-blue)](#从源码构建)
 [![Provider presets](https://img.shields.io/badge/Provider%20presets-110-brightgreen)](#服务商覆盖)
@@ -35,13 +35,15 @@ RouteNest 是一个自托管、Go 驱动的 AI 网关，面向编码代理与 AI
 
 ## 部署前安全须知
 
-> **安全提示：** RouteNest 默认没有管理密码，也不内置 TLS。在未设置密码的实例上，任何能访问 `/admin/` 的人都可以添加或导出账号、读取已保存的凭据、修改路由并生成 API 密钥。把 RouteNest 暴露到局域网或互联网之前，请先设置管理密码并限制网络访问。
+> **安全提示：** RouteNest 不提供通用默认密码，也不会匿名开放管理 API。全新安装进入一次性引导模式，必须设置永久本地管理员密码后才能正常管理。
 
-- **监听地址：** 二进制与桌面端默认绑定 `127.0.0.1`。Docker 镜像在容器内绑定 `0.0.0.0`，因此映射出去的端口在容器外部可达。
-- **两套独立的控制：** API 密钥只保护 `/v1/*` 代理端点，**不会**保护 `/admin/*`。管理后台由管理密码及其会话 Cookie 控制（24 小时过期，保存在内存中，进程重启后失效）。仅设置 API 密钥不能保护管理控制台。
-- **无 TLS：** RouteNest 使用明文 HTTP。流量经过不可信网络时，请在前面部署负责 TLS 终止的反向代理。
+- **一次性引导：** CLI 只把随机引导密钥写到本地控制终端。无终端部署首次启动时需设置 `ROUTENEST_ADMIN_BOOTSTRAP_PASSWORD`；完成引导后会永久忽略该变量。桌面端通过一次性原生对话框显示。
+- **两套独立控制：** API 密钥保护 `/v1/*`；持久化管理员会话、服务端 RBAC 与会话绑定 CSRF 保护 `/admin/*`。会话只持久化哈希，可在重启后继续并可立即撤销。
+- **托管管理后台：** 二进制与桌面端默认绑定 `127.0.0.1`。非回环管理访问必须配置精确公共 URL、受信反向代理模式及代理 CIDR。RouteNest 不内置 TLS，应由受信代理终止 HTTPS。
 - **敏感数据：** 账号 refreshToken、服务商密钥与生成的 API 密钥以明文保存在数据目录中。请保护该目录，不要提交到 Git 或分享。
-- **Docker：** 不要把 `3457` 端口公开到公网。请使用防火墙限制来源，或绑定到本机地址。
+- **Docker：** 示例 compose 只把后端端口绑定到宿主机回环，并要求显式配置引导、公共 URL 与代理信任。不要把后端端口直接暴露到互联网。
+
+RBAC、OIDC、SAML、离线恢复与反向代理配置见 [管理员安全与 SSO](docs/admin-security.md)。
 
 ## 快速开始
 
@@ -65,7 +67,7 @@ Windows SmartScreen 可能因为构建未做代码签名而警告。只有在文
 go build -o routenest .
 ./routenest                # 127.0.0.1:3457
 ./routenest -port 8080     # 自定义端口
-./routenest -host 0.0.0.0  # 所有网卡；请先阅读上方安全提示
+./routenest -host 0.0.0.0  # 需要配置托管管理后台安全参数
 ```
 
 打开 <http://127.0.0.1:3457/admin/> 进入管理控制台。监听地址也可以通过 `CLINE_PROXY_HOST` 设置。
@@ -78,11 +80,11 @@ docker compose logs -f
 docker compose down
 ```
 
-容器监听 `0.0.0.0:3457`。状态存放在 `/app/data`，compose 已挂载到 `./data`；只要保留 `./data`，重建容器不会丢数据。compose 还会以只读方式挂载 `./override.md`；如需覆盖 System Prompt，请先创建该文件再执行 `docker compose up`。
+容器内监听 `0.0.0.0:3457`，示例 compose 仅把它发布到宿主机回环，供本机 TLS 反向代理使用。启动前先在 `.env` 中填写管理员安全变量，参见 [Docker 示例](docs/admin-security.md#docker-and-reverse-proxy)。状态位于 `/app/data` 并挂载到 `./data`，保留卷即可保留身份与网关数据。
 
 ### 首次运行
 
-1. 打开 `/admin/`，设置管理密码。
+1. 从本地终端/原生对话框读取一次性引导密钥，打开 `/admin/` 并设置永久密码。
 2. 添加 Cline 账号、OpenCode Zen 连接，或服务商 API 密钥。
 3. 为客户端生成 API 密钥。
 4. 选择默认模型；不设置时使用第一个可用的免费模型。
@@ -251,7 +253,10 @@ RouteNest 默认把状态存放在操作系统的用户配置目录：
 
 | 文件 | 用途 |
 | --- | --- |
-| `.routenest-accounts.json` | 账号池、API 密钥、模型设置、管理密码哈希 |
+| `.routenest-accounts.json` | 账号池、API 密钥与模型设置；旧管理哈希仅用于迁移 |
+| `admin-auth/.routenest-admin-auth.json` | 持久化管理员、角色/SSO 元数据与哈希会话 |
+| `admin-auth/.routenest-admin-auth.journal` | 同步写入、哈希链式的管理员安全与审计日志 |
+| `admin-auth/sso-secrets/` | 仅所有者可读的 OIDC/SAML 文件密钥批准根目录 |
 | `.routenest-config.json` | 代理配置、别名、策略与模型组合 |
 | `.routenest-connections.json` | 非 Cline 连接元数据（Zen、Qoder 等） |
 | `.routenest-credentials.json` | 已保存的连接凭据 |
@@ -269,8 +274,8 @@ RouteNest 默认把状态存放在操作系统的用户配置目录：
 文件复制到所选目录。已存在的目标文件优先；迁移可重复执行，源文件保留作恢复备份。
 
 在类 Unix 系统上，数据目录和抓包目录权限为 `0700`，已知状态文件为
-`0600`。如果无法创建安全的默认配置目录，RouteNest 会以明确错误停止启动，
-不再回退到可执行文件旁写入凭据。
+`0600`；Windows 对私有路径使用仅当前用户与 SYSTEM 可访问的受保护 ACL。
+如果无法建立安全权限，RouteNest 会以明确错误停止启动，不再回退到可执行文件旁写入凭据。
 
 > 数据文件包含明文 refreshToken、服务商密钥与生成的 API 密钥。请安全备份，不要公开，也不要提交到 Git。
 

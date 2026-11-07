@@ -95,6 +95,30 @@ func TestAdminRouteRegistryPolicyIsDefensiveCopy(t *testing.T) {
 	}
 }
 
+func TestConfigRoutesSeparateProviderAndSecurityPermissions(t *testing.T) {
+	registry := newAdminRouteRegistry()
+	registerConfigRoutes(registry)
+	tests := []struct {
+		method string
+		path   string
+		want   []adminauth.Permission
+	}{
+		{http.MethodGet, "/admin/api/config", []adminauth.Permission{adminauth.PermissionProviderWrite}},
+		{http.MethodPost, "/admin/api/config/update", []adminauth.Permission{adminauth.PermissionProviderWrite}},
+		{http.MethodPost, "/admin/api/config/listener", []adminauth.Permission{adminauth.PermissionSecurityWrite}},
+		{http.MethodGet, "/admin/api/listener-operation", []adminauth.Permission{adminauth.PermissionSecurityWrite}},
+	}
+	for _, tt := range tests {
+		policy, ok := registry.Policy(tt.method, tt.path)
+		if !ok {
+			t.Fatalf("policy missing for %s %s", tt.method, tt.path)
+		}
+		if !reflect.DeepEqual(policy.Permissions, tt.want) {
+			t.Errorf("%s %s permissions = %v, want %v", tt.method, tt.path, policy.Permissions, tt.want)
+		}
+	}
+}
+
 func TestAdminRouteRegistryAllowsOnlyExactProtocolExemptions(t *testing.T) {
 	registry := newAdminRouteRegistry()
 	for _, def := range []adminRouteDefinition{

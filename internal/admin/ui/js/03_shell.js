@@ -181,6 +181,31 @@ function renderAdminPrincipal(principal) {
   const roles = _('adminRoles');
   if (identity) identity.textContent = principal ? (principal.username + ' · ' + principal.method) : t('未登录');
   if (roles) roles.textContent = principal && principal.roles ? principal.roles.join(', ') : '—';
+  applyAdminPermissionVisibility();
+}
+
+const ADMIN_ROLE_PERMISSIONS = Object.freeze({
+  viewer: ['admin.view'],
+  provider_admin: ['admin.view', 'provider.write', 'dangerous.execute'],
+  credential_admin: ['admin.view', 'credential.write', 'credential.export', 'dangerous.execute'],
+  security_admin: ['admin.view', 'security.write'],
+  break_glass: ['admin.view', 'provider.write', 'credential.write', 'credential.export', 'security.write', 'dangerous.execute']
+});
+
+function adminHasPermission(permission) {
+  const roles = (_adminPrincipal && Array.isArray(_adminPrincipal.roles)) ? _adminPrincipal.roles : [];
+  return roles.some(role => (ADMIN_ROLE_PERMISSIONS[role] || []).includes(permission));
+}
+
+function applyAdminPermissionVisibility() {
+  document.querySelectorAll('[data-admin-permission]').forEach(element => {
+    const required = String(element.dataset.adminPermission || '').split(/\s+/).filter(Boolean);
+    element.hidden = !required.every(adminHasPermission);
+  });
+  const activeSecuritySubtab = document.querySelector('.subtabs[data-page="security"] .subtab.active');
+  if (activeSecuritySubtab && activeSecuritySubtab.hidden && typeof switchPageSubTab === 'function') {
+    switchPageSubTab('security', 'access', true);
+  }
 }
 
 async function initializeAdminAuth() {

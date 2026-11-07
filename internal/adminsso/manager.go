@@ -11,7 +11,6 @@ import (
 	"net/url"
 	"sort"
 	"sync"
-	"time"
 
 	"routenest/internal/adminauth"
 )
@@ -20,6 +19,7 @@ var (
 	ErrProviderNotFound    = errors.New("SSO provider not found")
 	ErrProviderUnavailable = errors.New("SSO provider unavailable")
 	ErrProviderConflict    = errors.New("SSO provider changed concurrently")
+	ErrManagerClosed       = errors.New("SSO manager is closed")
 )
 
 type ManagerOptions struct {
@@ -43,10 +43,20 @@ type Manager struct {
 	service         *adminauth.Service
 	resolver        *SecretResolver
 	client          *http.Client
+	oidcClient      *http.Client
 	canonicalOrigin string
 	throttle        *adminauth.Throttler
 	samlReplay      *SAMLReplayStore
-	stateMu         sync.Mutex
+	stateMu         chan struct{}
+	lifecycleCtx    context.Context
+	cancel          context.CancelFunc
+	lifecycleMu     sync.Mutex
+	closed          bool
+	refreshStarted  bool
+	active          sync.WaitGroup
+	closeOnce       sync.Once
+	closeErr        error
+	closeClient     bool
 
 	mu                sync.RWMutex
 	views             map[string]ProviderView
@@ -61,6 +71,9 @@ type cachedSAMLMetadata struct {
 }
 
 func NewManager(ctx context.Context, opts ManagerOptions) (*Manager, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	if opts.Service == nil || opts.CanonicalURL == nil {
 		return nil, fmt.Errorf("SSO manager requires administrator identity and canonical URL")
 	}
@@ -72,18 +85,17 @@ func NewManager(ctx context.Context, opts ManagerOptions) (*Manager, error) {
 	if err != nil {
 		return nil, fmt.Errorf("initialize SSO secret resolver: %w", err)
 	}
-	client := opts.HTTPClient
-	if client == nil {
-		transport := http.DefaultTransport.(*http.Transport).Clone()
-		transport.MaxResponseHeaderBytes = 32 << 10
-		transport.ResponseHeaderTimeout = 10 * time.Second
-		transport.TLSHandshakeTimeout = 10 * time.Second
-		client = &http.Client{Transport: transport, Timeout: 10 * time.Second}
+	client := oidcBoundedClient(opts.HTTPClient)
+	closeClient := false
+	if transport, ok := client.Transport.(oidcResponseTransport); ok {
+		_, closeClient = transport.base.(*http.Transport)
 	}
+	lifecycleCtx, cancel := context.WithCancel(ctx)
 	m := &Manager{
 		service:           opts.Service,
 		resolver:          resolver,
 		client:            client,
+		oidcClient:        client,
 		canonicalOrigin:   scheme + "://" + host,
 		throttle:          adminauth.NewThrottler(),
 		samlReplay:        NewSAMLReplayStore(),
@@ -91,9 +103,22 @@ func NewManager(ctx context.Context, opts ManagerOptions) (*Manager, error) {
 		formActionOrigins: make(map[string][]string),
 		samlMetadata:      make(map[string]cachedSAMLMetadata),
 		knownRevisions:    make(map[string]uint64),
+		lifecycleCtx:      lifecycleCtx,
+		cancel:            cancel,
+		closeClient:       closeClient,
+		stateMu:           make(chan struct{}, 1),
 	}
+	client.Transport = managerTransport{manager: m, base: client.Transport}
+	// Share the bounded transport while preserving SAML's same-origin redirect
+	// policy. OIDC retains its stricter no-redirect client policy.
+	samlClient := *client
+	samlClient.CheckRedirect = nil
+	if opts.HTTPClient != nil {
+		samlClient.CheckRedirect = opts.HTTPClient.CheckRedirect
+	}
+	m.client = &samlClient
 	if err := m.seed(ctx); err != nil {
-		return nil, err
+		return nil, errors.Join(err, m.Close())
 	}
 	return m, nil
 }
@@ -125,8 +150,15 @@ func (m *Manager) seed(ctx context.Context) error {
 // Refresh probes every enabled provider independently. A failed provider only
 // updates its own readiness and never changes local break-glass availability.
 func (m *Manager) Refresh(ctx context.Context) error {
-	m.stateMu.Lock()
-	defer m.stateMu.Unlock()
+	ctx, finish, err := m.beginOperation(ctx)
+	if err != nil {
+		return err
+	}
+	defer finish()
+	if err := m.lockState(ctx); err != nil {
+		return err
+	}
+	defer m.unlockState()
 	state, err := m.service.State(ctx)
 	if err != nil {
 		return err
@@ -158,6 +190,9 @@ func (m *Manager) Refresh(ctx context.Context) error {
 	}
 	group.Wait()
 	close(results)
+	if err := m.operationErr(ctx); err != nil {
+		return err
+	}
 	views := make(map[string]ProviderView, len(state.Providers))
 	origins := make(map[string][]string)
 	metadata := make(map[string]cachedSAMLMetadata)
@@ -197,7 +232,7 @@ func (m *Manager) probe(ctx context.Context, provider adminauth.ProviderState) (
 	}
 	switch provider.Type {
 	case adminauth.MethodOIDC:
-		adapter, err := NewOIDCProvider(ctx, provider.ID, *config.OIDC, m.resolver, m.client, m.service.Flows(), provider.Revision)
+		adapter, err := NewOIDCProvider(ctx, provider.ID, *config.OIDC, m.resolver, m.oidcClient, m.service.Flows(), provider.Revision)
 		if err != nil {
 			view.Reason = "provider_unavailable"
 			return view, nil, nil
@@ -281,6 +316,11 @@ func (m *Manager) List(ctx context.Context) ([]ProviderView, error) {
 }
 
 func (m *Manager) LoginProviders(ctx context.Context) ([]LoginProvider, error) {
+	ctx, finish, err := m.beginOperation(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer finish()
 	state, err := m.service.State(ctx)
 	if err != nil {
 		return nil, err
@@ -323,8 +363,15 @@ func (m *Manager) Readiness(ctx context.Context) (map[string]adminauth.ProviderR
 }
 
 func (m *Manager) Upsert(ctx context.Context, principal adminauth.Principal, config ProviderConfig) (ProviderView, error) {
-	m.stateMu.Lock()
-	defer m.stateMu.Unlock()
+	ctx, finish, err := m.beginOperation(ctx)
+	if err != nil {
+		return ProviderView{}, err
+	}
+	defer finish()
+	if err := m.lockState(ctx); err != nil {
+		return ProviderView{}, err
+	}
+	defer m.unlockState()
 	if err := config.validate(); err != nil {
 		return ProviderView{}, err
 	}
@@ -367,6 +414,9 @@ func (m *Manager) Upsert(ctx context.Context, principal adminauth.Principal, con
 	}
 	provider := state.Providers[config.ID]
 	view, origins, metadata := m.probe(ctx, provider)
+	if err := m.operationErr(ctx); err != nil {
+		return ProviderView{}, err
+	}
 	m.mu.Lock()
 	m.knownRevisions[config.ID] = provider.Revision
 	m.views[config.ID] = view
@@ -385,8 +435,15 @@ func (m *Manager) Upsert(ctx context.Context, principal adminauth.Principal, con
 }
 
 func (m *Manager) Delete(ctx context.Context, principal adminauth.Principal, id string) error {
-	m.stateMu.Lock()
-	defer m.stateMu.Unlock()
+	ctx, finish, err := m.beginOperation(ctx)
+	if err != nil {
+		return err
+	}
+	defer finish()
+	if err := m.lockState(ctx); err != nil {
+		return err
+	}
+	defer m.unlockState()
 	if !providerIDPattern.MatchString(id) {
 		return ErrProviderNotFound
 	}
@@ -422,13 +479,18 @@ func (m *Manager) Delete(ctx context.Context, principal adminauth.Principal, id 
 }
 
 func (m *Manager) oidc(ctx context.Context, id string) (*OIDCProvider, error) {
-	m.stateMu.Lock()
-	defer m.stateMu.Unlock()
+	if err := m.lockState(ctx); err != nil {
+		return nil, err
+	}
+	defer m.unlockState()
 	provider, config, err := m.provider(ctx, id, adminauth.MethodOIDC)
 	if err != nil {
 		return nil, err
 	}
-	adapter, err := NewOIDCProvider(ctx, id, *config.OIDC, m.resolver, m.client, m.service.Flows(), provider.Revision)
+	adapter, err := NewOIDCProvider(ctx, id, *config.OIDC, m.resolver, m.oidcClient, m.service.Flows(), provider.Revision)
+	if err := m.operationErr(ctx); err != nil {
+		return nil, err
+	}
 	if err != nil {
 		m.markUnavailable(provider)
 		return nil, ErrProviderUnavailable
@@ -438,13 +500,18 @@ func (m *Manager) oidc(ctx context.Context, id string) (*OIDCProvider, error) {
 }
 
 func (m *Manager) saml(ctx context.Context, id string) (*SAMLProvider, error) {
-	m.stateMu.Lock()
-	defer m.stateMu.Unlock()
+	if err := m.lockState(ctx); err != nil {
+		return nil, err
+	}
+	defer m.unlockState()
 	provider, config, err := m.provider(ctx, id, adminauth.MethodSAML)
 	if err != nil {
 		return nil, err
 	}
 	adapter, err := NewSAMLProvider(ctx, id, provider.Revision, *config.SAML, m.resolver, m.client, m.service.Flows(), m.samlReplay)
+	if err := m.operationErr(ctx); err != nil {
+		return nil, err
+	}
 	if err != nil {
 		m.markUnavailable(provider)
 		return nil, ErrProviderUnavailable
@@ -518,6 +585,11 @@ func (m *Manager) allowStart(source string) error {
 }
 
 func (m *Manager) StartOIDC(ctx context.Context, id, source, returnLocation string) (string, error) {
+	ctx, finish, err := m.beginOperation(ctx)
+	if err != nil {
+		return "", err
+	}
+	defer finish()
 	if err := m.allowStart(source); err != nil {
 		return "", err
 	}
@@ -529,6 +601,11 @@ func (m *Manager) StartOIDC(ctx context.Context, id, source, returnLocation stri
 }
 
 func (m *Manager) CompleteOIDC(ctx context.Context, state, code, source string) (adminauth.Credentials, string, error) {
+	ctx, finish, err := m.beginOperation(ctx)
+	if err != nil {
+		return adminauth.Credentials{}, "", err
+	}
+	defer finish()
 	id, handle, err := ParseFlowState(state)
 	if err != nil {
 		return adminauth.Credentials{}, "", adminauth.ErrReplay
@@ -545,11 +622,19 @@ func (m *Manager) CompleteOIDC(ctx context.Context, state, code, source string) 
 	if err != nil {
 		return adminauth.Credentials{}, "", err
 	}
+	if err := m.operationErr(ctx); err != nil {
+		return adminauth.Credentials{}, "", err
+	}
 	credentials, err := m.service.IssueFederatedSession(ctx, identity.Provider, revision, identity.Subject, identity.Username, identity.Roles, identity.Method, source)
 	return credentials, returnLocation, err
 }
 
 func (m *Manager) SAMLMetadata(ctx context.Context, id, source string) ([]byte, error) {
+	ctx, finish, err := m.beginOperation(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer finish()
 	state, err := m.service.State(ctx)
 	if err != nil {
 		return nil, err
@@ -584,6 +669,11 @@ func (m *Manager) SAMLMetadata(ctx context.Context, id, source string) ([]byte, 
 }
 
 func (m *Manager) StartSAML(ctx context.Context, id, source, returnLocation string) (string, error) {
+	ctx, finish, err := m.beginOperation(ctx)
+	if err != nil {
+		return "", err
+	}
+	defer finish()
 	if err := m.allowStart(source); err != nil {
 		return "", err
 	}
@@ -595,6 +685,11 @@ func (m *Manager) StartSAML(ctx context.Context, id, source, returnLocation stri
 }
 
 func (m *Manager) CompleteSAML(ctx context.Context, id, relayState string, request *http.Request, source string) (adminauth.Credentials, string, error) {
+	ctx, finish, err := m.beginOperation(ctx)
+	if err != nil {
+		return adminauth.Credentials{}, "", err
+	}
+	defer finish()
 	stateProvider, handle, parseErr := ParseFlowState(relayState)
 	if parseErr != nil || stateProvider != id {
 		return adminauth.Credentials{}, "", adminauth.ErrReplay
@@ -609,6 +704,9 @@ func (m *Manager) CompleteSAML(ctx context.Context, id, relayState string, reque
 	}
 	identity, returnLocation, revision, err := provider.completeConsumed(ctx, request, relayState, flow)
 	if err != nil {
+		return adminauth.Credentials{}, "", err
+	}
+	if err := m.operationErr(ctx); err != nil {
 		return adminauth.Credentials{}, "", err
 	}
 	credentials, err := m.service.IssueFederatedSession(ctx, identity.Provider, revision, identity.Subject, identity.Username, identity.Roles, identity.Method, source)

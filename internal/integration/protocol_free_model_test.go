@@ -24,6 +24,7 @@ var protocolModelSyncOnce sync.Once
 
 func protocolTestServer(t *testing.T) string {
 	t.Helper()
+	ctx, cancel := context.WithCancel(context.Background())
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("reserve protocol test port: %v", err)
@@ -46,15 +47,22 @@ func protocolTestServer(t *testing.T) string {
 	proxycore.ServerMu.Lock()
 	oldServer := proxycore.CurrentServer
 	proxycore.ServerMu.Unlock()
+	serverErr := make(chan error, 1)
 	t.Cleanup(func() {
+		cancel()
 		proxycore.ServerMu.Lock()
 		server := proxycore.CurrentServer
 		proxycore.CurrentServer = oldServer
 		proxycore.ServerMu.Unlock()
 		if server != nil && server != oldServer {
-			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-			_ = server.Shutdown(ctx)
-			cancel()
+			shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), time.Second)
+			_ = server.Shutdown(shutdownCtx)
+			shutdownCancel()
+		}
+		select {
+		case <-serverErr:
+		case <-time.After(time.Second):
+			t.Error("timed out waiting for protocol test server shutdown")
 		}
 		proxycore.ServerMux = oldServerMux
 		zen.ConfigMu.Lock()
@@ -62,10 +70,9 @@ func protocolTestServer(t *testing.T) string {
 		zen.ConfigMu.Unlock()
 	})
 
-	serverErr := make(chan error, 1)
 	registerAdmin := integrationAdminRegistrar(t, "http://127.0.0.1:"+strconv.Itoa(port))
 	go func() {
-		serverErr <- proxycore.Start("127.0.0.1", port, registerAdmin)
+		serverErr <- proxycore.StartWithContext(ctx, "127.0.0.1", port, registerAdmin)
 	}()
 
 	baseURL := "http://127.0.0.1:" + strconv.Itoa(port)

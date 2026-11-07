@@ -487,7 +487,7 @@ async function saveListenHost() {
     return;
   }
   try {
-    const d = await api('POST', '/config/update', { host });
+    const d = await api('POST', '/config/listener', { host });
     const operation = d.data && d.data.listenerOperation;
     if (operation && operation.id) await waitForListenerOperation(operation.id);
     const safe = ['127.0.0.1', 'localhost', '::1'].indexOf(host) !== -1;

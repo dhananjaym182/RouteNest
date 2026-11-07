@@ -62,8 +62,9 @@ func newConfigHandler() (*Config, *configFixture) {
 			f.restarted <- host
 			return nil
 		},
-		ListenerOperations: NewListenerOperationStore(),
-		Translate:          func(_ *http.Request, key string) string { return key },
+		AuditListenerChange: func(*http.Request, string, string) error { return nil },
+		ListenerOperations:  NewListenerOperationStore(),
+		Translate:           func(_ *http.Request, key string) string { return key },
 	}
 	return h, f
 }
@@ -119,6 +120,23 @@ func TestConfigUpdateRejectsInvalidStrategy(t *testing.T) {
 	}
 	if resp := decodeEnvelope(t, rec); resp.Error != "invalid_strategy" {
 		t.Fatalf("error = %q", resp.Error)
+	}
+}
+
+func TestConfigRejectsOversizedBodies(t *testing.T) {
+	h, _ := newConfigHandler()
+	oversized := `{"strategy":"` + strings.Repeat("x", maxAdminConfigBodyBytes) + `"}`
+	for _, path := range []string{"/admin/api/config/update", "/admin/api/config/listener"} {
+		recorder := httptest.NewRecorder()
+		request := httptest.NewRequest(http.MethodPost, path, strings.NewReader(oversized))
+		if path == "/admin/api/config/update" {
+			h.Update(recorder, request)
+		} else {
+			h.UpdateListener(recorder, request)
+		}
+		if recorder.Code != http.StatusRequestEntityTooLarge {
+			t.Fatalf("%s status = %d, want 413", path, recorder.Code)
+		}
 	}
 }
 
@@ -209,11 +227,26 @@ func TestConfigUpdateValidatesDefaultModel(t *testing.T) {
 	}
 }
 
-func TestConfigUpdateHostValidationAndRestart(t *testing.T) {
+func TestConfigUpdateRejectsListenerMutation(t *testing.T) {
+	h, f := newConfigHandler()
+	rec := httptest.NewRecorder()
+	h.Update(rec, httptest.NewRequest(http.MethodPost, "/admin/api/config/update", strings.NewReader(`{"strategy":"fill","host":"localhost"}`)))
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", rec.Code)
+	}
+	if resp := decodeEnvelope(t, rec); resp.Error != "listener_update_requires_security_route" {
+		t.Fatalf("error = %q", resp.Error)
+	}
+	if f.cfg.Strategy != "round_robin" {
+		t.Fatalf("provider configuration changed on mixed listener request: %q", f.cfg.Strategy)
+	}
+}
+
+func TestConfigUpdateListenerValidatesAndRestarts(t *testing.T) {
 	h, f := newConfigHandler()
 
 	rec := httptest.NewRecorder()
-	h.Update(rec, httptest.NewRequest(http.MethodPost, "/admin/api/config", strings.NewReader(`{"host":"10.9.9.9"}`)))
+	h.UpdateListener(rec, httptest.NewRequest(http.MethodPost, "/admin/api/config/listener", strings.NewReader(`{"host":"10.9.9.9"}`)))
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want 400", rec.Code)
 	}
@@ -222,7 +255,7 @@ func TestConfigUpdateHostValidationAndRestart(t *testing.T) {
 	}
 
 	rec = httptest.NewRecorder()
-	h.Update(rec, httptest.NewRequest(http.MethodPost, "/admin/api/config", strings.NewReader(`{"host":"localhost"}`)))
+	h.UpdateListener(rec, httptest.NewRequest(http.MethodPost, "/admin/api/config/listener", strings.NewReader(`{"host":"localhost"}`)))
 	if rec.Code != http.StatusAccepted {
 		t.Fatalf("status = %d, want 202", rec.Code)
 	}
@@ -244,7 +277,7 @@ func TestConfigUpdateHostValidationAndRestart(t *testing.T) {
 	}
 }
 
-func TestConfigUpdateEscalatesWhenPersistenceAndRollbackFail(t *testing.T) {
+func TestConfigUpdateListenerEscalatesWhenPersistenceAndRollbackFail(t *testing.T) {
 	h, fixture := newConfigHandler()
 	fixture.persisted = make(chan string, 1)
 	restarts := 0
@@ -260,7 +293,7 @@ func TestConfigUpdateEscalatesWhenPersistenceAndRollbackFail(t *testing.T) {
 	h.FatalListenerFailure = func(err error) { fatal <- err }
 
 	recorder := httptest.NewRecorder()
-	h.Update(recorder, httptest.NewRequest(http.MethodPost, "/admin/api/config", strings.NewReader(`{"host":"localhost"}`)))
+	h.UpdateListener(recorder, httptest.NewRequest(http.MethodPost, "/admin/api/config/listener", strings.NewReader(`{"host":"localhost"}`)))
 	if recorder.Code != http.StatusAccepted {
 		t.Fatalf("status = %d, want 202", recorder.Code)
 	}
@@ -271,6 +304,41 @@ func TestConfigUpdateEscalatesWhenPersistenceAndRollbackFail(t *testing.T) {
 		}
 	case <-time.After(time.Second):
 		t.Fatal("fatal listener failure was not escalated")
+	}
+}
+
+func TestConfigUpdateListenerRejectsMutationWhenAuditFails(t *testing.T) {
+	h, fixture := newConfigHandler()
+	h.AuditListenerChange = func(*http.Request, string, string) error {
+		return errors.New("journal unavailable")
+	}
+
+	recorder := httptest.NewRecorder()
+	h.UpdateListener(recorder, httptest.NewRequest(http.MethodPost, "/admin/api/config/listener", strings.NewReader(`{"host":"localhost"}`)))
+	if recorder.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d, want 503", recorder.Code)
+	}
+	select {
+	case host := <-fixture.restarted:
+		t.Fatalf("listener restarted without durable audit: %q", host)
+	default:
+	}
+	select {
+	case host := <-fixture.persisted:
+		t.Fatalf("listener host persisted without durable audit: %q", host)
+	default:
+	}
+}
+
+func TestConfigUpdateListenerRejectsProviderFields(t *testing.T) {
+	h, f := newConfigHandler()
+	recorder := httptest.NewRecorder()
+	h.UpdateListener(recorder, httptest.NewRequest(http.MethodPost, "/admin/api/config/listener", strings.NewReader(`{"host":"localhost","strategy":"fill"}`)))
+	if recorder.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", recorder.Code)
+	}
+	if f.cfg.Strategy != "round_robin" {
+		t.Fatalf("provider configuration changed through listener route: %q", f.cfg.Strategy)
 	}
 }
 

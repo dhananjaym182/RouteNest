@@ -23,6 +23,7 @@ import (
 
 	"routenest/internal/accounts"
 	"routenest/internal/admin"
+	"routenest/internal/adminapi"
 	"routenest/internal/config"
 	"routenest/internal/providers"
 	"routenest/internal/routing"
@@ -50,16 +51,60 @@ func setPoolDefaultModel(v string) {
 	accounts.Pool.DefaultModel = v
 }
 
-// postAdmin sends a JSON POST to the live test server and returns the status and
-// decoded envelope.
-func postAdmin(t *testing.T, baseURL, path, body string) (int, map[string]any) {
+type authenticatedAdmin struct {
+	baseURL string
+	client  *http.Client
+	session *http.Cookie
+	csrf    string
+}
+
+func newAuthenticatedAdmin(t *testing.T, baseURL string) *authenticatedAdmin {
 	t.Helper()
-	req, err := http.NewRequest(http.MethodPost, baseURL+path, strings.NewReader(body))
+	client := &http.Client{Timeout: 5 * time.Second}
+	req, err := http.NewRequest(http.MethodPost, baseURL+"/admin/api/auth/bootstrap", strings.NewReader(`{"secret":"one time bootstrap secret","password":"permanent admin password"}`))
 	if err != nil {
 		t.Fatal(err)
 	}
 	req.Header.Set("Content-Type", "application/json")
-	resp, err := (&http.Client{Timeout: 5 * time.Second}).Do(req)
+	req.Header.Set("Origin", baseURL)
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatalf("bootstrap admin: %v", err)
+	}
+	defer resp.Body.Close()
+	raw, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("bootstrap admin status = %d: %s", resp.StatusCode, raw)
+	}
+
+	admin := &authenticatedAdmin{baseURL: baseURL, client: client}
+	for _, cookie := range resp.Cookies() {
+		switch cookie.Name {
+		case adminapi.SessionCookieName:
+			admin.session = cookie
+		case "routenest_admin_csrf":
+			admin.csrf = cookie.Value
+		}
+	}
+	if admin.session == nil || admin.csrf == "" {
+		t.Fatalf("bootstrap admin cookies missing: session=%t csrf=%t", admin.session != nil, admin.csrf != "")
+	}
+	return admin
+}
+
+// post sends an authenticated JSON mutation to the live test server and
+// returns the status and decoded envelope.
+func (admin *authenticatedAdmin) post(t *testing.T, path, body string) (int, map[string]any) {
+	t.Helper()
+	req, err := http.NewRequest(http.MethodPost, admin.baseURL+path, strings.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Origin", admin.baseURL)
+	req.Header.Set("X-RouteNest-CSRF", admin.csrf)
+	req.AddCookie(admin.session)
+	resp, err := admin.client.Do(req)
 	if err != nil {
 		t.Fatalf("POST %s: %v", path, err)
 	}
@@ -121,8 +166,9 @@ func TestModelDuplicateIDsMetadataEditsFirstMatchOnly(t *testing.T) {
 		{ID: "dup/x", Provider: "dup", Cost: "free", Status: "active", Source: "remote"},
 	})
 	baseURL := protocolTestServer(t)
+	admin := newAuthenticatedAdmin(t, baseURL)
 
-	status, _ := postAdmin(t, baseURL, "/admin/api/models/context", `{"id":"dup/x","context":100,"output":10}`)
+	status, _ := admin.post(t, "/admin/api/models/context", `{"id":"dup/x","context":100,"output":10}`)
 	if status != http.StatusOK {
 		t.Fatalf("context status = %d", status)
 	}
@@ -145,8 +191,9 @@ func TestModelDuplicateIDsToggleAppliesToEveryRecord(t *testing.T) {
 		{ID: "other/z", Provider: "other", Cost: "pass", Status: "active", Custom: true},
 	})
 	baseURL := protocolTestServer(t)
+	admin := newAuthenticatedAdmin(t, baseURL)
 
-	if status, _ := postAdmin(t, baseURL, "/admin/api/models/toggle", `{"ids":["dup/y"],"disabled":true}`); status != http.StatusOK {
+	if status, _ := admin.post(t, "/admin/api/models/toggle", `{"ids":["dup/y"],"disabled":true}`); status != http.StatusOK {
 		t.Fatalf("disable status = %d", status)
 	}
 	for _, m := range findModels(poolModels(t), "dup/y") {
@@ -162,7 +209,7 @@ func TestModelDuplicateIDsToggleAppliesToEveryRecord(t *testing.T) {
 		t.Errorf("unrelated model dropped from /v1/models: %v", ids)
 	}
 
-	if status, _ := postAdmin(t, baseURL, "/admin/api/models/toggle", `{"ids":["dup/y"],"disabled":false}`); status != http.StatusOK {
+	if status, _ := admin.post(t, "/admin/api/models/toggle", `{"ids":["dup/y"],"disabled":false}`); status != http.StatusOK {
 		t.Fatalf("enable status = %d", status)
 	}
 	if !contains(v1ModelIDs(t, baseURL), "dup/y") {
@@ -176,8 +223,9 @@ func TestModelDeleteRemovesFirstMatchAndRejectsBuiltin(t *testing.T) {
 		{ID: "dup/d", Provider: "dup", Cost: "free", Status: "active", Source: "remote"},
 	})
 	baseURL := protocolTestServer(t)
+	admin := newAuthenticatedAdmin(t, baseURL)
 
-	if status, _ := postAdmin(t, baseURL, "/admin/api/models/delete", `{"id":"dup/d"}`); status != http.StatusOK {
+	if status, _ := admin.post(t, "/admin/api/models/delete", `{"id":"dup/d"}`); status != http.StatusOK {
 		t.Fatalf("delete custom duplicate status = %d", status)
 	}
 	left := findModels(poolModels(t), "dup/d")
@@ -185,7 +233,7 @@ func TestModelDeleteRemovesFirstMatchAndRejectsBuiltin(t *testing.T) {
 		t.Fatalf("after first delete = %+v, want the remote record only", left)
 	}
 	// The remaining record is a non-delisted synchronized model: built-in, not deletable.
-	if status, _ := postAdmin(t, baseURL, "/admin/api/models/delete", `{"id":"dup/d"}`); status != http.StatusBadRequest {
+	if status, _ := admin.post(t, "/admin/api/models/delete", `{"id":"dup/d"}`); status != http.StatusBadRequest {
 		t.Errorf("delete non-delisted remote status = %d, want 400 (cannot_delete_builtin)", status)
 	}
 }
@@ -195,7 +243,8 @@ func TestModelDeleteDelistedRemoteIsAllowed(t *testing.T) {
 		{ID: "remote/gone", Provider: "remote", Cost: "free", Status: "active", Source: "remote", Delisted: true},
 	})
 	baseURL := protocolTestServer(t)
-	if status, _ := postAdmin(t, baseURL, "/admin/api/models/delete", `{"id":"remote/gone"}`); status != http.StatusOK {
+	admin := newAuthenticatedAdmin(t, baseURL)
+	if status, _ := admin.post(t, "/admin/api/models/delete", `{"id":"remote/gone"}`); status != http.StatusOK {
 		t.Fatalf("delete delisted status = %d, want 200", status)
 	}
 	if len(findModels(poolModels(t), "remote/gone")) != 0 {
@@ -221,9 +270,10 @@ func TestDefaultModelClearedByDisableAndDelete(t *testing.T) {
 		{ID: "c/two", Provider: "c", Cost: "pass", Status: "active", Custom: true},
 	})
 	baseURL := protocolTestServer(t)
+	admin := newAuthenticatedAdmin(t, baseURL)
 
 	setPoolDefaultModel("c/one")
-	if status, _ := postAdmin(t, baseURL, "/admin/api/models/toggle", `{"ids":["c/one"],"disabled":true}`); status != http.StatusOK {
+	if status, _ := admin.post(t, "/admin/api/models/toggle", `{"ids":["c/one"],"disabled":true}`); status != http.StatusOK {
 		t.Fatalf("disable status = %d", status)
 	}
 	if got := poolDefaultModel(); got != "" {
@@ -231,7 +281,7 @@ func TestDefaultModelClearedByDisableAndDelete(t *testing.T) {
 	}
 
 	setPoolDefaultModel("c/two")
-	if status, _ := postAdmin(t, baseURL, "/admin/api/models/delete", `{"id":"c/two"}`); status != http.StatusOK {
+	if status, _ := admin.post(t, "/admin/api/models/delete", `{"id":"c/two"}`); status != http.StatusOK {
 		t.Fatalf("delete status = %d", status)
 	}
 	if got := poolDefaultModel(); got != "" {
@@ -245,8 +295,9 @@ func TestDefaultModelUntouchedByOtherToggle(t *testing.T) {
 		{ID: "k/two", Provider: "k", Cost: "pass", Status: "active", Custom: true},
 	})
 	baseURL := protocolTestServer(t)
+	admin := newAuthenticatedAdmin(t, baseURL)
 	setPoolDefaultModel("k/one")
-	if status, _ := postAdmin(t, baseURL, "/admin/api/models/toggle", `{"ids":["k/two"],"disabled":true}`); status != http.StatusOK {
+	if status, _ := admin.post(t, "/admin/api/models/toggle", `{"ids":["k/two"],"disabled":true}`); status != http.StatusOK {
 		t.Fatalf("toggle status = %d", status)
 	}
 	if got := poolDefaultModel(); got != "k/one" {
@@ -259,8 +310,9 @@ func TestMetaLockFollowsContextEdits(t *testing.T) {
 		{ID: "meta/m", Provider: "meta", Cost: "pass", Status: "active", Custom: true},
 	})
 	baseURL := protocolTestServer(t)
+	admin := newAuthenticatedAdmin(t, baseURL)
 
-	if status, _ := postAdmin(t, baseURL, "/admin/api/models/context", `{"id":"meta/m","context":4096,"output":8192}`); status != http.StatusOK {
+	if status, _ := admin.post(t, "/admin/api/models/context", `{"id":"meta/m","context":4096,"output":8192}`); status != http.StatusOK {
 		t.Fatalf("set status = %d", status)
 	}
 	m := findModels(poolModels(t), "meta/m")[0]
@@ -268,7 +320,7 @@ func TestMetaLockFollowsContextEdits(t *testing.T) {
 		t.Errorf("after set: %+v, want locked 4096/8192", m)
 	}
 
-	if status, _ := postAdmin(t, baseURL, "/admin/api/models/context", `{"id":"meta/m","context":0,"output":0}`); status != http.StatusOK {
+	if status, _ := admin.post(t, "/admin/api/models/context", `{"id":"meta/m","context":0,"output":0}`); status != http.StatusOK {
 		t.Fatalf("reset status = %d", status)
 	}
 	m = findModels(poolModels(t), "meta/m")[0]
@@ -280,8 +332,9 @@ func TestMetaLockFollowsContextEdits(t *testing.T) {
 func TestModelAddConflictAndProviderInference(t *testing.T) {
 	installPool(t, nil)
 	baseURL := protocolTestServer(t)
+	admin := newAuthenticatedAdmin(t, baseURL)
 
-	if status, _ := postAdmin(t, baseURL, "/admin/api/models/add", `{"id":"acme/m1"}`); status != http.StatusOK {
+	if status, _ := admin.post(t, "/admin/api/models/add", `{"id":"acme/m1"}`); status != http.StatusOK {
 		t.Fatalf("add status = %d", status)
 	}
 	added := findModels(poolModels(t), "acme/m1")
@@ -289,11 +342,11 @@ func TestModelAddConflictAndProviderInference(t *testing.T) {
 		t.Errorf("added record = %+v, want provider=acme cost=pass custom=true", added)
 	}
 
-	if status, _ := postAdmin(t, baseURL, "/admin/api/models/add", `{"id":"acme/m1"}`); status != http.StatusConflict {
+	if status, _ := admin.post(t, "/admin/api/models/add", `{"id":"acme/m1"}`); status != http.StatusConflict {
 		t.Errorf("duplicate add status = %d, want 409", status)
 	}
 
-	if status, _ := postAdmin(t, baseURL, "/admin/api/models/add", `{"id":"plain"}`); status != http.StatusOK {
+	if status, _ := admin.post(t, "/admin/api/models/add", `{"id":"plain"}`); status != http.StatusOK {
 		t.Fatalf("add slashless status = %d", status)
 	}
 	plain := findModels(poolModels(t), "plain")

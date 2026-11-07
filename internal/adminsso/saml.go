@@ -445,7 +445,7 @@ func (p *SAMLProvider) completeCallback(callback parsedSAMLCallback, flow admina
 	if err := samlResponseShape(raw); err != nil {
 		return fail(errSAMLResponse)
 	}
-	assertion, err := p.sp.ParseXMLResponse(raw, []string{flow.SAMLRequestID}, p.sp.AcsURL)
+	assertion, err := p.parseXMLResponse(raw, flow.SAMLRequestID)
 	if err != nil {
 		return fail(errSAMLResponse)
 	}
@@ -460,6 +460,19 @@ func (p *SAMLProvider) completeCallback(callback parsedSAMLCallback, flow admina
 		return fail(err)
 	}
 	return identity, flow.ReturnLocation, flow.ProviderRevision, nil
+}
+
+// parseXMLResponse is a fail-closed boundary around the third-party XML and
+// signature parser. A malformed signed assertion must never crash the admin
+// server, even if a dependency regresses while processing optional elements.
+func (p *SAMLProvider) parseXMLResponse(raw []byte, requestID string) (assertion *saml.Assertion, err error) {
+	defer func() {
+		if recover() != nil {
+			assertion = nil
+			err = errSAMLResponse
+		}
+	}()
+	return p.sp.ParseXMLResponse(raw, []string{requestID}, p.sp.AcsURL)
 }
 
 func samlIssueValid(issued, created, now time.Time) bool {

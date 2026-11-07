@@ -8,12 +8,12 @@
   </div>
 
   <div class="subtabs page-subtabs" data-page="security">
-    <div class="subtab active" data-sub="keys">API 密钥</div>
+    <div class="subtab active" data-sub="keys" data-admin-permission="credential.write">API 密钥</div>
     <div class="subtab" data-sub="access">访问设置</div>
-    <div class="subtab" data-sub="danger">危险操作</div>
+    <div class="subtab" data-sub="danger" data-admin-permission="credential.write dangerous.execute">危险操作</div>
   </div>
 
-  <div class="page-subpage" data-subpage="keys">
+  <div class="page-subpage" data-subpage="keys" data-admin-permission="credential.write">
   <div class="section">
     <div class="section-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg><span>API 密钥管理</span>
       <span class="title-tools">
@@ -33,7 +33,7 @@
   <div class="section">
     <div class="section-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>访问设置</div>
     <div class="section-body">
-      <div class="form-row">
+      <div class="form-row" data-admin-permission="security.write">
         <div class="field">
           <label>监听地址</label>
           <select id="settingListenHost" onchange="saveListenHost()">
@@ -42,8 +42,8 @@
         </div>
         <div class="field"><label>当前地址</label><input type="text" id="settingAddr" disabled></div>
       </div>
-      <div id="listenWarn" class="warn-box" style="display:none">当前配置请求非回环监听。RouteNest 会拒绝启动或切换，直到配置规范的 HTTPS 公共地址与可信反向代理 CIDR。</div>
-      <div id="localIPsRow" class="form-row" style="display:none">
+      <div id="listenWarn" class="warn-box" style="display:none" data-admin-permission="security.write">当前配置请求非回环监听。RouteNest 会拒绝启动或切换，直到配置规范的 HTTPS 公共地址与可信反向代理 CIDR。</div>
+      <div id="localIPsRow" class="form-row" style="display:none" data-admin-permission="security.write">
         <div class="field f1">
           <label>本机 IP（局域网访问地址）</label>
           <div id="localIPsList"></div>
@@ -73,7 +73,7 @@
           <div class="hint-sm mt-4">密码更新会撤销该管理员的全部会话。管理员认证不能在线关闭。</div>
         </div>
       </div>
-      <div class="form-row mt-12">
+      <div class="form-row mt-12" data-admin-permission="security.write">
         <div class="field f1">
           <label>后台登录会话</label>
           <div class="gap-row-mid">
@@ -83,7 +83,7 @@
           <div id="adminSessionsList" class="mt-8"></div>
         </div>
       </div>
-      <div class="form-row mt-12">
+      <div class="form-row mt-12" data-admin-permission="security.write">
         <div class="field f1">
           <label>管理员用户与角色</label>
           <div class="gap-row-mid">
@@ -113,7 +113,7 @@
       </div>
     </div>
   </div>
-  <div class="section">
+  <div class="section" data-admin-permission="security.write">
     <div class="section-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2m20 0v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/><circle cx="9" cy="7" r="4"/></svg>单点登录（SSO）
       <span class="title-tools"><button type="button" class="btn btn-sm" onclick="loadSSOProviders()">刷新提供方</button></span>
     </div>
@@ -188,7 +188,7 @@
   </div>
   </div>
 
-  <div class="page-subpage" data-subpage="danger" style="display:none">
+  <div class="page-subpage" data-subpage="danger" style="display:none" data-admin-permission="credential.write dangerous.execute">
   <div class="section danger-zone">
     <div class="section-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>危险操作</div>
     <div class="section-desc">以下操作会删除全部数据，且删除后无法恢复；每个按钮点击后都会先弹出确认框。</div>

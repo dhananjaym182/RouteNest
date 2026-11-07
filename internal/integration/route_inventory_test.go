@@ -90,6 +90,7 @@ var routeMethods = map[string]string{
 	"/admin/api/combos/test":               "POST",
 	"/admin/api/combos/toggle":             "POST",
 	"/admin/api/config":                    "GET",
+	"/admin/api/config/listener":           "POST",
 	"/admin/api/config/update":             "POST",
 	"/admin/api/connections":               "GET",
 	"/admin/api/connections/delete":        "POST",

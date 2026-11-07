@@ -8,6 +8,11 @@ import (
 	"syscall"
 )
 
+func openSecretFile(root *os.Root, name string) (*os.File, error) {
+	// A replaced FIFO must not block before the descriptor can be inspected.
+	return root.OpenFile(name, os.O_RDONLY|syscall.O_NONBLOCK, 0)
+}
+
 func validateSecretFile(path string, info os.FileInfo) error {
 	if info.Mode().Perm() != 0o600 {
 		return fmt.Errorf("secret file %s must have mode 0600", path)

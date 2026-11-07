@@ -1,6 +1,7 @@
 package providers
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -10,7 +11,20 @@ import (
 	"routenest/internal/connections"
 	"sync"
 	"testing"
+	"time"
 )
+
+func TestStartModelRecheckStopsOnContextCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	done := StartModelRecheck(ctx)
+	cancel()
+
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("model recheck worker did not stop after context cancellation")
+	}
+}
 
 // isolateProviderRecheck 把 recheck 的池/状态文件/批次表重置到临时隔离环境。
 func isolateProviderRecheck(t *testing.T) {

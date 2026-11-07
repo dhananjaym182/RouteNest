@@ -38,8 +38,9 @@
 /admin/api/combos/save	POST	routes.go	wrap=security[provider.write,csrf=session]	handler=registry
 /admin/api/combos/test	POST	routes.go	wrap=security[provider.write,csrf=session]	handler=registry
 /admin/api/combos/toggle	POST	routes.go	wrap=security[provider.write,csrf=session]	handler=registry
-/admin/api/config	GET	routes.go	wrap=security[admin.view,csrf=safe]	handler=registry
-/admin/api/config/update	POST	routes.go	wrap=security[provider.write+security.write,csrf=session]	handler=registry
+/admin/api/config	GET	routes.go	wrap=security[provider.write,csrf=safe]	handler=registry
+/admin/api/config/listener	POST	routes.go	wrap=security[security.write,csrf=session]	handler=registry
+/admin/api/config/update	POST	routes.go	wrap=security[provider.write,csrf=session]	handler=registry
 /admin/api/connections	GET	routes.go	wrap=security[credential.write,csrf=safe]	handler=registry
 /admin/api/connections/delete	POST	routes.go	wrap=security[credential.write,csrf=session]	handler=registry
 /admin/api/connections/import	POST	routes.go	wrap=security[credential.write,csrf=session]	handler=registry
@@ -74,12 +75,12 @@
 /admin/api/oauth/start	POST	routes.go	wrap=security[credential.write,csrf=session]	handler=registry
 /admin/api/oauth/status	GET	routes.go	wrap=security[credential.write,csrf=safe]	handler=registry
 /admin/api/open-external	POST	routes.go	wrap=security[admin.view,csrf=session]	handler=registry
-/admin/api/opencode/config	GET	routes.go	wrap=security[admin.view,csrf=safe]	handler=registry
+/admin/api/opencode/config	GET	routes.go	wrap=security[provider.write,csrf=safe]	handler=registry
 /admin/api/opencode/config/update	POST	routes.go	wrap=security[provider.write,csrf=session]	handler=registry
 /admin/api/opencode/models/sync	POST	routes.go	wrap=security[provider.write,csrf=session]	handler=registry
 /admin/api/provider-instances	GET	routes.go	wrap=security[admin.view,csrf=safe]	handler=registry
 /admin/api/provider-state	GET	routes.go	wrap=security[admin.view,csrf=safe]	handler=registry
-/admin/api/providers	GET	routes.go	wrap=security[admin.view,csrf=safe]	handler=registry
+/admin/api/providers	GET	routes.go	wrap=security[provider.write,csrf=safe]	handler=registry
 /admin/api/providers/cooldown-reset	POST	routes.go	wrap=security[provider.write,csrf=session]	handler=registry
 /admin/api/providers/delete	POST	routes.go	wrap=security[provider.write,csrf=session]	handler=registry
 /admin/api/providers/models	POST	routes.go	wrap=security[provider.write,csrf=session]	handler=registry

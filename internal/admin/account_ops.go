@@ -23,19 +23,20 @@ func snapshotAccounts() []*domain.Account {
 func refreshAllAccounts() {
 	p := accounts.LoadPool()
 	accounts.PoolMu.Lock()
-	for _, a := range p.Accounts {
+	all := append([]*domain.Account(nil), p.Accounts...)
+	accounts.PoolMu.Unlock()
+	for _, a := range all {
 		if err := accounts.RefreshAccountToken(a); err != nil {
 			log.Printf("Refresh failed for %s: %v", a.Email, err)
 		}
 	}
-	accounts.PoolMu.Unlock()
 }
 
 func clearAccountPool() {
 	accounts.PoolMu.Lock()
 	accounts.Pool = &AccountPool{Accounts: []*Account{}, Keys: []string{}}
+	accounts.SavePoolLocked()
 	accounts.PoolMu.Unlock()
-	accounts.SavePool()
 }
 
 var adminAccountOps = &adminapi.AccountOps{

@@ -4,28 +4,22 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"runtime"
 )
 
-// EnsurePrivateDir creates dir and restricts it to the current user on Unix.
-// Windows permissions are governed by ACLs rather than Unix mode bits.
+// EnsurePrivateDir creates dir and restricts it to the current user. Platform
+// implementations use owner-only mode bits or a protected Windows ACL.
 func EnsurePrivateDir(dir string) error {
 	if err := os.MkdirAll(dir, 0700); err != nil {
 		return fmt.Errorf("create private directory %s: %w", dir, err)
 	}
-	if runtime.GOOS != "windows" {
-		if err := os.Chmod(dir, 0700); err != nil {
-			return fmt.Errorf("set private directory mode on %s: %w", dir, err)
-		}
+	if err := secureDirectoryPermissions(dir); err != nil {
+		return fmt.Errorf("secure private directory %s: %w", dir, err)
 	}
 	return nil
 }
 
 func ensureFileMode(path string, mode os.FileMode) error {
-	if runtime.GOOS == "windows" {
-		return nil
-	}
-	if err := os.Chmod(path, mode); err != nil {
+	if err := secureFilePermissions(path, mode); err != nil {
 		return fmt.Errorf("set mode %04o on %s: %w", mode, path, err)
 	}
 	return nil

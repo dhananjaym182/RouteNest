@@ -1,11 +1,12 @@
 package admin
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"path/filepath"
 	"testing"
 
 	"routenest/internal/accounts"
-	"routenest/internal/adminapi"
 	"routenest/internal/adminauth"
 	"routenest/internal/domain"
 	poolstore "routenest/internal/store/accounts"
@@ -38,7 +39,8 @@ func TestLegacyAdminCredentialPreservesCorruptAuthorityForFailClosedValidation(t
 
 func TestMarkLegacyAdminMigratedPersistsUnmatchableSentinel(t *testing.T) {
 	legacySalt := "00112233445566778899aabbccddeeff"
-	legacyHash := adminapi.HashPassword(legacySalt, "old-password")
+	sum := sha256.Sum256([]byte(legacySalt + "old-password"))
+	legacyHash := hex.EncodeToString(sum[:])
 	installLegacyAdminPool(t, &domain.AccountPool{
 		AdminPasswordHash: legacyHash,
 		AdminPasswordSalt: legacySalt,
@@ -47,7 +49,10 @@ func TestMarkLegacyAdminMigratedPersistsUnmatchableSentinel(t *testing.T) {
 	if err := markLegacyAdminMigrated(); err != nil {
 		t.Fatal(err)
 	}
-	if adminapi.VerifyPassword(adminauth.LegacyMigrationSentinel, adminauth.LegacyMigrationSentinel, "old-password") {
+	if adminauth.VerifyLegacy(adminauth.LegacyCredential{
+		Hash: adminauth.LegacyMigrationSentinel,
+		Salt: adminauth.LegacyMigrationSentinel,
+	}, "old-password") {
 		t.Fatal("migration sentinel must never match through the legacy verifier")
 	}
 

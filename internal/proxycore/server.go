@@ -218,6 +218,12 @@ type chatRequest struct {
 // Start serves the proxy on host:port. registerAdmin adds the admin console routes
 // to the mux; the caller supplies it so proxycore does not depend on admin.
 func Start(host string, port int, registerAdmin func(*http.ServeMux)) error {
+	return StartWithContext(context.Background(), host, port, registerAdmin)
+}
+
+// StartWithContext is Start with a caller-owned lifecycle for cancellable
+// background workers. The listener remains independently restartable.
+func StartWithContext(ctx context.Context, host string, port int, registerAdmin func(*http.ServeMux)) error {
 	log.Printf("Data directory: %s (set %s to override)", platform.CurrentDataDir(), platform.DataDirEnv)
 	p := accounts.LoadPool()
 	requestlog.Load()
@@ -242,7 +248,12 @@ func Start(host string, port int, registerAdmin func(*http.ServeMux)) error {
 	routing.StartModelSync()
 
 	// §W3-C：已启用 provider 的上游模型清单后台自动检测（下架标记 + 新模型入队待审）
-	providers.StartModelRecheck()
+	modelRecheckDone := providers.StartModelRecheck(ctx)
+	defer func() {
+		if ctx.Err() != nil {
+			<-modelRecheckDone
+		}
+	}()
 
 	// opencode zen：定时同步免费模型列表 + 压缩会话状态清理
 	if zen.GetConfig().Enabled {

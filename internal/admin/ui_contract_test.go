@@ -286,6 +286,37 @@ func TestAdminUICanonicalNavigationLabels(t *testing.T) {
 	}
 }
 
+func TestAdminSecurityUIReflectsRBACPermissions(t *testing.T) {
+	markup := adminUIAsset(t, "ui/html/pages/security.html")
+	script := adminUIAsset(t, "ui/js/03_shell.js")
+	for _, permission := range []string{
+		`data-admin-permission="credential.write"`,
+		`data-admin-permission="security.write"`,
+		`data-admin-permission="credential.write dangerous.execute"`,
+	} {
+		if !strings.Contains(markup, permission) {
+			t.Errorf("security markup missing permission gate %s", permission)
+		}
+	}
+	if strings.Contains(markup, `data-admin-permission="provider.write security.write"`) {
+		t.Error("listener controls still require the provider and security roles simultaneously")
+	}
+	settings := adminUIAsset(t, "ui/js/05_settings.js")
+	if !strings.Contains(settings, `api('POST', '/config/listener', { host })`) {
+		t.Error("listener UI does not use the security-owned listener endpoint")
+	}
+	for _, contract := range []string{
+		"const ADMIN_ROLE_PERMISSIONS",
+		"function adminHasPermission(permission)",
+		"function applyAdminPermissionVisibility()",
+		"required.every(adminHasPermission)",
+	} {
+		if !strings.Contains(script, contract) {
+			t.Errorf("security script missing RBAC contract %q", contract)
+		}
+	}
+}
+
 func TestAdminUIUpstreamProxyOwnership(t *testing.T) {
 	network := adminUIAsset(t, "ui/html/pages/upstreams.html")
 	providers := adminUIAsset(t, "ui/html/pages/providers.html")

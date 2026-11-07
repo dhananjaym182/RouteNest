@@ -3,6 +3,7 @@ package admin
 import (
 	"context"
 	"fmt"
+	"io"
 	"net/http"
 	"routenest/internal/zen"
 	"time"
@@ -35,8 +36,8 @@ var adminKeys = &adminapi.KeyManager{
 		p := accounts.LoadPool()
 		accounts.PoolMu.Lock()
 		p.Keys = append(p.Keys, key)
+		accounts.SavePoolLocked()
 		accounts.PoolMu.Unlock()
-		accounts.SavePool()
 	},
 	DeleteKey: func(key string) {
 		p := accounts.LoadPool()
@@ -47,8 +48,8 @@ var adminKeys = &adminapi.KeyManager{
 				break
 			}
 		}
+		accounts.SavePoolLocked()
 		accounts.PoolMu.Unlock()
-		accounts.SavePool()
 	},
 	Translate: func(r *http.Request, key string) string { return i18n.TAPI(r, key) },
 }
@@ -106,9 +107,9 @@ type RouteSecurityOptions struct {
 	EnableHSTS        bool
 }
 
-func RegisterRoutesWithService(mux *http.ServeMux, service *adminauth.Service, opts RouteSecurityOptions) error {
+func RegisterRoutesWithService(mux *http.ServeMux, service *adminauth.Service, opts RouteSecurityOptions) (io.Closer, error) {
 	if mux == nil || service == nil {
-		return fmt.Errorf("admin mux and security service are required")
+		return nil, fmt.Errorf("admin mux and security service are required")
 	}
 	requestOptions, err := requestSecurityOptions(SecurityOptions{
 		ListenHost:        "127.0.0.1",
@@ -118,14 +119,14 @@ func RegisterRoutesWithService(mux *http.ServeMux, service *adminauth.Service, o
 		ProxyMode:         opts.ProxyMode,
 	})
 	if err != nil {
-		return err
+		return nil, err
 	}
 	sso, err := adminsso.NewManager(context.Background(), adminsso.ManagerOptions{Service: service, CanonicalURL: requestOptions.CanonicalURL})
 	if err != nil {
-		return err
+		return nil, err
 	}
 	registerRoutesWithSecurity(mux, &adminSecurityRuntime{service: service, sso: sso, requestOptions: requestOptions, enableHSTS: opts.EnableHSTS})
-	return nil
+	return sso, nil
 }
 
 func registerRoutesWithSecurity(mux *http.ServeMux, runtime *adminSecurityRuntime) {
@@ -213,7 +214,7 @@ func registerModelsRoutes(registry *adminRouteRegistry) {
 }
 
 func registerUpstreamsRoutes(registry *adminRouteRegistry) {
-	registerProtectedRoute(registry, http.MethodGet, "/admin/api/opencode/config", csrfSafe, handleOpenCodeConfig, adminauth.PermissionView)
+	registerProtectedRoute(registry, http.MethodGet, "/admin/api/opencode/config", csrfSafe, handleOpenCodeConfig, adminauth.PermissionProviderWrite)
 	registerProtectedRoute(registry, http.MethodPost, "/admin/api/opencode/config/update", csrfSession, handleOpenCodeConfigUpdate, adminauth.PermissionProviderWrite)
 	registerProtectedRoute(registry, http.MethodPost, "/admin/api/opencode/models/sync", csrfSession, handleOpenCodeModelSync, adminauth.PermissionProviderWrite)
 	registerProtectedRoute(registry, http.MethodGet, "/admin/api/cline-proxy/config", csrfSafe, handleClineProxyConfig, adminauth.PermissionView)
@@ -221,13 +222,14 @@ func registerUpstreamsRoutes(registry *adminRouteRegistry) {
 }
 
 func registerConfigRoutes(registry *adminRouteRegistry) {
-	registerProtectedRoute(registry, http.MethodGet, "/admin/api/config", csrfSafe, handleAdminConfig, adminauth.PermissionView)
-	registerProtectedRoute(registry, http.MethodPost, "/admin/api/config/update", csrfSession, handleAdminUpdateConfig, adminauth.PermissionProviderWrite, adminauth.PermissionSecurityWrite)
+	registerProtectedRoute(registry, http.MethodGet, "/admin/api/config", csrfSafe, handleAdminConfig, adminauth.PermissionProviderWrite)
+	registerProtectedRoute(registry, http.MethodPost, "/admin/api/config/update", csrfSession, handleAdminUpdateConfig, adminauth.PermissionProviderWrite)
+	registerProtectedRoute(registry, http.MethodPost, "/admin/api/config/listener", csrfSession, handleAdminUpdateListener, adminauth.PermissionSecurityWrite)
 	registerProtectedRoute(registry, http.MethodGet, "/admin/api/listener-operation", csrfSafe, handleAdminListenerOperation, adminauth.PermissionSecurityWrite)
 }
 
 func registerProvidersRoutes(registry *adminRouteRegistry) {
-	registerProtectedRoute(registry, http.MethodGet, "/admin/api/providers", csrfSafe, handleProvidersList, adminauth.PermissionView)
+	registerProtectedRoute(registry, http.MethodGet, "/admin/api/providers", csrfSafe, handleProvidersList, adminauth.PermissionProviderWrite)
 	registerProtectedRoute(registry, http.MethodPost, "/admin/api/providers/save", csrfSession, handleProviderSave, adminauth.PermissionProviderWrite)
 	registerProtectedRoute(registry, http.MethodPost, "/admin/api/providers/delete", csrfSession, handleProviderDelete, adminauth.PermissionProviderWrite)
 	registerProtectedRoute(registry, http.MethodPost, "/admin/api/providers/test", csrfSession, handleProviderTest, adminauth.PermissionProviderWrite)
@@ -415,9 +417,14 @@ func handleAdminConfig(w http.ResponseWriter, r *http.Request) {
 	adminConfig.Get(w, r)
 }
 
-// POST /admin/api/config  body: { strategy?, headers?, defaultModel?, host? }
+// POST /admin/api/config/update  body: provider and routing configuration patch
 func handleAdminUpdateConfig(w http.ResponseWriter, r *http.Request) {
 	adminConfig.Update(w, r)
+}
+
+// POST /admin/api/config/listener  body: { host }
+func handleAdminUpdateListener(w http.ResponseWriter, r *http.Request) {
+	adminConfig.UpdateListener(w, r)
 }
 
 func handleAdminListenerOperation(w http.ResponseWriter, r *http.Request) {

@@ -30,8 +30,10 @@ func integrationAdminRegistrar(t *testing.T, canonicalURL string) func(*http.Ser
 	}
 	t.Cleanup(func() { _ = repo.Close() })
 	return func(mux *http.ServeMux) {
-		if err := admin.RegisterRoutesWithService(mux, service, admin.RouteSecurityOptions{CanonicalURL: canonicalURL}); err != nil {
+		routes, err := admin.RegisterRoutesWithService(mux, service, admin.RouteSecurityOptions{CanonicalURL: canonicalURL})
+		if err != nil {
 			panic(err)
 		}
+		t.Cleanup(func() { _ = routes.Close() })
 	}
 }

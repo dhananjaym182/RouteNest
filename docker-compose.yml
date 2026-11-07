@@ -4,7 +4,8 @@ services:
     container_name: routenest
     restart: unless-stopped
     ports:
-      - "3457:3457"
+      # Keep the backend private; terminate TLS in a local reverse proxy.
+      - "127.0.0.1:3457:3457"
     volumes:
       # 数据目录整体挂载（账号/配置/用量统计等全部持久化），重建容器不丢数据
       - ./data:/app/data
@@ -13,6 +14,11 @@ services:
       - PORT=3457
       - CLINE_PROXY_HOST=0.0.0.0
       - ROUTENEST_DATA_DIR=/app/data
+      - ROUTENEST_ADMIN_BOOTSTRAP_PASSWORD=${ROUTENEST_ADMIN_BOOTSTRAP_PASSWORD:-}
+      - ROUTENEST_ADMIN_CANONICAL_URL=${ROUTENEST_ADMIN_CANONICAL_URL:-}
+      - ROUTENEST_ADMIN_PROXY_MODE=${ROUTENEST_ADMIN_PROXY_MODE:-false}
+      - ROUTENEST_ADMIN_TRUSTED_PROXY_CIDRS=${ROUTENEST_ADMIN_TRUSTED_PROXY_CIDRS:-}
+      - ROUTENEST_ADMIN_HSTS=${ROUTENEST_ADMIN_HSTS:-false}
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3457/health"]
       interval: 30s

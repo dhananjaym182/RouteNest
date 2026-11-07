@@ -70,6 +70,7 @@ func newManagerForTest(t *testing.T, service *adminauth.Service) *Manager {
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() { _ = manager.Close() })
 	return manager
 }
 
@@ -189,6 +190,7 @@ func TestManagerOIDCIssuesUnifiedDurableSession(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() { _ = manager.Close() })
 	oidcConfig := fixture.config(t)
 	oidcConfig.DefaultRoles = []adminauth.Role{adminauth.RoleViewer}
 	config := ProviderConfig{ID: "fixture", Type: adminauth.MethodOIDC, Enabled: true, OIDC: &oidcConfig}

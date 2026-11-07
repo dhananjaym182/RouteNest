@@ -27,13 +27,22 @@ import (
 const defaultDesktopPort = 3457
 
 func main() {
+	if handled, err := runAdminRecoveryCommand(os.Args[1:]); handled {
+		if err != nil {
+			log.Fatalf("Administrator recovery failed: %v", err)
+		}
+		return
+	}
 	app.Configure()
 	selfCheck := flag.Bool("selfcheck", false, "Start embedded proxy, wait for /health, and exit")
 	port := flag.Int("port", configuredDesktopPort(), "Proxy server port")
 	host := flag.String("host", configuredDesktopHost(), "Proxy server listen host (0.0.0.0 = all interfaces)")
 	flag.Parse()
 
-	securityOptions := admin.SecurityOptions{ListenHost: *host, ListenPort: *port}
+	securityOptions, err := admin.SecurityOptionsFromEnvironment(admin.SecurityOptions{ListenHost: *host, ListenPort: *port})
+	if err != nil {
+		log.Fatalf("Administrator security configuration failed: %v", err)
+	}
 	var nativeBootstrapSecret string
 	if !*selfCheck {
 		secret, err := admin.GenerateBootstrapSecret()

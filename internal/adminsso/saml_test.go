@@ -107,7 +107,7 @@ func (f *samlFixture) response(requestID, unique string) *saml.Response {
 	return &saml.Response{ID: "response-" + unique, InResponseTo: requestID, Version: "2.0", IssueInstant: now, Destination: f.provider.config.ACSURL, Issuer: &saml.Issuer{Value: f.metadata.EntityID}, Status: saml.Status{StatusCode: saml.StatusCode{Value: saml.StatusSuccess}}, Assertion: &saml.Assertion{ID: "assertion-" + unique, Version: "2.0", IssueInstant: now, Issuer: saml.Issuer{Value: f.metadata.EntityID}, Subject: &saml.Subject{NameID: &saml.NameID{Value: "stable-subject", NameQualifier: f.metadata.EntityID, SPNameQualifier: f.provider.config.EntityID}, SubjectConfirmations: []saml.SubjectConfirmation{{Method: samlBearer, SubjectConfirmationData: &saml.SubjectConfirmationData{InResponseTo: requestID, Recipient: f.provider.config.ACSURL, NotOnOrAfter: now.Add(2 * time.Minute)}}}}, Conditions: &saml.Conditions{NotBefore: now.Add(-10 * time.Second), NotOnOrAfter: now.Add(2 * time.Minute), AudienceRestrictions: []saml.AudienceRestriction{{Audience: saml.Audience{Value: f.provider.config.EntityID}}}}, AuthnStatements: []saml.AuthnStatement{{AuthnInstant: now, AuthnContext: saml.AuthnContext{AuthnContextClassRef: &saml.AuthnContextClassRef{Value: "urn:oasis:names:tc:SAML:2.0:ac:classes:PasswordProtectedTransport"}}}}, AttributeStatements: []saml.AttributeStatement{{Attributes: []saml.Attribute{{Name: "uid", Values: []saml.AttributeValue{{Type: "xs:string", Value: "Alice"}}}, {Name: "groups", Values: []saml.AttributeValue{{Type: "xs:string", Value: "operators"}, {Type: "xs:string", Value: "security_admin"}}}}}}}}
 }
 
-func (f *samlFixture) signed(t *testing.T, response *saml.Response, signResponse bool) []byte {
+func (f *samlFixture) signingContext(t *testing.T) *dsig.SigningContext {
 	t.Helper()
 	context, err := dsig.NewSigningContext(f.key, [][]byte{f.certificate.Raw})
 	if err != nil {
@@ -118,7 +118,14 @@ func (f *samlFixture) signed(t *testing.T, response *saml.Response, signResponse
 	if err := context.SetSignatureMethod(dsig.RSASHA256SignatureMethod); err != nil {
 		t.Fatal(err)
 	}
+	return context
+}
+
+func (f *samlFixture) signed(t *testing.T, response *saml.Response, signResponse bool) []byte {
+	t.Helper()
+	context := f.signingContext(t)
 	root := response.Element()
+	var err error
 	if signResponse {
 		root, err = context.SignEnveloped(root)
 	} else {
@@ -136,6 +143,30 @@ func (f *samlFixture) signed(t *testing.T, response *saml.Response, signResponse
 	if err != nil {
 		t.Fatal(err)
 	}
+	doc := etree.NewDocument()
+	doc.SetRoot(root)
+	raw, err := doc.WriteToBytes()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return raw
+}
+
+func (f *samlFixture) signedAssertionTree(t *testing.T, response *saml.Response, mutate func(*etree.Element)) []byte {
+	t.Helper()
+	context := f.signingContext(t)
+	root := response.Element()
+	assertion := root.FindElement("./Assertion")
+	if assertion == nil {
+		t.Fatal("response assertion missing")
+	}
+	mutate(assertion)
+	signed, err := context.SignEnveloped(assertion)
+	if err != nil {
+		t.Fatal(err)
+	}
+	root.RemoveChild(assertion)
+	root.AddChild(signed)
 	doc := etree.NewDocument()
 	doc.SetRoot(root)
 	raw, err := doc.WriteToBytes()
@@ -256,6 +287,46 @@ func TestSAMLRejectsSignedHostileAssertions(t *testing.T) {
 			}
 			if _, _, _, err := f.provider.Complete(context.Background(), samlCallback(state, raw)); !errors.Is(err, adminauth.ErrReplay) {
 				t.Fatal("failed callback retained flow")
+			}
+		})
+	}
+}
+
+func TestSAMLRejectsParserEdgeCasesWithoutPanic(t *testing.T) {
+	f := newSAMLFixture(t)
+	tests := []struct {
+		name   string
+		mutate func(*etree.Element)
+	}{
+		{"missing assertion issuer", func(assertion *etree.Element) {
+			issuer := assertion.FindElement("./Issuer")
+			if issuer == nil {
+				t.Fatal("assertion issuer missing before mutation")
+			}
+			assertion.RemoveChild(issuer)
+		}},
+		{"foreign namespace NameID", func(assertion *etree.Element) {
+			subject := assertion.FindElement("./Subject")
+			if subject == nil {
+				t.Fatal("assertion subject missing before mutation")
+			}
+			nameID := subject.FindElement("./NameID")
+			if nameID == nil {
+				t.Fatal("assertion NameID missing before mutation")
+			}
+			subject.RemoveChild(nameID)
+			foreign := etree.NewElement("x:NameID")
+			foreign.CreateAttr("xmlns:x", "urn:routenest:test:foreign")
+			foreign.SetText("spoofed-subject")
+			subject.AddChild(foreign)
+		}},
+	}
+	for i, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			requestID, state := f.start(t, fmt.Sprint(i))
+			raw := f.signedAssertionTree(t, f.response(requestID, fmt.Sprint(i)), test.mutate)
+			if _, _, _, err := f.provider.Complete(context.Background(), samlCallback(state, raw)); !errors.Is(err, errSAMLResponse) {
+				t.Fatalf("hostile parser edge accepted or error leaked: %v", err)
 			}
 		})
 	}

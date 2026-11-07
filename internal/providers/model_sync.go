@@ -13,6 +13,7 @@ package providers
 // ============================================================================
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"math/rand"
@@ -252,6 +253,10 @@ func clearProviderRecheck(providerID string) {
 
 // RunAllRechecks 对全部启用 provider 顺序检测一轮（单飞：并发触发时后来的直接跳过）。
 func RunAllRechecks() map[string]providerRecheckState {
+	return runAllRechecks(context.Background())
+}
+
+func runAllRechecks(ctx context.Context) map[string]providerRecheckState {
 	LoadRecheckState()
 	provRecheckMu.Lock()
 	if provRecheckBusy {
@@ -268,11 +273,16 @@ func RunAllRechecks() map[string]providerRecheckState {
 
 	out := map[string]providerRecheckState{}
 	for _, p := range List() {
+		if ctx.Err() != nil {
+			break
+		}
 		if !p.Enabled {
 			continue
 		}
 		out[p.ID] = recheckProviderModels(p)
-		time.Sleep(providerRecheckGap)
+		if !waitForRecheck(ctx, providerRecheckGap) {
+			break
+		}
 	}
 	return out
 }
@@ -311,16 +321,34 @@ func SyncStatusSnapshot() map[string]any {
 	return result
 }
 
+func waitForRecheck(ctx context.Context, delay time.Duration) bool {
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return false
+	case <-timer.C:
+		return true
+	}
+}
+
 // StartModelRecheck 启动后台检测循环：开机延迟一轮（避开首启模型同步抢带宽），
-// 之后 6h + 随机抖动周期执行。
-func StartModelRecheck() {
+// 之后 6h + 随机抖动周期执行。取消 ctx 会停止等待，并在当前检测轮完成后退出。
+func StartModelRecheck(ctx context.Context) <-chan struct{} {
+	done := make(chan struct{})
 	go func() {
-		time.Sleep(providerRecheckBootDelay + time.Duration(rand.Intn(90))*time.Second)
-		RunAllRechecks()
+		defer close(done)
+		if !waitForRecheck(ctx, providerRecheckBootDelay+time.Duration(rand.Intn(90))*time.Second) {
+			return
+		}
+		runAllRechecks(ctx)
 		for {
 			interval := providerRecheckInterval + time.Duration(rand.Intn(45))*time.Minute
-			time.Sleep(interval)
-			RunAllRechecks()
+			if !waitForRecheck(ctx, interval) {
+				return
+			}
+			runAllRechecks(ctx)
 		}
 	}()
+	return done
 }

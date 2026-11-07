@@ -35,6 +35,6 @@ func RecordTokenUsage(acc *domain.Account, model string, usage TokenUsage) {
 		st.TotalTokens += usage.Total
 		st.CachedTokens += usage.Cached
 	}
+	accounts.SavePoolLocked()
 	accounts.PoolMu.Unlock()
-	accounts.SavePool()
 }

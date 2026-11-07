@@ -34,13 +34,11 @@ func markLegacyAdminMigrated() error {
 	oldHash, oldSalt := p.AdminPasswordHash, p.AdminPasswordSalt
 	p.AdminPasswordHash = adminauth.LegacyMigrationSentinel
 	p.AdminPasswordSalt = adminauth.LegacyMigrationSentinel
-	accounts.PoolMu.Unlock()
-
-	if err := accounts.SavePoolStrict(); err != nil {
-		accounts.PoolMu.Lock()
+	if err := accounts.SavePoolStrictLocked(); err != nil {
 		p.AdminPasswordHash, p.AdminPasswordSalt = oldHash, oldSalt
 		accounts.PoolMu.Unlock()
 		return fmt.Errorf("persist legacy administrator migration sentinel: %w", err)
 	}
+	accounts.PoolMu.Unlock()
 	return nil
 }

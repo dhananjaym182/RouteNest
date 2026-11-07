@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"net"
 	"net/url"
@@ -41,7 +42,6 @@ type adminSecurityRuntime struct {
 	enableHSTS     bool
 	cancel         context.CancelFunc
 	done           chan struct{}
-	ssoDone        chan struct{}
 }
 
 var adminSecurityState struct {
@@ -129,7 +129,10 @@ func openAdminSecurity(opts SecurityOptions) (*adminSecurityRuntime, error) {
 		enableHSTS:     opts.EnableHSTS,
 	}
 	runtime.startDenialFlusher()
-	runtime.startSSORefresher()
+	if err := runtime.sso.StartRefresh(context.Background(), 5*time.Minute, 30*time.Second); err != nil {
+		_ = runtime.close()
+		return nil, fmt.Errorf("start administrator SSO readiness refresh: %w", err)
+	}
 	return runtime, nil
 }
 
@@ -142,7 +145,13 @@ func requestSecurityOptions(opts SecurityOptions) (adminauth.RequestSecurityOpti
 		}
 		trusted = append(trusted, network)
 	}
-	if !listenHostIsLoopback(opts.ListenHost) && (!opts.ProxyMode || len(trusted) == 0) {
+	if opts.ProxyMode && len(trusted) == 0 {
+		return adminauth.RequestSecurityOptions{}, fmt.Errorf("trusted-proxy mode requires at least one trusted proxy CIDR")
+	}
+	if opts.ProxyMode && strings.TrimSpace(opts.CanonicalURL) == "" {
+		return adminauth.RequestSecurityOptions{}, fmt.Errorf("trusted-proxy mode requires an explicit canonical administrator URL")
+	}
+	if !listenHostIsLoopback(opts.ListenHost) && !opts.ProxyMode {
 		return adminauth.RequestSecurityOptions{}, fmt.Errorf("non-loopback administration requires explicit trusted-proxy mode and CIDRs")
 	}
 	canonicalRaw := opts.CanonicalURL
@@ -157,8 +166,12 @@ func requestSecurityOptions(opts SecurityOptions) (adminauth.RequestSecurityOpti
 	if err != nil {
 		return adminauth.RequestSecurityOptions{}, fmt.Errorf("invalid administrator canonical URL: %w", err)
 	}
-	if _, _, err := adminauth.NormalizeCanonicalURL(canonical); err != nil {
+	scheme, _, err := adminauth.NormalizeCanonicalURL(canonical)
+	if err != nil {
 		return adminauth.RequestSecurityOptions{}, err
+	}
+	if opts.EnableHSTS && scheme != "https" {
+		return adminauth.RequestSecurityOptions{}, fmt.Errorf("administrator HSTS requires an HTTPS canonical URL")
 	}
 	return adminauth.RequestSecurityOptions{
 		CanonicalURL:      canonical,
@@ -184,12 +197,13 @@ func effectiveLoopbackHost(host string) string {
 	return strings.Trim(host, "[]")
 }
 
-func deliverBootstrapToTTY(secret string) error {
-	info, err := os.Stderr.Stat()
-	if err != nil || info.Mode()&os.ModeCharDevice == 0 {
-		return fmt.Errorf("no controlling terminal; set %s for this one-time bootstrap", AdminBootstrapPasswordEnv)
+func deliverBootstrapToTTY(secret string) (err error) {
+	tty, err := openControllingTerminal()
+	if err != nil {
+		return fmt.Errorf("no controlling terminal; set %s for this one-time bootstrap: %w", AdminBootstrapPasswordEnv, err)
 	}
-	_, err = fmt.Fprintf(os.Stderr, "\nRouteNest one-time administrator bootstrap secret:\n\n  %s\n\nOpen the local admin console and replace it with a permanent password. This secret is not stored in plaintext and will not be shown again.\n\n", secret)
+	defer func() { err = errors.Join(err, tty.Close()) }()
+	_, err = fmt.Fprintf(tty, "\nRouteNest one-time administrator bootstrap secret:\n\n  %s\n\nOpen the local admin console and replace it with a permanent password. This secret is not stored in plaintext and will not be shown again.\n\n", secret)
 	return err
 }
 
@@ -240,10 +254,14 @@ func (runtime *adminSecurityRuntime) close() error {
 	if runtime.done != nil {
 		<-runtime.done
 	}
-	if runtime.ssoDone != nil {
-		<-runtime.ssoDone
+	var errs []error
+	if runtime.sso != nil {
+		errs = append(errs, runtime.sso.Close())
 	}
-	return runtime.store.Close()
+	if runtime.store != nil {
+		errs = append(errs, runtime.store.Close())
+	}
+	return errors.Join(errs...)
 }
 
 func (runtime *adminSecurityRuntime) startDenialFlusher() {
@@ -261,38 +279,6 @@ func (runtime *adminSecurityRuntime) startDenialFlusher() {
 				return
 			case <-ticker.C:
 				_ = runtime.service.FlushDenials(ctx)
-			}
-		}
-	}()
-}
-
-func (runtime *adminSecurityRuntime) startSSORefresher() {
-	if runtime.sso == nil || runtime.cancel == nil {
-		return
-	}
-	ctx, cancel := context.WithCancel(context.Background())
-	previousCancel := runtime.cancel
-	runtime.cancel = func() {
-		previousCancel()
-		cancel()
-	}
-	runtime.ssoDone = make(chan struct{})
-	go func() {
-		defer close(runtime.ssoDone)
-		refresh := func() {
-			refreshCtx, refreshCancel := context.WithTimeout(ctx, 30*time.Second)
-			defer refreshCancel()
-			_ = runtime.sso.Refresh(refreshCtx)
-		}
-		refresh()
-		ticker := time.NewTicker(5 * time.Minute)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-ticker.C:
-				refresh()
 			}
 		}
 	}()

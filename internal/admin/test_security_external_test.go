@@ -43,11 +43,19 @@ func newAdminRouteTestHarness(t *testing.T) *adminRouteTestHarness {
 		t.Fatal(err)
 	}
 	mux := http.NewServeMux()
-	if err := admin.RegisterRoutesWithService(mux, service, admin.RouteSecurityOptions{CanonicalURL: "http://127.0.0.1:3457"}); err != nil {
+	routes, err := admin.RegisterRoutesWithService(mux, service, admin.RouteSecurityOptions{CanonicalURL: "http://127.0.0.1:3457"})
+	if err != nil {
 		_ = repo.Close()
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = repo.Close() })
+	if routes == nil {
+		_ = repo.Close()
+		t.Fatal("route registration did not return lifecycle ownership")
+	}
+	t.Cleanup(func() {
+		_ = routes.Close()
+		_ = repo.Close()
+	})
 	return &adminRouteTestHarness{
 		mux:     mux,
 		session: &http.Cookie{Name: adminapi.SessionCookieName, Value: credentials.Token, Path: "/admin"},

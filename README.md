@@ -8,7 +8,7 @@ RouteNest is a self-hosted, Go-powered AI gateway for coding agents and AI appli
 
 It provides provider presets, account management, model discovery, ordered fallback, request logging, and a built-in admin console.
 
-[![Go](https://img.shields.io/badge/Go-1.25-00ADD8?logo=go&logoColor=white)](https://go.dev)
+[![Go](https://img.shields.io/badge/Go-1.26-00ADD8?logo=go&logoColor=white)](https://go.dev)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux-blue)](#build-from-source)
 [![Provider presets](https://img.shields.io/badge/Provider%20presets-110-brightgreen)](#provider-coverage)
@@ -35,13 +35,15 @@ Provider availability, authentication requirements, free allowances and supporte
 
 ## Before you deploy
 
-> **Security:** RouteNest has no default admin password and no built-in TLS. Anyone who can reach `/admin/` on a password-less instance can add or export accounts, read stored credentials, change routing, and create API keys. Set an admin password and restrict network access before exposing RouteNest to a LAN or the internet.
+> **Security:** RouteNest has no universal default password and never opens the admin API anonymously. A fresh install starts in one-time bootstrap mode and requires a permanent local administrator password before normal administration.
 
-- **Listen address:** the binary and desktop app bind to `127.0.0.1` by default. The Docker image binds `0.0.0.0` inside the container, so a published port is reachable from outside the container.
-- **Two separate controls:** API keys protect the `/v1/*` proxy endpoints only. They do **not** protect `/admin/*`. Admin access is controlled by the admin password and its session cookie (24-hour expiry, held in memory, reset when the process restarts). Setting an API key alone does not secure the console.
-- **No TLS:** RouteNest serves plain HTTP. Put it behind a TLS-terminating reverse proxy if traffic crosses an untrusted network.
+- **Bootstrap:** the CLI prints a generated one-time secret only to its controlling terminal. Headless deployments must provide `ROUTENEST_ADMIN_BOOTSTRAP_PASSWORD` for the first start; completed bootstrap state permanently ignores it. The desktop app uses a one-shot native dialog.
+- **Separate controls:** API keys protect `/v1/*`; durable administrator sessions and server-side RBAC protect `/admin/*`. Admin sessions store only hashed tokens, survive restart, can be revoked, and require session-bound CSRF tokens for mutations.
+- **Hosted administration:** the binary and desktop app bind to `127.0.0.1` by default. Non-loopback administration is rejected unless an exact public URL, trusted-proxy mode and trusted proxy CIDRs are configured. RouteNest has no built-in TLS; terminate HTTPS at the trusted proxy.
 - **Sensitive data:** account refresh tokens, provider keys and generated API keys are stored in plaintext in the data directory. Protect that directory, and never commit or share it.
-- **Docker:** do not publish port `3457` publicly. Restrict it with firewall rules or bind it to a local address.
+- **Docker:** the sample compose file binds the backend port to host loopback and requires explicit bootstrap/public-URL/proxy settings. Do not expose the backend port directly to the internet.
+
+See [Administrator security and SSO](docs/admin-security.md) for RBAC, OIDC, SAML, recovery and reverse-proxy configuration.
 
 ## Quick start
 
@@ -65,7 +67,7 @@ Requires Go 1.26.10 or newer to build:
 go build -o routenest .
 ./routenest                # 127.0.0.1:3457
 ./routenest -port 8080     # custom port
-./routenest -host 0.0.0.0  # all interfaces; see the security note above
+./routenest -host 0.0.0.0  # requires the hosted-admin settings below
 ```
 
 Open <http://127.0.0.1:3457/admin/> for the admin console. The listen address can also be set with `CLINE_PROXY_HOST`.
@@ -78,11 +80,11 @@ docker compose logs -f
 docker compose down
 ```
 
-The container listens on `0.0.0.0:3457`. State lives in `/app/data`, mounted to `./data` by the compose file, so recreating the container keeps your data as long as `./data` is preserved. The compose file also mounts `./override.md` read-only; create that file before `docker compose up` if you use a prompt override.
+The container listens on `0.0.0.0:3457`, while the sample compose file publishes it only on host loopback for a local TLS reverse proxy. Set the required administrator variables in `.env` first; see [the Docker example](docs/admin-security.md#docker-and-reverse-proxy). State lives in `/app/data`, mounted to `./data`, so recreating the container preserves identity and gateway data when the volume is retained.
 
 ### First run
 
-1. Open `/admin/` and set an admin password.
+1. Read the one-time bootstrap secret from the local terminal/native dialog, open `/admin/`, and set a permanent password.
 2. Add a Cline account, an OpenCode Zen connection, or a provider API key.
 3. Generate an API key for your clients.
 4. Pick a default model, or leave it unset to use the first available free model.
@@ -228,7 +230,7 @@ The console at `/admin/` manages the gateway:
 - Model catalog, custom models, default model and model tests.
 - Model combos and ordered fallback.
 - Request logs with latency, tokens, TPS, upstream and model.
-- API keys, listen address, admin password, egress proxies and runtime tuning.
+- API keys, administrator users/roles/sessions, OIDC/SAML providers, listen security, password, egress proxies and runtime tuning.
 
 The UI is bilingual (English/Chinese), follows the browser language, and can be switched from the sidebar. On desktop widths the sidebar collapses to a rail; `Ctrl+B` toggles it.
 
@@ -256,7 +258,10 @@ compatibility override.
 
 | File | Purpose |
 | --- | --- |
-| `.routenest-accounts.json` | Account pool, API keys, model settings, admin password hash |
+| `.routenest-accounts.json` | Account pool, API keys and model settings; legacy admin hashes are migration-only |
+| `admin-auth/.routenest-admin-auth.json` | Durable administrator users, role/provider metadata and hashed sessions |
+| `admin-auth/.routenest-admin-auth.journal` | Synced, hash-chained administrator security and audit journal |
+| `admin-auth/sso-secrets/` | Approved root for owner-only OIDC/SAML secret files |
 | `.routenest-config.json` | Proxy configuration, aliases, policies and model combos |
 | `.routenest-connections.json` | Non-Cline connection metadata (Zen, Qoder and others) |
 | `.routenest-credentials.json` | Stored connection credentials |
@@ -276,9 +281,10 @@ destination files always win, migration is idempotent, and source files are
 preserved as recovery backups.
 
 On Unix-like systems the data and capture directories are restricted to `0700`
-and known state files to `0600`. RouteNest fails startup with an actionable
-error if it cannot create a safe default config directory; it no longer falls
-back to writing secrets beside the executable.
+and known state files to `0600`. Windows uses protected owner/SYSTEM ACLs for
+private RouteNest paths. RouteNest fails startup with an actionable error if it
+cannot establish safe permissions; it no longer falls back to writing secrets
+beside the executable.
 
 > The data files contain plaintext refresh tokens, provider keys and generated API keys. Back them up securely and never publish them or commit them to Git.
 

@@ -370,6 +370,14 @@ func (t oidcResponseTransport) RoundTrip(request *http.Request) (*http.Response,
 }
 
 func oidcBoundedClient(supplied *http.Client) *http.Client {
+	// Manager adapters share one already-bounded client. Repeated discovery
+	// must not clone transports and retain a fresh idle pool on every refresh.
+	if supplied != nil {
+		switch supplied.Transport.(type) {
+		case oidcResponseTransport, managerTransport:
+			return supplied
+		}
+	}
 	var client http.Client
 	if supplied != nil {
 		client = *supplied
@@ -388,6 +396,9 @@ func oidcBoundedClient(supplied *http.Client) *http.Client {
 		bounded.MaxResponseHeaderBytes = 32 << 10
 		if bounded.ResponseHeaderTimeout <= 0 || bounded.ResponseHeaderTimeout > oidcHTTPTimeout {
 			bounded.ResponseHeaderTimeout = oidcHTTPTimeout
+		}
+		if bounded.TLSHandshakeTimeout <= 0 || bounded.TLSHandshakeTimeout > oidcHTTPTimeout {
+			bounded.TLSHandshakeTimeout = oidcHTTPTimeout
 		}
 		transport = bounded
 	}

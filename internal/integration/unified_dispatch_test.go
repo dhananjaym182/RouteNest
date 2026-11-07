@@ -35,6 +35,10 @@ func assertProtocolResponse(t *testing.T, baseURL, path, body, want string) {
 	}
 }
 
+func isInferenceUpstreamRequest(req *http.Request) bool {
+	return req != nil && req.Method == http.MethodPost
+}
+
 func TestUnifiedDispatchEnforceCustomProviderAcrossIngresses(t *testing.T) {
 	const modelID = "unified/custom-model"
 	installPool(t, []Model{{
@@ -49,7 +53,9 @@ func TestUnifiedDispatchEnforceCustomProviderAcrossIngresses(t *testing.T) {
 
 	var models []string
 	installTransport(t, func(req *http.Request) *http.Response {
-		models = append(models, readReqModel(req))
+		if isInferenceUpstreamRequest(req) {
+			models = append(models, readReqModel(req))
+		}
 		return stubResp(req, http.StatusOK,
 			`{"id":"custom-ok","object":"chat.completion","model":"unified/custom-model","choices":[{"index":0,"message":{"role":"assistant","content":"custom-ok"},"finish_reason":"stop"}],"usage":{"prompt_tokens":1,"completion_tokens":1,"total_tokens":2}}`)
 	})
@@ -92,7 +98,9 @@ func TestUnifiedDispatchEnforceFreeFirstAndStrictProviderPin(t *testing.T) {
 
 	var hosts []string
 	installTransport(t, func(req *http.Request) *http.Response {
-		hosts = append(hosts, req.URL.Host)
+		if isInferenceUpstreamRequest(req) {
+			hosts = append(hosts, req.URL.Host)
+		}
 		return stubResp(req, http.StatusOK,
 			`{"id":"route-ok","object":"chat.completion","choices":[{"index":0,"message":{"role":"assistant","content":"route-ok"},"finish_reason":"stop"}]}`)
 	})
@@ -124,7 +132,9 @@ func TestUnifiedDispatchEnforceOnlyFreeUsesProviderScopedOfferingAcrossIngresses
 
 	var hosts []string
 	installTransport(t, func(req *http.Request) *http.Response {
-		hosts = append(hosts, req.URL.Host)
+		if isInferenceUpstreamRequest(req) {
+			hosts = append(hosts, req.URL.Host)
+		}
 		return stubResp(req, http.StatusOK,
 			`{"id":"scoped-free-ok","object":"chat.completion","model":"gpt-5-turbo","choices":[{"index":0,"message":{"role":"assistant","content":"scoped-free-ok"},"finish_reason":"stop"}]}`)
 	})
@@ -160,7 +170,9 @@ func TestUnifiedDispatchEnforcePreservesProviderSessionAffinity(t *testing.T) {
 
 	var hosts []string
 	installTransport(t, func(req *http.Request) *http.Response {
-		hosts = append(hosts, req.URL.Host)
+		if isInferenceUpstreamRequest(req) {
+			hosts = append(hosts, req.URL.Host)
+		}
 		return stubResp(req, http.StatusOK, `{"choices":[{"message":{"role":"assistant","content":"affinity-ok"},"finish_reason":"stop"}]}`)
 	})
 	baseURL := protocolTestServer(t)
@@ -220,7 +232,9 @@ func TestUnifiedDispatchEnforceComboPreservesSameModelPinOrder(t *testing.T) {
 
 	var hosts []string
 	installTransport(t, func(req *http.Request) *http.Response {
-		hosts = append(hosts, req.URL.Host)
+		if isInferenceUpstreamRequest(req) {
+			hosts = append(hosts, req.URL.Host)
+		}
 		if req.URL.Host == "combo-one.test" {
 			return stubResp(req, http.StatusServiceUnavailable, `{"error":"busy"}`)
 		}
@@ -250,7 +264,9 @@ func TestUnifiedDispatchEnforceRequestErrorRules(t *testing.T) {
 		)
 		var hosts []string
 		installTransport(t, func(req *http.Request) *http.Response {
-			hosts = append(hosts, req.URL.Host)
+			if isInferenceUpstreamRequest(req) {
+				hosts = append(hosts, req.URL.Host)
+			}
 			if req.URL.Host == "rule-one.test" {
 				return stubResp(req, http.StatusBadRequest, `{"error":"try next"}`)
 			}
@@ -278,7 +294,9 @@ func TestUnifiedDispatchEnforceRequestErrorRules(t *testing.T) {
 		)
 		var hosts []string
 		installTransport(t, func(req *http.Request) *http.Response {
-			hosts = append(hosts, req.URL.Host)
+			if isInferenceUpstreamRequest(req) {
+				hosts = append(hosts, req.URL.Host)
+			}
 			return stubResp(req, http.StatusInternalServerError, `{"error":"stop now"}`)
 		})
 		baseURL := protocolTestServer(t)
@@ -307,7 +325,9 @@ func TestUnifiedDispatchRollbackModesDoNotFailClosedOnShadowPlanErrors(t *testin
 			)
 			var hosts []string
 			installTransport(t, func(req *http.Request) *http.Response {
-				hosts = append(hosts, req.URL.Host)
+				if isInferenceUpstreamRequest(req) {
+					hosts = append(hosts, req.URL.Host)
+				}
 				return stubResp(req, http.StatusOK, `{"choices":[{"message":{"role":"assistant","content":"rollback-ok"},"finish_reason":"stop"}]}`)
 			})
 			baseURL := protocolTestServer(t)

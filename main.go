@@ -21,6 +21,12 @@ import (
 )
 
 func main() {
+	if handled, err := runAdminRecoveryCommand(os.Args[1:]); handled {
+		if err != nil {
+			log.Fatalf("Administrator recovery failed: %v", err)
+		}
+		return
+	}
 	app.Configure()
 	loginMode := flag.Bool("login", false, "Run OAuth device login flow and add account to pool")
 	captureMode := flag.Bool("capture", false, "Run interactive OAuth capture (records ALL traffic)")
@@ -70,7 +76,11 @@ func main() {
 		fmt.Println()
 		return
 	}
-	if err := admin.ConfigureSecurity(admin.SecurityOptions{ListenHost: *host, ListenPort: *port}); err != nil {
+	securityOptions, err := admin.SecurityOptionsFromEnvironment(admin.SecurityOptions{ListenHost: *host, ListenPort: *port})
+	if err != nil {
+		log.Fatalf("Administrator security configuration failed: %v", err)
+	}
+	if err := admin.ConfigureSecurity(securityOptions); err != nil {
 		log.Fatalf("Administrator security failed: %v", err)
 	}
 	defer func() {

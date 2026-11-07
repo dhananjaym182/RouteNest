@@ -2,6 +2,7 @@ package adminapi
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -13,6 +14,16 @@ import (
 	"routenest/internal/domain"
 	"routenest/internal/httpx"
 )
+
+const maxAdminConfigBodyBytes = 1 << 20
+
+func configBodyErrorStatus(err error) int {
+	var tooLarge *http.MaxBytesError
+	if errors.As(err, &tooLarge) {
+		return http.StatusRequestEntityTooLarge
+	}
+	return http.StatusBadRequest
+}
 
 // Config serves proxy runtime configuration administration. All state lives in
 // the composition layer; callbacks own locking, persistence, and listener life.
@@ -37,9 +48,12 @@ type Config struct {
 	// FatalListenerFailure terminates the process when both a listener change
 	// and its rollback fail, leaving no trustworthy administration endpoint.
 	FatalListenerFailure func(error)
-	ListenerOperations   *ListenerOperationStore
-	Translate            func(*http.Request, string) string
-	Logf                 func(string, ...any)
+	// AuditListenerChange durably journals the authorized change before any
+	// listener or persisted configuration mutation is attempted.
+	AuditListenerChange func(*http.Request, string, string) error
+	ListenerOperations  *ListenerOperationStore
+	Translate           func(*http.Request, string) string
+	Logf                func(string, ...any)
 }
 
 func (h *Config) msg(r *http.Request, key string) string {
@@ -129,15 +143,18 @@ func (h *Config) ListenerOperation(w http.ResponseWriter, r *http.Request) {
 	httpx.WriteAPI(w, http.StatusOK, httpx.Response{Success: true, Data: map[string]any{"operation": operation}})
 }
 
-// Update handles POST /admin/api/config with a partial configuration patch.
+// Update handles POST /admin/api/config/update with a partial provider and
+// routing configuration patch. Listener changes use UpdateListener so the
+// route can enforce the separate security.write permission.
 func (h *Config) Update(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		httpx.WriteAPI(w, http.StatusMethodNotAllowed, httpx.Response{Error: h.msg(r, "method_not_allowed")})
 		return
 	}
+	r.Body = http.MaxBytesReader(w, r.Body, maxAdminConfigBodyBytes)
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
-		httpx.WriteAPI(w, http.StatusBadRequest, httpx.Response{Error: err.Error()})
+		httpx.WriteAPI(w, configBodyErrorStatus(err), httpx.Response{Error: err.Error()})
 		return
 	}
 	defer r.Body.Close()
@@ -149,7 +166,7 @@ func (h *Config) Update(w http.ResponseWriter, r *http.Request) {
 		DispatchMode *configpkg.DispatchMode `json:"dispatchMode"`
 		Headers      map[string]string       `json:"headers"`
 		DefaultModel string                  `json:"defaultModel"`
-		Host         string                  `json:"host"`
+		Host         *string                 `json:"host"`
 		ModelChain   *[]string               `json:"modelChain"`
 		OnlyFree     *bool                   `json:"onlyFree"`
 
@@ -173,6 +190,10 @@ func (h *Config) Update(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteAPI(w, http.StatusBadRequest, httpx.Response{Error: h.msg(r, "invalid_json")})
 		return
 	}
+	if req.Host != nil {
+		httpx.WriteAPI(w, http.StatusBadRequest, httpx.Response{Error: "listener_update_requires_security_route"})
+		return
+	}
 	if req.DispatchMode != nil && !req.DispatchMode.Valid() {
 		httpx.WriteAPI(w, http.StatusBadRequest, httpx.Response{Error: h.msg(r, "invalid_dispatch_mode")})
 		return
@@ -180,7 +201,6 @@ func (h *Config) Update(w http.ResponseWriter, r *http.Request) {
 
 	cfg := h.Proxy().Clone()
 	changed := false
-	restarting := false
 
 	// Validate the merged durability policy before applying any patch. Absent
 	// fields retain their effective values; explicitly invalid fields are a 400.
@@ -346,73 +366,12 @@ func (h *Config) Update(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	currentHost := ""
-	if h.ListenHost != nil {
-		currentHost = h.ListenHost()
-	}
-	var listenerOperation ListenerOperation
-	if req.Host != "" {
-		valid := req.Host == "127.0.0.1" || req.Host == "localhost" || req.Host == "::1"
-		if !valid {
-			httpx.WriteAPI(w, http.StatusBadRequest, httpx.Response{Error: h.msg(r, "invalid_host")})
-			return
-		}
-		if req.Host != currentHost {
-			if h.ListenerOperations == nil || h.RestartListener == nil || h.SetListenHost == nil {
-				httpx.WriteAPI(w, http.StatusServiceUnavailable, httpx.Response{Error: "listener reconfiguration unavailable"})
-				return
-			}
-			var operationErr error
-			listenerOperation, operationErr = h.ListenerOperations.Start(req.Host)
-			if operationErr != nil {
-				httpx.WriteAPI(w, http.StatusServiceUnavailable, httpx.Response{Error: operationErr.Error()})
-				return
-			}
-			restarting = true
-		}
-	}
-
 	if changed && h.SetProxy != nil {
 		h.SetProxy(cfg)
 	}
-
-	// Restart is asynchronous. Persistence happens only after the new listener
-	// binds and passes its local readiness probe; persistence failure rolls the
-	// active listener back to the prior host.
-	host := currentHost
-	if restarting {
-		port := 0
-		if h.ListenPort != nil {
-			port = h.ListenPort()
-		}
-		oldHost, newHost, operationID := currentHost, req.Host, listenerOperation.ID
-		go func() {
-			if err := h.RestartListener(newHost, port); err != nil {
-				h.ListenerOperations.Fail(operationID, err)
-				h.logf("Listener restart failed: %v", err)
-				return
-			}
-			if err := h.SetListenHost(newHost); err != nil {
-				rollbackErr := h.RestartListener(oldHost, port)
-				if rollbackErr != nil {
-					err = fmt.Errorf("persist listener host: %v; rollback failed: %w", err, rollbackErr)
-				} else {
-					err = fmt.Errorf("persist listener host: %w", err)
-				}
-				h.ListenerOperations.Fail(operationID, err)
-				h.logf("Listener persistence failed: %v", err)
-				if rollbackErr != nil && h.FatalListenerFailure != nil {
-					h.FatalListenerFailure(err)
-				}
-				return
-			}
-			h.ListenerOperations.Succeed(operationID)
-		}()
-	}
-
-	status := http.StatusOK
-	if restarting {
-		status = http.StatusAccepted
+	host := ""
+	if h.ListenHost != nil {
+		host = h.ListenHost()
 	}
 	data := map[string]any{
 		"strategy":                  cfg.Strategy,
@@ -422,7 +381,7 @@ func (h *Config) Update(w http.ResponseWriter, r *http.Request) {
 		"defaultModel":              h.DefaultModel(),
 		"host":                      host,
 		"address":                   h.address(host),
-		"restarting":                restarting,
+		"restarting":                false,
 		"chainUnverified":           chainUnverified,
 		"retry":                     cfg.Retry,
 		"stream":                    cfg.Stream,
@@ -435,10 +394,109 @@ func (h *Config) Update(w http.ResponseWriter, r *http.Request) {
 		"passthroughHeaders":        cfg.PassthroughHeaders,
 		"nonstreamKeepaliveSeconds": cfg.NonstreamKeepaliveSeconds,
 	}
-	if restarting {
-		data["listenerOperation"] = listenerOperation
+	httpx.WriteAPI(w, http.StatusOK, httpx.Response{Success: true, Data: data})
+}
+
+// UpdateListener handles POST /admin/api/config/listener. The route is owned
+// by security.write and accepts only the listener host mutation.
+func (h *Config) UpdateListener(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		httpx.WriteAPI(w, http.StatusMethodNotAllowed, httpx.Response{Error: h.msg(r, "method_not_allowed")})
+		return
 	}
-	httpx.WriteAPI(w, status, httpx.Response{Success: true, Data: data})
+	defer r.Body.Close()
+	r.Body = http.MaxBytesReader(w, r.Body, maxAdminConfigBodyBytes)
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+	var req struct {
+		Host string `json:"host"`
+	}
+	if err := decoder.Decode(&req); err != nil {
+		httpx.WriteAPI(w, configBodyErrorStatus(err), httpx.Response{Error: h.msg(r, "invalid_json")})
+		return
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		httpx.WriteAPI(w, configBodyErrorStatus(err), httpx.Response{Error: h.msg(r, "invalid_json")})
+		return
+	}
+	req.Host = strings.TrimSpace(req.Host)
+	valid := req.Host == "127.0.0.1" || req.Host == "localhost" || req.Host == "::1"
+	if !valid {
+		httpx.WriteAPI(w, http.StatusBadRequest, httpx.Response{Error: h.msg(r, "invalid_host")})
+		return
+	}
+
+	currentHost := ""
+	if h.ListenHost != nil {
+		currentHost = h.ListenHost()
+	}
+	if req.Host == currentHost {
+		httpx.WriteAPI(w, http.StatusOK, httpx.Response{Success: true, Data: map[string]any{
+			"host":       currentHost,
+			"address":    h.address(currentHost),
+			"restarting": false,
+		}})
+		return
+	}
+	if h.ListenerOperations == nil || h.RestartListener == nil || h.SetListenHost == nil {
+		httpx.WriteAPI(w, http.StatusServiceUnavailable, httpx.Response{Error: "listener reconfiguration unavailable"})
+		return
+	}
+	listenerOperation, err := h.ListenerOperations.Start(req.Host)
+	if err != nil {
+		httpx.WriteAPI(w, http.StatusServiceUnavailable, httpx.Response{Error: err.Error()})
+		return
+	}
+	if h.AuditListenerChange == nil {
+		err := fmt.Errorf("listener audit unavailable")
+		h.ListenerOperations.Fail(listenerOperation.ID, err)
+		httpx.WriteAPI(w, http.StatusServiceUnavailable, httpx.Response{Error: err.Error()})
+		return
+	}
+	if err := h.AuditListenerChange(r, currentHost, req.Host); err != nil {
+		h.ListenerOperations.Fail(listenerOperation.ID, err)
+		h.logf("Listener audit failed: %v", err)
+		httpx.WriteAPI(w, http.StatusServiceUnavailable, httpx.Response{Error: "listener audit unavailable"})
+		return
+	}
+
+	// Restart is asynchronous. Persistence happens only after the new listener
+	// binds and passes its local readiness probe; persistence failure rolls the
+	// active listener back to the prior host.
+	port := 0
+	if h.ListenPort != nil {
+		port = h.ListenPort()
+	}
+	oldHost, newHost, operationID := currentHost, req.Host, listenerOperation.ID
+	go func() {
+		if err := h.RestartListener(newHost, port); err != nil {
+			h.ListenerOperations.Fail(operationID, err)
+			h.logf("Listener restart failed: %v", err)
+			return
+		}
+		if err := h.SetListenHost(newHost); err != nil {
+			rollbackErr := h.RestartListener(oldHost, port)
+			if rollbackErr != nil {
+				err = fmt.Errorf("persist listener host: %v; rollback failed: %w", err, rollbackErr)
+			} else {
+				err = fmt.Errorf("persist listener host: %w", err)
+			}
+			h.ListenerOperations.Fail(operationID, err)
+			h.logf("Listener persistence failed: %v", err)
+			if rollbackErr != nil && h.FatalListenerFailure != nil {
+				h.FatalListenerFailure(err)
+			}
+			return
+		}
+		h.ListenerOperations.Succeed(operationID)
+	}()
+
+	httpx.WriteAPI(w, http.StatusAccepted, httpx.Response{Success: true, Data: map[string]any{
+		"host":              currentHost,
+		"address":           h.address(currentHost),
+		"restarting":        true,
+		"listenerOperation": listenerOperation,
+	}})
 }
 
 // valueOr picks the patch value when present, else the current config value.

@@ -19,12 +19,15 @@ import (
 
 func TestAdminSecurityDependencyVersions(t *testing.T) {
 	exact := map[string]string{
-		"github.com/coreos/go-oidc/v3": "v3.21.0",
-		"github.com/crewjam/saml":      "v0.5.2",
-		"golang.org/x/oauth2":          "v0.37.0",
+		"github.com/andybalholm/brotli": "v1.2.8",
+		"github.com/coreos/go-oidc/v3":  "v3.21.0",
+		"github.com/crewjam/saml":       "v0.5.2",
+		"github.com/klauspost/compress": "v1.20.3",
+		"golang.org/x/oauth2":           "v0.37.0",
 	}
 	args := []string{"list", "-mod=readonly", "-m", "-json", "routenest",
-		"github.com/coreos/go-oidc/v3", "github.com/crewjam/saml",
+		"github.com/andybalholm/brotli", "github.com/coreos/go-oidc/v3",
+		"github.com/crewjam/saml", "github.com/klauspost/compress",
 		"golang.org/x/oauth2", "github.com/russellhaering/goxmldsig"}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -51,8 +54,8 @@ func TestAdminSecurityDependencyVersions(t *testing.T) {
 		if want, ok := exact[module.Path]; ok && module.Version != want {
 			t.Errorf("%s = %s, want %s", module.Path, module.Version, want)
 		}
-		if module.Path == "routenest" && module.GoVersion != "1.26.0" {
-			t.Errorf("Go baseline = %s, want 1.26.0", module.GoVersion)
+		if module.Path == "routenest" && module.GoVersion != "1.26.10" {
+			t.Errorf("Go baseline = %s, want 1.26.10", module.GoVersion)
 		}
 		if module.Path == "github.com/russellhaering/goxmldsig" &&
 			(strings.Contains(module.Version, "-") ||

@@ -21,8 +21,8 @@ var (
 	PoolPath string
 )
 
-// poolPathMu guards first-use resolution of PoolPath. Kept separate from PoolMu
-// so the path can be resolved before the pool lock is taken.
+// poolPathMu guards first-use resolution of PoolPath. Code that needs both
+// locks takes PoolMu first, then poolPathMu, matching LoadPool and persistence.
 var poolPathMu sync.Mutex
 
 // ensurePoolPath resolves the accounts file path on first use, so importing this
@@ -36,9 +36,9 @@ func ensurePoolPath() {
 }
 
 func LoadPool() *AccountPool {
-	ensurePoolPath()
 	PoolMu.Lock()
 	defer PoolMu.Unlock()
+	ensurePoolPath()
 
 	if Pool != nil {
 		return Pool
@@ -53,7 +53,14 @@ func LoadPool() *AccountPool {
 }
 
 func SavePool() {
-	if err := SavePoolStrict(); err != nil {
+	PoolMu.Lock()
+	defer PoolMu.Unlock()
+	SavePoolLocked()
+}
+
+// SavePoolLocked persists the live pool while the caller holds PoolMu.
+func SavePoolLocked() {
+	if err := SavePoolStrictLocked(); err != nil {
 		log.Printf("Failed to save accounts to %s: %v", PoolPath, err)
 	}
 }
@@ -63,6 +70,15 @@ func SavePool() {
 // best-effort logging, while security migrations must not acknowledge success
 // unless the old credential authority was durably replaced.
 func SavePoolStrict() error {
+	PoolMu.Lock()
+	defer PoolMu.Unlock()
+	return SavePoolStrictLocked()
+}
+
+// SavePoolStrictLocked is the fail-closed persistence primitive for mutations
+// already protected by PoolMu. Callers must hold PoolMu for the entire mutation
+// and save so JSON serialization never observes a partially updated pool.
+func SavePoolStrictLocked() error {
 	ensurePoolPath()
 	return poolstore.Save(PoolPath, Pool)
 }
@@ -119,8 +135,8 @@ func AddAccount(acc *Account) {
 	} else {
 		p.Accounts = append(p.Accounts, acc)
 	}
+	SavePoolLocked()
 	PoolMu.Unlock()
-	SavePool()
 }
 
 // FindAccountByRefreshToken 按 refreshToken 查找已有账号（不存在返回 nil）。
@@ -166,7 +182,7 @@ func RemoveAccount(accountID string) bool {
 	for i, a := range p.Accounts {
 		if a.AccountID == accountID {
 			p.Accounts = append(p.Accounts[:i], p.Accounts[i+1:]...)
-			SavePool()
+			SavePoolLocked()
 			return true
 		}
 	}
@@ -200,35 +216,101 @@ func GetAccountByCredentialID(credentialID domain.CredentialID) *Account {
 	return nil
 }
 
+func accountRefreshToken(acc *Account) string {
+	PoolMu.Lock()
+	defer PoolMu.Unlock()
+	return acc.RefreshToken
+}
+
+func accountAccessState(acc *Account) (string, int64) {
+	PoolMu.Lock()
+	defer PoolMu.Unlock()
+	return acc.AccessToken, acc.ExpiresAt
+}
+
+// CurrentAccessToken returns the shared account token under the pool's account-
+// state synchronization boundary.
+func CurrentAccessToken(acc *Account) string {
+	PoolMu.Lock()
+	defer PoolMu.Unlock()
+	return acc.AccessToken
+}
+
+// AccountAvailability snapshots the mutable account-wide routing state.
+func AccountAvailability(acc *Account) (string, time.Time) {
+	PoolMu.Lock()
+	defer PoolMu.Unlock()
+	return acc.Status, acc.CooldownUntil
+}
+
+func persistAccountUpdate(update func()) {
+	PoolMu.Lock()
+	defer PoolMu.Unlock()
+	update()
+	SavePoolLocked()
+}
+
+// SetAccountCooldown changes account-wide availability and persists the state
+// before releasing the account-state lock.
+func SetAccountCooldown(acc *Account, until time.Time) {
+	persistAccountUpdate(func() {
+		acc.Status = "cooldown"
+		acc.CooldownUntil = until
+	})
+}
+
+// SetAccountStatus changes and persists an account status under the pool lock.
+func SetAccountStatus(acc *Account, status string) {
+	persistAccountUpdate(func() { acc.Status = status })
+}
+
+// ActivateAccount persists a recovery only when the account is not active.
+func ActivateAccount(acc *Account) {
+	PoolMu.Lock()
+	defer PoolMu.Unlock()
+	if acc.Status == "active" {
+		return
+	}
+	acc.Status = "active"
+	SavePoolLocked()
+}
+
+// RecordAccountUse updates last-use and aggregate request count atomically.
+func RecordAccountUse(acc *Account, usedAt time.Time) {
+	persistAccountUpdate(func() {
+		acc.LastUsed = usedAt
+		acc.UsageCount++
+	})
+}
+
 func RefreshAccountToken(acc *Account) error {
-	resp, err := refreshClineToken(acc.RefreshToken)
+	refreshToken := accountRefreshToken(acc)
+	resp, err := refreshClineToken(refreshToken)
 	if err != nil {
 		if isRefreshRejected(err) {
 			// cline 自家 refresh 端点拒绝 ≠ 账号真失效：refresh token 本质是
 			// WorkOS token，走 WorkOS authenticate 端点仍可能自愈，不必重新授权。
-			if wos := refreshViaWorkOS(acc.RefreshToken); wos != nil {
+			if wos := refreshViaWorkOS(refreshToken); wos != nil {
 				ApplyWorkOSTokens(acc, wos)
 				return nil
 			}
-			acc.Status = "expired"
-			SavePool()
+			SetAccountStatus(acc, "expired")
 			// 双通道都拒绝 = WorkOS 会话已被服务端终结（invalid_grant: Session
 			// has already ended / token revoked），刷新救不回，必须重新授权
 			return fmt.Errorf("refresh token rejected by both Cline and WorkOS (session ended or revoked) — account requires re-authorization: 管理页「导入账号」→ OAuth 登录")
 		}
-		acc.Status = "cooldown"
-		acc.CooldownUntil = time.Now().Add(5 * time.Minute)
-		SavePool()
+		SetAccountCooldown(acc, time.Now().Add(5*time.Minute))
 		return fmt.Errorf("token refresh failed (transient): %w", err)
 	}
 
-	acc.AccessToken = "workos:" + resp.Data.AccessToken
-	if resp.Data.RefreshToken != "" {
-		acc.RefreshToken = resp.Data.RefreshToken
-	}
-	acc.ExpiresAt = parseExpiry(resp.Data.ExpiresAt) - 60000
-	acc.Status = "active"
-	SavePool()
+	persistAccountUpdate(func() {
+		acc.AccessToken = "workos:" + resp.Data.AccessToken
+		if resp.Data.RefreshToken != "" {
+			acc.RefreshToken = resp.Data.RefreshToken
+		}
+		acc.ExpiresAt = parseExpiry(resp.Data.ExpiresAt) - 60000
+		acc.Status = "active"
+	})
 	return nil
 }
 
@@ -236,22 +318,28 @@ func RefreshAccountToken(acc *Account) error {
 // /auth/register 换正式 cline 令牌；注册也失败时直接用 workos 前缀令牌
 // （Cline 上游接受），轮换出的新 refresh token 一并落盘。
 func ApplyWorkOSTokens(acc *Account, wos *authenticateResp) {
+	var accessToken, refreshToken string
+	var expiresAt int64
 	if cline, err := registerWithCline(wos.AccessToken, wos.RefreshToken); err == nil && cline.Data.AccessToken != "" {
-		acc.AccessToken = "workos:" + cline.Data.AccessToken
-		if cline.Data.RefreshToken != "" {
-			acc.RefreshToken = cline.Data.RefreshToken
-		}
-		acc.ExpiresAt = parseExpiry(cline.Data.ExpiresAt) - 60000
+		accessToken = "workos:" + cline.Data.AccessToken
+		refreshToken = cline.Data.RefreshToken
+		expiresAt = parseExpiry(cline.Data.ExpiresAt) - 60000
 	} else {
-		acc.AccessToken = "workos:" + wos.AccessToken
-		if wos.RefreshToken != "" {
-			acc.RefreshToken = wos.RefreshToken
-		}
-		acc.ExpiresAt = time.Now().Add(time.Hour).UnixMilli() - 60000
+		accessToken = "workos:" + wos.AccessToken
+		refreshToken = wos.RefreshToken
+		expiresAt = time.Now().Add(time.Hour).UnixMilli() - 60000
 	}
-	acc.Status = "active"
-	SavePool()
-	log.Printf("  account %s: token refreshed via WorkOS fallback (no re-auth needed)", acc.Email)
+	email := ""
+	persistAccountUpdate(func() {
+		acc.AccessToken = accessToken
+		if refreshToken != "" {
+			acc.RefreshToken = refreshToken
+		}
+		acc.ExpiresAt = expiresAt
+		acc.Status = "active"
+		email = acc.Email
+	})
+	log.Printf("  account %s: token refreshed via WorkOS fallback (no re-auth needed)", email)
 }
 
 func PickAccount() *Account {
@@ -325,7 +413,7 @@ func PickAccountForModelWithFallback(model string, fallbackToActive bool) *Accou
 		acc = eligible[p.CurrentIdx]
 		p.CurrentIdx = (p.CurrentIdx + 1) % len(eligible)
 	}
-	SavePool()
+	SavePoolLocked()
 	return acc
 }
 
@@ -366,7 +454,7 @@ func PickAccountForModelLeastUsed(model string) *Account {
 	if best == nil {
 		return nil
 	}
-	SavePool()
+	SavePoolLocked()
 	return best
 }
 
@@ -408,7 +496,7 @@ func SortModelsByAvailability(chain []string) []string {
 		cands = append(cands, dispatch.ModelAvailability{Model: m, Available: avail, MinUsage: minUsage})
 	}
 	out := dispatch.OrderByAvailability(cands)
-	SavePool()
+	SavePoolLocked()
 	return out
 }
 
@@ -438,20 +526,21 @@ func pickAccountLocked(p *AccountPool) *Account {
 		acc = active[p.CurrentIdx]
 		p.CurrentIdx = (p.CurrentIdx + 1) % len(active)
 	}
-	SavePool()
+	SavePoolLocked()
 	return acc
 }
 
 func EnsureAccountToken(acc *Account) (string, error) {
-	if acc.AccessToken != "" && time.Now().UnixMilli() < acc.ExpiresAt {
-		return acc.AccessToken, nil
+	accessToken, expiresAt := accountAccessState(acc)
+	if accessToken != "" && time.Now().UnixMilli() < expiresAt {
+		return accessToken, nil
 	}
 
 	if err := RefreshAccountToken(acc); err != nil {
 		return "", err
 	}
 
-	return acc.AccessToken, nil
+	return CurrentAccessToken(acc), nil
 }
 
 func ListAccounts() []*Account {

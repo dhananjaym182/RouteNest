@@ -208,9 +208,7 @@ func resolveClineAttempt(request dispatch.Request, attempt dispatch.CandidateAtt
 			}
 			accounts.ObserveAffinityOutcome(affinityKey, account, affinityErr)
 			if outcome.Success {
-				account.LastUsed = time.Now()
-				account.UsageCount++
-				accounts.SavePool()
+				accounts.RecordAccountUse(account, time.Now())
 				for _, scope := range []domain.AvailabilityScope{
 					{ProviderID: "cline", CredentialID: attempt.CredentialID},
 					{ProviderID: "cline", CredentialID: attempt.CredentialID, ModelID: attempt.LogicalModelID},
@@ -223,13 +221,12 @@ func resolveClineAttempt(request dispatch.Request, attempt dispatch.CandidateAtt
 				return
 			}
 			if outcome.Err != nil {
-				account.Status = "cooldown"
-				account.CooldownUntil = time.Now().Add(5 * time.Minute)
-				accounts.SavePool()
+				cooldownUntil := time.Now().Add(5 * time.Minute)
+				accounts.SetAccountCooldown(account, cooldownUntil)
 				_ = providerstate.Default().Apply(domain.AvailabilityObservation{
 					Kind:  domain.ObservationTransientFailure,
 					Scope: domain.AvailabilityScope{ProviderID: "cline", CredentialID: attempt.CredentialID, ModelID: attempt.LogicalModelID},
-					Until: account.CooldownUntil, Source: "transport", Confidence: domain.ConfidenceInferred,
+					Until: cooldownUntil, Source: "transport", Confidence: domain.ConfidenceInferred,
 				})
 				return
 			}

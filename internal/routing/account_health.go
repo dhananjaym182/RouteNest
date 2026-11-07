@@ -131,12 +131,7 @@ func TestAccount(acc *domain.Account) accountTestResult {
 		result.OutputTokens = usage.Completion
 	}
 
-	if acc.Status != "active" {
-		accounts.PoolMu.Lock()
-		acc.Status = "active"
-		accounts.PoolMu.Unlock()
-		accounts.SavePool()
-	}
+	accounts.ActivateAccount(acc)
 	return result
 }
 
@@ -153,7 +148,7 @@ func ModelCooldownActive(acc *domain.Account, model string) bool {
 	}
 	if time.Now().After(until) {
 		delete(acc.ModelCooldowns, model)
-		accounts.SavePool()
+		accounts.SavePoolLocked()
 		return false
 	}
 	return true
@@ -184,8 +179,8 @@ func SetModelCooldown(acc *domain.Account, model string, until time.Time) {
 		acc.ModelCooldowns = make(map[string]time.Time)
 	}
 	acc.ModelCooldowns[model] = until
+	accounts.SavePoolLocked()
 	accounts.PoolMu.Unlock()
-	accounts.SavePool()
 	log.Printf("model cooldown: account=%s model=%s until=%s", TruncateEmail(acc.Email), model, until.Format("15:04:05"))
 	if providerstate.HasDefault() && acc.AccountID != "" {
 		scope := domain.AvailabilityScope{

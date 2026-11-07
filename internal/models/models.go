@@ -49,10 +49,10 @@ func Edit(fn func(p *domain.AccountPool) bool) bool {
 	accounts.LoadPool()
 	accounts.PoolMu.Lock()
 	changed := fn(accounts.Pool)
-	accounts.PoolMu.Unlock()
 	if changed {
-		accounts.SavePool()
+		accounts.SavePoolLocked()
 	}
+	accounts.PoolMu.Unlock()
 	return changed
 }
 

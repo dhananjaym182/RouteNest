@@ -1,6 +1,7 @@
 package admin
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -12,6 +13,31 @@ import (
 	"routenest/internal/adminauth"
 	storeadminauth "routenest/internal/store/adminauth"
 )
+
+func TestListenerChangeUsesDurableAdminAudit(t *testing.T) {
+	_, runtime := newAdminAuthTestMux(t)
+	credentials, err := runtime.service.CompleteBootstrap(t.Context(), "one time bootstrap secret", "permanent admin password")
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := adminTestRequest(http.MethodPost, "/admin/api/config/listener", `{"host":"localhost"}`)
+	ctx := context.WithValue(request.Context(), adminSecurityRuntimeContextKey{}, runtime)
+	ctx = context.WithValue(ctx, adminPrincipalContextKey{}, credentials.Principal)
+	request = request.WithContext(ctx)
+	if err := adminConfig.AuditListenerChange(request, "127.0.0.1", "localhost"); err != nil {
+		t.Fatal(err)
+	}
+	events, err := runtime.store.AuditEvents(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, event := range events {
+		if event.Kind == adminauth.AuditListenerChange && event.ActorID == credentials.Principal.UserID && event.TargetID == "localhost" {
+			return
+		}
+	}
+	t.Fatalf("durable listener audit event missing: %+v", events)
+}
 
 func newAdminAuthTestMux(t *testing.T) (*http.ServeMux, *adminSecurityRuntime) {
 	t.Helper()
@@ -147,5 +173,90 @@ func TestAdminSecurityHeadersAndOriginEnforcement(t *testing.T) {
 		if recorder.Header().Get(header) == "" {
 			t.Fatalf("security header %s missing", header)
 		}
+	}
+}
+
+func TestAdminConfigMutationRoleMatrix(t *testing.T) {
+	mux, runtime := newAdminAuthTestMux(t)
+	bootstrap, err := runtime.service.CompleteBootstrap(t.Context(), "one time bootstrap secret", "permanent admin password")
+	if err != nil {
+		t.Fatal(err)
+	}
+	breakGlass, err := runtime.service.Authenticate(t.Context(), bootstrap.Token)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	type roleSession struct {
+		token string
+		csrf  string
+	}
+	createSession := func(username string, role adminauth.Role) roleSession {
+		t.Helper()
+		password := username + " permanent password"
+		if _, err := runtime.service.CreateLocalUser(t.Context(), breakGlass, username, password, []adminauth.Role{role}); err != nil {
+			t.Fatal(err)
+		}
+		credentials, err := runtime.service.Login(t.Context(), username, password, "127.0.0.1")
+		if err != nil {
+			t.Fatal(err)
+		}
+		return roleSession{token: credentials.Token, csrf: credentials.CSRFToken}
+	}
+	viewer := createSession("read-only-viewer", adminauth.RoleViewer)
+	provider := createSession("provider-operator", adminauth.RoleProviderAdmin)
+	security := createSession("security-operator", adminauth.RoleSecurityAdmin)
+
+	requestAs := func(session roleSession, path, body string) *http.Request {
+		req := adminTestRequest(http.MethodPost, path, body)
+		req.AddCookie(&http.Cookie{Name: adminapi.SessionCookieName, Value: session.token})
+		req.Header.Set("X-RouteNest-CSRF", session.csrf)
+		return req
+	}
+	tests := []struct {
+		name    string
+		session roleSession
+		path    string
+		body    string
+		want    int
+	}{
+		{"provider updates routing", provider, "/admin/api/config/update", `{}`, http.StatusOK},
+		{"provider cannot update listener", provider, "/admin/api/config/listener", `{"host":""}`, http.StatusForbidden},
+		{"security cannot update routing", security, "/admin/api/config/update", `{}`, http.StatusForbidden},
+		{"security reaches listener handler", security, "/admin/api/config/listener", `{"host":""}`, http.StatusBadRequest},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			recorder := httptest.NewRecorder()
+			mux.ServeHTTP(recorder, requestAs(tt.session, tt.path, tt.body))
+			if recorder.Code != tt.want {
+				t.Fatalf("status = %d, want %d: %s", recorder.Code, tt.want, recorder.Body.String())
+			}
+		})
+	}
+
+	for _, path := range []string{
+		"/admin/api/opencode/config",
+		"/admin/api/config",
+		"/admin/api/providers",
+	} {
+		t.Run("viewer cannot read provider secrets "+path, func(t *testing.T) {
+			request := adminTestRequest(http.MethodGet, path, "")
+			request.AddCookie(&http.Cookie{Name: adminapi.SessionCookieName, Value: viewer.token})
+			recorder := httptest.NewRecorder()
+			mux.ServeHTTP(recorder, request)
+			if recorder.Code != http.StatusForbidden {
+				t.Fatalf("viewer status = %d, want 403: %s", recorder.Code, recorder.Body.String())
+			}
+		})
+		t.Run("provider admin can read provider configuration "+path, func(t *testing.T) {
+			request := adminTestRequest(http.MethodGet, path, "")
+			request.AddCookie(&http.Cookie{Name: adminapi.SessionCookieName, Value: provider.token})
+			recorder := httptest.NewRecorder()
+			mux.ServeHTTP(recorder, request)
+			if recorder.Code != http.StatusOK {
+				t.Fatalf("provider admin status = %d, want 200: %s", recorder.Code, recorder.Body.String())
+			}
+		})
 	}
 }

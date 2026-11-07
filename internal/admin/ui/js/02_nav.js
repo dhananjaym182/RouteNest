@@ -107,7 +107,16 @@ function applyTab(name){
   else if (name === 'network') { loadGlobal(); loadClineProxyConfig(); }
   else if (name === 'providers') { loadGlobal(); loadProviders(); loadConnections(); }
   else if (name === 'health') { loadGlobal(); }
-  else if (name === 'security') { loadKeys(); loadConfig(); loadAdminSessions(); if (typeof loadAdminUsers === 'function') loadAdminUsers(); if (typeof loadSSOProviders === 'function') loadSSOProviders(); renderAdminPrincipal(_adminPrincipal); }
+  else if (name === 'security') {
+    if (typeof adminHasPermission === 'function' && adminHasPermission('credential.write')) loadKeys();
+    loadConfig();
+    if (typeof adminHasPermission === 'function' && adminHasPermission('security.write')) {
+      loadAdminSessions();
+      if (typeof loadAdminUsers === 'function') loadAdminUsers();
+      if (typeof loadSSOProviders === 'function') loadSSOProviders();
+    }
+    renderAdminPrincipal(_adminPrincipal);
+  }
   else if (name === 'quota') { loadQuota(true); }
   else if (name === 'about') { if (typeof checkForUpdate === 'function' && !_verCheckDone) checkForUpdate(false); }
   refreshSaveBar();

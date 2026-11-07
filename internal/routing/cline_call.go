@@ -65,10 +65,9 @@ func CallClineAPIWithAccountCtx(ctx context.Context, acc *domain.Account, params
 
 	resp, err := invoke(token)
 	if err != nil {
-		acc.Status = "cooldown"
-		acc.CooldownUntil = time.Now().Add(5 * time.Minute)
-		accounts.SavePool()
-		observeClineTransportFailure(credentialID, bodyModel(body), acc.CooldownUntil)
+		until := time.Now().Add(5 * time.Minute)
+		accounts.SetAccountCooldown(acc, until)
+		observeClineTransportFailure(credentialID, bodyModel(body), until)
 		return nil, acc, &ClineAccountUnavailableError{err: fmt.Errorf("upstream request: %w", err)}
 	}
 
@@ -76,20 +75,18 @@ func CallClineAPIWithAccountCtx(ctx context.Context, acc *domain.Account, params
 		resp.Body.Close()
 
 		if err := accounts.RefreshAccountToken(acc); err == nil {
-			token = acc.AccessToken
+			token = accounts.CurrentAccessToken(acc)
 			resp, err = invoke(token)
 			if err != nil {
-				acc.Status = "cooldown"
-				acc.CooldownUntil = time.Now().Add(5 * time.Minute)
-				accounts.SavePool()
-				observeClineTransportFailure(credentialID, bodyModel(body), acc.CooldownUntil)
+				until := time.Now().Add(5 * time.Minute)
+				accounts.SetAccountCooldown(acc, until)
+				observeClineTransportFailure(credentialID, bodyModel(body), until)
 				return nil, acc, &ClineAccountUnavailableError{err: fmt.Errorf("upstream retry: %w", err)}
 			}
 			if resp.StatusCode == 401 {
 				observeClineFailure(bundle, credentialID, bodyModel(body), resp, nil)
 				resp.Body.Close()
-				acc.Status = "expired"
-				accounts.SavePool()
+				accounts.SetAccountStatus(acc, "expired")
 				return nil, acc, &ClineAccountUnavailableError{err: fmt.Errorf("account %s token expired permanently", acc.Email)}
 			}
 		} else {
@@ -110,9 +107,7 @@ func CallClineAPIWithAccountCtx(ctx context.Context, acc *domain.Account, params
 			if model != "" {
 				SetModelCooldown(acc, model, until)
 			} else {
-				acc.Status = "cooldown"
-				acc.CooldownUntil = until
-				accounts.SavePool()
+				accounts.SetAccountCooldown(acc, until)
 			}
 		}
 
@@ -122,9 +117,7 @@ func CallClineAPIWithAccountCtx(ctx context.Context, acc *domain.Account, params
 		return nil, acc, egress.NewAPIError(resp.StatusCode, platform.Truncate(bodyStr, 500))
 	}
 
-	acc.LastUsed = time.Now()
-	acc.UsageCount++
-	accounts.SavePool()
+	accounts.RecordAccountUse(acc, time.Now())
 	recoverClineState(credentialID, bodyModel(body))
 	return resp, acc, nil
 }
@@ -163,10 +156,10 @@ func observeClineAccountState(credentialID domain.CredentialID, modelID string, 
 	if !providerstate.HasDefault() || account == nil {
 		return
 	}
+	status, until := accounts.AccountAvailability(account)
 	kind := domain.ObservationTransientFailure
-	until := account.CooldownUntil
 	confidence := domain.ConfidenceInferred
-	if account.Status == "expired" {
+	if status == "expired" {
 		kind, until, confidence = domain.ObservationAuthExpired, time.Time{}, domain.ConfidenceExplicit
 	}
 	_ = providerstate.Default().Apply(domain.AvailabilityObservation{
