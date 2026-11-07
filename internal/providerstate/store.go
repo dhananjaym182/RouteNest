@@ -1,8 +1,10 @@
 package providerstate
 
 import (
+	"context"
 	"fmt"
 	"sort"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -30,22 +32,39 @@ func Default() *Store {
 
 func HasDefault() bool { return defaultStore.Load() != nil }
 
-// Store owns normalized runtime availability observations. It is independent
-// of provider protocols and legacy persistence adapters.
+// Store caches normalized observations. The backend, rather than this cache,
+// owns mutation ordering and durable state across Store instances.
 type Store struct {
-	mu     sync.Mutex
-	now    func() time.Time
-	states map[domain.AvailabilityScope]map[domain.ObservationKind]domain.AvailabilityObservation
+	mu          sync.Mutex
+	now         func() time.Time
+	backend     Backend
+	state       BackendSnapshot
+	lastErr     error
+	unavailable bool
 }
 
+// NewStore retains the process-local constructor for compatibility.
 func NewStore(now func() time.Time) *Store {
 	if now == nil {
 		now = time.Now
 	}
-	return &Store{
-		now:    now,
-		states: map[domain.AvailabilityScope]map[domain.ObservationKind]domain.AvailabilityObservation{},
+	return &Store{now: now, backend: &memoryBackend{}}
+}
+
+// NewDurableStore hydrates and durably removes expired observations before the
+// store can be published. A failed read or expiry write fails construction.
+func NewDurableStore(backend Backend, now func() time.Time) (*Store, error) {
+	if backend == nil {
+		return nil, fmt.Errorf("providerstate: backend is nil")
 	}
+	if now == nil {
+		now = time.Now
+	}
+	s := &Store{now: now, backend: backend}
+	if err := s.refreshLocked(context.Background(), true); err != nil {
+		return nil, err
+	}
+	return s, nil
 }
 
 func expiry(observation domain.AvailabilityObservation) time.Time {
@@ -68,19 +87,10 @@ func Active(observation domain.AvailabilityObservation, now time.Time) bool {
 // ScopeMatches reports whether a blocking scope applies to a candidate scope.
 // A blocker's unset dimension is broader than the candidate's.
 func ScopeMatches(blocker, candidate domain.AvailabilityScope) bool {
-	if blocker.ProviderID != candidate.ProviderID {
-		return false
-	}
-	if blocker.CredentialID != "" && blocker.CredentialID != candidate.CredentialID {
-		return false
-	}
-	if blocker.ModelID != "" && blocker.ModelID != candidate.ModelID {
-		return false
-	}
-	if blocker.EgressID != "" && blocker.EgressID != candidate.EgressID {
-		return false
-	}
-	return true
+	return blocker.ProviderID == candidate.ProviderID &&
+		(blocker.CredentialID == "" || blocker.CredentialID == candidate.CredentialID) &&
+		(blocker.ModelID == "" || blocker.ModelID == candidate.ModelID) &&
+		(blocker.EgressID == "" || blocker.EgressID == candidate.EgressID)
 }
 
 // Blocks returns the active observations that apply to scope, in input order.
@@ -94,21 +104,139 @@ func Blocks(observations []domain.AvailabilityObservation, scope domain.Availabi
 	return out
 }
 
-func (s *Store) expireLocked(now time.Time) {
-	for scope, byKind := range s.states {
-		for kind, observation := range byKind {
-			until := expiry(observation)
-			if !until.IsZero() && !now.Before(until) {
-				delete(byKind, kind)
-			}
-		}
-		if len(byKind) == 0 {
-			delete(s.states, scope)
+func scopeIndex(state *BackendSnapshot, scope domain.AvailabilityScope) int {
+	for i := range state.Scopes {
+		if state.Scopes[i].Scope == scope {
+			return i
 		}
 	}
+	return -1
+}
+
+func ensureScope(state *BackendSnapshot, scope domain.AvailabilityScope) *ScopeState {
+	i := scopeIndex(state, scope)
+	if i < 0 {
+		state.Scopes = append(state.Scopes, ScopeState{Scope: scope})
+		i = len(state.Scopes) - 1
+	}
+	return &state.Scopes[i]
+}
+
+func purgeExpired(state *BackendSnapshot, now time.Time) bool {
+	changed := false
+	for i := range state.Scopes {
+		entry := &state.Scopes[i]
+		kept := entry.Observations[:0]
+		removed := false
+		for _, observation := range entry.Observations {
+			if until := expiry(observation); !until.IsZero() && !now.Before(until) {
+				removed = true
+				continue
+			}
+			kept = append(kept, observation)
+		}
+		entry.Observations = kept
+		if removed {
+			entry.Revision++
+			changed = true
+		}
+	}
+	return changed
+}
+
+func validateSnapshot(state BackendSnapshot) error {
+	scopes := make(map[domain.AvailabilityScope]bool, len(state.Scopes))
+	for _, entry := range state.Scopes {
+		if !entry.Scope.Valid() || scopes[entry.Scope] {
+			return fmt.Errorf("providerstate: invalid backend scope")
+		}
+		scopes[entry.Scope] = true
+		kinds := make(map[domain.ObservationKind]bool, len(entry.Observations))
+		for _, observation := range entry.Observations {
+			if !observation.Valid() || observation.Scope != entry.Scope || observation.Kind == domain.ObservationRecovered || observation.Kind == domain.ObservationQuotaReset || kinds[observation.Kind] {
+				return fmt.Errorf("providerstate: invalid backend observation")
+			}
+			kinds[observation.Kind] = true
+		}
+	}
+	events := make(map[string]bool, len(state.Events))
+	for _, receipt := range state.Events {
+		if receipt.EventID == "" || receipt.EventID != strings.TrimSpace(receipt.EventID) || !receipt.Observation.Valid() || events[receipt.EventID] {
+			return fmt.Errorf("providerstate: invalid backend event receipt")
+		}
+		events[receipt.EventID] = true
+	}
+	return nil
+}
+
+// mutateLocked retries from authoritative snapshots. No cache change is
+// published until a backend write succeeds or an idempotent replay is proven.
+func (s *Store) mutateLocked(ctx context.Context, mutate func(*BackendSnapshot) (bool, error)) error {
+	for attempt := 0; attempt < 64; attempt++ {
+		current, err := s.backend.Snapshot(ctx)
+		if err == nil {
+			err = validateSnapshot(current)
+		}
+		if err != nil {
+			s.lastErr = err
+			s.unavailable = true
+			return err
+		}
+		next := CloneSnapshot(current)
+		changed, err := mutate(&next)
+		if err != nil {
+			s.state = CloneSnapshot(current)
+			s.lastErr = err
+			s.unavailable = false
+			return err
+		}
+		if !changed {
+			s.state = CloneSnapshot(current)
+			s.lastErr = nil
+			s.unavailable = false
+			return nil
+		}
+		next.Revision = current.Revision + 1
+		committed, err := s.backend.CompareAndSwap(ctx, current.Revision, next)
+		if err != nil {
+			s.lastErr = err
+			s.unavailable = true
+			return err
+		}
+		if committed {
+			s.state = CloneSnapshot(next)
+			s.lastErr = nil
+			s.unavailable = false
+			return nil
+		}
+	}
+	s.lastErr = ErrConflict
+	return ErrConflict
+}
+
+func (s *Store) refreshLocked(ctx context.Context, purge bool) error {
+	return s.mutateLocked(ctx, func(state *BackendSnapshot) (bool, error) {
+		if purge {
+			return purgeExpired(state, s.now()), nil
+		}
+		return false, nil
+	})
 }
 
 func (s *Store) Apply(observation domain.AvailabilityObservation) error {
+	return s.apply("", observation)
+}
+
+// ApplyEvent durably deduplicates a stable upstream event ID. Replaying an ID
+// with different evidence is rejected instead of silently dropping new evidence.
+func (s *Store) ApplyEvent(eventID string, observation domain.AvailabilityObservation) error {
+	if eventID == "" || eventID != strings.TrimSpace(eventID) {
+		return fmt.Errorf("providerstate: invalid event ID")
+	}
+	return s.apply(eventID, observation)
+}
+
+func (s *Store) apply(eventID string, observation domain.AvailabilityObservation) error {
 	if s == nil {
 		return fmt.Errorf("providerstate: store is nil")
 	}
@@ -118,61 +246,115 @@ func (s *Store) Apply(observation domain.AvailabilityObservation) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	now := s.now()
-	s.expireLocked(now)
-	if observation.Kind == domain.ObservationRecovered {
-		delete(s.states, observation.Scope)
-		return nil
-	}
-	if observation.Kind == domain.ObservationQuotaReset {
-		if byKind := s.states[observation.Scope]; byKind != nil {
-			delete(byKind, domain.ObservationQuotaExhausted)
-			if len(byKind) == 0 {
-				delete(s.states, observation.Scope)
+	return s.mutateLocked(context.Background(), func(state *BackendSnapshot) (bool, error) {
+		if eventID != "" {
+			for _, receipt := range state.Events {
+				if receipt.EventID != eventID {
+					continue
+				}
+				if !sameObservation(receipt.Observation, observation) {
+					return false, fmt.Errorf("providerstate: event ID reused with different evidence")
+				}
+				return false, nil
 			}
 		}
-		return nil
-	}
-	if until := expiry(observation); !until.IsZero() && !now.Before(until) {
-		return nil
-	}
-	byKind := s.states[observation.Scope]
-	if byKind == nil {
-		byKind = map[domain.ObservationKind]domain.AvailabilityObservation{}
-		s.states[observation.Scope] = byKind
-	}
-	byKind[observation.Kind] = observation
-	return nil
+		changed := purgeExpired(state, now)
+		if eventID != "" {
+			state.Events = append(state.Events, EventReceipt{EventID: eventID, Observation: observation})
+			changed = true
+		}
+		entry := ensureScope(state, observation.Scope)
+		switch observation.Kind {
+		case domain.ObservationRecovered:
+			entry.Observations = nil
+		case domain.ObservationQuotaReset:
+			kept := entry.Observations[:0]
+			for _, old := range entry.Observations {
+				if old.Kind != domain.ObservationQuotaExhausted {
+					kept = append(kept, old)
+				}
+			}
+			entry.Observations = kept
+		default:
+			if !Active(observation, now) {
+				return changed, nil
+			}
+			replaced := false
+			for i := range entry.Observations {
+				if entry.Observations[i].Kind == observation.Kind {
+					entry.Observations[i] = observation
+					replaced = true
+					break
+				}
+			}
+			if !replaced {
+				entry.Observations = append(entry.Observations, observation)
+			}
+		}
+		entry.Revision++
+		return true, nil
+	})
 }
 
-func (s *Store) Recover(scope domain.AvailabilityScope) error {
-	if s == nil {
-		return fmt.Errorf("providerstate: store is nil")
+func sameObservation(a, b domain.AvailabilityObservation) bool {
+	return a.Kind == b.Kind && a.Scope == b.Scope && a.Until.Equal(b.Until) &&
+		a.ResetAt.Equal(b.ResetAt) && a.Source == b.Source && a.Confidence == b.Confidence
+}
+
+// Guard captures the authoritative revision without expiring due state, so a
+// recovery probe can operate on that evidence and then conditionally clear it.
+func (s *Store) Guard(scope domain.AvailabilityScope) (ScopeGuard, error) {
+	if s == nil || !scope.Valid() {
+		return ScopeGuard{}, fmt.Errorf("providerstate: invalid recovery scope")
 	}
-	if !scope.Valid() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if err := s.refreshLocked(context.Background(), false); err != nil {
+		return ScopeGuard{}, err
+	}
+	guard := ScopeGuard{Scope: scope}
+	if i := scopeIndex(&s.state, scope); i >= 0 {
+		guard.Revision = s.state.Scopes[i].Revision
+	}
+	return guard, nil
+}
+
+// RecoverGuard clears only the exact scope if no newer evidence changed it.
+func (s *Store) RecoverGuard(guard ScopeGuard) error {
+	return s.recover(&guard, guard.Scope)
+}
+
+// Recover retains unconditional exact-scope clearing for compatibility. Probe
+// callers should capture Guard before I/O and use RecoverGuard afterward.
+func (s *Store) Recover(scope domain.AvailabilityScope) error { return s.recover(nil, scope) }
+
+func (s *Store) recover(guard *ScopeGuard, scope domain.AvailabilityScope) error {
+	if s == nil || !scope.Valid() {
 		return fmt.Errorf("providerstate: invalid recovery scope")
 	}
 	s.mu.Lock()
-	delete(s.states, scope)
-	s.mu.Unlock()
-	return nil
-}
-
-func scopeMatches(blocker, candidate domain.AvailabilityScope) bool {
-	return ScopeMatches(blocker, candidate)
+	defer s.mu.Unlock()
+	return s.mutateLocked(context.Background(), func(state *BackendSnapshot) (bool, error) {
+		i := scopeIndex(state, scope)
+		revision := uint64(0)
+		if i >= 0 {
+			revision = state.Scopes[i].Revision
+		}
+		if guard != nil && guard.Revision != revision {
+			return false, ErrConflict
+		}
+		if i < 0 || len(state.Scopes[i].Observations) == 0 {
+			return false, nil
+		}
+		state.Scopes[i].Observations = nil
+		state.Scopes[i].Revision++
+		return true, nil
+	})
 }
 
 func observationLess(a, b domain.AvailabilityObservation) bool {
-	if a.Scope.ProviderID != b.Scope.ProviderID {
-		return a.Scope.ProviderID < b.Scope.ProviderID
-	}
-	if a.Scope.CredentialID != b.Scope.CredentialID {
-		return a.Scope.CredentialID < b.Scope.CredentialID
-	}
-	if a.Scope.ModelID != b.Scope.ModelID {
-		return a.Scope.ModelID < b.Scope.ModelID
-	}
-	if a.Scope.EgressID != b.Scope.EgressID {
-		return a.Scope.EgressID < b.Scope.EgressID
+	if a.Scope != b.Scope {
+		return scopeLess(a.Scope, b.Scope)
 	}
 	return a.Kind < b.Kind
 }
@@ -194,72 +376,93 @@ func (s *Store) Blocking(candidate domain.AvailabilityScope) []domain.Availabili
 	if s == nil || !candidate.Valid() {
 		return nil
 	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.expireLocked(s.now())
-	var out []domain.AvailabilityObservation
-	for scope, byKind := range s.states {
-		if !scopeMatches(scope, candidate) {
-			continue
-		}
-		for _, observation := range byKind {
-			out = append(out, observation)
-		}
-	}
-	sort.Slice(out, func(i, j int) bool { return observationLess(out[i], out[j]) })
-	return out
+	return Blocks(s.Snapshot(candidate.ProviderID), candidate, s.now())
 }
 
+// Snapshot preserves the read-only compatibility API. Backend failure retains
+// last-good diagnostics and is visible through LastError and Health.
 func (s *Store) Snapshot(providerID domain.ProviderInstanceID) []domain.AvailabilityObservation {
+	observations, _ := s.SnapshotWithError(context.Background(), providerID)
+	return observations
+}
+
+// SnapshotWithError refreshes authoritative state and persists lazy expiry.
+func (s *Store) SnapshotWithError(ctx context.Context, providerID domain.ProviderInstanceID) ([]domain.AvailabilityObservation, error) {
 	if s == nil {
-		return nil
+		return nil, fmt.Errorf("providerstate: store is nil")
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.expireLocked(s.now())
+	err := s.refreshLocked(ctx, true)
 	var out []domain.AvailabilityObservation
-	for scope, byKind := range s.states {
-		if providerID != "" && scope.ProviderID != providerID {
+	now := s.now()
+	for _, entry := range s.state.Scopes {
+		if providerID != "" && entry.Scope.ProviderID != providerID {
 			continue
 		}
-		for _, observation := range byKind {
-			out = append(out, observation)
+		for _, observation := range entry.Observations {
+			if Active(observation, now) {
+				out = append(out, observation)
+			}
 		}
 	}
 	sort.Slice(out, func(i, j int) bool { return observationLess(out[i], out[j]) })
-	return out
+	return out, err
 }
 
-// DueScopes returns unique scopes whose timed state is ready for a recovery
-// probe. It does not mutate state; failed probes can therefore defer it.
+// DueScopes returns unique scopes ready for recovery without expiring evidence.
 func (s *Store) DueScopes(now time.Time) []domain.AvailabilityScope {
+	scopes, _ := s.DueScopesWithError(context.Background(), now)
+	return scopes
+}
+
+func (s *Store) DueScopesWithError(ctx context.Context, now time.Time) ([]domain.AvailabilityScope, error) {
+	guards, err := s.DueGuards(ctx, now)
+	if err != nil {
+		return nil, err
+	}
+	var scopes []domain.AvailabilityScope
+	for _, guard := range guards {
+		scopes = append(scopes, guard.Scope)
+	}
+	return scopes, nil
+}
+
+// DueGuards captures due evidence and its revisions in one authoritative read.
+// Recovery must not capture a fresh guard after selecting older due evidence.
+func (s *Store) DueGuards(ctx context.Context, now time.Time) ([]ScopeGuard, error) {
 	if s == nil {
-		return nil
+		return nil, fmt.Errorf("providerstate: store is nil")
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	seen := map[domain.AvailabilityScope]bool{}
-	for scope, byKind := range s.states {
-		for _, observation := range byKind {
-			until := expiry(observation)
-			if !until.IsZero() && !now.Before(until) {
-				seen[scope] = true
+	if err := s.refreshLocked(ctx, false); err != nil {
+		return nil, err
+	}
+	var out []ScopeGuard
+	for _, entry := range s.state.Scopes {
+		for _, observation := range entry.Observations {
+			if until := expiry(observation); !until.IsZero() && !now.Before(until) {
+				out = append(out, ScopeGuard{Scope: entry.Scope, Revision: entry.Revision})
 				break
 			}
 		}
 	}
-	out := make([]domain.AvailabilityScope, 0, len(seen))
-	for scope := range seen {
-		out = append(out, scope)
-	}
-	sort.Slice(out, func(i, j int) bool { return scopeLess(out[i], out[j]) })
-	return out
+	sort.Slice(out, func(i, j int) bool { return scopeLess(out[i].Scope, out[j].Scope) })
+	return out, nil
 }
 
 // Defer moves expired timed observations at one scope to a later probe time.
-// A confirmed reset that already passed is retained as evidence only in logs;
-// ResetAt is cleared so it cannot override the new fallback retry time.
 func (s *Store) Defer(scope domain.AvailabilityScope, until time.Time) error {
+	return s.deferScope(nil, scope, until)
+}
+
+// DeferGuard prevents a failed slow probe from rewriting newer exact-scope evidence.
+func (s *Store) DeferGuard(guard ScopeGuard, until time.Time) error {
+	return s.deferScope(&guard, guard.Scope, until)
+}
+
+func (s *Store) deferScope(guard *ScopeGuard, scope domain.AvailabilityScope, until time.Time) error {
 	if s == nil || !scope.Valid() || until.IsZero() {
 		return fmt.Errorf("providerstate: invalid deferred recovery")
 	}
@@ -269,17 +472,72 @@ func (s *Store) Defer(scope domain.AvailabilityScope, until time.Time) error {
 	if !until.After(now) {
 		return fmt.Errorf("providerstate: deferred recovery must be in the future")
 	}
-	for kind, observation := range s.states[scope] {
-		if current := expiry(observation); current.IsZero() || now.Before(current) {
-			continue
+	return s.mutateLocked(context.Background(), func(state *BackendSnapshot) (bool, error) {
+		i := scopeIndex(state, scope)
+		revision := uint64(0)
+		if i >= 0 {
+			revision = state.Scopes[i].Revision
 		}
-		observation.Until = until
-		if !observation.ResetAt.IsZero() && !now.Before(observation.ResetAt) {
-			observation.ResetAt = time.Time{}
+		if guard != nil && guard.Revision != revision {
+			return false, ErrConflict
 		}
-		observation.Source = "recovery_probe"
-		observation.Confidence = domain.ConfidenceFallback
-		s.states[scope][kind] = observation
+		if i < 0 {
+			return false, nil
+		}
+		changed := false
+		for j, observation := range state.Scopes[i].Observations {
+			if current := expiry(observation); current.IsZero() || now.Before(current) {
+				continue
+			}
+			observation.Until = until
+			if !observation.ResetAt.IsZero() && !now.Before(observation.ResetAt) {
+				observation.ResetAt = time.Time{}
+			}
+			observation.Source = "recovery_probe"
+			observation.Confidence = domain.ConfidenceFallback
+			state.Scopes[i].Observations[j] = observation
+			changed = true
+		}
+		if changed {
+			state.Scopes[i].Revision++
+		}
+		return changed, nil
+	})
+}
+
+// LastError makes persistence errors visible to compatibility callers whose
+// historical signatures cannot return an error.
+func (s *Store) LastError() error {
+	if s == nil {
+		return fmt.Errorf("providerstate: store is nil")
 	}
-	return nil
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.lastErr
+}
+
+func (s *Store) recordError(err error) {
+	if s == nil || err == nil {
+		return
+	}
+	s.mu.Lock()
+	s.lastErr = err
+	s.mu.Unlock()
+}
+
+func (s *Store) Health() domain.RuntimeStateHealth {
+	if s == nil {
+		return domain.RuntimeStateHealth{Degraded: true, Stale: true, Reason: "backend_unavailable"}
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	health := s.backend.Health()
+	if s.unavailable {
+		health.Ready = false
+		health.SingleNodeReady = false
+		health.Degraded = true
+		health.Stale = true
+		health.Reason = "backend_unavailable"
+	}
+	return health
 }

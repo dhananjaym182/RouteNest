@@ -1,145 +1,179 @@
 package providers
 
 import (
-	"sync"
+	"context"
+	"errors"
+	"log"
+	"net/http"
 	"time"
 
+	"routenest/internal/budget"
+	"routenest/internal/dispatch"
 	"routenest/internal/domain"
 	"routenest/internal/providerstate"
 )
 
-// ---- 预算上限：派发前就避开配额墙，别再拿 429 当发现手段 ----------------
+type budgetAttemptContextKey struct{}
 
-var (
-	budgetMu      sync.Mutex
-	providerRPM   = map[string][]time.Time{}      // providerID:model → 分钟窗口内派发时间
-	providerDaily = map[string]map[string]int64{} // providerID → UTC 日 → 计数
-	// providerTokens token 用量：providerID → 时间键（月窗 "2006-01" / 日窗
-	// "2006-01-02"）→ token 数，请求日志落盘时按实际计量归集，重启后从零学起。
-	providerTokens = map[string]map[string]int64{}
-)
-
-const providerRPMWindow = time.Minute
-
-// utcTokenKey 当前 UTC 时间键，按 token 配额窗口取粒度：daily 用整日
-// （"2006-01-02"），monthly（含空/未知值）用整月（"2006-01"）。与 providerDaily
-// 的日键同风格：直接按当前键计数，过期键自然废弃。
-func utcTokenKey(tokenWindow string) string {
-	if tokenWindow == "daily" {
-		return time.Now().UTC().Format("2006-01-02")
+func providerBudgetPolicy(provider CustomProvider) budget.Policy {
+	return budget.Policy{
+		RPMLimit: provider.RpmLimit, DailyLimit: provider.DailyLimit,
+		TokenLimit: provider.TokenLimit, TokenWindow: provider.TokenWindow,
 	}
-	return time.Now().UTC().Format("2006-01")
 }
 
-// providerBudgetExceeded 判断该 provider:model 是否已超配（超一票都算超）。
-// rpmLimit/dailyLimit/tokenLimit 任一超限即返回 true；不超过顺带清理过期窗口数据。
-// tokenWindow 为 token 配额窗口（"monthly"/"daily"，空视同 monthly）。
+// providerBudgetExceeded is the lock-order-safe compatibility check used by
+// legacy selection while it already holds the provider registry lock. Planning
+// consumes no capacity; every real invocation is rechecked atomically by
+// AdmitDispatch.
 func providerBudgetExceeded(providerID, model string, rpmLimit, dailyLimit int, tokenLimit int64, tokenWindow string) bool {
-	if rpmLimit <= 0 && dailyLimit <= 0 && tokenLimit <= 0 {
+	if !budget.HasDefault() {
 		return false
 	}
-	now := time.Now()
-	scope := domain.AvailabilityScope{ProviderID: domain.ProviderInstanceID(providerID), ModelID: model}
-	var observed *domain.AvailabilityObservation
-	budgetMu.Lock()
-	if rpmLimit > 0 {
-		key := providerID + ":" + model
-		cut := now.Add(-providerRPMWindow)
-		kept := providerRPM[key][:0]
-		for _, t := range providerRPM[key] {
-			if t.After(cut) {
-				kept = append(kept, t)
-			}
-		}
-		providerRPM[key] = kept
-		if len(kept) >= rpmLimit {
-			oldest := kept[0]
-			for _, at := range kept[1:] {
-				if at.Before(oldest) {
-					oldest = at
-				}
-			}
-			observation := domain.AvailabilityObservation{
-				Kind: domain.ObservationRateLimited, Scope: scope, Until: oldest.Add(providerRPMWindow),
-				Source: "configured_window", Confidence: domain.ConfidenceExplicit,
-			}
-			observed = &observation
-		}
+	policy := budget.Policy{
+		RPMLimit: rpmLimit, DailyLimit: dailyLimit,
+		TokenLimit: tokenLimit, TokenWindow: tokenWindow,
 	}
-	if observed == nil && dailyLimit > 0 {
-		day := now.UTC().Format("2006-01-02")
-		if providerDaily[providerID][day] >= int64(dailyLimit) {
-			resetAt := providerstate.ConfiguredQuotaResetAt(now, "daily")
-			observation := domain.AvailabilityObservation{
-				Kind: domain.ObservationQuotaExhausted, Scope: scope, Until: resetAt, ResetAt: resetAt,
-				Source: "configured_window", Confidence: domain.ConfidenceExplicit,
-			}
-			observed = &observation
-		}
+	exhaustion, err := budget.Default().ExhaustionWithPolicy(context.Background(), providerID, model, policy)
+	blocked := exhaustion != nil
+	mirrorConfiguredBudgetObservation(providerID, model, exhaustion)
+	if err != nil && policy.HardLimited() {
+		return true
 	}
-	// token 预算：本窗口（月或日）已归集 token 达上限即超配，派发前就避开
-	if observed == nil && tokenLimit > 0 && providerTokens[providerID][utcTokenKey(tokenWindow)] >= tokenLimit {
-		window := tokenWindow
-		if window != "daily" {
-			window = "monthly"
-		}
-		resetAt := providerstate.ConfiguredQuotaResetAt(now, window)
-		observation := domain.AvailabilityObservation{
-			Kind: domain.ObservationQuotaExhausted, Scope: scope, Until: resetAt, ResetAt: resetAt,
-			Source: "configured_window", Confidence: domain.ConfidenceExplicit,
-		}
-		observed = &observation
-	}
-	budgetMu.Unlock()
-	if observed != nil && providerstate.HasDefault() {
-		_ = providerstate.Default().Apply(*observed)
-	}
-	return observed != nil
+	return blocked
 }
 
-// recordProviderDispatch 派发即计数（成败都计入：已打出的上游请求都占配额）。
-func recordProviderDispatch(providerID, model string) {
-	if providerID == "" {
+func mirrorConfiguredBudgetObservation(providerID, model string, exhaustion *budget.ExhaustionError) {
+	if !providerstate.HasDefault() || providerID == "" || model == "" {
 		return
 	}
-	budgetMu.Lock()
-	defer budgetMu.Unlock()
-	providerRPM[providerID+":"+model] = append(providerRPM[providerID+":"+model], time.Now())
-	day := time.Now().UTC().Format("2006-01-02")
-	if providerDaily[providerID] == nil {
-		providerDaily[providerID] = map[string]int64{}
+	store := providerstate.Default()
+	scope := domain.AvailabilityScope{ProviderID: domain.ProviderInstanceID(providerID), ModelID: model}
+	current := store.Blocking(scope)
+	if exhaustion != nil {
+		for _, observation := range current {
+			if observation.Scope == scope && observation.Kind == domain.ObservationQuotaExhausted &&
+				observation.Source == "configured_window" && observation.ResetAt.Equal(exhaustion.ResetAt) {
+				return
+			}
+		}
+		_ = store.Apply(domain.AvailabilityObservation{
+			Kind: domain.ObservationQuotaExhausted, Scope: scope,
+			Until: exhaustion.ResetAt, ResetAt: exhaustion.ResetAt,
+			Source: "configured_window", Confidence: domain.ConfidenceExplicit,
+		})
+		return
 	}
-	providerDaily[providerID][day]++
+	for _, observation := range current {
+		if observation.Scope == scope && observation.Kind == domain.ObservationQuotaExhausted && observation.Source == "configured_window" {
+			_ = store.Apply(domain.AvailabilityObservation{
+				Kind: domain.ObservationQuotaReset, Scope: scope,
+				Source: "configured_window", Confidence: domain.ConfidenceExplicit,
+			})
+			return
+		}
+	}
 }
 
-// TokenWindow 查询 provider 的 token 配额窗口；未找到或空值视同
-// "monthly"。请求日志落盘归集用量时用它取窗口，避免调用方透传窗口。
+// AdmitDispatch atomically checks and records one actual custom-provider
+// invocation. The caller supplies the server-owned event ID and timestamp from
+// the dispatch invocation boundary.
+func AdmitDispatch(ctx context.Context, provider CustomProvider, model, eventID string, at time.Time) (string, error) {
+	if !budget.HasDefault() {
+		return "", &budget.UnavailableError{}
+	}
+	receipt, err := budget.Default().CheckAndRecordWithPolicy(ctx, budget.AdmissionCommand{
+		ProviderID: provider.ID, ModelID: model, AttemptID: eventID,
+		At: at, Policy: providerBudgetPolicy(provider),
+	})
+	if err != nil {
+		return receipt.AttemptID, err
+	}
+	return receipt.AttemptID, nil
+}
+
+// RecordDispatch remains as a temporary compatibility helper for internal
+// callers that cannot yet carry an invocation event. Production dispatch paths
+// use AdmitDispatch and surface failures instead of logging through them.
+func RecordDispatch(providerID, model string) {
+	provider := Find(providerID)
+	if provider == nil {
+		return
+	}
+	eventID, err := dispatch.GenerateID()
+	if err != nil {
+		log.Printf("provider %s: generate budget event: %v", providerID, err)
+		return
+	}
+	if _, err := AdmitDispatch(context.Background(), *provider, model, eventID, time.Now()); err != nil && !errors.Is(err, budget.ErrExhausted) {
+		log.Printf("provider %s: record dispatch budget: %v", providerID, err)
+	}
+}
+
+// SnapshotBudgetExhaustion projects durable counters by provider and logical
+// model. Backend errors fail closed only for offerings with configured limits.
+func SnapshotBudgetExhaustion(offerings []domain.ModelOffering) map[domain.OfferingKey]bool {
+	providersByID := make(map[string]CustomProvider)
+	for _, provider := range List() {
+		providersByID[provider.ID] = provider
+	}
+	out := make(map[domain.OfferingKey]bool)
+	if !budget.HasDefault() {
+		return out
+	}
+	for _, offering := range offerings {
+		provider, ok := providersByID[string(offering.ProviderID)]
+		if !ok {
+			continue
+		}
+		policy := providerBudgetPolicy(provider)
+		blocked, err := budget.Default().ExhaustedWithPolicy(context.Background(), provider.ID, offering.ModelID, policy)
+		if blocked || (err != nil && policy.HardLimited()) {
+			out[offering.Key()] = true
+		}
+	}
+	return out
+}
+
+// TokenWindow reports the configured compatibility window.
 func TokenWindow(providerID string) string {
 	Load()
 	Mu.Lock()
 	defer Mu.Unlock()
-	for _, p := range CustomProviders {
-		if p.ID == providerID {
-			if p.TokenWindow == "daily" {
-				return "daily"
-			}
-			return "monthly"
+	for _, provider := range CustomProviders {
+		if provider.ID == providerID && provider.TokenWindow == "daily" {
+			return "daily"
 		}
 	}
 	return "monthly"
 }
 
-// RecordTokenUsage 落盘请求日志时归集 token 用量（发出即消耗，不论
-// 成败都按上游回报的计量累加）。tokens<0 的异常回报直接忽略。tokenWindow
-// 决定时间键粒度（"daily" 用日键，其余用月键）。
-func RecordTokenUsage(providerID string, tokens int64, tokenWindow string) {
-	if providerID == "" || tokens < 0 {
+// RecordTokenUsage persists one final reported usage event. Replaying the same
+// event is idempotent; changing its payload is rejected.
+func RecordTokenUsage(providerID, attemptID, eventID string, tokens int64) error {
+	if !budget.HasDefault() {
+		return &budget.UnavailableError{}
+	}
+	return budget.Default().RecordTokens(context.Background(), providerID, attemptID, eventID, tokens)
+}
+
+// TagResponseBudgetAttempt retains internal accounting attribution without
+// adding an upstream header or exposing it to downstream clients.
+func TagResponseBudgetAttempt(response *http.Response, attemptID string) {
+	if response == nil || attemptID == "" {
 		return
 	}
-	budgetMu.Lock()
-	defer budgetMu.Unlock()
-	if providerTokens[providerID] == nil {
-		providerTokens[providerID] = map[string]int64{}
+	request := response.Request
+	if request == nil {
+		request = &http.Request{}
 	}
-	providerTokens[providerID][utcTokenKey(tokenWindow)] += tokens
+	response.Request = request.WithContext(context.WithValue(request.Context(), budgetAttemptContextKey{}, attemptID))
+}
+
+func ResponseBudgetAttempt(response *http.Response) string {
+	if response == nil || response.Request == nil {
+		return ""
+	}
+	attemptID, _ := response.Request.Context().Value(budgetAttemptContextKey{}).(string)
+	return attemptID
 }

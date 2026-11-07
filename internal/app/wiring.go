@@ -10,11 +10,13 @@ import (
 	"sync"
 
 	"routenest/internal/accounts"
+	"routenest/internal/budget"
 	"routenest/internal/buildinfo"
 	"routenest/internal/combos"
 	"routenest/internal/config"
 	"routenest/internal/connections"
 	"routenest/internal/credentials"
+	"routenest/internal/dispatch"
 	"routenest/internal/domain"
 	"routenest/internal/egress"
 	"routenest/internal/platform"
@@ -52,8 +54,8 @@ func Configure() {
 }
 
 func configure() {
-	if err := configureProviderState(); err != nil {
-		panic("app: publish provider state: " + err.Error())
+	if err := configureRuntimeState(); err != nil {
+		panic("app: configure provider runtime state: " + err.Error())
 	}
 	if err := configureCredentials(); err != nil {
 		panic("app: publish credentials: " + err.Error())
@@ -133,6 +135,9 @@ func configure() {
 
 	proxycore.ConfigProvider = config.Live
 	proxycore.RecordUsage = RecordUsage
+	if err := configureDispatch(); err != nil {
+		panic("app: publish dispatch runtime: " + err.Error())
+	}
 
 	if err := ValidateComposition(); err != nil {
 		panic(err)
@@ -158,9 +163,11 @@ func ValidateComposition() error {
 	check("proxycore.RecordUsage", proxycore.RecordUsage != nil)
 	check("routing combo catalogue", routing.HasComboCatalog())
 	check("provider adapter registry", provideradapters.HasDefault())
+	check("provider budget store", budget.HasDefault())
 	check("provider state store", providerstate.HasDefault())
 	check("credentials registry", credentials.HasDefault())
 	check("egress resolver", egress.HasDefault())
+	check("dispatch runtime", dispatch.HasRuntime())
 	if len(missing) > 0 {
 		return fmt.Errorf("app: incomplete composition: %s", strings.Join(missing, ", "))
 	}

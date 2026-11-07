@@ -13,6 +13,9 @@ func TestDefaultProxy(t *testing.T) {
 	if cfg.Strategy != "round_robin" {
 		t.Errorf("strategy = %q", cfg.Strategy)
 	}
+	if cfg.DispatchMode != DispatchModeShadow {
+		t.Errorf("dispatchMode = %q, want shadow", cfg.DispatchMode)
+	}
 	if cfg.Headers["User-Agent"] != "Cline/3.0.47" {
 		t.Errorf("User-Agent = %q", cfg.Headers["User-Agent"])
 	}
@@ -26,7 +29,7 @@ func TestLoadProxyMissingFileKeepsDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if cfg.Strategy != "round_robin" || cfg.Headers["X-Title"] != "Cline" {
+	if cfg.Strategy != "round_robin" || cfg.DispatchMode != DispatchModeShadow || cfg.Headers["X-Title"] != "Cline" {
 		t.Errorf("defaults not applied: %+v", cfg)
 	}
 }
@@ -65,6 +68,20 @@ func TestLoadProxyInvalidStrategyFallsBack(t *testing.T) {
 	}
 }
 
+func TestLoadProxyInvalidDispatchModeFallsBackToShadow(t *testing.T) {
+	path := filepath.Join(t.TempDir(), ".cline-config.json")
+	if err := os.WriteFile(path, []byte(`{"dispatchMode":"future"}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := LoadProxy(path)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if cfg.DispatchMode != DispatchModeShadow {
+		t.Errorf("dispatchMode = %q, want shadow", cfg.DispatchMode)
+	}
+}
+
 func TestLoadProxyCorruptFileReportsError(t *testing.T) {
 	path := filepath.Join(t.TempDir(), ".cline-config.json")
 	if err := os.WriteFile(path, []byte("{oops"), 0600); err != nil {
@@ -79,6 +96,7 @@ func TestSaveProxyRoundTripIncludingCombos(t *testing.T) {
 	path := filepath.Join(t.TempDir(), ".cline-config.json")
 	cfg := DefaultProxy()
 	cfg.Strategy = "quality"
+	cfg.DispatchMode = DispatchModeEnforce
 	cfg.OnlyFree = true
 	cfg.Combos = []domain.ModelCombo{{
 		ID:      "combo-a",
@@ -93,7 +111,7 @@ func TestSaveProxyRoundTripIncludingCombos(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load: %v", err)
 	}
-	if loaded.Strategy != "quality" || !loaded.OnlyFree {
+	if loaded.Strategy != "quality" || loaded.DispatchMode != DispatchModeEnforce || !loaded.OnlyFree {
 		t.Errorf("settings lost: %+v", loaded)
 	}
 	if len(loaded.Combos) != 1 || loaded.Combos[0].ID != "combo-a" || len(loaded.Combos[0].Entries) != 2 {

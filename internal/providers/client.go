@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"routenest/internal/connections"
+	"routenest/internal/dispatch"
 	"routenest/internal/domain"
 	"routenest/internal/egress"
 	"routenest/internal/platform"
@@ -89,9 +90,18 @@ func Call(p *CustomProvider, params map[string]any, stream bool) (*http.Response
 		} else if p.APIKey != "" {
 			credential.ID = domain.CredentialID("api-key:" + p.ID)
 		}
-		// Count at dispatch: RPM/daily budget measures requests actually sent upstream.
-		recordProviderDispatch(p.ID, modelKey)
+		invocationID, err := dispatch.GenerateID()
+		if err != nil {
+			return nil, fmt.Errorf("provider %s: invocation identity: %w", p.Name, err)
+		}
 		started := time.Now()
+		attemptID := invocationID
+		if p.ID != "" {
+			attemptID, err = AdmitDispatch(context.Background(), *p, modelKey, invocationID, started)
+			if err != nil {
+				return nil, fmt.Errorf("provider %s budget admission: %w", p.Name, err)
+			}
+		}
 		var resp *http.Response
 		resp, err = bundle.Invoker.Invoke(context.Background(), provideradapters.Invocation{
 			ProviderID: domain.ProviderInstanceID(p.ID), HTTP: httpCli,
@@ -101,11 +111,16 @@ func Call(p *CustomProvider, params map[string]any, stream bool) (*http.Response
 		})
 		latency := time.Since(started).Milliseconds()
 		if err != nil {
-			recordProviderOutcome(p.ID, modelKey, false, latency)
+			if p.ID != "" {
+				recordProviderOutcome(p.ID, modelKey, false, latency)
+			}
 			return nil, fmt.Errorf("provider request: %w", err)
 		}
 		if resp.StatusCode == http.StatusOK {
-			recordProviderOutcome(p.ID, modelKey, true, latency)
+			if p.ID != "" {
+				recordProviderOutcome(p.ID, modelKey, true, latency)
+				TagResponseBudgetAttempt(resp, attemptID)
+			}
 			if conn != nil {
 				// Consumed a real dispatch: move rotation past this connection.
 				connections.AdvanceConnCursor(p, conn.ID)
@@ -113,11 +128,15 @@ func Call(p *CustomProvider, params map[string]any, stream bool) (*http.Response
 			connections.TagResponseConn(resp, conn)
 			return resp, nil
 		}
-		recordProviderOutcome(p.ID, modelKey, false, latency)
+		if p.ID != "" {
+			recordProviderOutcome(p.ID, modelKey, false, latency)
+		}
 		bodyBytes, _ := io.ReadAll(io.LimitReader(resp.Body, 8<<10))
 		resp.Body.Close()
 		bodyStr := string(bodyBytes)
-		observeProviderFailure(bundle, p, credential.ID, modelKey, resp, bodyBytes)
+		if p.ID != "" {
+			observeProviderFailure(bundle, p, credential.ID, modelKey, resp, bodyBytes)
+		}
 		// Connection-specific failure with siblings left in the pool:
 		// park this connection (401/403 -> reauth, 429 -> timed cooldown)
 		// and retry with the next connection now instead of failing the provider.
@@ -136,7 +155,7 @@ func Call(p *CustomProvider, params map[string]any, stream bool) (*http.Response
 		if conn != nil && (resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden) {
 			connections.MarkConnectionReauth(conn.ID)
 		}
-		if until := egress.CooldownUntil(resp.StatusCode, resp.Header.Get("Retry-After"), bodyStr); !until.IsZero() {
+		if until := egress.CooldownUntil(resp.StatusCode, resp.Header.Get("Retry-After"), bodyStr); p.ID != "" && !until.IsZero() {
 			SetCooldown(p.ID, modelKey, until)
 		}
 		return nil, egress.NewAPIError(resp.StatusCode, platform.Truncate(bodyStr, 500))

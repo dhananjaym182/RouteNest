@@ -230,17 +230,17 @@ tbody tr:hover{background:var(--surface2)}
 
 /* ===== Buttons ===== */
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:var(--sp-2) var(--sp-4);min-height:var(--control-h);border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);color:var(--text);cursor:pointer;font-size:var(--fs-md);font-weight:500;transition:background 0.18s var(--ease),border-color 0.18s var(--ease),transform 0.18s var(--ease),box-shadow 0.18s var(--ease);text-decoration:none;line-height:1.2;white-space:nowrap}
-.btn:hover{background:var(--surface2);border-color:var(--text3)}
+.btn:where(:not(:disabled)):hover{background:var(--surface2);border-color:var(--text3)}
 .btn:active{transform:scale(0.97)}
 .btn svg{width:16px;height:16px;flex-shrink:0}
 .btn:focus-visible{outline:none;box-shadow:var(--ring);border-color:var(--accent)}
 .btn:disabled{opacity:0.5;cursor:not-allowed;transform:none}
-.btn-primary{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
-.btn-primary:hover{background:var(--accent-hover);border-color:var(--accent-hover)}
-.btn-success{background:var(--green);border-color:var(--green);color:var(--on-accent)}
-.btn-success:hover{background:var(--green-hover);border-color:var(--green-hover)}
+.btn-primary{background:var(--accent);border-color:var(--accent);color:var(--on-button-accent)}
+.btn-primary:where(:not(:disabled)):hover{background:var(--accent-hover);border-color:var(--accent-hover)}
+.btn-success{background:var(--green);border-color:var(--green);color:var(--on-button-accent)}
+.btn-success:where(:not(:disabled)):hover{background:var(--green-hover);border-color:var(--green-hover)}
 .btn-danger{border-color:var(--red);color:var(--red);background:var(--surface)}
-.btn-danger:hover{background:var(--red);color:var(--on-accent)}
+.btn-danger:where(:not(:disabled)):hover{background:var(--red);color:var(--on-button-accent)}
 .btn-sm{padding:5px var(--sp-3);min-height:var(--control-h-sm);font-size:var(--fs-base)}
 .btn-icon{padding:6px;width:32px;height:32px;min-height:0;justify-content:center}
 

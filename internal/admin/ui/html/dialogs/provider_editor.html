@@ -32,6 +32,7 @@
         <div class="field f1"><label>自定义请求头（每行 Key: Value，如 HTTP-Referer: https://mysite.com）</label><textarea id="provHeaders" rows="3"></textarea></div>
       </div>
     </div>
+    <details class="provider-editor-advanced"><summary>高级设置</summary>
     <div class="drawer-group">
       <div class="form-group-label">调度与限额</div>
       <div class="form-row">
@@ -52,6 +53,8 @@
       </div>
       <div class="field-hint">配额提示：<span id="provQuotaWinHint">Token 配额按月度重置（每月 1 日 UTC），0=不限。</span>填入免费层限额后，路由会在派发前自动避开打满额度的上游，改用组内其他 provider，不再拿 429 试错</div>
     </div>
+    </details>
+    <div id="providerAuthSetup" class="provider-auth-setup" hidden></div>
     <div class="drawer-group">
       <div class="form-group-label">行为与连接</div>
       <div class="form-row">
@@ -67,7 +70,7 @@
       <div class="field">
         <label>Provider OAuth 账号 <span id="provConnCount" class="grp-count"></span></label>
         <div id="provConnPick" class="conn-pick-box"><span class="conn-pick-empty">加载中...</span></div>
-        <div class="field-hint">选择多个登录账号后轮转派发；限流或待重登账号会自动跳过。不选择账号时仅使用 API Key。账号在「凭据 → Provider OAuth」中管理。</div>
+        <div class="field-hint">选择多个登录账号后轮转派发；限流或待重登账号会自动跳过。不选择账号时仅使用 API Key。使用上方登录入口连接账号，再选中需要使用的账号。</div>
       </div>
     </div>
   </div>

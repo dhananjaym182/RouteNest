@@ -18,7 +18,6 @@ func TestMain(m *testing.M) {
 	if err != nil {
 		panic(err)
 	}
-	oldPoolPath, oldLogsPath := accounts.PoolPath, requestlog.Path
 	accounts.PoolPath = filepath.Join(tmp, ".cline-accounts.json")
 	requestlog.Path = filepath.Join(tmp, ".cline-request-logs.json")
 
@@ -28,7 +27,8 @@ func TestMain(m *testing.M) {
 
 	code := m.Run()
 
-	accounts.PoolPath, requestlog.Path = oldPoolPath, oldLogsPath
+	// The process exits immediately below. Do not restore these globals while
+	// server-owned cooldown recovery goroutines may still be reading them.
 	os.RemoveAll(tmp)
 	os.Exit(code)
 }

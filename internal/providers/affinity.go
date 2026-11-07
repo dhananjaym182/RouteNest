@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"sync"
 	"time"
+
+	"routenest/internal/domain"
 )
 
 // ---- 粘贴会话：同一会话在 TTL 内钉在同一家 provider --------------------
@@ -96,6 +98,37 @@ func stickyClearForProvider(providerID string) {
 	stickyMu.Unlock()
 }
 
+// PreferredProviderForSession returns the still-eligible provider pinned to a
+// conversation and model. Stale pins are cleared so planning can fall back to
+// its normal deterministic ordering.
+func PreferredProviderForSession(sessionKey, model string) domain.ProviderInstanceID {
+	if sessionKey == "" || model == "" {
+		return ""
+	}
+	pin := stickyGet(sessionKey)
+	if pin == nil || pin.model != model {
+		return ""
+	}
+	if pinProviderPresent(pin.providerID, model) == nil {
+		stickyClear(sessionKey)
+		return ""
+	}
+	return domain.ProviderInstanceID(pin.providerID)
+}
+
+// ObserveSessionProvider refreshes a successful automatic provider pin or
+// clears it after a failed attempt. Explicit request/combo pins do not call it.
+func ObserveSessionProvider(sessionKey string, providerID domain.ProviderInstanceID, model string, success bool) {
+	if sessionKey == "" || providerID == "" || model == "" {
+		return
+	}
+	if success {
+		stickySet(sessionKey, string(providerID), model)
+		return
+	}
+	stickyClear(sessionKey)
+}
+
 // pinProviderPresent 粘贴会话命中后校验钉住的 provider 仍然可用：启用、
 // 服务该模型、未冷却、未超预算。任何一条不满足都返回 nil（随后解钉转入
 // 组内故障转移）。
@@ -103,6 +136,7 @@ func pinProviderPresent(providerID, model string) *CustomProvider {
 	Load()
 	Mu.Lock()
 	defer Mu.Unlock()
+	legacyOwners := providerLegacyOwnerCountsLocked()
 	for _, p := range CustomProviders {
 		if p.ID != providerID {
 			continue
@@ -118,6 +152,9 @@ func pinProviderPresent(providerID, model string) *CustomProvider {
 			}
 		}
 		if !serves {
+			return nil
+		}
+		if !providerOfferingEligibleScoped(*p, model, providerMayInheritLegacy(*p, model, legacyOwners)) {
 			return nil
 		}
 		if until, cool := Cooldowns[providerID+":"+model]; cool && time.Now().Before(until) {

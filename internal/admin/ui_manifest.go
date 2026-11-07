@@ -24,6 +24,8 @@ var adminUIJSAssets = []string{
 	"ui/js/15_dashboard.js",
 	"ui/js/17_quota.js",
 	"ui/js/18_global.js",
+	"ui/js/19_provider_setup.js",
+	"ui/js/20_routing_inspector.js",
 	// 16_init runs applyLang/applyTab, so it must stay last.
 	"ui/js/16_init.js",
 }
@@ -49,6 +51,7 @@ var adminUIBodyParts = []string{
 	"ui/html/dialogs/provider_save_bar.html",
 	"ui/html/dialogs/diff.html",
 	"ui/html/dialogs/provider_editor.html",
+	"ui/html/dialogs/provider_setup.html",
 	"ui/html/pages/quickstart.html",
 	"ui/html/pages/quota.html",
 	"ui/html/pages/about.html",
@@ -78,4 +81,7 @@ var adminUICSSLayers = []string{
 	"ui/css/80_waves.css",
 	"ui/css/90_connection_import.css",
 	"ui/css/95_control_plane.css",
+	"ui/css/96_workflows.css",
+	"ui/css/97_management_tables.css",
+	"ui/css/98_routing_inspector.css",
 }

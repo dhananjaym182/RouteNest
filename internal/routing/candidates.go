@@ -39,7 +39,6 @@ const (
 type CandidatePin struct {
 	ProviderID   domain.ProviderInstanceID
 	ProviderName string
-	Manual       bool
 }
 
 func (pin CandidatePin) active() bool {
@@ -69,10 +68,12 @@ type CandidateQuality struct {
 // CandidateSignals are the ordering inputs that still live in legacy provider
 // records. Passing them explicitly keeps the planner pure.
 type CandidateSignals struct {
-	Priority  int
-	Weight    int
-	CreatedAt time.Time
-	Quality   CandidateQuality
+	Priority      int
+	Weight        int
+	CreatedAt     time.Time
+	Quality       CandidateQuality
+	WeightRank    int
+	HasWeightRank bool
 }
 
 // CandidatePlanInput is a complete snapshot for one planning pass.
@@ -87,22 +88,34 @@ type CandidatePlanInput struct {
 	Credentials  []domain.ProviderCredential
 	Observations []domain.AvailabilityObservation
 	Budgets      map[domain.ProviderInstanceID]bool
-	Egress       map[domain.ProviderInstanceID]egress.Decision
-	Signals      map[domain.ProviderInstanceID]CandidateSignals
+	// BudgetExhausted is the provider/model-scoped budget snapshot. Budgets is
+	// retained during migration for compatibility with older planner callers.
+	BudgetExhausted     map[domain.OfferingKey]bool
+	CredentialRequired  map[domain.ProviderInstanceID]bool
+	Egress              map[domain.ProviderInstanceID]egress.Decision
+	Signals             map[domain.ProviderInstanceID]CandidateSignals
+	OfferingSignals     map[domain.OfferingKey]CandidateSignals
+	AffinityModelID     string
+	PreferredProviderID domain.ProviderInstanceID
+	PreferredCredential domain.CredentialID
 }
 
 // Candidate is one routable provider offering with its eligible credentials
 // and resolved egress decision.
 type Candidate struct {
-	ProviderID  domain.ProviderInstanceID
-	ModelID     string
-	Access      domain.AccessClass
-	Offering    domain.ModelOffering
-	Credentials []domain.CredentialID
-	Egress      egress.Decision
-	Signals     CandidateSignals
-	Pinned      bool
-	Manual      bool
+	ProviderID      domain.ProviderInstanceID
+	ProviderName    string
+	AdapterID       string
+	ModelID         string
+	UpstreamModelID string
+	Group           int
+	Order           int
+	Access          domain.AccessClass
+	Offering        domain.ModelOffering
+	Credentials     []domain.CredentialID
+	Egress          egress.Decision
+	Signals         CandidateSignals
+	Pinned          bool
 }
 
 // CandidateExclusion records one omitted offering.
@@ -251,14 +264,29 @@ func eligibleCredentials(input CandidatePlanInput, instance domain.ProviderInsta
 	for i, credential := range eligible {
 		ids[i] = credential.ID
 	}
+	if offering.ModelID == input.AffinityModelID && input.PreferredCredential != "" {
+		for index, id := range ids {
+			if id != input.PreferredCredential || index == 0 {
+				continue
+			}
+			copy(ids[1:index+1], ids[:index])
+			ids[0] = id
+			break
+		}
+	}
 	return ids, ""
 }
 
-func candidateLess(a, b Candidate, strategy string) bool {
+func candidateLess(a, b Candidate, input CandidatePlanInput) bool {
 	if ra, rb := accessRank(a.Access, a.Offering.AllowanceVerified), accessRank(b.Access, b.Offering.AllowanceVerified); ra != rb {
 		return ra < rb
 	}
-	switch strategy {
+	aPreferred := a.ModelID == input.AffinityModelID && a.ProviderID == input.PreferredProviderID
+	bPreferred := b.ModelID == input.AffinityModelID && b.ProviderID == input.PreferredProviderID
+	if aPreferred != bPreferred {
+		return aPreferred
+	}
+	switch input.Strategy {
 	case "quality":
 		qa, qb := a.Signals.Quality, b.Signals.Quality
 		if qa.HasSamples != qb.HasSamples {
@@ -271,6 +299,12 @@ func candidateLess(a, b Candidate, strategy string) bool {
 			return qa.AvgLatencyMS < qb.AvgLatencyMS
 		}
 	case "weighted_round_robin", "weight", "weighted":
+		if a.Signals.HasWeightRank != b.Signals.HasWeightRank {
+			return a.Signals.HasWeightRank
+		}
+		if a.Signals.HasWeightRank && a.Signals.WeightRank != b.Signals.WeightRank {
+			return a.Signals.WeightRank < b.Signals.WeightRank
+		}
 		if wa, wb := normalizedWeight(a.Signals.Weight), normalizedWeight(b.Signals.Weight); wa != wb {
 			return wa > wb
 		}
@@ -287,7 +321,7 @@ func candidateLess(a, b Candidate, strategy string) bool {
 	return a.ModelID < b.ModelID
 }
 
-func planForModel(input CandidatePlanInput, modelID string) CandidatePlan {
+func planForModel(input CandidatePlanInput, modelID string, group int) CandidatePlan {
 	now := input.Now
 	if now.IsZero() {
 		now = time.Now()
@@ -337,7 +371,7 @@ func planForModel(input CandidatePlanInput, modelID string) CandidatePlan {
 			exclude(ExclusionNotFreeEligible)
 			continue
 		}
-		if input.Budgets[instance.ID] {
+		if input.Budgets[instance.ID] || input.BudgetExhausted[offering.Key()] {
 			exclude(ExclusionBudgetExhausted)
 			continue
 		}
@@ -365,11 +399,18 @@ func planForModel(input CandidatePlanInput, modelID string) CandidatePlan {
 			}
 		}
 		credentials, reason := eligibleCredentials(input, instance, offering, egressID)
+		credentialRequired := input.CredentialRequired[instance.ID]
+		if reason == "" && credentialRequired && len(credentials) == 0 {
+			reason = ExclusionCredentialMissing
+		}
 		if reason != "" {
 			exclude(reason)
 			continue
 		}
-		signals := input.Signals[instance.ID]
+		signals, ok := input.OfferingSignals[offering.Key()]
+		if !ok {
+			signals = input.Signals[instance.ID]
+		}
 		if signals.Priority == 0 && instance.Priority != 0 {
 			signals.Priority = instance.Priority
 		}
@@ -381,20 +422,26 @@ func planForModel(input CandidatePlanInput, modelID string) CandidatePlan {
 			continue
 		}
 		plan.Candidates = append(plan.Candidates, Candidate{
-			ProviderID:  instance.ID,
-			ModelID:     offering.ModelID,
-			Access:      offering.Access,
-			Offering:    offering,
-			Credentials: credentials,
-			Egress:      decision,
-			Signals:     signals,
-			Pinned:      input.Pin.active() && input.Pin.matches(instance),
-			Manual:      offering.Manual || input.Pin.Manual,
+			ProviderID:      instance.ID,
+			ProviderName:    instance.Name,
+			AdapterID:       instance.AdapterID,
+			ModelID:         offering.ModelID,
+			UpstreamModelID: offering.UpstreamModelID,
+			Group:           group,
+			Access:          offering.Access,
+			Offering:        offering,
+			Credentials:     credentials,
+			Egress:          decision,
+			Signals:         signals,
+			Pinned:          input.Pin.active() && input.Pin.matches(instance),
 		})
 	}
 	sort.SliceStable(plan.Candidates, func(i, j int) bool {
-		return candidateLess(plan.Candidates[i], plan.Candidates[j], input.Strategy)
+		return candidateLess(plan.Candidates[i], plan.Candidates[j], input)
 	})
+	for i := range plan.Candidates {
+		plan.Candidates[i].Order = i + 1
+	}
 	sort.SliceStable(plan.Excluded, func(i, j int) bool {
 		if plan.Excluded[i].ProviderID != plan.Excluded[j].ProviderID {
 			return plan.Excluded[i].ProviderID < plan.Excluded[j].ProviderID
@@ -413,7 +460,7 @@ func PlanCandidates(input CandidatePlanInput) CandidatePlan {
 	if strings.TrimSpace(input.ModelID) == "" {
 		return CandidatePlan{}
 	}
-	return planForModel(input, input.ModelID)
+	return planForModel(input, input.ModelID, 0)
 }
 
 // PlanFallbackChain plans each model in order and concatenates the candidates,
@@ -421,15 +468,20 @@ func PlanCandidates(input CandidatePlanInput) CandidatePlan {
 func PlanFallbackChain(input CandidatePlanInput, chain []string) CandidatePlan {
 	combined := CandidatePlan{}
 	seen := map[string]bool{}
+	group := 0
 	for _, modelID := range chain {
 		modelID = strings.TrimSpace(modelID)
 		if modelID == "" || seen[modelID] {
 			continue
 		}
 		seen[modelID] = true
-		plan := planForModel(input, modelID)
+		plan := planForModel(input, modelID, group)
 		combined.Candidates = append(combined.Candidates, plan.Candidates...)
 		combined.Excluded = append(combined.Excluded, plan.Excluded...)
+		group++
+	}
+	for i := range combined.Candidates {
+		combined.Candidates[i].Order = i + 1
 	}
 	return combined
 }

@@ -29,6 +29,7 @@ var requiredAdminIDs = []string{
 	"globalCredentialProviderFilter", "globalModelProviderFilter",
 	"globalHealthProviderFilter", "globalNetworkContext",
 	"globalOfferingsToggle",
+	"connectProviderBtn", "providerSetup", "providerSetupOverlay", "providerSetupContent", "providerAuthSetup",
 
 	"toastStack", "loginOverlay", "loginPassword", "loginError",
 	"langZh", "langEn", "themeSwitch", "refreshAllBtn", "saveDiscardBar",
@@ -225,9 +226,10 @@ func TestAdminUICanonicalNavigationLabels(t *testing.T) {
 			want: []string{
 				`id="tab-credentials"`,
 				`class="large-title">账号与凭据</div>`,
-				`data-sub="inventory">凭据清单</div>`,
-				`data-sub="pool">Cline 账号</div>`,
-				`data-sub="conns">Provider OAuth</div>`,
+				`data-sub="inventory">API 凭据</button>`,
+				`data-sub="conns">OAuth 已连接账号</button>`,
+				`id="connectionsList"`,
+				`id="accountTableBody"`,
 			},
 		},
 		{
@@ -246,9 +248,9 @@ func TestAdminUICanonicalNavigationLabels(t *testing.T) {
 			want: []string{
 				`id="tab-network"`,
 				`class="large-title">网络与出口</div>`,
-				`data-sub="zen">OpenCode Zen</div>`,
-				`data-sub="cline">出口代理池</div>`,
-				`data-sub="headers">上游请求头</div>`,
+				`id="clineProxies"`,
+				`默认出口代理</div>`,
+				`服务专属网络设置</span>`,
 			},
 		},
 		{
@@ -265,7 +267,9 @@ func TestAdminUICanonicalNavigationLabels(t *testing.T) {
 				`'网络与出口': 'Network & Egress'`,
 				`'Provider 健康': 'Provider Health'`,
 				`'出口代理池': 'Egress Proxies'`,
-				`'上游请求头': 'Request Headers'`,
+				`'OAuth 已连接账号': 'OAuth Connected Accounts'`,
+				`'API 凭据': 'API Credentials'`,
+				`'默认出口代理': 'Default outbound proxy'`,
 			},
 		},
 	}
@@ -283,20 +287,28 @@ func TestAdminUICanonicalNavigationLabels(t *testing.T) {
 }
 
 func TestAdminUIUpstreamProxyOwnership(t *testing.T) {
-	src := adminUIAsset(t, "ui/html/pages/upstreams.html")
-	proxyStart := strings.Index(src, `<div class="page-subpage" data-subpage="cline"`)
-	headersStart := strings.Index(src, `<div class="page-subpage" data-subpage="headers"`)
-	if proxyStart < 0 || headersStart < 0 || proxyStart >= headersStart {
-		t.Fatalf("upstream subpage boundaries not found: proxy=%d headers=%d", proxyStart, headersStart)
+	network := adminUIAsset(t, "ui/html/pages/upstreams.html")
+	providers := adminUIAsset(t, "ui/html/pages/providers.html")
+	for _, id := range []string{"clineProxyStrategy", "clineProxies", "clineProxySaveResult"} {
+		if !strings.Contains(network, `id="`+id+`"`) {
+			t.Errorf("global default egress missing %s", id)
+		}
 	}
-	zen := src[:proxyStart]
-	proxies := src[proxyStart:headersStart]
-	if strings.Contains(zen, `id="ocProxyStrategy"`) {
-		t.Error("OpenCode proxy settings still belong to the Zen subpage")
+	for _, id := range []string{"ocKey", "ocProxyStrategy", "ocProxies", "zenHeadersBulk", "headersTableBody"} {
+		if strings.Contains(network, `id="`+id+`"`) {
+			t.Errorf("provider-specific setting %s remains on Network", id)
+		}
+		if !strings.Contains(providers, `id="`+id+`"`) {
+			t.Errorf("Providers missing native setting %s", id)
+		}
 	}
-	for _, id := range []string{`id="ocProxyStrategy"`, `id="clineProxyStrategy"`} {
-		if !strings.Contains(proxies, id) {
-			t.Errorf("proxy subpage missing %s", id)
+	accounts := adminUIAsset(t, "ui/html/pages/accounts.html")
+	if strings.Contains(accounts, `data-sub="pool"`) || strings.Contains(accounts, `id="loginImportSection"`) {
+		t.Error("credentials still owns a separate Cline setup destination")
+	}
+	for _, id := range []string{"loginImportSection", "connProviderGroups", "providerNativeOpenCode", "providerNativeCline"} {
+		if !strings.Contains(providers, `id="`+id+`"`) {
+			t.Errorf("Providers missing native setup %s", id)
 		}
 	}
 }
@@ -363,10 +375,10 @@ func TestAdminUICanonicalOpenCodeLabels(t *testing.T) {
 		asset string
 		want  string
 	}{
-		{"ui/html/pages/upstreams.html", "OpenCode Zen 今日用量"},
+		{"ui/html/pages/providers.html", "OpenCode Zen 今日用量"},
 		{"ui/html/pages/models.html", "从 OpenCode Zen 同步模型"},
-		{"ui/html/pages/upstreams.html", "OpenCode Zen 出口代理"},
-		{"ui/html/pages/upstreams.html", "OpenCode Zen 请求头"},
+		{"ui/html/pages/providers.html", "OpenCode Zen 出口代理"},
+		{"ui/html/pages/providers.html", "OpenCode Zen 请求头"},
 		{"ui/js/11_upstreams.js", "t('OpenCode Zen 配置已保存')"},
 		{"ui/js/05_settings.js", "t('OpenCode Zen 请求头已保存')"},
 		{"ui/js/13_models.js", "zen: 'OpenCode Zen'"},

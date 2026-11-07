@@ -35,9 +35,12 @@ function attemptOutcomeLabel(o) {
 }
 
 // 上游展示名：自定义 provider 上游时用后端回传的 providerName 显示真实名称，
-// 旧日志条目（无 providerName）与 cline/opencode 上游回落为原通用文案。
+// 其次回落到 attempt.provider，最后才是通用 upstream 文案。旧日志条目没有
+// providerName/provider，仍显示 cline/opencode 等原值。
 function attemptUpstreamLabel(a) {
-  return (a.upstream === 'provider' && a.providerName) ? 'Provider › ' + a.providerName : (a.upstream || '');
+  if (a.providerName) return a.upstream === 'provider' ? 'Provider › ' + a.providerName : a.providerName;
+  if (a.provider) return a.provider;
+  return a.upstream || '';
 }
 
 // 表格「账号」列 / 卡片标题：账号邮箱优先；无邮箱时展示上游（provider 上游带真实名称）
@@ -46,24 +49,48 @@ function logUpstreamValue(l) {
   return attemptUpstreamLabel(l) || '-';
 }
 
-// 尝试链路渲染：序号 / 模型 / 上游 / 结果 / HTTP 状态 / 耗时 / 原因
+// 尝试链路渲染：顺序 / 模型 / Provider 或上游 / HTTP 状态 / 耗时 / 结果 / 原因。
+// 只展示 AttemptLog 实际存在的字段；没有 account 邮箱与 TTFT，绝不臆造。
 function renderAttempts(attempts) {
   return '<ol class="log-attempts">' + attempts.map((a, i) => {
     const outcome = a.outcome || 'failed';
     const oc = (outcome === 'success' || outcome === 'failed' || outcome === 'skipped') ? outcome : 'failed';
+    const order = (typeof a.order === 'number' && a.order > 0) ? a.order : (i + 1);
     const meta = [];
     const upLabel = attemptUpstreamLabel(a);
     if (upLabel) meta.push(esc(upLabel));
     if (a.status) meta.push('HTTP ' + esc(String(a.status)));
-    if (typeof a.durationMs === 'number' && a.durationMs >= 0) meta.push(formatDuration(a.durationMs));
+    if (typeof a.durationMs === 'number' && a.durationMs > 0) meta.push(formatDuration(a.durationMs));
     return '<li>' +
-      '<span class="combo-entry-idx">' + (i + 1) + '</span>' +
+      '<span class="combo-entry-idx">' + order + '</span>' +
       '<span class="attempt-model">' + esc(a.model || '-') + '</span>' +
       '<span class="attempt-outcome ' + oc + '">' + esc(attemptOutcomeLabel(outcome)) + '</span>' +
       (meta.length ? '<span class="attempt-meta">' + meta.join(' · ') + '</span>' : '') +
       (a.reason ? '<span class="attempt-reason">' + esc(a.reason) + '</span>' : '') +
     '</li>';
   }).join('') + '</ol>';
+}
+
+// 详情弹窗分区：语义 section + 标题，便于桌面右侧抽屉纵向阅读。
+function logDetailSection(title, body) {
+  return '<section class="log-detail-section">' +
+    '<h4 class="log-detail-section-title">' + esc(title) + '</h4>' + body +
+  '</section>';
+}
+
+// 详情键值网格：沿用 .log-detail-grid 的既有阅读密度。
+function logDetailGrid(rows) {
+  return '<div class="log-detail-grid">' + rows.map(r =>
+    '<span class="k">' + esc(r[0]) + '</span><span class="v">' + esc(String(r[1])) + '</span>').join('') + '</div>';
+}
+
+// 移动端行内 HTTP 状态：只取 attempt 上真实存在的 status（优先最后一次尝试）。
+// 没有 attempt 状态时由调用方回落为完成/失败，不伪造状态码。
+function logAttemptStatus(attempts) {
+  for (let i = attempts.length - 1; i >= 0; i--) {
+    if (attempts[i].status) return attempts[i].status;
+  }
+  return 0;
 }
 
 // 日志模型单元格：服务模型 + 组合徽章 + 回退计数（requestedModel 与服务模型不同时一并显示）
@@ -237,37 +264,32 @@ function renderLogList() {
       (hasAttempts ? '<tr id="' + detailId + '" class="log-detail' + (open ? ' open' : '') + '"><td colspan="13" class="log-detail-cell">' + renderAttempts(attempts) + '</td></tr>' : '');
   };
 
+  // 移动端 ≤760px：每条请求压成两行（模型 + 状态 / 账号·上游 + HTTP或结果 + 耗时 + 时间）。
+  // 完整信息与尝试链路统一进入全屏详情抽屉，不再渲染高卡片与 2x2 指标网格。
   const renderCard = (l, idx) => {
-    const st = l.completed ? t('完成') : t('失败');
-    const tk = l.usageAvailable
-      ? t('输入 ') + formatTokenCount(l.inputTokens) + t(' · 输出 ') + formatTokenCount(l.outputTokens) + t(' · 缓存 ') + formatTokenCount(l.cachedTokens) + t(' · 总 ') + formatTokenCount(l.totalTokens)
-      : t('Token 未知');
     const attempts = Array.isArray(l.attempts) ? l.attempts : [];
-    let extra = '';
-    if (l.comboId) extra += '<span class="log-combo-badge">' + t('组合') + ': ' + esc(l.comboName || l.comboId) + '</span>';
-    if (l.fallbackUsed) {
-      const n = Number(l.fallbackCount) || 0;
-      extra += '<span class="log-fallback-badge">' + t('回退') + (n > 0 ? ' ' + n : '') + '</span>';
-    }
-    const extraBlock = extra ? '<div class="log-extra-row">' + extra + '</div>' : '';
-    const reqLine = (l.requestedModel && l.requestedModel !== l.model)
-      ? '<div class="log-req-model mb-6">' + t('请求: ') + esc(l.requestedModel) + '</div>' : '';
-    const attemptsBlock = attempts.length
-      ? '<details class="log-card-attempts"><summary>' + t('尝试链路') + ' (' + attempts.length + ')</summary>' + renderAttempts(attempts) + '</details>'
-      : '';
-    return '<article class="account-card log-card" data-idx="' + idx + '">' +
-      '<div class="account-card-header"><span class="account-email">' + esc(logUpstreamValue(l)) + '</span><span class="log-status ' + (l.completed ? 'ok' : 'fail') + '">' + st + '</span></div>' +
-      '<div class="account-metrics">' +
-        '<div class="account-metric"><span class="account-metric-label">' + t('协议') + '</span><span class="account-metric-value">' + esc(l.protocol || '-') + '</span></div>' +
-        '<div class="account-metric"><span class="account-metric-label">' + t('耗时') + '</span><span class="account-metric-value">' + formatDuration(l.durationMs) + '</span></div>' +
-        '<div class="account-metric"><span class="account-metric-label">TTFT</span><span class="account-metric-value">' + (l.ttftMs ? formatDuration(l.ttftMs) : '-') + '</span></div>' +
-        '<div class="account-metric"><span class="account-metric-label">tok/s</span><span class="account-metric-value">' + formatTPS(l.outputTokensPerSecond) + '</span></div>' +
+    const st = l.completed
+      ? '<span class="log-status ok">' + t('完成') + '</span>'
+      : '<span class="log-status fail">' + t('失败') + '</span>';
+    const model = l.requestedModel || l.model || '-';
+    const status = logAttemptStatus(attempts);
+    const result = status ? 'HTTP ' + esc(String(status)) : (l.completed ? t('完成') : t('失败'));
+    const when = l.startedAt ? new Date(l.startedAt).toLocaleTimeString(LC()) : '-';
+    const titleBits = [l.model, l.requestedModel, logUpstreamValue(l), when].filter(Boolean).join(' · ');
+    return '<article class="log-card log-row-mobile" data-idx="' + idx + '" title="' + escAttr(titleBits) + '">' +
+      '<div class="log-row-mobile-top">' +
+        '<span class="log-row-mobile-model mono">' + esc(model) + '</span>' +
+        st +
       '</div>' +
-      extraBlock + reqLine +
-      '<div class="hint-mut mb-8">' + tk + '</div>' +
-      '<div class="account-card-footer">' + logTimestampHtml(l.startedAt) + '<span class="mono hint-xs">' + esc(l.model || '-') + '</span></div>' +
-      attemptsBlock +
-      '<div class="mt-8"><button type="button" class="btn btn-sm log-detail-btn" data-idx="' + idx + '">' + t('详情') + '</button></div>' +
+      '<div class="log-row-mobile-meta">' +
+        '<span class="log-row-mobile-provider">' + esc(logUpstreamValue(l)) + '</span>' +
+        '<span class="log-row-mobile-sep" aria-hidden="true">·</span>' +
+        '<span class="log-row-mobile-result">' + result + '</span>' +
+        '<span class="log-row-mobile-sep" aria-hidden="true">·</span>' +
+        '<span class="log-row-mobile-latency">' + formatDuration(l.durationMs) + '</span>' +
+        '<span class="log-row-mobile-sep" aria-hidden="true">·</span>' +
+        '<span class="log-row-mobile-time">' + esc(when) + '</span>' +
+      '</div>' +
     '</article>';
   };
 
@@ -416,27 +438,60 @@ function openLogDetail(idx) {
   if (!modal) return;
   _('logDetailId').textContent = l.id || '';
   const bits = [];
-  if (l.startedAt) bits.push(new Date(l.startedAt).toLocaleString());
+  if (l.startedAt) bits.push(new Date(l.startedAt).toLocaleString(LC()));
   if (l.protocol) bits.push(l.protocol);
   if (l.stream) bits.push(t('流式'));
   if (l.model) bits.push(l.model);
   _('logDetailSub').textContent = bits.join(' · ');
-  const rows = [
-    [t('账号'), logUpstreamValue(l)],
-    [t('状态'), l.completed && !l.error ? t('完成') : t('失败')],
-    [t('耗时'), formatDuration(l.durationMs)],
+
+  // 1) 摘要：请求身份 / 路由归属 / 结果，全部来自已加载记录。
+  const summaryRows = [
+    ['ID', l.id || '-'],
+    [t('时间'), l.startedAt ? new Date(l.startedAt).toLocaleString(LC()) : '-'],
+    [t('协议'), l.protocol || '-'],
+    [t('流式'), l.stream ? t('开启') : t('关闭')],
+    [t('模型'), l.model || '-']
+  ];
+  if (l.requestedModel) summaryRows.push([t('请求模型'), l.requestedModel]);
+  if (l.comboId) summaryRows.push([t('组合'), l.comboName || l.comboId]);
+  const fallbackCount = Number(l.fallbackCount) || 0;
+  summaryRows.push([t('回退'), l.fallbackUsed
+    ? t('已使用') + (fallbackCount > 0 ? ' × ' + fallbackCount : '')
+    : t('关闭')]);
+  let accountProvider = logUpstreamValue(l);
+  if (l.accountEmail && l.providerName) accountProvider += ' · ' + l.providerName;
+  summaryRows.push([t('账号'), accountProvider]);
+  summaryRows.push([t('状态'), l.completed && !l.error ? t('完成') : t('失败')]);
+
+  let html = logDetailSection(t('摘要'), logDetailGrid(summaryRows));
+
+  // 2) 路由尝试：仅 attempts 存在时渲染，字段来自 AttemptLog。
+  const attempts = Array.isArray(l.attempts) ? l.attempts : [];
+  if (attempts.length) {
+    html += logDetailSection(t('尝试链路'), renderAttempts(attempts));
+  }
+
+  // 3) 错误 / 响应：有 error 就展示；完成且无错误时明确说明未记录错误。
+  const errorBody = l.error
+    ? '<div class="log-detail-error">' + esc(l.error) + '</div>'
+    : '<div class="log-detail-note">' + t('未记录错误') + '</div>';
+  html += logDetailSection(t('错误 / 响应'), errorBody);
+
+  // 4) 用量：usageAvailable 为假时 token 显示未知；TTFT/耗时等仍按实际值展示。
+  const usageRows = [
+    [t('输入'), l.usageAvailable ? formatTokenCount(l.inputTokens) : t('未知')],
+    [t('输出'), l.usageAvailable ? formatTokenCount(l.outputTokens) : t('未知')],
+    [t('缓存'), l.usageAvailable ? formatTokenCount(l.cachedTokens) : t('未知')],
+    [t('总 Token'), l.usageAvailable ? formatTokenCount(l.totalTokens) : t('未知')],
     ['TTFT', l.ttftMs ? formatDuration(l.ttftMs) : '-'],
     ['tok/s', formatTPS(l.outputTokensPerSecond)],
-    [t('输入/输出/缓存/总'), l.usageAvailable
-      ? formatTokenCount(l.inputTokens) + ' / ' + formatTokenCount(l.outputTokens) + ' / ' + formatTokenCount(l.cachedTokens) + ' / ' + formatTokenCount(l.totalTokens)
-      : t('Token 未知')]
+    [t('耗时'), formatDuration(l.durationMs)]
   ];
-  if (l.error) rows.push([t('错误'), l.error]);
-  let html = '<div class="log-detail-grid">' + rows.map(r =>
-    '<span class="k">' + esc(r[0]) + '</span><span class="v">' + esc(String(r[1])) + '</span>').join('') + '</div>';
-  const attempts = Array.isArray(l.attempts) ? l.attempts : [];
-  if (attempts.length) html += '<div class="log-detail-sep">' + t('尝试链路') + '</div>' + renderAttempts(attempts);
-  html += '<div class="log-detail-sep">' + t('原始 JSON') + '</div><pre class="log-detail-json">' + esc(JSON.stringify(l, null, 2)) + '</pre>';
+  html += logDetailSection(t('用量'), logDetailGrid(usageRows));
+
+  // 5) 原始 JSON：保持既有 pre 块与复制 JSON 按钮。
+  html += logDetailSection(t('原始 JSON'), '<pre class="log-detail-json">' + esc(JSON.stringify(l, null, 2)) + '</pre>');
+
   _('logDetailBody').innerHTML = html;
   modal.style.display = 'flex';
 }
@@ -540,8 +595,10 @@ function toggleLogFullscreen(btn) {
       const art = e.target.closest('.log-card');
       if (art) copyLogJson(Number(art.dataset.idx));
     });
-    // 详情按钮在卡片视图中没有行委托兜底：点它必须直接开详情弹窗
+    // 移动端两行列表：整行点击打开全屏详情抽屉（保留旧 .log-detail-btn 兜底）
     cards.addEventListener('click', e => {
+      const row = e.target.closest('.log-row-mobile');
+      if (row) { openLogDetail(Number(row.dataset.idx)); return; }
       const btn = e.target.closest('.log-detail-btn');
       if (btn) openLogDetail(Number(btn.dataset.idx));
     });

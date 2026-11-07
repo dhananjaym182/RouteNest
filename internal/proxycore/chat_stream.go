@@ -57,12 +57,12 @@ func emitChatStreamError(w http.ResponseWriter, message string) {
 // through the retry callback up to Stream.BootstrapRetries times (default 1,
 // the historic behavior). A nil retry means the caller has no failover path;
 // the failure is then reported in-band.
-func serveChatStream(ctx context.Context, w http.ResponseWriter, resp *http.Response, acc *domain.Account, reqLog *domain.RequestLog, retry func() (*http.Response, *domain.Account, error)) {
+func serveChatStream(ctx context.Context, w http.ResponseWriter, resp *http.Response, acc *domain.Account, reqLog *domain.RequestLog, retry func() (*http.Response, *domain.Account, error), onCommit ...func()) {
 	copyPassthroughHeaders(w, resp.Header)
 	newSSESink(w).commitSSEHeaders()
 	run := func(ctx context.Context, bw *bootstrapBuffer, current *http.Response, currentAcc *domain.Account) streamResult {
 		return handleStreamResponse(ctx, bw, current, currentAcc, reqLog)
 	}
 	serveWithBootstrap(ctx, w, resp, acc, reqLog, retry, "chat stream",
-		"upstream returned an empty stream", emitChatStreamError, run)
+		"upstream returned an empty stream", emitChatStreamError, run, firstCallback(onCommit))
 }

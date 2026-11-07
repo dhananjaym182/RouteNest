@@ -109,9 +109,9 @@ func TestPlanCandidatesPinByIDAndName(t *testing.T) {
 		t.Fatalf("name pin = %v", got)
 	}
 	byID := planInput("m")
-	byID.Pin = CandidatePin{ProviderID: "c", Manual: true}
+	byID.Pin = CandidatePin{ProviderID: "c"}
 	plan := PlanCandidates(byID)
-	if got := candidateIDs(plan); !reflect.DeepEqual(got, []string{"c"}) || !plan.Candidates[0].Pinned || !plan.Candidates[0].Manual {
+	if got := candidateIDs(plan); !reflect.DeepEqual(got, []string{"c"}) || !plan.Candidates[0].Pinned {
 		t.Fatalf("id pin = %+v", plan.Candidates)
 	}
 	if len(plan.Excluded) != 2 {
@@ -260,6 +260,33 @@ func TestPlanCandidatesCredentialAvailability(t *testing.T) {
 	}
 }
 
+func TestPlanCandidatesSessionAffinityPrefersProviderAndCredential(t *testing.T) {
+	input := planInput("m")
+	for i := range input.Offerings {
+		input.Offerings[i].Access = domain.AccessUnknown
+	}
+	input.AffinityModelID = "m"
+	input.PreferredProviderID = "b"
+	input.PreferredCredential = "b-second"
+	input.Credentials = []domain.ProviderCredential{
+		{ID: "b-first", ProviderIDs: []domain.ProviderInstanceID{"b"}, Status: "active", UsageCount: 0},
+		{ID: "b-second", ProviderIDs: []domain.ProviderInstanceID{"b"}, Status: "active", UsageCount: 10},
+	}
+	plan := PlanCandidates(input)
+	if got := candidateIDs(plan); !reflect.DeepEqual(got, []string{"b", "a", "c"}) {
+		t.Fatalf("affinity provider order = %v", got)
+	}
+	if got := plan.Candidates[0].Credentials; !reflect.DeepEqual(got, []domain.CredentialID{"b-second", "b-first"}) {
+		t.Fatalf("affinity credential order = %v", got)
+	}
+	freeFirst := planInput("m")
+	freeFirst.AffinityModelID = "m"
+	freeFirst.PreferredProviderID = "a"
+	if got := candidateIDs(PlanCandidates(freeFirst)); !reflect.DeepEqual(got, []string{"b", "c", "a"}) {
+		t.Fatalf("affinity overrode free-first order = %v", got)
+	}
+}
+
 func TestPlanCandidatesBudgetAndDisabledOfferings(t *testing.T) {
 	input := planInput("m")
 	input.Budgets = map[domain.ProviderInstanceID]bool{"a": true}
@@ -300,6 +327,61 @@ func TestPlanFallbackChainPreservesModelOrder(t *testing.T) {
 	want := []string{"primary:a", "primary:b", "fallback:a"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("chain order = %v", got)
+	}
+	if groups := []int{plan.Candidates[0].Group, plan.Candidates[1].Group, plan.Candidates[2].Group}; !reflect.DeepEqual(groups, []int{0, 0, 1}) {
+		t.Fatalf("chain groups = %v", groups)
+	}
+	if orders := []int{plan.Candidates[0].Order, plan.Candidates[1].Order, plan.Candidates[2].Order}; !reflect.DeepEqual(orders, []int{1, 2, 3}) {
+		t.Fatalf("chain orders = %v", orders)
+	}
+}
+
+func TestPlanCandidatesCarriesUpstreamModelAndAdapterMetadata(t *testing.T) {
+	input := planInput("m")
+	input.Instances = []domain.ProviderInstance{{ID: "a", Name: "Alpha", AdapterID: "openaicompat", Enabled: true}}
+	offering := planOffering("a", "m", domain.AccessUnknown)
+	offering.UpstreamModelID = "vendor/model-v2"
+	input.Offerings = []domain.ModelOffering{offering}
+	plan := PlanCandidates(input)
+	if len(plan.Candidates) != 1 {
+		t.Fatalf("plan = %+v", plan)
+	}
+	candidate := plan.Candidates[0]
+	if candidate.ModelID != "m" || candidate.UpstreamModelID != "vendor/model-v2" || candidate.AdapterID != "openaicompat" || candidate.ProviderName != "Alpha" {
+		t.Fatalf("candidate metadata = %+v", candidate)
+	}
+}
+
+func TestPlanCandidatesBudgetIsProviderModelScoped(t *testing.T) {
+	input := CandidatePlanInput{
+		ModelID:   "m1",
+		Instances: []domain.ProviderInstance{{ID: "a", Enabled: true}},
+		Offerings: []domain.ModelOffering{
+			planOffering("a", "m1", domain.AccessUnknown),
+			planOffering("a", "m2", domain.AccessUnknown),
+		},
+		BudgetExhausted: map[domain.OfferingKey]bool{{ProviderID: "a", ModelID: "m2"}: true},
+	}
+	if plan := PlanCandidates(input); len(plan.Candidates) != 1 || plan.Candidates[0].ModelID != "m1" {
+		t.Fatalf("m1 plan = %+v", plan)
+	}
+	input.ModelID = "m2"
+	plan := PlanCandidates(input)
+	if len(plan.Candidates) != 0 || len(plan.Excluded) != 1 || plan.Excluded[0].Reason != ExclusionBudgetExhausted {
+		t.Fatalf("m2 plan = %+v", plan)
+	}
+}
+
+func TestPlanCandidatesRequiredCredentialCannotBecomePublic(t *testing.T) {
+	input := CandidatePlanInput{
+		ModelID:            "m",
+		Instances:          []domain.ProviderInstance{{ID: "cline", Enabled: true}},
+		Offerings:          []domain.ModelOffering{planOffering("cline", "m", domain.AccessUnknown)},
+		CredentialRequired: map[domain.ProviderInstanceID]bool{"cline": true},
+	}
+	plan := PlanCandidates(input)
+	if len(plan.Candidates) != 0 || len(plan.Excluded) != 1 || plan.Excluded[0].Reason != ExclusionCredentialMissing {
+		t.Fatalf("plan = %+v", plan)
 	}
 }
 

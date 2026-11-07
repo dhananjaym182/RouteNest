@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"reflect"
 	"routenest/internal/accounts"
 	"routenest/internal/connections"
 	"sync"
@@ -263,6 +264,83 @@ func TestSyncProviderModelsPreservesDelisted(t *testing.T) {
 	}
 	if _, ok := poolModelByID("b"); !ok {
 		t.Error("declared model should be (re)added")
+	}
+}
+
+func TestProviderRecheckSameModelCollisionAndRecovery(t *testing.T) {
+	alphaUpstream := &mutableUpstream{}
+	betaUpstream := &mutableUpstream{}
+	alphaServer := alphaUpstream.server()
+	betaServer := betaUpstream.server()
+	defer alphaServer.Close()
+	defer betaServer.Close()
+
+	alpha := &CustomProvider{
+		ID: "alpha", Name: "Alpha", BaseURL: alphaServer.URL, Enabled: true,
+		ModelIDs: []string{offeringStateSharedModel, "alpha/keep"},
+	}
+	beta := &CustomProvider{
+		ID: "beta", Name: "Beta", BaseURL: betaServer.URL, Enabled: true,
+		ModelIDs: []string{offeringStateSharedModel, "beta/keep"},
+	}
+	installOfferingStateTest(t, nil, alpha, beta)
+	SyncModels()
+
+	alphaUpstream.set([]string{"alpha/keep"})
+	betaUpstream.set([]string{offeringStateSharedModel, "beta/keep"})
+	if st := recheckProviderModels(*beta); st.LastError != "" || st.DelistedMarked != 0 || st.DelistedModels == nil {
+		t.Fatalf("Beta baseline state = %+v, want authoritative empty delisting list", st)
+	}
+	if st := recheckProviderModels(*alpha); st.LastError != "" || st.MissCounting != 1 || st.DelistedMarked != 0 {
+		t.Fatalf("Alpha first miss state = %+v", st)
+	}
+	alphaState := recheckProviderModels(*alpha)
+	if alphaState.LastError != "" || alphaState.DelistedMarked != 1 || !reflect.DeepEqual(alphaState.DelistedModels, []string{offeringStateSharedModel}) {
+		t.Fatalf("Alpha second miss state = %+v", alphaState)
+	}
+
+	status := SyncStatusSnapshot()
+	gotAlpha, ok := status[alpha.ID].(providerRecheckState)
+	if !ok || !reflect.DeepEqual(gotAlpha.DelistedModels, []string{offeringStateSharedModel}) {
+		t.Fatalf("Alpha popup state = %#v", status[alpha.ID])
+	}
+	gotBeta, ok := status[beta.ID].(providerRecheckState)
+	if !ok || gotBeta.DelistedModels == nil || len(gotBeta.DelistedModels) != 0 {
+		t.Fatalf("Beta popup state inherited Alpha's delisting: %#v", status[beta.ID])
+	}
+	if got := offeringForStateTest(t, alpha.ID); !got.Delisted {
+		t.Fatalf("Alpha offering was not delisted: %+v", got)
+	}
+	if got := offeringForStateTest(t, beta.ID); got.Delisted {
+		t.Fatalf("Beta offering inherited Alpha's delisting: %+v", got)
+	}
+	if legacy, ok := poolModelByID(offeringStateSharedModel); !ok || legacy.Delisted {
+		t.Fatalf("legacy aggregate must remain active while Beta serves the model: %+v", legacy)
+	}
+
+	alphaUpstream.set([]string{offeringStateSharedModel, "alpha/keep"})
+	recovered := recheckProviderModels(*alpha)
+	if recovered.LastError != "" || recovered.DelistedMarked != 0 || recovered.DelistedModels == nil || len(recovered.DelistedModels) != 0 {
+		t.Fatalf("Alpha recovery state = %+v, want authoritative empty delisting list", recovered)
+	}
+	if got := offeringForStateTest(t, alpha.ID); got.Delisted {
+		t.Fatalf("Alpha offering did not recover: %+v", got)
+	}
+	failedAlpha := *alpha
+	failedAlpha.BaseURL = "http://127.0.0.1:1"
+	recheckProviderModels(failedAlpha)
+	preserved := getProviderRecheckStateForTest(alpha.ID)
+	if preserved.DelistedModels == nil || len(preserved.DelistedModels) != 0 {
+		t.Fatalf("failed recheck changed authoritative empty recovery state to unknown: %+v", preserved)
+	}
+
+	// Recovery must clear the persisted popup state so a later delisting is a
+	// new event instead of being silently suppressed.
+	alphaUpstream.set([]string{"alpha/keep"})
+	recheckProviderModels(*alpha)
+	relistedAgain := recheckProviderModels(*alpha)
+	if !reflect.DeepEqual(relistedAgain.DelistedModels, []string{offeringStateSharedModel}) {
+		t.Fatalf("later Alpha delisting was not reported again: %+v", relistedAgain)
 	}
 }
 

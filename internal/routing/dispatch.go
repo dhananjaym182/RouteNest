@@ -33,7 +33,7 @@ func CallClineAPI(params map[string]any, stream bool) (*http.Response, *domain.A
 			params[ProviderNameParam] = provName
 			return resp, nil, nil
 		case !attempted:
-			return nil, nil, fmt.Errorf("no enabled provider named %q serves model %q", pin, bare)
+			return nil, nil, &FreeModelUnavailableError{Message: fmt.Sprintf("no enabled provider named %q serves model %q", pin, bare)}
 		default:
 			return nil, nil, perr
 		}
@@ -203,7 +203,7 @@ func CallClineAPI(params map[string]any, stream bool) (*http.Response, *domain.A
 	if hasActiveAccounts() {
 		return nil, nil, &FreeModelUnavailableError{Message: fmt.Sprintf("model %q is cooling on all accounts and no fallback model is available", model)}
 	}
-	return nil, nil, fmt.Errorf("no active accounts available. Use --login or admin API to add accounts")
+	return nil, nil, &FreeModelUnavailableError{Message: "no active accounts available. Use --login or admin API to add accounts"}
 }
 
 // hasActiveAccounts 池中是否存在 active 状态的账号。

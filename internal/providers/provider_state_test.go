@@ -27,23 +27,15 @@ func TestSetCooldownMirrorsProviderState(t *testing.T) {
 }
 
 func TestConfiguredBudgetExhaustionMirrorsQuotaReset(t *testing.T) {
+	now := time.Now().UTC()
+	installTestBudget(t, func() time.Time { return now })
 	installProviders(t, &CustomProvider{
 		ID: "budget", Name: "Budget", Enabled: true, ModelIDs: []string{"m"},
 		TokenLimit: 100, TokenWindow: "daily",
 	})
-	budgetMu.Lock()
-	oldTokens := providerTokens
-	providerTokens = map[string]map[string]int64{
-		"budget": {time.Now().UTC().Format("2006-01-02"): 100},
-	}
-	budgetMu.Unlock()
-	t.Cleanup(func() {
-		budgetMu.Lock()
-		providerTokens = oldTokens
-		budgetMu.Unlock()
-	})
+	admitTestUsage(t, *Find("budget"), "m", "attempt", "tokens", now, 100)
 
-	store := providerstate.NewStore(time.Now)
+	store := providerstate.NewStore(func() time.Time { return now })
 	if err := providerstate.Publish(store); err != nil {
 		t.Fatal(err)
 	}

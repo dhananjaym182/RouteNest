@@ -45,8 +45,19 @@
 	  .account-table th:nth-child(9),.account-table td:nth-child(9){display:none}
 	}
 	@media (max-width:760px){
+	  /* 请求日志：桌面 13 列表格在窄屏隐藏，改用两行紧凑列表 */
 	  .log-table{display:none}
-	  .log-cards{display:grid;gap:10px;padding:12px}
+	  .log-cards{display:flex;flex-direction:column;gap:0;padding:0}
+	  .log-row-mobile{display:flex;flex-direction:column;justify-content:center;gap:3px;min-height:56px;padding:10px 14px;background:var(--surface);border-bottom:1px solid var(--border2);cursor:pointer;-webkit-tap-highlight-color:transparent}
+	  .log-row-mobile:last-child{border-bottom:0}
+	  .log-row-mobile:active{background:var(--surface2)}
+	  .log-row-mobile-top{display:flex;align-items:center;gap:8px;min-width:0}
+	  .log-row-mobile-model,.log-row-mobile .log-row-mobile-model{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:var(--font-mono)!important;font-size:13px;font-weight:600;color:var(--text)}
+	  .log-row-mobile-top .log-status{flex:0 0 auto;padding:1px 7px;font-size:12px}
+	  .log-row-mobile-meta{display:flex;align-items:center;gap:5px;min-width:0;overflow:hidden;font-size:12.5px;line-height:1.35;color:var(--text3);white-space:nowrap}
+	  .log-row-mobile-provider{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;color:var(--text2)}
+	  .log-row-mobile-sep{flex:0 0 auto;opacity:.55}
+	  .log-row-mobile-result,.log-row-mobile-latency,.log-row-mobile-time{flex:0 0 auto;font-variant-numeric:tabular-nums}
 	}
 	@media (max-width:760px){
 	  .account-table{display:none}
@@ -82,7 +93,6 @@
   .title-tools{margin-left:0}
   .combo-entry-select{flex:1 1 100%;min-width:0}
   .combo-entry-actions{margin-left:0}
-  .log-cards{padding:var(--sp-3);gap:var(--sp-2)}
   .section-body.xscroll{padding:var(--sp-4)}
 }
 

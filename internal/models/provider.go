@@ -12,6 +12,7 @@ type ProviderClaim struct {
 	Provider   string // display name of the claiming provider
 	Cost       string // "pass" or "free" from the provider-level classification
 	TierSignal string // id-only free provenance, or "" when none
+	Shared     bool   // another custom provider also declares this model ID
 }
 
 // ProjectProvider reconciles provider-sourced records with the claims:
@@ -51,6 +52,11 @@ func ProjectProvider(claims []ProviderClaim) bool {
 				for i := range kept {
 					if kept[i].ID != c.ID || kept[i].Source != SourceProvider {
 						continue
+					}
+					// A shared logical row is only a compatibility projection. Its
+					// existing owner and pricing must not depend on provider order.
+					if c.Shared {
+						break
 					}
 					if kept[i].Provider != c.Provider {
 						kept[i].Provider = c.Provider
@@ -134,6 +140,65 @@ func ApplyDecisions(decisions []Decision, providerName string, now int64) (added
 		return changed+len(added) > 0
 	})
 	return added, changed
+}
+
+// ApplyProviderProjection mirrors provider-scoped decisions into the legacy
+// logical-model list without letting one provider overwrite another provider or
+// a built-in source. Existing rows are updated only when the offering is
+// exclusive and the row is already owned by providerName; unknown IDs are added.
+// Routing must use provider-scoped ModelOfferings rather than this projection.
+func ApplyProviderProjection(decisions []Decision, providerName string, exclusive map[string]bool, now int64) (added []string, changed int) {
+	Edit(func(p *domain.AccountPool) bool {
+		index := make(map[string]int, len(p.Models))
+		for i := range p.Models {
+			index[p.Models[i].ID] = i
+		}
+		for _, decision := range decisions {
+			if i, ok := index[decision.ID]; ok {
+				model := &p.Models[i]
+				if !exclusive[decision.ID] || model.Source != SourceProvider || model.Provider != providerName {
+					continue
+				}
+				if model.Cost == decision.Cost && model.TierSignal == decision.Signal && !model.Delisted {
+					continue
+				}
+				model.Cost = decision.Cost
+				model.TierSignal = decision.Signal
+				model.TierDecidedAt = now
+				model.Delisted = false
+				changed++
+				continue
+			}
+			p.Models = append(p.Models, domain.Model{
+				ID: decision.ID, Provider: providerName, Cost: decision.Cost, Status: "active",
+				Source: SourceProvider, TierSignal: decision.Signal, TierDecidedAt: now,
+			})
+			index[decision.ID] = len(p.Models) - 1
+			added = append(added, decision.ID)
+		}
+		return changed+len(added) > 0
+	})
+	return added, changed
+}
+
+// ApplyProviderDelistedProjection updates the legacy provider row to the
+// aggregate state of all enabled custom-provider offerings with that model ID.
+// It never touches Cline, Zen, or administrator-owned rows.
+func ApplyProviderDelistedProjection(delisted map[string]bool) int {
+	changed := 0
+	Edit(func(p *domain.AccountPool) bool {
+		for i := range p.Models {
+			model := &p.Models[i]
+			want, ok := delisted[model.ID]
+			if !ok || model.Source != SourceProvider || model.Delisted == want {
+				continue
+			}
+			model.Delisted = want
+			changed++
+		}
+		return changed > 0
+	})
+	return changed
 }
 
 // SetManualCost sets the cost of the first record with id and marks it as a

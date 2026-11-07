@@ -28,7 +28,7 @@ ARTIFACT_DIR=/tmp/routenest-navigation-verification \
 node tools/admin_navigation_verify.mjs
 ```
 
-`FONTCONFIG_FILE` may be set to an existing Fontconfig configuration when required by the system Chromium installation. The script itself does not depend on client-installed Inter or IBM Plex Mono: it verifies embedded WOFF2 declarations and successfully loaded font faces at every declared UI weight.
+`FONTCONFIG_FILE` may be set to an existing Fontconfig configuration when required by the system Chromium installation. The script itself does not depend on client-installed Inter: it verifies embedded WOFF2 declarations and successfully loaded font faces at every declared UI weight.
 
 Coverage:
 
@@ -36,14 +36,16 @@ Coverage:
 - Only the intended page panel is visible; only the intended sidebar button is `active` and has `aria-current="page"`; all other sidebar entries are inactive.
 - Canonical URL hashes, matching shell/sidebar titles, and page-level horizontal overflow.
 - Mobile drawer opening, background `inert`, navigation closure, and restored background interaction.
-- All four legacy hashes (`global`, `accounts`, `import`, `upstreams`), including account-pool selection and the import workflow: 48 alias cases.
+- All four legacy hashes (`global`, `accounts`, `import`, `upstreams`), including the shared OAuth account view and the native Cline import drawer: 48 alias cases.
 - Back and forward through real same-document hash history: 48 traversals. Sidebar clicks intentionally keep the existing `replaceState` behavior and do not add history entries.
 - English navigation titles and Chinese legacy/history navigation.
 - Exact multi-provider gateway dashboard subtitle, focused Provider Health & Diagnostics title, retained health projections, and absence of redundant health shortcuts.
 - Actual theme control switching and pressed states in desktop and mobile navigation.
-- Embedded Inter at 400–800 and IBM Plex Mono at 400–700, with no font runtime URL requests.
+- Embedded Inter at 400–800, with no font runtime URL requests.
 - Browser console errors, uncaught errors, and failed requests.
 
-The script emits progress to stderr and a JSON result to stdout. Exit code 0 means all checks passed, 1 means assertions failed, and 2 means browser execution stopped. Diagnostics identify the safe operation label while avoiding page content, credentials, URL queries, and raw browser errors. Optional screenshots cover Overview and Provider Health in each theme and width; the browser closes in a `finally` block.
+The script emits progress to stderr and a JSON result to stdout. Exit code 0 means all checks passed, 1 means assertions failed, and 2 means browser execution stopped. Diagnostics identify the safe operation label while avoiding page content, credentials, URL queries, and raw browser errors. Optional screenshots cover Overview, Providers, Accounts & Credentials, Network & Egress, Models and Provider Health in each theme and width; the browser closes in a `finally` block.
+
+See [README-admin-provider-setup.md](README-admin-provider-setup.md) for native setup, account links and async workflow regression coverage.
 
 Stop the separate verification server with Ctrl-C afterward. The test does not manage or alter an existing server process.

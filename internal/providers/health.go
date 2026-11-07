@@ -1,14 +1,16 @@
 package providers
 
 import (
+	"context"
+	"routenest/internal/budget"
 	"routenest/internal/domain"
 	"sort"
 	"strings"
 	"time"
 )
 
-// Provider 健康快照：配额用量 / 冷却恢复 / 近期成败热度。数据全部在内存
-// （score ring、RPM/日计数、冷却表），重启后从零学起，与 quality 策略同源。
+// Provider 健康快照：持久化配额用量、兼容冷却恢复和进程内近期成败热度。
+// 只有 score ring 在重启后重新学习；预算与运行时可用性来自 durable stores。
 
 type modelCooldown struct {
 	Model string    `json:"model"`
@@ -30,8 +32,8 @@ type providerHealth struct {
 
 const providerRecentWindow = 16
 
-// providerHealthSnapshot 按 providerID 汇总健康数据。锁序：Mu 之外
-// 只短暂取 budgetMu/scoreMu，避免与派发路径形成嵌套。
+// providerHealthSnapshot 按 providerID 汇总健康数据。预算快照在 Mu 之外
+// 读取；成绩环只短暂持有 scoreMu，避免与派发路径形成嵌套。
 func providerHealthSnapshot() map[string]*providerHealth {
 	Load()
 	Mu.Lock()
@@ -66,34 +68,23 @@ func providerHealthSnapshot() map[string]*providerHealth {
 
 	now := time.Now()
 	today := now.UTC().Format("2006-01-02")
-	cutoff := now.Add(-providerRPMWindow)
-
-	budgetMu.Lock()
-	for key, times := range providerRPM {
-		id := strings.SplitN(key, ":", 2)[0]
-		h := health(id)
-		if h == nil {
-			continue
-		}
-		for _, t := range times {
-			if t.After(cutoff) {
-				h.Rpm++
+	if budget.HasDefault() {
+		for _, id := range ids {
+			state, _ := budget.Default().Snapshot(context.Background(), id)
+			state.Purge(now)
+			h := health(id)
+			for _, attempts := range state.RPM {
+				h.Rpm += len(attempts)
 			}
+			h.Daily = state.DailyRequests[today]
+			tokenKey := now.UTC().Format("2006-01")
+			if windows[id] == "daily" {
+				tokenKey = today
+			}
+			h.Tokens = state.Tokens[tokenKey]
 		}
 	}
-	for id, days := range providerDaily {
-		if h := health(id); h != nil {
-			h.Daily = days[today]
-		}
-	}
-	for id, periods := range providerTokens {
-		if h := health(id); h != nil {
-			h.Tokens = periods[utcTokenKey(windows[id])]
-		}
-	}
-	budgetMu.Unlock()
 
-	var earliest time.Time
 	for key, until := range cooldowns {
 		id := strings.SplitN(key, ":", 2)[0]
 		h := health(id)
@@ -105,9 +96,6 @@ func providerHealthSnapshot() map[string]*providerHealth {
 			model = key[i+1:]
 		}
 		h.Cooldowns = append(h.Cooldowns, modelCooldown{Model: model, Until: until})
-		if earliest.IsZero() || until.Before(earliest) {
-			earliest = until
-		}
 	}
 	for _, h := range out {
 		sort.Slice(h.Cooldowns, func(i, j int) bool { return h.Cooldowns[i].Until.Before(h.Cooldowns[j].Until) })

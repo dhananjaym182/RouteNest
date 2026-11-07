@@ -88,6 +88,7 @@ func handleProviderState(w http.ResponseWriter, r *http.Request) {
 	}
 	httpx.WriteAPI(w, http.StatusOK, httpx.Response{Success: true, Data: map[string]any{
 		"observations": observations,
+		"runtimeState": providers.RuntimeStateHealth(),
 	}})
 }
 

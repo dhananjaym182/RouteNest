@@ -17,8 +17,6 @@ import (
 	"sync"
 	"time"
 
-	"routenest/internal/accounts"
-	"routenest/internal/domain"
 	"routenest/internal/modelcatalog"
 	"routenest/internal/models"
 )
@@ -69,11 +67,9 @@ func newImportBatchID() string {
 func buildImportBatch(p CustomProvider, entries []upstreamModelEntry) *importBatch {
 	batch := &importBatch{ID: newImportBatchID(), ProviderID: p.ID, ProviderName: p.Name, CreatedAt: time.Now()}
 	existing := make(map[string]modelcatalog.Existing)
-	models.Read(func(list []domain.Model) {
-		for _, m := range list {
-			existing[m.ID] = modelcatalog.Existing{Source: m.Source, TierSignal: m.TierSignal, Cost: m.Cost}
-		}
-	})
+	for modelID, state := range providerOfferingStates(p, models.Snapshot()) {
+		existing[modelID] = modelcatalog.Existing{Source: models.SourceProvider, TierSignal: state.TierSignal, Cost: state.Cost}
+	}
 	batch.Items, batch.Stats = modelcatalog.BuildImportItems(entries, p.Free, existing, freeModelIDAllowlist())
 	importsMu.Lock()
 	for id, old := range pendingImports {
@@ -194,16 +190,17 @@ func ApplyImport(batchID string, approve []string) (ImportApplyResult, error) {
 		return ImportApplyResult{}, ErrImportProviderGone
 	}
 	// Decisions are sorted by id so appended records keep a stable order.
-	var decisions []models.Decision
+	var decisions []offeringDecision
 	for id := range approved {
 		it, ok := byID[id]
 		if !ok || (it.Action != "add" && it.Action != "tier_change") {
 			continue
 		}
-		decisions = append(decisions, models.Decision{ID: id, Cost: it.Tier, Signal: it.Signal})
+		decisions = append(decisions, offeringDecision{ID: id, Cost: it.Tier, Signal: it.Signal})
 	}
 	sort.Slice(decisions, func(i, j int) bool { return decisions[i].ID < decisions[j].ID })
-	addedIDs, changed := models.ApplyDecisions(decisions, prov.Name, time.Now().Unix())
+	now := time.Now().Unix()
+	addedIDs, changed := applyProviderOfferingDecisions(*prov, decisions, now)
 	added := len(addedIDs)
 	// Newly added models join the provider's ModelIDs, which SyncModels uses as
 	// the authority for its cleanup loop.
@@ -231,7 +228,7 @@ func ApplyImport(batchID string, approve []string) (ImportApplyResult, error) {
 	}
 	SaveLocked()
 	Mu.Unlock()
-	accounts.SavePool()
+	mirrorOfferingDecisions(*prov, decisions, now)
 	importsMu.Lock()
 	delete(pendingImports, batch.ID)
 	importsMu.Unlock()
@@ -282,9 +279,16 @@ func DiscardImport(id string) {
 
 // SetModelCost sets a model's manual tier. An empty cost restores automatic
 // classification; the tier stays as it is until the next import or sync.
-func SetModelCost(id, cost string) error {
+func SetModelCost(providerID, id, cost string) error {
 	if id == "" || (cost != "free" && cost != "pass" && cost != "") {
 		return ErrInvalidModelCost
+	}
+	provider, err := resolveModelCostProvider(providerID, id)
+	if err != nil {
+		return err
+	}
+	if provider != nil {
+		return updateProviderOfferingCost(*provider, id, cost)
 	}
 	if !models.SetManualCost(id, cost, time.Now().Unix()) {
 		return ErrModelNotFound

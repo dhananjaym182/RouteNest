@@ -265,7 +265,8 @@ async function provDetailRecheck(btn) {
     const text = ok ? (bits.length ? bits.join(' · ') : t('无变化')) : friendlyTestError(new Error(st.lastError));
     _provRowResults['recheck:' + id] = { ok: ok, text: text };
     if (out) out.innerHTML = renderTestResultHTML(ok, text);
-    loadProviders(); // 刷新列表状态列（同时经 refreshProvDetailIfOpen 重绘详情）
+    await loadProviders(); // 刷新列表状态列（同时经 refreshProvDetailIfOpen 重绘详情）
+    await loadModels();
   } catch (e) {
     _provRowResults['recheck:' + id] = { ok: false, text: friendlyTestError(e) };
     if (out) out.innerHTML = renderTestResultHTML(false, _provRowResults['recheck:' + id].text);

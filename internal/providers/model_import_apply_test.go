@@ -20,11 +20,15 @@ func TestImportApplyKeepsTierChangeWhenAddReallocates(t *testing.T) {
 	}))
 	defer srv.Close()
 
+	oldPool := accounts.Pool
+	t.Cleanup(func() { accounts.Pool = oldPool })
+	provider := &CustomProvider{ID: "race1", Name: "RaceProv", BaseURL: srv.URL, Enabled: true, ModelIDs: []string{"tier/exists"}}
+	installProviders(t, provider)
 	for run := 0; run < 30; run++ {
-		oldPool := accounts.Pool
-		oldProvs, oldLoaded := CustomProviders, Loaded
-		provider := &CustomProvider{ID: "race1", Name: "RaceProv", BaseURL: srv.URL, Enabled: true, ModelIDs: []string{"tier/exists"}}
-		CustomProviders, Loaded = []*CustomProvider{provider}, true
+		provider.ModelIDs = []string{"tier/exists"}
+		provRecheckMu.Lock()
+		providerRecheckStat = map[string]*providerRecheckState{}
+		provRecheckMu.Unlock()
 		accounts.Pool = &AccountPool{Models: []Model{
 			{ID: "tier/exists", Provider: "RaceProv", Cost: "pass", Status: "active", Source: "provider"},
 		}}
@@ -47,7 +51,5 @@ func TestImportApplyKeepsTierChangeWhenAddReallocates(t *testing.T) {
 			t.Fatalf("run %d: tier change lost or add missing: %+v", run, got)
 		}
 
-		accounts.Pool = oldPool
-		CustomProviders, Loaded = oldProvs, oldLoaded
 	}
 }

@@ -101,7 +101,7 @@ async function hashDestination(page, hash, expected, label) {
 async function fontChecks(page, label) {
   currentStep = label + ': embedded font loading';
   const fonts = await page.evaluate(async () => {
-    const families = [{ family: 'Inter', weights: [400, 500, 600, 700, 800] }, { family: 'IBM Plex Mono', weights: [400, 500, 600, 700] }];
+    const families = [{ family: 'Inter', weights: [400, 500, 600, 700, 800] }];
     const output = [];
     const rules = [...document.styleSheets].flatMap(sheet => [...sheet.cssRules]);
     for (const { family, weights } of families) {
@@ -179,7 +179,7 @@ try {
             check(await page.locator('#tab-health #globalState').count(), 1, label + ': existing health state retained');
             check(await page.locator('#tab-health #globalHealthSummary').count(), 1, label + ': existing health summary retained');
           }
-          if (screenshotDir && (tab === 'dashboard' || tab === 'health')) {
+          if (screenshotDir && ['dashboard', 'providers', 'credentials', 'network', 'models', 'health'].includes(tab)) {
             await page.screenshot({ path: resolve(screenshotDir, label + '-' + tab + '.png'), fullPage: true, animations: 'disabled' });
             result.screenshots++;
           }
@@ -188,7 +188,7 @@ try {
         for (const [alias, expected] of Object.entries(aliases)) {
           await hashDestination(page, alias, expected, label + ': legacy ' + alias);
           if (alias === 'accounts' || alias === 'import') {
-            check(await page.locator('#tab-credentials .page-subpage[data-subpage="pool"]').isVisible(), true, label + ': legacy ' + alias + ' selects pool');
+            check(await page.locator('#tab-credentials .page-subpage[data-subpage="conns"]').isVisible(), true, label + ': legacy ' + alias + ' selects OAuth connected accounts');
           }
           if (alias === 'import') check(await page.locator('#loginImportBody').isVisible(), true, label + ': import opens login/import workflow');
           result.aliasChecks++;

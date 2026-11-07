@@ -1,10 +1,12 @@
 package proxycore
 
 import (
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
 	"os/exec"
+	"routenest/internal/dispatch"
 	"routenest/internal/routing"
 	"routenest/internal/zen"
 	"strconv"
@@ -178,10 +180,15 @@ func clineHeaders(token, sessionID string) http.Header {
 }
 
 func clineErrorHTTPStatus(err error) int {
-	if _, ok := err.(*routing.FreeModelUnavailableError); ok {
-		return http.StatusTooManyRequests
+	if providerUnavailable(err) {
+		return http.StatusServiceUnavailable
 	}
 	return http.StatusInternalServerError
+}
+
+func providerUnavailable(err error) bool {
+	var unavailable *routing.FreeModelUnavailableError
+	return errors.As(err, &unavailable) || errors.Is(err, dispatch.ErrExhausted)
 }
 
 // stampUpstream 按实际服务结果写入请求日志的上游归因：

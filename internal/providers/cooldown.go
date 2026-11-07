@@ -2,6 +2,8 @@ package providers
 
 import (
 	"log"
+	"sort"
+	"strings"
 	"time"
 
 	"routenest/internal/dispatch"
@@ -10,6 +12,50 @@ import (
 	"routenest/internal/providerstate"
 	providerstore "routenest/internal/store/providers"
 )
+
+// LegacyCooldown is one active entry from the compatibility cooldown file.
+// Runtime composition imports these entries into providerstate before routing
+// is published.
+type LegacyCooldown struct {
+	ProviderID string
+	ModelID    string
+	Until      time.Time
+}
+
+// LegacyCooldowns returns a deterministic copy of active compatibility state.
+func LegacyCooldowns(now time.Time) []LegacyCooldown {
+	Load()
+	Mu.Lock()
+	defer Mu.Unlock()
+	var out []LegacyCooldown
+	for key, until := range Cooldowns {
+		if !now.Before(until) {
+			continue
+		}
+		providerID, modelID := key, ""
+		if cut := strings.Index(key, ":"); cut >= 0 {
+			providerID, modelID = key[:cut], key[cut+1:]
+		}
+		if providerID == "" {
+			continue
+		}
+		scope := domain.AvailabilityScope{ProviderID: domain.ProviderInstanceID(providerID), ModelID: modelID}
+		if !scope.Valid() {
+			continue
+		}
+		out = append(out, LegacyCooldown{ProviderID: providerID, ModelID: modelID, Until: until})
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].ProviderID != out[j].ProviderID {
+			return out[i].ProviderID < out[j].ProviderID
+		}
+		if out[i].ModelID != out[j].ModelID {
+			return out[i].ModelID < out[j].ModelID
+		}
+		return out[i].Until.Before(out[j].Until)
+	})
+	return out
+}
 
 // SetCooldown 记录 provider 模型冷却（限流/5xx/配置错误时调用）。
 // 同步落盘：重启后不再把刚冷却的 provider 当健康源重新探一遍 —— 对 429 这类
@@ -30,6 +76,32 @@ func SetCooldown(providerID, model string, until time.Time) {
 				Source: "legacy_provider_cooldown", Confidence: domain.ConfidenceFallback,
 			})
 		}
+	}
+}
+
+func legacyCooldownScope(key string) (domain.AvailabilityScope, bool) {
+	providerID, modelID := key, ""
+	if cut := strings.Index(key, ":"); cut >= 0 {
+		providerID, modelID = key[:cut], key[cut+1:]
+	}
+	scope := domain.AvailabilityScope{ProviderID: domain.ProviderInstanceID(providerID), ModelID: modelID}
+	return scope, scope.Valid()
+}
+
+func recoverLegacyCooldownScopes(scopes []domain.AvailabilityScope) {
+	if !providerstate.HasDefault() {
+		return
+	}
+	seen := make(map[domain.AvailabilityScope]struct{}, len(scopes))
+	for _, scope := range scopes {
+		if !scope.Valid() {
+			continue
+		}
+		if _, exists := seen[scope]; exists {
+			continue
+		}
+		seen[scope] = struct{}{}
+		_ = providerstate.Default().Recover(scope)
 	}
 }
 

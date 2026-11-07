@@ -56,6 +56,12 @@ func providerTransportFor(providerID, spec string) (http.RoundTripper, error) {
 	return actual.(http.RoundTripper), nil
 }
 
+// TransportForDispatch exposes the established cached provider transport to
+// the application compatibility resolver. No raw proxy value leaves callers.
+func TransportForDispatch(providerID, spec string) (http.RoundTripper, error) {
+	return providerTransportFor(providerID, spec)
+}
+
 // isolatedTransport builds a transport that does not consult the Cline egress
 // accounts.Pool. A direct provider must also ignore HTTPS_PROXY, which the global
 // transport's Proxy hook intentionally honors when the pool is empty.

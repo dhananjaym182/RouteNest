@@ -9,8 +9,10 @@ import (
 	"io"
 	"log"
 	"net/http"
+
 	"routenest/internal/combos"
 	"routenest/internal/compaction"
+	"routenest/internal/config"
 	"routenest/internal/dispatch"
 	"routenest/internal/domain"
 	"routenest/internal/httpx"
@@ -272,6 +274,86 @@ func streamAnthropicWithRetry(ctx context.Context, w http.ResponseWriter, fetch 
 	}
 }
 
+// streamUnifiedAnthropic forwards the serving response selected by the shared
+// dispatcher and advances that same execution after a pre-content empty/stalled
+// stream. The SSE writer is reused, so message_start and compaction advisory
+// events remain exactly-once across provider changes.
+func streamUnifiedAnthropic(
+	ctx context.Context,
+	w http.ResponseWriter,
+	call *unifiedDispatchCall,
+	resp *http.Response,
+	acc *domain.Account,
+	reqLog *domain.RequestLog,
+	compactionSummary string,
+	compactionApplied []compaction.CMAppliedEdit,
+) {
+	sw := NewSSEWriter(w)
+	maxAttempts := len(routing.DispatchAttempts(call.plan))
+	if call.mode != config.DispatchModeEnforce {
+		if combo, isCombo := combos.FindCombo(call.request.RequestedModel); isCombo {
+			maxAttempts = len(combo.Entries)
+		} else {
+			maxAttempts = len(routing.ModelFallbackChain(reqLog.Model))
+			if maxAttempts > maxStreamAttempts {
+				maxAttempts = maxStreamAttempts
+			}
+		}
+	}
+	if maxAttempts < 1 {
+		maxAttempts = 1
+	}
+	current, currentAcc := resp, acc
+	for attempt := 1; ; attempt++ {
+		if ctx.Err() != nil {
+			return
+		}
+		if currentAcc != nil {
+			reqLog.AccountID = currentAcc.AccountID
+			reqLog.AccountEmail = currentAcc.Email
+		}
+		if HandleAnthropicStream(ctx, sw, current, currentAcc, reqLog, firstContentTimeoutForAttempt(attempt, maxAttempts), compactionSummary, compactionApplied, call.MarkCommitted) {
+			return
+		}
+		current.Body.Close()
+		if ctx.Err() != nil {
+			return
+		}
+		if currentAcc != nil && reqLog.Model != "" && attempt < maxAttempts {
+			routing.SetModelCooldown(currentAcc, reqLog.Model, time.Now().Add(streamFailoverCooldown))
+			log.Printf("  anthropic stream: model %q produced no content, cooling it for %s and failing over", reqLog.Model, streamFailoverCooldown)
+		}
+		if attempt >= maxAttempts {
+			finishAnthropicStreamFailure(sw, w, reqLog, http.StatusBadGateway,
+				"stream failed before first token", "upstream stream failed before first token")
+			return
+		}
+		next, nextAcc, err := call.Retry(ctx, "empty_stream")
+		if err != nil || next == nil || next.Body == nil {
+			note := "upstream stream failed before first token"
+			if err != nil {
+				note += ": " + err.Error()
+			} else {
+				note += ": retry returned no response"
+			}
+			if err != nil && !errors.Is(err, dispatch.ErrExhausted) {
+				log.Printf("  anthropic stream retry failed: %v", err)
+			}
+			finishAnthropicStreamFailure(sw, w, reqLog, http.StatusBadGateway,
+				note, "upstream stream failed before first token")
+			return
+		}
+		current, currentAcc = next, nextAcc
+		log.Printf("  anthropic stream: upstream produced no content, retrying (%d/%d)", attempt+1, maxAttempts)
+		select {
+		case <-ctx.Done():
+			current.Body.Close()
+			return
+		case <-time.After(300 * time.Millisecond):
+		}
+	}
+}
+
 // HandleAnthropicStream 把上游 OpenAI SSE 流转换为 Anthropic 事件流转发给客户端。
 //
 // 关键设计：
@@ -291,7 +373,7 @@ func streamAnthropicWithRetry(ctx context.Context, w http.ResponseWriter, fetch 
 //
 // 返回 true 表示客户端响应已完整处理（正常收尾或已发出 error 事件）；
 // 返回 false 表示上游尚未产出任何内容 —— 调用方重试，或用 sw.Started 判断后发带内 error。
-func HandleAnthropicStream(ctx context.Context, sw *sseWriter, upstream *http.Response, acc *domain.Account, reqLog *domain.RequestLog, firstContentTimeout time.Duration, compactionSummary string, compactionApplied []compaction.CMAppliedEdit) bool {
+func HandleAnthropicStream(ctx context.Context, sw *sseWriter, upstream *http.Response, acc *domain.Account, reqLog *domain.RequestLog, firstContentTimeout time.Duration, compactionSummary string, compactionApplied []compaction.CMAppliedEdit, onSemanticCommit ...func()) bool {
 	if upstream.StatusCode != http.StatusOK {
 		b, _ := io.ReadAll(io.LimitReader(upstream.Body, 2048))
 		upstream.Body.Close()
@@ -383,7 +465,13 @@ func HandleAnthropicStream(ctx context.Context, sw *sseWriter, upstream *http.Re
 	// commit：上游首条有效数据行到达，开始实时转发（信封已提前发送）。
 	// committed=true 后本次尝试不再重试，只能实时转发或发带内 error。
 	commit := func() {
+		if committed {
+			return
+		}
 		committed = true
+		if len(onSemanticCommit) > 0 && onSemanticCommit[0] != nil {
+			onSemanticCommit[0]()
+		}
 		log.Printf("  anthropic stream: starting real-time forward")
 	}
 
@@ -511,10 +599,6 @@ L:
 			// 上游被截短的工具名还原为客户端原始名
 			restoreToolCallsInResponse(obj, reqLog.ToolNames)
 
-			if !committed {
-				commit() // 首条有效数据行到达，提交响应头 + message_start
-			}
-
 			choices, _ := protocol.GetNested(obj, "choices").([]any)
 			if len(choices) == 0 {
 				continue
@@ -524,7 +608,11 @@ L:
 				continue
 			}
 
-			for _, ev := range st.PushDelta(choice) {
+			events := st.PushDelta(choice)
+			if !committed && st.HasContent() {
+				commit()
+			}
+			for _, ev := range events {
 				emit(ev.Name, ev.Data)
 			}
 		}

@@ -4,9 +4,11 @@ import (
 	"testing"
 
 	"routenest/internal/accounts"
+	"routenest/internal/budget"
 	"routenest/internal/credentials"
 	"routenest/internal/egress"
 	"routenest/internal/provideradapters"
+	"routenest/internal/providers"
 	"routenest/internal/providerstate"
 	"routenest/internal/routing"
 )
@@ -45,6 +47,13 @@ func TestConfigureInstallsRequiredSeams(t *testing.T) {
 	}
 	if !providerstate.HasDefault() {
 		t.Fatal("provider state store not installed")
+	}
+	if !budget.HasDefault() {
+		t.Fatal("provider budget store not installed")
+	}
+	if health := providers.RuntimeStateHealth(); health.Backend != "local_file" || !health.Ready ||
+		!health.SingleNodeReady || health.MultiReplicaSupported || health.LastSuccessfulRead.IsZero() {
+		t.Fatalf("runtime state health = %+v", health)
 	}
 	if !credentials.HasDefault() {
 		t.Fatal("credentials registry not installed")

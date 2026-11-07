@@ -1,10 +1,15 @@
 package httpapi
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
+	"time"
+
+	"routenest/internal/domain"
 )
 
 func strKeys(keys ...string) func() []string {
@@ -93,5 +98,79 @@ func TestHealthHandler(t *testing.T) {
 		if !strings.Contains(body, want) {
 			t.Fatalf("body %s missing %s", body, want)
 		}
+	}
+}
+
+func TestHealthRuntimeStateUnavailableWithoutProvider(t *testing.T) {
+	h := Health{Version: func() string { return "1.2.3" }, ActiveAccounts: func() int { return 0 }}
+	rec := httptest.NewRecorder()
+	h.Handler(rec, httptest.NewRequest(http.MethodGet, "/health", nil))
+	var payload struct {
+		Status         string                    `json:"status"`
+		Version        string                    `json:"version"`
+		ActiveAccounts int                       `json:"activeAccounts"`
+		RuntimeState   domain.RuntimeStateHealth `json:"runtimeState"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+		t.Fatal(err)
+	}
+	if rec.Code != http.StatusOK || payload.Status != "ok" || payload.Version != "1.2.3" || payload.ActiveAccounts != 0 {
+		t.Fatalf("legacy health payload changed: %s", rec.Body.String())
+	}
+	want := domain.RuntimeStateHealth{
+		Backend: "unknown", Degraded: true, Stale: true,
+		Enforcement: "unavailable", Reason: "runtime_state_unavailable",
+	}
+	if !reflect.DeepEqual(payload.RuntimeState, want) {
+		t.Fatalf("runtimeState = %+v, want %+v", payload.RuntimeState, want)
+	}
+}
+
+func TestHealthRuntimeStateRedactedDTO(t *testing.T) {
+	now := time.Date(2026, 11, 7, 7, 0, 0, 0, time.UTC)
+	want := domain.RuntimeStateHealth{
+		Backend: "local_file", Ready: true, SingleNodeReady: true,
+		MultiReplicaSupported: false, Enforcement: "single_node",
+		LastSuccessfulRead: now, LastSuccessfulWrite: now,
+	}
+	called := false
+	h := Health{
+		Version: func() string { return "1.2.3" }, ActiveAccounts: func() int { return 0 },
+		RuntimeState: func() domain.RuntimeStateHealth { called = true; return want },
+	}
+	rec := httptest.NewRecorder()
+	h.Handler(rec, httptest.NewRequest(http.MethodGet, "/health", nil))
+	if !called || rec.Code != http.StatusOK {
+		t.Fatalf("runtime provider not called: %d", rec.Code)
+	}
+	var payload struct {
+		RuntimeState domain.RuntimeStateHealth `json:"runtimeState"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(payload.RuntimeState, want) {
+		t.Fatalf("runtimeState = %+v, want %+v", payload.RuntimeState, want)
+	}
+	var object map[string]json.RawMessage
+	if err := json.Unmarshal(rec.Body.Bytes(), &object); err != nil {
+		t.Fatal(err)
+	}
+	var runtimeState map[string]json.RawMessage
+	if err := json.Unmarshal(object["runtimeState"], &runtimeState); err != nil {
+		t.Fatal(err)
+	}
+	allowed := map[string]bool{
+		"backend": true, "ready": true, "singleNodeReady": true,
+		"multiReplicaSupported": true, "degraded": true, "stale": true,
+		"enforcement": true, "lastSuccessfulRead": true, "lastSuccessfulWrite": true, "reason": true,
+	}
+	for key := range runtimeState {
+		if !allowed[key] {
+			t.Fatalf("unexpected public runtime field %q", key)
+		}
+	}
+	if string(runtimeState["multiReplicaSupported"]) != "false" {
+		t.Fatal("local backend claimed multi-replica support")
 	}
 }

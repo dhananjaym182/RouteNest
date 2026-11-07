@@ -6,13 +6,16 @@ package providers
 
 import (
 	"net/http"
+	"time"
 
+	"routenest/internal/budget"
 	"routenest/internal/config"
 	"routenest/internal/connections"
 	"routenest/internal/egress"
 )
 
 func init() {
+	_ = budget.Publish(budget.NewStore(newTestBudgetBackend(), nil, budget.Options{Now: time.Now}))
 	ConfigProvider = func() *config.Proxy { return config.DefaultProxy() }
 	egress.ConfigProvider = func() *config.Proxy { return config.DefaultProxy() }
 	TransportProvider = func() http.RoundTripper { return http.DefaultTransport }

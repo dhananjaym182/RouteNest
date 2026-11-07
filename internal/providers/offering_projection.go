@@ -12,16 +12,21 @@ func SnapshotModelOfferings() ([]domain.ModelOffering, error) {
 	if err != nil {
 		return nil, err
 	}
+	records := models.Snapshot()
 	claims := make(map[domain.ProviderInstanceID][]string)
+	states := make(map[domain.ProviderInstanceID]map[string]domain.ModelOfferingState)
 	for _, provider := range List() {
-		claims[domain.ProviderInstanceID(provider.ID)] = append([]string(nil), provider.ModelIDs...)
+		providerID := domain.ProviderInstanceID(provider.ID)
+		claims[providerID] = append([]string(nil), provider.ModelIDs...)
+		states[providerID] = providerOfferingStates(provider, records)
 	}
 	sources := make([]models.OfferingSource, 0, len(instances))
 	for _, instance := range instances {
 		sources = append(sources, models.OfferingSource{
 			Instance: instance,
 			ModelIDs: claims[instance.ID],
+			States:   states[instance.ID],
 		})
 	}
-	return models.ProjectOfferings(models.Snapshot(), sources), nil
+	return models.ProjectOfferings(records, sources), nil
 }

@@ -1,25 +1,19 @@
 <div id="tab-providers" class="tab-panel system-page" style="display:none">
   <div class="page-header">
     <div>
-      <div class="page-kicker">连接管理</div>
       <div class="large-title">Provider 管理</div>
-      <div class="large-subtitle">统一查看上游平台、认证方式、账号与模型数量，再管理自定义 Provider。</div>
+      <div class="large-subtitle">在这里连接服务、管理账号并选择可用模型。</div>
     </div>
     <div class="action-row">
-      <button type="button" class="btn btn-sm" onclick="loadGlobal(true);loadProviders()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>刷新</button>
+      <button type="button" class="btn btn-sm" onclick="loadGlobal(true);loadProviders()">刷新</button>
+      <button type="button" class="btn btn-primary" id="connectProviderBtn" onclick="openProviderSetup()">＋ 连接 Provider</button>
     </div>
   </div>
-  <div class="system-hero">
-    <div class="system-hero-copy">
-      <span class="system-hero-label">Provider 目录</span>
-      <h2>多 Provider 资源概览</h2>
-      <p>能力状态、凭据与模型数量来自现有运行时投影；未知值保持未知。</p>
-    </div>
-    <div id="globalSummary" class="system-summary" aria-live="polite"></div>
-  </div>
+  <div class="subtabs page-subtabs" data-page="providers"><button type="button" class="subtab active" data-sub="inventory">已配置的服务</button><button type="button" class="subtab" data-sub="oauth">OAuth 设置</button></div>
+  <div class="page-subpage" data-subpage="inventory">
+  <div id="globalSummary" class="provider-overview-strip" aria-live="polite"></div>
   <div class="section system-section">
-    <div class="section-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15 15 0 0 1 0 20M12 2a15 15 0 0 0 0 20"/></svg><span>Provider 清单</span></div>
-    <div class="section-desc">内置与自定义上游统一展示。打开关联视图时会保留当前 Provider 筛选。</div>
+    <div class="section-title"><span>已配置的服务</span></div>
     <div class="system-toolbar">
       <div class="system-toolbar-grid">
         <div class="field system-filter-field system-search-field">
@@ -34,26 +28,237 @@
           <label for="globalProviderKindFilter">类型</label>
           <select id="globalProviderKindFilter" onchange="setGlobalProviderKind(this.value)"><option value="">全部类型</option></select>
         </div>
-      </div>
-      <div class="capability-legend" aria-label="能力状态图例">
-        <span class="capability-state capability-supported">支持</span>
-        <span class="capability-state capability-unsupported">不支持</span>
-        <span class="capability-state capability-unknown">未知</span>
+        <div class="field system-filter-field">
+          <label for="globalProviderStatusFilter">状态</label>
+          <select id="globalProviderStatusFilter" onchange="setGlobalProviderStatus(this.value)"><option value="">全部状态</option><option value="enabled">已启用</option><option value="disabled">已停用</option></select>
+        </div>
       </div>
     </div>
     <div id="globalInstances" class="section-body system-inventory" aria-live="polite"></div>
   </div>
-  <div class="section legacy-workspace">
-    <div class="section-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg><span>自定义 Provider 管理</span>
+  <details class="provider-advanced-details">
+    <summary>自定义 Provider 高级管理</summary>
+    <div class="section">
+      <div class="section-title"><span>自定义 Provider 管理</span>
+        <span class="title-tools"><button type="button" class="btn btn-sm" onclick="loadProviderPresets()">从预设添加 Provider</button><button type="button" class="btn btn-sm" onclick="showProviderEditor()">添加自定义 Provider</button></span>
+      </div>
+      <div id="providerSyncBanner" class="sync-banner" aria-live="polite"></div>
+      <div class="section-body"><div id="providersList"></div></div>
+    </div>
+  </details>
+
+  </div>
+  <div class="page-subpage" data-subpage="oauth" style="display:none">
+<div class="section"><div class="section-title"><span>OAuth 服务</span><span class="title-tools"><button type="button" class="btn btn-sm" onclick="showPageSubTab('accounts','conns')">查看已连接账号</button></span></div><div class="section-desc">选择服务并登录。已有账号统一在「账号与凭据」中查看；服务配置保持原生方式。</div><div class="section-body"><div class="oauth-native-entry"><strong>Cline</strong><span>浏览器登录、刷新令牌或批量导入</span><button type="button" class="btn btn-primary" onclick="openProviderSetup('cline')">添加账号</button><button type="button" class="btn" onclick="openProviderSetup('cline-config')">连接设置</button></div><div id="connProviderGroups"></div></div></div>
+  <div class="section" id="loginImportSection" style="display:none">
+    <div class="section-title"><button class="btn btn-sm btn-icon" id="loginImportToggle" onclick="toggleLoginImport()" title="展开" aria-label="展开" aria-expanded="false" aria-controls="loginImportBody"><svg class="ui-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"/></svg></button><span>Cline OAuth 登录与导入</span></div>
+    <div id="loginImportBody" style="display:none">
+      <div class="section-desc">使用 Cline 原生 OAuth、刷新令牌或批量导入连接账号。已连接账号统一在「账号与凭据」中管理。</div>
+      <div class="tabs" id="importTabs">
+        <div class="tab active" data-tab="oauth">OAuth 浏览器登录</div>
+        <div class="tab" data-tab="token">手动输入 Token</div>
+        <div class="tab" data-tab="batch">批量导入</div>
+      </div>
+
+      <div id="import-oauth" class="tab-content active">
+        <p class="desc-lead">通过浏览器完成 OAuth 认证，支持 Google/GitHub/邮箱登录，自动获取 refreshToken。</p>
+        <button class="btn btn-primary" onclick="startOAuth()" id="oauthBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>开始 OAuth 登录</button>
+        <div id="oauthProgress" style="display:none;margin-top:16px" aria-live="polite">
+          <div class="oauth-line">
+            <div class="loading"></div>
+            <div>
+              <div class="txt-strong" id="oauthStatus">等待浏览器授权...</div>
+              <div class="small-t2 mt-4">
+                点击链接（系统浏览器打开）: <a href="#" id="oauthUrl" class="oauth-url"></a><br>
+                并输入代码: <strong id="oauthUserCode"></strong>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div id="oauthResult" style="display:none;margin-top:16px" aria-live="polite"></div>
+      </div>
+
+      <div id="import-token" class="tab-content">
+        <p class="desc-lead">输入已有的 Cline refreshToken，系统会自动验证并加入池。</p>
+        <div class="form-row">
+          <div class="field">
+            <label>Refresh Token *</label>
+            <input type="password" autocomplete="new-password" id="tokenInput" placeholder="粘贴 refreshToken">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="field">
+            <label>邮箱（可选，留空自动生成）</label>
+            <input type="text" id="tokenEmail" placeholder="user@example.com">
+          </div>
+        </div>
+        <div class="form-actions">
+          <button class="btn btn-primary" onclick="addByToken(this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>添加账号</button>
+        </div>
+        <div id="tokenResult" class="mt-8" aria-live="polite"></div>
+      </div>
+
+      <div id="import-batch" class="tab-content">
+        <p class="desc-lead">批量导入多个账号。支持 JSON 数组或每行一个 token。</p>
+        <div class="form-row">
+          <div class="field">
+            <label>JSON 数组格式：[{"refreshToken":"...","email":"..."}]</label>
+            <textarea id="batchInput" placeholder='[{"refreshToken":"xxx","email":"u1@x.com"},{"refreshToken":"yyy","email":"u2@x.com"}]'></textarea>
+          </div>
+        </div>
+        <div class="form-actions">
+          <button class="btn btn-primary" onclick="batchImport(this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>导入全部</button>
+          <button class="btn" onclick="document.getElementById('fileInput').click()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>选择文件</button>
+        </div>
+        <div id="batchResult" class="mt-8" aria-live="polite"></div>
+      </div>
+    </div>
+  </div>
+
+  </div>
+
+  <div id="providerNativeForms" hidden>
+    <div id="providerNativeOpenCode" data-native-provider="opencode">
+
+  <div class="metric-section">
+    <div class="metric-heading">OpenCode Zen 今日用量</div>
+    <div class="tiles">
+      <div class="stat-tile"><div class="tile-body"><div class="tile-num" id="statOcRequests">-</div><div class="tile-label">请求数</div></div></div>
+      <div class="stat-tile"><div class="tile-body"><div class="tile-num" id="statOcInputTokens">-</div><div class="tile-label">输入 Token</div></div></div>
+      <div class="stat-tile"><div class="tile-body"><div class="tile-num" id="statOcOutputTokens">-</div><div class="tile-label">输出 Token</div></div></div>
+      <div class="stat-tile"><div class="tile-body"><div class="tile-num" id="statOcTotalTokens">-</div><div class="tile-label">总 Token</div></div></div>
+    </div>
+  </div>
+  <div class="section">
+    <div class="section-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg><span>OpenCode Zen 服务</span>
       <span class="title-tools">
-        <button class="btn btn-sm" onclick="loadProviderPresets()">从预设添加 Provider</button>
-        <button class="btn btn-sm btn-primary" onclick="showProviderEditor()">＋ 添加 Provider</button>
+        <span id="ocRuntimeStatus">-</span>
       </span>
     </div>
-    <div class="section-desc">添加、测试与编辑 OpenAI 兼容上游。凭据、模型和网络状态分别在对应全局视图中查看。</div>
-    <div id="providerSyncBanner" class="sync-banner" aria-live="polite"></div>
+    <div class="section-desc">接入 OpenCode Zen 免费模型。按请求中的模型名自动分流：免费模型走 OpenCode Zen，付费模型直接拒绝，其余走 Cline 账号池。</div>
     <div class="section-body">
-      <div id="providersList"></div>
+      <div class="form-group-label">基础连接</div>
+      <div class="form-row">
+        <div class="field w-220">
+          <label>启用 OpenCode Zen</label>
+          <select id="ocEnabled" onchange="saveOcConfig()">
+            <option value="true">启用</option>
+            <option value="false">停用</option>
+          </select>
+        </div>
+        <div class="field f1"><label>API Key</label><input type="password" autocomplete="new-password" id="ocKey" placeholder="public" onchange="saveOcConfig()"></div>
+        <div class="field f-14"><label>Base URL</label><input type="text" id="ocBaseURL" placeholder="https://opencode.ai/zen/v1" class="mono-plain" onchange="saveOcConfig()"></div>
+      </div>
+      <div class="form-group-label">请求调优</div>
+      <div class="form-row">
+        <div class="field"><label>最大并发</label><input type="number" id="ocMaxConcurrency" min="1" max="64" onchange="saveOcConfig()"></div>
+        <div class="field"><label>重试次数</label><input type="number" id="ocRetries" min="0" max="10" onchange="saveOcConfig()"></div>
+      </div>
+      <div class="form-group-label">故障转移</div>
+      <div class="form-row">
+        <div class="field"><label>故障转移</label>
+          <select id="ocFailover" onchange="saveOcConfig()">
+            <option value="true">开启（连续失败后暂走 Cline 池）</option>
+            <option value="false">关闭</option>
+          </select>
+        </div>
+        <div class="field"><label>失败阈值（次）</label><input type="number" id="ocFailoverCount" min="1" max="20" onchange="saveOcConfig()"></div>
+        <div class="field"><label>转移窗口（分钟）</label><input type="number" id="ocFailoverMinutes" min="1" max="120" onchange="saveOcConfig()"></div>
+      </div>
+      <div class="form-group-label">上下文压缩</div>
+      <div class="form-row">
+        <div class="field"><label>自动上下文压缩</label>
+          <select id="ocCompactAuto" onchange="saveOcConfig()">
+            <option value="true">开启（超限自动摘要）</option>
+            <option value="false">关闭</option>
+          </select>
+        </div>
+        <div class="field"><label>压缩缓冲 Token</label><input type="number" id="ocCompactBuffer" min="0" onchange="saveOcConfig()"></div>
+        <div class="field"><label>尾部保留 Token</label><input type="number" id="ocCompactKeepTokens" min="0" onchange="saveOcConfig()"></div>
+        <div class="field"><label>摘要最大 Token</label><input type="number" id="ocCompactMaxSummary" min="0" onchange="saveOcConfig()"></div>
+      </div>
+      <div class="form-actions mt-14">
+        <button class="btn btn-primary" onclick="saveOcConfig(this)">保存 OpenCode Zen 配置</button>
+      </div>
+      <div id="ocSaveResult" class="mt-8" aria-live="polite"></div>
+      <div class="hint-sm mt-8">上述字段改动后会自动保存，也可点按钮手动触发。</div>
+    </div>
+  </div>
+
+<details class="native-provider-advanced"><summary>代理与请求头</summary>
+  <div class="section">
+    <div class="section-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>OpenCode Zen 出口代理</div>
+    <div class="section-desc">发往 OpenCode Zen 的请求可经代理池轮询出口；命中限流时冷却当前出口并自动跳过。支持 http / https / socks5 / socks5h，每行一个，如 <span class="mono">socks5://127.0.0.1:1080</span>。</div>
+    <div class="section-body">
+      <div class="form-row">
+        <div class="field w-260">
+          <label>代理策略</label>
+          <select id="ocProxyStrategy" onchange="saveOcConfig()">
+            <option value="round_robin">轮询 (round_robin)</option>
+            <option value="random">随机 (random)</option>
+            <option value="fill">填满 (fill)</option>
+          </select>
+          <div class="field-hint">仅决定多个出口代理地址之间的选择；Cline 账号轮询与 Provider 评分在 <a href="#" onclick="showPageSubTab('routing', 'config');return false" class="lnk-a">「路由 → 路由策略」</a></div>
+        </div>
+        <div class="field f1"><label>出口冷却状态</label><div id="ocProxyCooldowns" class="hint-sm">-</div></div>
+      </div>
+      <div class="field mt-10">
+        <label>代理列表</label>
+        <textarea id="ocProxies" rows="4" placeholder="socks5://127.0.0.1:1080&#10;http://user:pass@proxy.example.com:8080" onchange="saveOcConfig()"></textarea>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7V4h16v3"/><path d="M9 20h6"/><path d="M12 4v16"/></svg>OpenCode Zen 请求头</div>
+    <div class="section-desc">附加到发往 OpenCode Zen 的请求。特殊值：$session / $request / $project / $client 会注入每请求的动态身份；留空删除该头。</div>
+    <div class="section-body">
+      <div class="field">
+        <label>请求头（每行一个，格式 Key: Value）</label>
+        <textarea id="zenHeadersBulk" rows="6" placeholder="User-Agent: opencode/1.18.31&#10;x-opencode-project: global&#10;x-custom-header: my-value"></textarea>
+      </div>
+      <div class="form-actions mt-10">
+        <button class="btn btn-sm btn-primary" onclick="saveZenHeaders(this)">保存 OpenCode Zen 请求头</button>
+      </div>
+      <div id="zenHeaderSaveResult" class="mt-8" aria-live="polite"></div>
+    </div>
+  </div>
+
+</details>
+    </div>
+    <div id="providerNativeCline" data-native-provider="cline">
+<div class="section"><div class="section-title"><span>网络设置</span></div><div class="section-body"><p class="section-desc">Cline 使用默认出口代理。服务专属请求头在下方配置。</p><button type="button" class="btn" onclick="applyTab('network')">管理默认代理</button></div></div>
+  <div class="section">
+    <div class="section-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7V4h16v3"/><path d="M9 20h6"/><path d="M12 4v16"/></svg>Cline 请求头</div>
+    <div class="section-desc">这些请求头会附加到所有转发给 Cline API 的请求中，以模拟官方客户端行为。</div>
+    <div class="section-body xscroll">
+      <table class="action-table headers-table">
+        <thead><tr><th>请求头</th><th>值</th><th>操作</th></tr></thead>
+        <tbody id="headersTableBody">
+          <tr><td colspan="3"><div class="sk-stack"><span class="skeleton"></span><span class="skeleton w70"></span></div></td></tr>
+        </tbody>
+      </table>
+      <div class="form-actions mt-14">
+        <button class="btn btn-sm" onclick="addHeaderRow()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>添加请求头</button>
+        <button class="btn btn-sm btn-primary" onclick="saveHeaders(this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>保存请求头</button>
+        <button class="btn btn-sm" onclick="bulkEditHeaders()">批量编辑</button>
+      </div>
+      <div id="headerSaveResult" class="mt-8" aria-live="polite"></div>
+    </div>
+  </div>
+
+
     </div>
   </div>
 </div>
+
+<div id="globalProviderDetailOverlay" class="drawer-overlay" onclick="closeGlobalProviderDetail()"></div>
+<aside id="globalProviderDetail" class="drawer drawer-wide" role="dialog" aria-modal="true" aria-labelledby="globalProviderDetailTitle">
+  <div class="drawer-header">
+    <div class="drawer-title" id="globalProviderDetailTitle">Provider 详情</div>
+    <button type="button" class="drawer-close" onclick="closeGlobalProviderDetail()" aria-label="关闭"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+  </div>
+  <div class="drawer-body" id="globalProviderDetailBody">
+    <div class="sk-stack"><span class="skeleton"></span><span class="skeleton w70"></span><span class="skeleton w45"></span></div>
+  </div>
+</aside>

@@ -91,9 +91,13 @@ func TestRequestLogComboAttributionRoundTrip(t *testing.T) {
 		ComboName:      "My Combo",
 		FallbackUsed:   true,
 		Attempts: []AttemptLog{
-			{Model: "first", Order: 1, Outcome: "failed", Reason: "429"},
+			{
+				Model: "first", UpstreamModelID: "vendor/first", Order: 1, Group: 2,
+				Outcome: "failed", Reason: "429", CredentialID: "credential:first", EgressID: "egress:first",
+			},
 			{Model: "served-model", Order: 2, Outcome: "success", ProviderName: "openrouter"},
 		},
+		PlannerExclusions: []PlannerExclusionLog{{ProviderID: "paid", Model: "served-model", Reason: "not_free_eligible"}},
 	}
 	raw, err := json.Marshal(in)
 	if err != nil {
@@ -108,6 +112,12 @@ func TestRequestLogComboAttributionRoundTrip(t *testing.T) {
 	}
 	if len(out.Attempts) != 2 || out.Attempts[1].ProviderName != "openrouter" {
 		t.Errorf("attempts not preserved: %+v", out.Attempts)
+	}
+	if out.Attempts[0].UpstreamModelID != "vendor/first" || out.Attempts[0].CredentialID != "credential:first" || out.Attempts[0].EgressID != "egress:first" || out.Attempts[0].Group != 2 {
+		t.Errorf("attempt routing identity not preserved: %+v", out.Attempts[0])
+	}
+	if len(out.PlannerExclusions) != 1 || out.PlannerExclusions[0].Reason != "not_free_eligible" {
+		t.Errorf("planner exclusions not preserved: %+v", out.PlannerExclusions)
 	}
 	if !out.StartedAt.Equal(started) {
 		t.Errorf("startedAt = %v, want %v", out.StartedAt, started)

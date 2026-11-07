@@ -20,6 +20,7 @@ func ResolveForModel(model string) []*CustomProvider {
 	defer Mu.Unlock()
 	var cs []providerCand
 	now := time.Now()
+	legacyOwners := providerLegacyOwnerCountsLocked()
 	for _, p := range CustomProviders {
 		if !p.Enabled {
 			continue
@@ -27,6 +28,9 @@ func ResolveForModel(model string) []*CustomProvider {
 		for _, m := range p.ModelIDs {
 			if m != model {
 				continue
+			}
+			if !providerOfferingEligibleScoped(*p, model, providerMayInheritLegacy(*p, model, legacyOwners)) {
+				break
 			}
 			if until, cool := Cooldowns[p.ID+":"+model]; cool && now.Before(until) {
 				break // 该 provider 的该模型冷却中
@@ -224,6 +228,7 @@ func ResolveNamedForModel(model, name string) []*CustomProvider {
 	}
 	var cs []providerCand
 	now := time.Now()
+	legacyOwners := providerLegacyOwnerCountsLocked()
 	for _, p := range CustomProviders {
 		if !p.Enabled || !strings.EqualFold(strings.TrimSpace(p.Name), name) {
 			continue
@@ -231,6 +236,9 @@ func ResolveNamedForModel(model, name string) []*CustomProvider {
 		for _, m := range p.ModelIDs {
 			if m != model {
 				continue
+			}
+			if !providerOfferingEligibleScoped(*p, model, providerMayInheritLegacy(*p, model, legacyOwners)) {
+				break
 			}
 			if until, cool := Cooldowns[p.ID+":"+model]; cool && now.Before(until) {
 				break // 该 provider 的该模型冷却中

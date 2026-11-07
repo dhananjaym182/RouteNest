@@ -3,13 +3,26 @@ let _connFlows = [];
 let _connList = [];
 let _loginSessionId = '';
 let _loginPollTimer = null;
+let _loginGeneration = 0;
 
 // 流程 key → 用户可读名由后端 /connections 的 flowLabels 提供（规范 provider
 // 目录的投影）；目录缺标签时回落实体 key，前端不再维护并行表。
 let _flowLabels = {};
+let _connLoadPromise = null;
+let _connLoadFailed = false;
 function flowLabel(p) { return t(_flowLabels[p] || p); }
 
-async function loadConnections() {
+async function loadConnections(fresh) {
+  // A mutation must not reuse a GET whose snapshot predates that mutation.
+  if (fresh && _connLoadPromise) await _connLoadPromise;
+  if (_connLoadPromise) return _connLoadPromise;
+  const pending = _connLoadPromise = loadConnectionSnapshot();
+  try { return await pending; }
+  finally { if (_connLoadPromise === pending) _connLoadPromise = null; }
+}
+
+async function loadConnectionSnapshot() {
+  _connLoadFailed = false;
   try {
     const d = await api('GET', '/connections');
     const r = d.data || {};
@@ -17,6 +30,7 @@ async function loadConnections() {
     _connList = r.connections || [];
     _flowLabels = r.flowLabels || {};
   } catch (e) {
+    _connLoadFailed = true;
     _connFlows = []; _connList = []; _flowLabels = {};
   }
   renderConnectionProviders();
@@ -67,7 +81,7 @@ function renderConnectionProviders() {
       if (reauth) state += ' · <span class="warn-txt">' + reauth + ' ' + t('需重新登录') + '</span>';
       state += '</span>';
     }
-    const action = '<button class="btn btn-sm' + (has ? '' : ' btn-primary') + '" onclick="startProviderLogin(\'' + escAttr(p) + '\', this)">' +
+    const action = '<button class="btn btn-sm' + (has ? '' : ' btn-primary') + '" onclick="openProviderSetup(\'oauth\',\'' + escAttr(p) + '\')">' +
       t(has ? '添加账号' : '连接') + '</button>';
     return '<div class="conn-provider-tile' + (has ? ' connected' : '') + '">' +
       '<div class="conn-tile-main">' +
@@ -171,6 +185,7 @@ function toggleConnStats(id, btn) {
 
 function startProviderLogin(provider, btn) {
   if (!provider) return;
+  closeDeviceLogin();
   const title = _('connLoginTitle');
   if (title) title.textContent = t('设备码登录') + ' · ' + flowLabel(provider);
   _('connLoginCode').textContent = '';
@@ -179,10 +194,11 @@ function startProviderLogin(provider, btn) {
   _('connLoginCode').parentElement.style.display = '';
   _('connLoginStatus').innerHTML = '<span class="loading"></span> ' + t('发起中...');
   _('connLoginModal').style.display = 'flex';
-  beginDeviceLogin(btn, provider);
+  return beginDeviceLogin(btn, provider);
 }
 
 function closeDeviceLogin() {
+  _loginGeneration++;
   if (_loginPollTimer) { clearInterval(_loginPollTimer); _loginPollTimer = null; }
   _loginSessionId = '';
   const m = _('connLoginModal');
@@ -190,17 +206,21 @@ function closeDeviceLogin() {
 }
 
 async function beginDeviceLogin(btn, provider) {
+  const generation = ++_loginGeneration;
   provider = provider || 'kilocode';
   const orig = btn ? btn.innerHTML : '';
   if (btn) { btn.disabled = true; btn.innerHTML = '<span class="loading"></span> ' + t('发起中...'); }
+  const setupContext = typeof _providerSetupAuthContext === 'undefined' ? null : _providerSetupAuthContext;
   try {
     const d = await api('POST', '/connections/login/start', { provider: provider });
+    if (generation !== _loginGeneration) return;
     const r = d.data || {};
     if (r.error) {
       _('connLoginStatus').innerHTML = renderTestResultHTML(false, r.error);
       return;
     }
     _loginSessionId = r.sessionId;
+    if (typeof providerSetupLoginStarted === 'function') providerSetupLoginStarted(provider, r.sessionId, setupContext);
     _('connLoginCode').textContent = r.userCode || '';
     // Qoder identifies the device by nonce+verifier: the user just opens the
     // link and approves in the browser, there is no code to type.
@@ -219,7 +239,7 @@ async function beginDeviceLogin(btn, provider) {
     if (_loginPollTimer) clearInterval(_loginPollTimer);
     _loginPollTimer = setInterval(pollDeviceLogin, 2000);
   } catch (e) {
-    _('connLoginStatus').innerHTML = renderTestResultHTML(false, e.message);
+    if (generation === _loginGeneration) _('connLoginStatus').innerHTML = renderTestResultHTML(false, e.message);
   } finally {
     if (btn) { btn.disabled = false; btn.innerHTML = orig; }
   }
@@ -227,8 +247,12 @@ async function beginDeviceLogin(btn, provider) {
 
 async function pollDeviceLogin() {
   if (!_loginSessionId) return;
+  const sessionId = _loginSessionId;
+  const generation = _loginGeneration;
+  const setupContext = typeof _providerSetupAuthContext === 'undefined' ? null : _providerSetupAuthContext;
   try {
-    const d = await api('GET', '/connections/login/status?sessionId=' + encodeURIComponent(_loginSessionId));
+    const d = await api('GET', '/connections/login/status?sessionId=' + encodeURIComponent(sessionId));
+    if (sessionId !== _loginSessionId || generation !== _loginGeneration) return;
     const r = d.data || {};
     if (!r.done) return;
     clearInterval(_loginPollTimer); _loginPollTimer = null;
@@ -236,7 +260,8 @@ async function pollDeviceLogin() {
       const email = r.email || (r.connection && r.connection.email) || '';
       toast(t('登录成功') + (email ? ': ' + email : ''), 'success');
       closeDeviceLogin();
-      loadConnections();
+      await loadConnections(true);
+      if (typeof providerSetupLoginComplete === 'function') providerSetupLoginComplete(r.connection, sessionId, setupContext);
     } else {
       _('connLoginStatus').innerHTML = renderTestResultHTML(false, r.error || t('登录失败'));
     }
@@ -466,12 +491,14 @@ async function submitConnectionImport(btn) {
   };
   const orig = btn ? btn.innerHTML : '';
   if (btn) { btn.disabled = true; btn.innerHTML = '<span class="loading"></span> ' + t('保存中...'); }
+  const setupContext = typeof _providerSetupAuthContext === 'undefined' ? null : _providerSetupAuthContext;
   try {
-    await api('POST', '/connections/import', body);
+    const imported = await api('POST', '/connections/import', body);
     connImpShowResult(true, t('连接已保存') + ' · ' + provider);
     toast(t('连接已保存'), 'success');
     _('connImpToken').value = '';
-    loadConnections();
+    await loadConnections(true);
+    if (typeof providerSetupLoginComplete === 'function') providerSetupLoginComplete(imported.data && imported.data.connection, null, setupContext);
   } catch (e) {
     connImpShowResult(false, t('保存失败: ') + e.message);
     toast(t('保存失败: ') + e.message, 'error');
@@ -652,7 +679,7 @@ async function submitConnBatch(btn) {
     connBatchRenderResult(r);
     toast(t('导入完成') + ' · ' + t('成功 ') + imported + t(' · 失败 ') + failed,
       failed ? (imported ? 'info' : 'error') : 'success');
-    if (imported > 0) loadConnections();
+    if (imported > 0) loadConnections(true);
     if (!failed) {
       if (ta) ta.value = '';
       const nameEl = _('connBatchFileName'); if (nameEl) nameEl.textContent = '';
@@ -679,7 +706,7 @@ async function testConnection(id, cell) {
     const d = await api('POST', '/connections/test', { id });
     const r = d.data || {};
     if (out) out.innerHTML = renderTestResultHTML(r.ok, r.ok ? (t('可用') + ' · HTTP ' + r.status) : (r.error || t('失败')));
-    loadConnections();
+    loadConnections(true);
   } catch (e) {
     if (out) out.innerHTML = renderTestResultHTML(false, friendlyTestError(e));
   } finally {
@@ -692,7 +719,7 @@ async function deleteConnection(id) {
   try {
     await api('POST', '/connections/delete', { id });
     toast(t('已删除'), 'success');
-    loadConnections();
+    loadConnections(true);
   } catch (e) { toast(t('删除失败: ') + e.message, 'error'); }
 }
 

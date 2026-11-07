@@ -201,11 +201,17 @@ func Finalize(entry *requestLog, usage openaichat.Usage, firstOutputAt time.Time
 		}
 	}
 
-	// provider token 配额归集：ID 归因且上游回报了计量 token，按该 provider 的
-	// 配额窗口（monthly/daily）累加（失败但带着 usage 的请求同样计入：token
-	// 已经消耗）。
-	if entry.ProviderID != "" && entry.TotalTokens > 0 {
-		providers.RecordTokenUsage(entry.ProviderID, entry.TotalTokens, providers.TokenWindow(entry.ProviderID))
+	// Provider token accounting uses the durable admission identity and its
+	// captured UTC windows. Enforcement reads the provider's configured window;
+	// failed requests with reported usage still count because tokens were spent.
+	if entry.ProviderID != "" && entry.BudgetAttemptID != "" && entry.TotalTokens > 0 {
+		eventID := entry.ID + "/usage/final"
+		if entry.ID == "" {
+			eventID = fmt.Sprintf("req_%d/usage/final", entry.StartedAt.UnixNano())
+		}
+		if err := providers.RecordTokenUsage(entry.ProviderID, entry.BudgetAttemptID, eventID, entry.TotalTokens); err != nil {
+			log.Printf("provider %s token accounting failed: %v", entry.ProviderID, err)
+		}
 	}
 
 	appendRequestLog(*entry)

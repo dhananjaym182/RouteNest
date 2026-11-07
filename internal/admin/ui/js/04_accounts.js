@@ -421,7 +421,7 @@ async function testAccount(id, btn) {
     } else {
       toast(t('测试失败：') + esc(r ? r.email : '?') + ' · ' + (r ? r.error : t('未知错误')), 'error');
     }
-    loadAccounts(); loadStats();
+    loadAccounts(); loadStats(); loadGlobal(false);
   } catch (e) { toast(t('测试失败: ') + e.message, 'error'); }
   if (btn) { btn.disabled = false; btn.innerHTML = orig; }
 }
@@ -441,7 +441,7 @@ async function testAllAccounts(btn) {
       const failed = results.filter(r => !r.ok).map(r => esc(r.email) + '(' + r.error + ')').join('，');
       toast(t('测试完成：') + ok + t(' 成功 / ') + fail + t(' 失败 · ') + failed, 'error');
     }
-    loadAccounts(); loadStats();
+    loadAccounts(); loadStats(); loadGlobal(false);
   } catch (e) { toast(t('测试失败: ') + e.message, 'error'); }
   if (btn) { btn.disabled = false; btn.innerHTML = orig; }
 }
@@ -453,7 +453,7 @@ async function deleteAccount(id, btn) {
   try {
     await api('POST', '/accounts/delete', { accountId: id });
     toast(t('账号已删除'), 'success');
-    loadAccounts(); loadStats();
+    loadAccounts(); loadStats(); loadGlobal(false);
   } catch (e) { toast(t('删除失败: ') + e.message, 'error'); }
   finally { if (btn) { btn.disabled = false; btn.innerHTML = orig; } }
 }
@@ -463,7 +463,7 @@ async function resetAccount(id) {
   try {
     await api('POST', '/accounts/reset', { accountId: id });
     toast(t('账号已重置'), 'success');
-    loadAccounts(); loadStats();
+    loadAccounts(); loadStats(); loadGlobal(false);
   } catch (e) { toast(t('重置失败: ') + e.message, 'error'); }
 }
 
@@ -472,7 +472,7 @@ async function deleteAllAccounts() {
   try {
     await api('POST', '/accounts/delete-all', {});
     toast(t('全部账号已删除'), 'success');
-    loadAccounts(); loadStats();
+    loadAccounts(); loadStats(); loadGlobal(false);
   } catch (e) { toast(t('删除失败: ') + e.message, 'error'); }
 }
 
@@ -482,7 +482,7 @@ async function refreshAllTokens(btn) {
   try {
     await api('POST', '/accounts/refresh-all', {});
     toast(t('全部 Token 已刷新'), 'success');
-    loadAccounts(); loadStats();
+    loadAccounts(); loadStats(); loadGlobal(false);
   } catch (e) { toast(t('刷新失败: ') + e.message, 'error'); }
   finally { if (btn) { btn.disabled = false; btn.innerHTML = orig; } }
 }
@@ -517,7 +517,7 @@ async function startOAuth() {
             _('oauthProgress').style.display = 'none';
             _('oauthResult').innerHTML = '<div class="save-result ok">' + t('账号添加成功: ')+ esc(r.data.email) + '</div>';
             _('oauthResult').style.display = 'block';
-            loadAccounts(); loadStats();
+            loadAccounts(); loadStats(); loadGlobal(false);
             toast(t('账号添加成功！'), 'success');
           } else {
             _('oauthStatus').textContent = t('失败: ') + (r.data.error || t('未知错误'));
@@ -552,7 +552,7 @@ function tokenFormResult(ok, html) {
 }
 // 提交后引导：跳到账号列表核对结果
 function viewAccountsLink() {
-  return '<a href="#" onclick="switchTab(\'accounts\')" class="lnk-a ml-8">' + t('查看账号列表') + ' →</a>';
+  return '<a href="#credentials" onclick="showPageSubTab(\'accounts\',\'conns\');return false" class="lnk-a ml-8">' + t('查看账号列表') + ' →</a>';
 }
 
 async function addByToken(btn) {
@@ -568,7 +568,7 @@ async function addByToken(btn) {
     toast(t('账号添加成功: ') + (d.data.email || ''), 'success');
     _('tokenInput').value = '';
     _('tokenEmail').value = '';
-    loadAccounts(); loadStats();
+    loadAccounts(); loadStats(); loadGlobal(false);
   } catch (e) {
     tokenFormResult(false, esc(e.message));
     toast(t('添加失败: ') + e.message, 'error');
@@ -647,7 +647,7 @@ async function batchImport(btn) {
     batchFormResult(true, esc(d.message || t('导入完成')) + viewAccountsLink());
     toast(d.message || t('导入完成'), 'success');
     _('batchInput').value = '';
-    loadAccounts(); loadStats();
+    loadAccounts(); loadStats(); loadGlobal(false);
   } catch (e) {
     batchFormResult(false, esc(e.message));
     toast(t('导入失败: ') + e.message, 'error');
@@ -664,7 +664,7 @@ async function handleFileImport(event) {
     const d = await api('POST', '/batch-import', { tokens });
     const imported = (d.data && typeof d.data.imported === 'number') ? d.data.imported : tokens.length;
     toast(d.message || t('导入了 ') + imported + t(' 个账号'), 'success');
-    loadAccounts(); loadStats();
+    loadAccounts(); loadStats(); loadGlobal(false);
   } catch (e) { toast(t('导入失败: ') + e.message, 'error'); }
   event.target.value = '';
 }

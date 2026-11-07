@@ -231,6 +231,7 @@ func PresetEntries() []PresetEntry {
 func ResetCooldowns(id, model string) int {
 	Mu.Lock()
 	var removed int
+	var scopes []domain.AvailabilityScope
 	for key := range Cooldowns {
 		pid := strings.SplitN(key, ":", 2)[0]
 		if pid != id {
@@ -245,6 +246,9 @@ func ResetCooldowns(id, model string) int {
 				continue
 			}
 		}
+		if scope, ok := legacyCooldownScope(key); ok {
+			scopes = append(scopes, scope)
+		}
 		delete(Cooldowns, key)
 		removed++
 	}
@@ -252,6 +256,7 @@ func ResetCooldowns(id, model string) int {
 		saveProviderCooldownsLocked()
 	}
 	Mu.Unlock()
+	recoverLegacyCooldownScopes(scopes)
 	if removed > 0 {
 		log.Printf("admin: provider cooldown reset id=%s model=%s removed=%d", id, model, removed)
 	}

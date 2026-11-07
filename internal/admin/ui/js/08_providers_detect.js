@@ -42,9 +42,11 @@ async function recheckProvider(id, btn) {
       _provRowResults['recheck:' + id] = { ok: true, text: bits.length ? bits.join(' · ') : t('无变化') };
       if (out) out.innerHTML = renderTestResultHTML(true, _provRowResults['recheck:' + id].text);
     }
-    loadProviders();
+    await loadProviders();
+    await loadModels();
   } catch (e) {
     toast(t('检测失败') + ': ' + e.message, 'error');
+  } finally {
     if (btn) { btn.disabled = false; btn.innerHTML = orig; }
   }
 }
@@ -120,11 +122,15 @@ async function toggleProvider(id, enable, btn) {
     await api('POST', '/providers/save', p);
     toast(t(enable ? '已启用' : '已停用') + ': ' + p.name, 'success');
     loadProviders();
+    loadGlobal(false);
   } catch (e) { toast(t('保存失败: ') + e.message, 'error'); }
   finally { if (btn) { btn.disabled = false; btn.innerHTML = orig; } }
 }
 
 function showProviderEditor(p) {
+  if (typeof _providerSetupAuthContext !== 'undefined') _providerSetupAuthContext = null;
+  const authSetup = _('providerAuthSetup');
+  if (authSetup) { authSetup.hidden = true; authSetup.innerHTML = ''; }
   _editingProviderId = p ? p.id : '';
   _previewAfterSave = false;
   // 切换编辑对象 = 新上下文：丢弃上一轮的预览批次缓存（池/源变化后不得复用旧统计）
@@ -306,6 +312,7 @@ async function saveProvider(btn) {
     toast(t('Provider 已保存'), 'success');
     hideProviderEditor();
     loadProviders();
+    loadGlobal(false);
     // 保存后池状态已变：先失效预览缓存，再按需重新拉取（不能复用保存前的批次）
     invalidateImportPreviewCache();
     // 从免费/免密钥预设新建后，自动跑一次分级预览，弹出勾选导入（仍受控，不静默写入）
@@ -345,6 +352,7 @@ async function deleteProvider(id) {
     invalidateImportPreviewCache('id:' + id);
     toast(t('已删除'), 'success');
     loadProviders();
+    loadGlobal(false);
   } catch (e) { toast(t('删除失败: ') + e.message, 'error'); }
 }
 

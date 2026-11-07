@@ -294,9 +294,17 @@ type bootstrapBuffer struct {
 	maxFrames int
 	suppress  bool
 	committed bool
+	onCommit  func()
 }
 
-func newBootstrapBuffer(w http.ResponseWriter) *bootstrapBuffer {
+func firstCallback(callbacks []func()) func() {
+	if len(callbacks) == 0 {
+		return nil
+	}
+	return callbacks[0]
+}
+
+func newBootstrapBuffer(w http.ResponseWriter, onCommit ...func()) *bootstrapBuffer {
 	cfg := liveConfig().Stream
 	f, _ := w.(http.Flusher)
 	maxBytes := cfg.BootstrapBufferBytes
@@ -307,12 +315,16 @@ func newBootstrapBuffer(w http.ResponseWriter) *bootstrapBuffer {
 	if maxFrames <= 0 {
 		maxFrames = 64
 	}
-	return &bootstrapBuffer{
+	buffer := &bootstrapBuffer{
 		w: w, flusher: f,
 		maxBytes:  maxBytes,
 		maxFrames: maxFrames,
 		suppress:  cfg.SuppressKeepaliveBeforeFirstToken,
 	}
+	if len(onCommit) > 0 {
+		buffer.onCommit = onCommit[0]
+	}
+	return buffer
 }
 
 func (b *bootstrapBuffer) Header() http.Header { return b.w.Header() }
@@ -354,6 +366,9 @@ func (b *bootstrapBuffer) Commit() {
 		return
 	}
 	b.committed = true
+	if b.onCommit != nil {
+		b.onCommit()
+	}
 	if len(b.buf) > 0 {
 		_, _ = b.w.Write(b.buf)
 		b.buf = nil
@@ -570,7 +585,7 @@ func handleStreamResponse(ctx context.Context, w http.ResponseWriter, upstream *
 
 // serveResponsesStream runs a Responses stream attempt with the same bootstrap
 // retry semantics as serveChatStream.
-func serveResponsesStream(ctx context.Context, w http.ResponseWriter, resp *http.Response, reqLog *domain.RequestLog, acc *domain.Account, retry func() (*http.Response, *domain.Account, error)) {
+func serveResponsesStream(ctx context.Context, w http.ResponseWriter, resp *http.Response, reqLog *domain.RequestLog, acc *domain.Account, retry func() (*http.Response, *domain.Account, error), onCommit ...func()) {
 	copyPassthroughHeaders(w, resp.Header)
 	newSSESink(w).commitSSEHeaders()
 	run := func(ctx context.Context, bw *bootstrapBuffer, current *http.Response, currentAcc *domain.Account) streamResult {
@@ -579,7 +594,7 @@ func serveResponsesStream(ctx context.Context, w http.ResponseWriter, resp *http
 	serveWithBootstrap(ctx, w, resp, acc, reqLog, retry, "responses stream",
 		"upstream returned an empty stream",
 		func(w http.ResponseWriter, msg string) { emitResponsesStreamError(w, "upstream_stream_empty", msg) },
-		run)
+		run, firstCallback(onCommit))
 }
 
 // serveWithBootstrap is the shared retry loop for the chat and Responses
@@ -597,11 +612,12 @@ func serveWithBootstrap(
 	label, emptyMsg string,
 	emitError func(http.ResponseWriter, string),
 	run func(context.Context, *bootstrapBuffer, *http.Response, *domain.Account) streamResult,
+	onCommit func(),
 ) {
 	maxBoot := effectiveBootstrapRetries()
 	current, currentAcc := resp, acc
 	for attempt := 0; ; attempt++ {
-		bw := newBootstrapBuffer(w)
+		bw := newBootstrapBuffer(w, onCommit)
 		res := run(ctx, bw, current, currentAcc)
 		if res.clientGone {
 			return
@@ -628,8 +644,9 @@ func serveWithBootstrap(
 			if err == nil {
 				err = fmt.Errorf("retry returned no response")
 			}
-			emitError(w, message+": "+err.Error())
-			requestlog.Finalize(reqLog, res.usage, res.firstOutputAt, reqLog.StartedAt, false, message)
+			detail := message + ": " + err.Error()
+			emitError(w, detail)
+			requestlog.Finalize(reqLog, res.usage, res.firstOutputAt, reqLog.StartedAt, false, detail)
 			return
 		}
 		current, currentAcc = retryResp, retryAcc

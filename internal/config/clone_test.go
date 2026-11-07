@@ -11,7 +11,10 @@ import (
 func fullProxy() *Proxy {
 	now := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
 	return &Proxy{
-		Strategy:   "round_robin",
+		Strategy:     "round_robin",
+		DispatchMode: DispatchModeEnforce,
+		RuntimeState: RuntimeStatePolicy{OutagePolicy: RuntimeStateFailOpen, AcknowledgeFailOpen: true,
+			DeploymentTopology: RuntimeStateMultiReplica, SnapshotMaxAgeSeconds: 90},
 		Headers:    map[string]string{"X-A": "1"},
 		ModelChain: []string{"m1", "m2"},
 		OnlyFree:   true,

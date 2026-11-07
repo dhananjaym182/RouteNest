@@ -11,10 +11,38 @@ import (
 // ProxyPath is the data file holding global proxy settings and combos.
 const ProxyPath = ".routenest-config.json"
 
+// DispatchMode controls the reversible Phase 2 routing cutover. Shadow builds
+// and compares the unified plan while retaining the legacy execution path;
+// enforce executes that plan; legacy is the explicit rollback mode.
+type DispatchMode string
+
+const (
+	DispatchModeLegacy  DispatchMode = "legacy"
+	DispatchModeShadow  DispatchMode = "shadow"
+	DispatchModeEnforce DispatchMode = "enforce"
+)
+
+func (mode DispatchMode) Valid() bool {
+	switch mode {
+	case DispatchModeLegacy, DispatchModeShadow, DispatchModeEnforce:
+		return true
+	default:
+		return false
+	}
+}
+
+func (mode DispatchMode) normalized() DispatchMode {
+	if mode.Valid() {
+		return mode
+	}
+	return DispatchModeShadow
+}
+
 // Proxy is the persisted global proxy configuration.
 type Proxy struct {
-	Strategy string            `json:"strategy"`
-	Headers  map[string]string `json:"headers"`
+	Strategy     string            `json:"strategy"`
+	DispatchMode DispatchMode      `json:"dispatchMode"`
+	Headers      map[string]string `json:"headers"`
 	// ModelChain is the administrator-configured fallback order used when a
 	// model is cooling down. Empty means the built-in free chain.
 	ModelChain []string `json:"modelChain,omitempty"`
@@ -34,6 +62,7 @@ type Proxy struct {
 	Retry             RetryPolicy           `json:"retry,omitempty"`
 	Stream            StreamPolicy          `json:"stream,omitempty"`
 	SessionAffinity   SessionAffinityPolicy `json:"sessionAffinity,omitempty"`
+	RuntimeState      RuntimeStatePolicy    `json:"runtimeState"`
 	ModelAliases      []ModelAlias          `json:"modelAliases,omitempty"`
 	ExcludedModels    []string              `json:"excludedModels,omitempty"`
 	RequestErrorRules []RequestErrorRule    `json:"requestErrorRules,omitempty"`
@@ -42,7 +71,9 @@ type Proxy struct {
 // DefaultProxy returns the built-in proxy configuration.
 func DefaultProxy() *Proxy {
 	return &Proxy{
-		Strategy: "round_robin",
+		Strategy:     "round_robin",
+		DispatchMode: DispatchModeShadow,
+		RuntimeState: DefaultRuntimeStatePolicy(),
 		Headers: map[string]string{
 			"User-Agent":         "Cline/3.0.47",
 			"HTTP-Referer":       "https://cline.bot",
@@ -59,6 +90,8 @@ func DefaultProxy() *Proxy {
 
 // Normalize restores an unknown strategy and clamps policy values.
 func (c *Proxy) Normalize() {
+	c.DispatchMode = c.DispatchMode.normalized()
+	c.RuntimeState.Normalize()
 	switch c.Strategy {
 	case "round_robin", "weighted_round_robin", "fill", "random", "quality":
 	default:

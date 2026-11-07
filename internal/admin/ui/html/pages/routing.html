@@ -23,6 +23,40 @@
     <div class="route-flow-node"><span>05</span><small>失败后的兜底</small><strong id="routeFlowFallback">加载中…</strong></div>
   </div>
 
+  <div class="section route-inspector" id="routeInspectorSection">
+    <div class="section-title">模型路由检查</div>
+    <div class="section-desc">仅展示当前配置投影与已存储请求记录，不代表实时路由决策。选择模型后查看候选与回退配置，再对照最近一次已存储请求。</div>
+    <div class="section-body">
+      <div class="ri-controls">
+        <label class="ri-field">
+          <span>逻辑模型</span>
+          <select id="routeInspectorModel" onchange="selectRouteInspectorModel(this.value)"><option value="">加载中…</option></select>
+        </label>
+        <button type="button" class="btn btn-sm ri-refresh" onclick="loadRouteInspector(true)">刷新</button>
+        <span class="ri-hint">只读取现有接口，不计算资格或路由顺序</span>
+      </div>
+      <div id="routeInspectorError" class="ri-error" hidden></div>
+      <div id="routeInspectorSummary" class="ri-summary"><div class="ri-hint">加载中…</div></div>
+      <div class="ri-block">
+        <div class="ri-block-head">
+          <h3>候选与回退配置</h3>
+          <span class="ri-block-tag config">配置预览</span>
+        </div>
+        <div class="ri-hint ri-block-note">以下为当前配置与投影事实，不是预测，也不代表请求会被路由到这些候选项。</div>
+        <div id="routeInspectorCandidates"></div>
+        <div class="ri-subhead">回退配置（配置，不是预测）</div>
+        <div id="routeInspectorFallback"></div>
+      </div>
+      <div class="ri-block">
+        <div class="ri-block-head">
+          <h3>近期请求</h3>
+          <span class="ri-block-tag runtime">运行请求追踪</span>
+        </div>
+        <div id="routeInspectorRuntime"></div>
+      </div>
+    </div>
+  </div>
+
   <div class="subtabs page-subtabs" data-page="routing">
     <div class="subtab active" data-sub="config">路由策略</div>
     <div class="subtab" data-sub="tuning">运行调优</div>

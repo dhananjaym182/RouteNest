@@ -63,6 +63,8 @@ func (h *Config) address(host string) string {
 // Get handles GET /admin/api/config.
 func (h *Config) Get(w http.ResponseWriter, r *http.Request) {
 	cfg := h.Proxy()
+	runtimeState := cfg.RuntimeState
+	runtimeState.Normalize()
 	host := ""
 	if h.ListenHost != nil {
 		host = h.ListenHost()
@@ -71,6 +73,7 @@ func (h *Config) Get(w http.ResponseWriter, r *http.Request) {
 		"address":      h.address(host),
 		"host":         host,
 		"strategy":     cfg.Strategy,
+		"dispatchMode": cfg.DispatchMode,
 		"modelChain":   cfg.ModelChain,
 		"version":      h.Version,
 		"poolPath":     h.PoolPath,
@@ -81,6 +84,7 @@ func (h *Config) Get(w http.ResponseWriter, r *http.Request) {
 		"retry":                     cfg.Retry,
 		"stream":                    cfg.Stream,
 		"sessionAffinity":           cfg.SessionAffinity,
+		"runtimeState":              runtimeState,
 		"modelAliases":              cfg.ModelAliases,
 		"excludedModels":            cfg.ExcludedModels,
 		"requestErrorRules":         cfg.RequestErrorRules,
@@ -121,31 +125,59 @@ func (h *Config) Update(w http.ResponseWriter, r *http.Request) {
 	var chainUnverified []string
 
 	var req struct {
-		Strategy     string            `json:"strategy"`
-		Headers      map[string]string `json:"headers"`
-		DefaultModel string            `json:"defaultModel"`
-		Host         string            `json:"host"`
-		ModelChain   *[]string         `json:"modelChain"`
-		OnlyFree     *bool             `json:"onlyFree"`
+		Strategy     string                  `json:"strategy"`
+		DispatchMode *configpkg.DispatchMode `json:"dispatchMode"`
+		Headers      map[string]string       `json:"headers"`
+		DefaultModel string                  `json:"defaultModel"`
+		Host         string                  `json:"host"`
+		ModelChain   *[]string               `json:"modelChain"`
+		OnlyFree     *bool                   `json:"onlyFree"`
 
-		Retry               *configpkg.RetryPolicy           `json:"retry"`
-		Stream              *configpkg.StreamPolicy          `json:"stream"`
-		SessionAffinity     *configpkg.SessionAffinityPolicy `json:"sessionAffinity"`
-		ModelAliases        *[]configpkg.ModelAlias          `json:"modelAliases"`
-		ExcludedModels      *[]string                        `json:"excludedModels"`
-		RequestErrorRules   *[]configpkg.RequestErrorRule    `json:"requestErrorRules"`
-		MaxRequestBodyBytes *int64                           `json:"maxRequestBodyBytes"`
-		PassthroughHeaders  *bool                            `json:"passthroughHeaders"`
-		NonstreamKeepalive  *int                             `json:"nonstreamKeepaliveSeconds"`
+		Retry           *configpkg.RetryPolicy           `json:"retry"`
+		Stream          *configpkg.StreamPolicy          `json:"stream"`
+		SessionAffinity *configpkg.SessionAffinityPolicy `json:"sessionAffinity"`
+		RuntimeState    *struct {
+			OutagePolicy          *configpkg.RuntimeStateOutagePolicy `json:"outagePolicy"`
+			AcknowledgeFailOpen   *bool                               `json:"acknowledgeFailOpen"`
+			DeploymentTopology    *configpkg.RuntimeStateTopology     `json:"deploymentTopology"`
+			SnapshotMaxAgeSeconds *int                                `json:"snapshotMaxAgeSeconds"`
+		} `json:"runtimeState"`
+		ModelAliases        *[]configpkg.ModelAlias       `json:"modelAliases"`
+		ExcludedModels      *[]string                     `json:"excludedModels"`
+		RequestErrorRules   *[]configpkg.RequestErrorRule `json:"requestErrorRules"`
+		MaxRequestBodyBytes *int64                        `json:"maxRequestBodyBytes"`
+		PassthroughHeaders  *bool                         `json:"passthroughHeaders"`
+		NonstreamKeepalive  *int                          `json:"nonstreamKeepaliveSeconds"`
 	}
 	if err := json.Unmarshal(body, &req); err != nil {
 		httpx.WriteAPI(w, http.StatusBadRequest, httpx.Response{Error: h.msg(r, "invalid_json")})
 		return
 	}
+	if req.DispatchMode != nil && !req.DispatchMode.Valid() {
+		httpx.WriteAPI(w, http.StatusBadRequest, httpx.Response{Error: h.msg(r, "invalid_dispatch_mode")})
+		return
+	}
 
-	cfg := h.Proxy()
+	cfg := h.Proxy().Clone()
 	changed := false
 	restarting := false
+
+	// Validate the merged durability policy before applying any patch. Absent
+	// fields retain their effective values; explicitly invalid fields are a 400.
+	runtimeState := cfg.RuntimeState
+	runtimeState.Normalize()
+	if req.RuntimeState != nil {
+		runtimeState.OutagePolicy = valueOr(req.RuntimeState.OutagePolicy, runtimeState.OutagePolicy)
+		runtimeState.AcknowledgeFailOpen = valueOr(req.RuntimeState.AcknowledgeFailOpen, runtimeState.AcknowledgeFailOpen)
+		runtimeState.DeploymentTopology = valueOr(req.RuntimeState.DeploymentTopology, runtimeState.DeploymentTopology)
+		runtimeState.SnapshotMaxAgeSeconds = valueOr(req.RuntimeState.SnapshotMaxAgeSeconds, runtimeState.SnapshotMaxAgeSeconds)
+		if err := runtimeState.Validate(); err != nil {
+			httpx.WriteAPI(w, http.StatusBadRequest, httpx.Response{Error: err.Error()})
+			return
+		}
+		cfg.RuntimeState = runtimeState
+		changed = true
+	}
 
 	// Validate model policies before touching the live config: a bad alias,
 	// duplicate, or unusable error rule must be a 400, not a silent drop.
@@ -185,6 +217,11 @@ func (h *Config) Update(w http.ResponseWriter, r *http.Request) {
 			httpx.WriteAPI(w, http.StatusBadRequest, httpx.Response{Error: h.msg(r, "invalid_strategy")})
 			return
 		}
+	}
+
+	if req.DispatchMode != nil {
+		cfg.DispatchMode = *req.DispatchMode
+		changed = true
 	}
 
 	if req.Headers != nil {
@@ -332,6 +369,7 @@ func (h *Config) Update(w http.ResponseWriter, r *http.Request) {
 
 	httpx.WriteAPI(w, http.StatusOK, httpx.Response{Success: true, Data: map[string]any{
 		"strategy":                  cfg.Strategy,
+		"dispatchMode":              cfg.DispatchMode,
 		"headers":                   cfg.Headers,
 		"onlyFree":                  cfg.OnlyFree,
 		"defaultModel":              h.DefaultModel(),
@@ -342,6 +380,7 @@ func (h *Config) Update(w http.ResponseWriter, r *http.Request) {
 		"retry":                     cfg.Retry,
 		"stream":                    cfg.Stream,
 		"sessionAffinity":           cfg.SessionAffinity,
+		"runtimeState":              runtimeState,
 		"modelAliases":              cfg.ModelAliases,
 		"excludedModels":            cfg.ExcludedModels,
 		"requestErrorRules":         cfg.RequestErrorRules,

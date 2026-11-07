@@ -133,10 +133,7 @@ func TestModelImportPreviewApplyFlow(t *testing.T) {
 	oldPool := accounts.Pool
 	defer func() { accounts.Pool = oldPool }()
 	provider := &CustomProvider{ID: "imp1", Name: "ImpTest", BaseURL: srv.URL, Enabled: true, ModelIDs: []string{"legacy/manual-c", "legacy/remote-d"}}
-	oldProvs, oldLoaded := CustomProviders, Loaded
-	defer func() { CustomProviders, Loaded = oldProvs, oldLoaded }()
-	CustomProviders = []*CustomProvider{provider}
-	Loaded = true
+	installProviders(t, provider)
 
 	accounts.Pool = &AccountPool{Models: []Model{
 		{ID: "legacy/manual-c", Provider: "ImpTest", Cost: "free", Status: "active", Source: "provider", TierSignal: "manual"},
@@ -151,7 +148,7 @@ func TestModelImportPreviewApplyFlow(t *testing.T) {
 	if len(batch.Items) != 4 {
 		t.Fatalf("items: %+v", batch.Items)
 	}
-	if batch.Stats.Total != len(batch.Items) || batch.Stats.Protected != 2 {
+	if batch.Stats.Total != len(batch.Items) || batch.Stats.Protected != 1 || batch.Stats.NoChange != 1 {
 		t.Errorf("preview must carry server-computed stats: %+v", batch.Stats)
 	}
 	actions := map[string]string{}
@@ -161,8 +158,8 @@ func TestModelImportPreviewApplyFlow(t *testing.T) {
 	if actions["free/model-a:free"] != "add" || actions["paid/model-b"] != "add" {
 		t.Errorf("new models should be add: %v", actions)
 	}
-	if actions["legacy/manual-c"] != "protected" || actions["legacy/remote-d"] != "protected" {
-		t.Errorf("manual/remote entries must be protected: %v", actions)
+	if actions["legacy/manual-c"] != "protected" || actions["legacy/remote-d"] != "nochange" {
+		t.Errorf("provider manual state must be protected and same-ID built-in state must remain independent: %v", actions)
 	}
 
 	if _, err := ApplyImport(batch.ID, []string{"free/model-a:free", "paid/model-b", "legacy/manual-c", "legacy/remote-d"}); err != nil {
@@ -221,10 +218,7 @@ func TestSyncProviderModelsPreservesTierSignal(t *testing.T) {
 	provider := &CustomProvider{ID: "mix1", Name: "Mix", Enabled: true, ModelIDs: []string{"mixed/free-one", "mixed/legacy"}}
 	// Free=false → claimed cost=pass；tiered 条目应保持 free
 	provider.Free = false
-	oldProvs, oldLoaded := CustomProviders, Loaded
-	defer func() { CustomProviders, Loaded = oldProvs, oldLoaded }()
-	CustomProviders = []*CustomProvider{provider}
-	Loaded = true
+	installProviders(t, provider)
 
 	SyncModels()
 
@@ -256,10 +250,7 @@ func TestSyncProviderModelsSeedsFreeSignals(t *testing.T) {
 	provider := &CustomProvider{ID: "seed1", Name: "Seed", Enabled: true, Free: false, ModelIDs: []string{
 		"old/declared-chat:free", "approved/by-manual", "new/free-token-model", "new/plain-paid",
 	}}
-	oldProvs, oldLoaded := CustomProviders, Loaded
-	defer func() { CustomProviders, Loaded = oldProvs, oldLoaded }()
-	CustomProviders = []*CustomProvider{provider}
-	Loaded = true
+	installProviders(t, provider)
 
 	SyncModels()
 

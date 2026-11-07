@@ -30,16 +30,20 @@ func TestSaveLoadRoundTripExcludesToolNames(t *testing.T) {
 	path := filepath.Join(t.TempDir(), FileName)
 	started := time.Unix(1700000000, 0).UTC()
 	in := []domain.RequestLog{{
-		ID:         "req-1",
-		StartedAt:  started,
-		AccountID:  "acct-1",
-		Protocol:   "openai-chat",
-		Model:      "m1",
-		ComboID:    "c1",
-		Attempts:   []domain.AttemptLog{{Model: "m1", Outcome: "success"}},
-		ToolNames:  map[string]string{"t": "long_tool"},
-		OutputTPS:  9.5,
-		FinishedAt: started.Add(time.Second),
+		ID:        "req-1",
+		StartedAt: started,
+		AccountID: "acct-1",
+		Protocol:  "openai-chat",
+		Model:     "m1",
+		ComboID:   "c1",
+		Attempts: []domain.AttemptLog{{
+			Model: "m1", UpstreamModelID: "vendor/m1", Group: 1, Outcome: "success",
+			DispatchOutcome: "selected", CredentialID: "credential:1", EgressID: "egress:1",
+		}},
+		PlannerExclusions: []domain.PlannerExclusionLog{{ProviderID: "paid", Model: "m1", Reason: "not_free_eligible"}},
+		ToolNames:         map[string]string{"t": "long_tool"},
+		OutputTPS:         9.5,
+		FinishedAt:        started.Add(time.Second),
 	}}
 	if err := Save(path, in); err != nil {
 		t.Fatalf("save: %v", err)
@@ -57,6 +61,9 @@ func TestSaveLoadRoundTripExcludesToolNames(t *testing.T) {
 	}
 	if len(out) != 1 || out[0].ComboID != "c1" || len(out[0].Attempts) != 1 || out[0].OutputTPS != 9.5 {
 		t.Errorf("round trip lost data: %+v", out)
+	}
+	if out[0].Attempts[0].CredentialID != "credential:1" || out[0].Attempts[0].UpstreamModelID != "vendor/m1" || len(out[0].PlannerExclusions) != 1 {
+		t.Errorf("routing attribution lost: %+v", out[0])
 	}
 	if out[0].ToolNames != nil {
 		t.Errorf("ToolNames should not be restored from disk: %+v", out[0].ToolNames)

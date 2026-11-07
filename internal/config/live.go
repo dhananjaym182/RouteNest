@@ -67,7 +67,9 @@ func Publish(c *Proxy) {
 	}
 	Mu.Lock()
 	defer Mu.Unlock()
-	live.Store(c.Clone())
+	next := c.Clone()
+	next.RuntimeState.Normalize()
+	live.Store(next)
 	SaveLocked()
 }
 

@@ -112,23 +112,28 @@ func handleModelImportDiscard(w http.ResponseWriter, r *http.Request) {
 	httpx.WriteAPI(w, http.StatusOK, httpx.Response{Success: true})
 }
 
-// POST /admin/api/models/cost  body: {id, cost: "free"|"pass"|""}
+// POST /admin/api/models/cost  body: {providerId?, id, cost: "free"|"pass"|""}
+// providerId may be omitted only when the model is global or exactly one custom
+// provider declares it.
 func handleModelCost(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		httpx.WriteAPI(w, http.StatusMethodNotAllowed, httpx.Response{Error: "method_not_allowed"})
 		return
 	}
 	var req struct {
-		ID   string `json:"id"`
-		Cost string `json:"cost"`
+		ProviderID string `json:"providerId"`
+		ID         string `json:"id"`
+		Cost       string `json:"cost"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		httpx.WriteAPI(w, http.StatusBadRequest, httpx.Response{Error: "invalid_json"})
 		return
 	}
-	switch err := providers.SetModelCost(req.ID, req.Cost); {
+	switch err := providers.SetModelCost(req.ProviderID, req.ID, req.Cost); {
 	case errors.Is(err, providers.ErrInvalidModelCost):
 		httpx.WriteAPI(w, http.StatusBadRequest, httpx.Response{Error: err.Error()})
+	case errors.Is(err, providers.ErrAmbiguousModelOffering):
+		httpx.WriteAPI(w, http.StatusConflict, httpx.Response{Error: err.Error()})
 	case errors.Is(err, providers.ErrModelNotFound):
 		httpx.WriteAPI(w, http.StatusNotFound, httpx.Response{Error: err.Error()})
 	case err != nil:

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -154,8 +155,19 @@ func TestProviderStateHandlerSeparatesResetFromCooldown(t *testing.T) {
 		t.Fatalf("status = %d: %s", rec.Code, rec.Body.String())
 	}
 	var observations []domain.AvailabilityObservation
-	if err := json.Unmarshal(decodeProviderSystemData(t, rec)["observations"], &observations); err != nil {
+	data := decodeProviderSystemData(t, rec)
+	if err := json.Unmarshal(data["observations"], &observations); err != nil {
 		t.Fatalf("decode observations: %v", err)
+	}
+	var runtimeState domain.RuntimeStateHealth
+	if err := json.Unmarshal(data["runtimeState"], &runtimeState); err != nil {
+		t.Fatalf("decode runtime state: %v", err)
+	}
+	if want := providers.RuntimeStateHealth(); !reflect.DeepEqual(runtimeState, want) {
+		t.Fatalf("runtime state = %+v, want %+v", runtimeState, want)
+	}
+	if body := rec.Body.String(); strings.Contains(body, ".routenest-providers-sync.json") || strings.Contains(body, "proxy-secret") {
+		t.Fatalf("runtime health leaked backend details: %s", body)
 	}
 	found := false
 	for _, observation := range observations {

@@ -7,13 +7,11 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"routenest/internal/combos"
 	"routenest/internal/compaction"
 	"routenest/internal/domain"
 	"routenest/internal/httpx"
 	"routenest/internal/protocol"
 	"routenest/internal/routing"
-	"routenest/internal/zen"
 	"strings"
 	"time"
 
@@ -249,7 +247,7 @@ func HandleResponses(w http.ResponseWriter, r *http.Request) {
 
 	reqLog := domain.RequestLog{StartedAt: time.Now(), Protocol: "responses", Model: model, Stream: isStream}
 
-	if msg := routing.FreeOnlyRejection(model); msg != "" {
+	if msg := legacyIngressFreeOnlyRejection(model); msg != "" {
 		requestlog.Finalize(&reqLog, TokenUsage{}, time.Time{}, reqLog.StartedAt, false, msg)
 		httpx.WriteJSON(w, http.StatusBadRequest, map[string]any{
 			"error": map[string]string{"message": msg, "type": "invalid_request_error"},
@@ -272,224 +270,57 @@ func HandleResponses(w http.ResponseWriter, r *http.Request) {
 	}
 	chatModel, _ := chat["model"].(string)
 
-	// 模型组合：在普通路由之前分流（组合 ID 不是真实上游模型）。按配置顺序回退，
-	// 默认不触发全局 ModelChain / free 链；流式在连接级（尚未向客户端写字节）可
-	// 回退，建流后若上游空流则补发 in-band 错误，不再伪装成 response.completed。
-	if combo, ok := combos.FindCombo(chatModel); ok {
-		if !combo.Enabled {
-			msg := fmt.Sprintf("model combo %q is disabled", chatModel)
-			requestlog.Finalize(&reqLog, TokenUsage{}, time.Time{}, reqLog.StartedAt, false, msg)
-			httpx.WriteJSON(w, http.StatusBadRequest, map[string]any{
-				"error": map[string]string{"message": msg, "type": "invalid_request_error"},
-			})
-			return
+	sessionID := compaction.RequestSessionID(chat, r.Header)
+	call, err := startUnifiedDispatch(r.Context(), chat, isStream, "responses", sessionID, &reqLog)
+	if err != nil {
+		log.Printf("  responses api error: %v", err)
+		requestlog.Finalize(&reqLog, TokenUsage{}, time.Time{}, reqLog.StartedAt, false, err.Error())
+		status := unifiedDispatchHTTPStatus(chatModel, err)
+		errType := "api_error"
+		if status == http.StatusBadRequest {
+			errType = "invalid_request_error"
 		}
-		reqLog.ToolNames = clampParamsToolNames(chat)
-		run := combos.RunCombo(chat, combo, isStream, compaction.RequestSessionID(chat, r.Header))
-		combos.ApplyTrace(&reqLog, combo, run)
-		stampUpstream(&reqLog, chat)
-		if run.Acc != nil {
-			reqLog.AccountID = run.Acc.AccountID
-			reqLog.AccountEmail = run.Acc.Email
-		}
-		if run.Err != nil {
-			log.Printf("  responses combo %q error: %v", combo.ID, run.Err)
-			msg := combos.TraceSummary(combo, run)
-			requestlog.Finalize(&reqLog, TokenUsage{}, time.Time{}, reqLog.StartedAt, false, msg)
-			httpx.WriteJSON(w, clineErrorHTTPStatus(run.Err), map[string]any{
-				"error": map[string]string{"message": msg, "type": "api_error"},
-			})
-			return
-		}
-		defer run.Resp.Body.Close()
-		if isStream {
-			serveResponsesStream(r.Context(), w, run.Resp, &reqLog, run.Acc, nil)
-			return
-		}
-		copyPassthroughHeaders(w, run.Resp.Header)
-		var raw map[string]any
-		if err := json.NewDecoder(run.Resp.Body).Decode(&raw); err != nil {
-			requestlog.Finalize(&reqLog, TokenUsage{}, time.Time{}, reqLog.StartedAt, false, "decode response: "+err.Error())
-			httpx.WriteJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
-			return
-		}
-		out2 := NormalizeOpenAIResponse(unwrapDataEnvelope(raw))
-		restoreToolCallsInResponse(out2, reqLog.ToolNames)
-		usage := ParseTokenUsage(out2["usage"])
-		recordUsage(run.Acc, run.Resp, &reqLog, reqLog.Model, usage)
-		requestlog.Finalize(&reqLog, usage, time.Time{}, reqLog.StartedAt, true, "")
-		httpx.WriteJSON(w, http.StatusOK, chatToResponses(out2))
-		return
-	}
-
-	route := zen.RouteModel(chatModel)
-
-	switch route {
-	case "reject":
-		requestlog.Finalize(&reqLog, TokenUsage{}, time.Time{}, reqLog.StartedAt, false, "paid zen model rejected")
-		httpx.WriteJSON(w, http.StatusBadRequest, map[string]any{
-			"error": map[string]string{
-				"message": fmt.Sprintf("model %q is a paid opencode model; only free models are proxied", chatModel),
-				"type":    "invalid_request_error",
-			},
+		httpx.WriteJSON(w, status, map[string]any{
+			"error": map[string]string{"message": err.Error(), "type": errType},
 		})
 		return
-	case "zen":
-		reqLog.Upstream = zen.UpstreamOpenCode
-		zm, _ := zen.ResolveInfo(chatModel)
-		out := compaction.MaybeCompact(chat, zm, compaction.RequestSessionID(chat, r.Header))
-		if out.Changed {
-			log.Printf("  responses %s", out.Note)
-		}
-		upResp, err := zen.Call(chat, isStream)
-		if err != nil {
-			// zen 故障转移到 Cline 池：先截短超长工具名（Meta 后端硬限 ≤64）
-			reqLog.ToolNames = clampParamsToolNames(chat)
-			if fbResp, fbAcc, fbErr, attempted := routing.ZenFailoverToCline(chat, isStream); attempted {
-				if fbErr == nil {
-					log.Printf("  responses failover: serving %q via cline pool", chatModel)
-					stampUpstream(&reqLog, chat) // 归因实际服务方（provider / cline）
-					if fm, ok := chat["model"].(string); ok && fm != "" {
-						reqLog.Model = fm // zen 故障转移后记录实际服务模型
-					}
-					if fbAcc != nil {
-						reqLog.AccountID = fbAcc.AccountID
-						reqLog.AccountEmail = fbAcc.Email
-					}
-					defer fbResp.Body.Close()
-					if isStream {
-						serveResponsesStream(r.Context(), w, fbResp, &reqLog, fbAcc, func() (*http.Response, *domain.Account, error) {
-							rr, ra, rerr := routing.CallClineAPI(chat, true)
-							if rerr == nil {
-								stampUpstream(&reqLog, chat)
-							}
-							if m, ok := chat["model"].(string); ok && m != "" {
-								reqLog.Model = m
-							}
-							return rr, ra, rerr
-						})
-						return
-					}
-					copyPassthroughHeaders(w, fbResp.Header)
-					var raw map[string]any
-					if err := json.NewDecoder(fbResp.Body).Decode(&raw); err != nil {
-						requestlog.Finalize(&reqLog, TokenUsage{}, time.Time{}, reqLog.StartedAt, false, "decode response: "+err.Error())
-						httpx.WriteJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
-						return
-					}
-					out2 := NormalizeOpenAIResponse(unwrapDataEnvelope(raw))
-					restoreToolCallsInResponse(out2, reqLog.ToolNames)
-					usage := ParseTokenUsage(out2["usage"])
-					recordUsage(fbAcc, fbResp, &reqLog, reqLog.Model, usage)
-					requestlog.Finalize(&reqLog, usage, time.Time{}, reqLog.StartedAt, true, "")
-					httpx.WriteJSON(w, http.StatusOK, chatToResponses(out2))
-					return
-				}
-				// 兜底也失败：zen 的真实失败原因不能被吞 —— 最终错误带上两段，
-				// 日志/UI 能直接看到 zen 为什么挂、Cline 兜底为什么也没接住
-				err = fmt.Errorf("zen: %v; cline free chain: %w", err, fbErr)
-			}
-			log.Printf("  responses api error: %v", err)
-			requestlog.Finalize(&reqLog, TokenUsage{}, time.Time{}, reqLog.StartedAt, false, err.Error())
-			httpx.WriteJSON(w, http.StatusBadGateway, map[string]any{
-				"error": map[string]string{"message": err.Error(), "type": "api_error"},
-			})
-			return
-		}
-		defer upResp.Body.Close()
-
-		if isStream {
-			serveResponsesStream(r.Context(), w, upResp, &reqLog, nil, func() (*http.Response, *domain.Account, error) {
-				fbResp, fbAcc, fbErr, attempted := routing.ZenFailoverToCline(chat, true)
-				if !attempted {
-					return nil, nil, fmt.Errorf("no cline fallback available")
-				}
-				if fbErr == nil {
-					stampUpstream(&reqLog, chat)
-					if m, ok := chat["model"].(string); ok && m != "" {
-						reqLog.Model = m
-					}
-				}
-				return fbResp, fbAcc, fbErr
-			})
-			return
-		}
-		copyPassthroughHeaders(w, upResp.Header)
-		var raw map[string]any
-		if err := json.NewDecoder(upResp.Body).Decode(&raw); err != nil {
-			requestlog.Finalize(&reqLog, TokenUsage{}, time.Time{}, reqLog.StartedAt, false, "decode response: "+err.Error())
-			httpx.WriteJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
-			return
-		}
-		out2 := NormalizeOpenAIResponse(unwrapDataEnvelope(raw))
-		usage := ParseTokenUsage(out2["usage"])
-		requestlog.Finalize(&reqLog, usage, time.Time{}, reqLog.StartedAt, true, "")
-		httpx.WriteJSON(w, http.StatusOK, chatToResponses(out2))
-
-	default: // cline
-		// Cline 通道：截短超长工具名并记录映射，回程由响应处理器还原（Meta 后端硬限 ≤64）
-		// 主动压缩对 cline/provider 路由同样生效。
-		zm := compaction.ModelForCompaction(chatModel)
-		compaction.CompactForRequest(chat, zm, compaction.RequestSessionID(chat, r.Header), "responses")
-		reqLog.ToolNames = clampParamsToolNames(chat)
-		upResp, acc, err := routing.CallClineAPI(chat, isStream)
-		if err != nil && routing.IsContextLengthError(err) {
-			if out := compaction.FallbackTruncate(chat, zm); out.Changed {
-				log.Printf("  responses %s", out.Note)
-				upResp, acc, err = routing.CallClineAPI(chat, isStream)
-			}
-		}
-		if effectiveModel, ok := chat["model"].(string); ok && effectiveModel != "" {
-			reqLog.Model = effectiveModel // 含回退后的实际服务模型
-		}
-		stampUpstream(&reqLog, chat) // 归因实际服务方（provider / opencode / cline）
-		if acc != nil {
-			reqLog.AccountID = acc.AccountID
-			reqLog.AccountEmail = acc.Email // 失败也要记账号：否则日志显示不出实际被 402/429 的账号
-		}
-		if err != nil {
-			log.Printf("  responses api error: %v", err)
-			requestlog.Finalize(&reqLog, TokenUsage{}, time.Time{}, reqLog.StartedAt, false, err.Error())
-			httpx.WriteJSON(w, clineErrorHTTPStatus(err), map[string]any{
-				"error": map[string]string{"message": err.Error(), "type": "api_error"},
-			})
-			return
-		}
-		defer upResp.Body.Close()
-		if acc != nil {
-			reqLog.AccountID = acc.AccountID
-			reqLog.AccountEmail = acc.Email
-		}
-
-		if isStream {
-			serveResponsesStream(r.Context(), w, upResp, &reqLog, acc, func() (*http.Response, *domain.Account, error) {
-				rr, ra, rerr := routing.CallClineAPI(chat, true)
-				if rerr == nil {
-					stampUpstream(&reqLog, chat)
-				}
-				if m, ok := chat["model"].(string); ok && m != "" {
-					reqLog.Model = m
-				}
-				return rr, ra, rerr
-			})
-			return
-		}
-		copyPassthroughHeaders(w, upResp.Header)
-		var raw map[string]any
-		if err := json.NewDecoder(upResp.Body).Decode(&raw); err != nil {
-			requestlog.Finalize(&reqLog, TokenUsage{}, time.Time{}, reqLog.StartedAt, false, "decode response: "+err.Error())
-			httpx.WriteJSON(w, http.StatusInternalServerError, map[string]any{
-				"error": map[string]string{"message": err.Error(), "type": "parse_error"},
-			})
-			return
-		}
-		out2 := NormalizeOpenAIResponse(unwrapDataEnvelope(raw))
-		restoreToolCallsInResponse(out2, reqLog.ToolNames)
-		usage := ParseTokenUsage(out2["usage"])
-		recordUsage(acc, upResp, &reqLog, reqLog.Model, usage)
-		requestlog.Finalize(&reqLog, usage, time.Time{}, reqLog.StartedAt, true, "")
-		httpx.WriteJSON(w, http.StatusOK, chatToResponses(out2))
 	}
+	upResp, acc := call.result.Response, call.result.Account
+	if upResp == nil || upResp.Body == nil {
+		err := fmt.Errorf("upstream returned no response")
+		requestlog.Finalize(&reqLog, TokenUsage{}, time.Time{}, reqLog.StartedAt, false, err.Error())
+		httpx.WriteJSON(w, http.StatusBadGateway, map[string]any{
+			"error": map[string]string{"message": err.Error(), "type": "api_error"},
+		})
+		return
+	}
+	defer upResp.Body.Close()
+	if isStream {
+		serveResponsesStream(r.Context(), w, upResp, &reqLog, acc, func() (*http.Response, *domain.Account, error) {
+			return call.Retry(r.Context(), "empty_stream")
+		}, call.MarkCommitted)
+		return
+	}
+
+	copyPassthroughHeaders(w, upResp.Header)
+	var raw map[string]any
+	if err := json.NewDecoder(upResp.Body).Decode(&raw); err != nil {
+		requestlog.Finalize(&reqLog, TokenUsage{}, time.Time{}, reqLog.StartedAt, false, "decode response: "+err.Error())
+		status := http.StatusInternalServerError
+		if call.result.Serving.ProviderID == "opencode" || reqLog.RequestedModel != "" {
+			status = http.StatusBadGateway
+		}
+		httpx.WriteJSON(w, status, map[string]any{
+			"error": map[string]string{"message": err.Error(), "type": "parse_error"},
+		})
+		return
+	}
+	out := NormalizeOpenAIResponse(unwrapDataEnvelope(raw))
+	restoreToolCallsInResponse(out, reqLog.ToolNames)
+	usage := ParseTokenUsage(out["usage"])
+	recordUsage(acc, upResp, &reqLog, reqLog.Model, usage)
+	requestlog.Finalize(&reqLog, usage, time.Time{}, reqLog.StartedAt, true, "")
+	httpx.WriteJSON(w, http.StatusOK, chatToResponses(out))
 }
 
 // unwrapDataEnvelope 剥掉部分上游返回的 {data:{...}} 信封。

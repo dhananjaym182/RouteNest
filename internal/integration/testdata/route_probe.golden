@@ -3,7 +3,7 @@ GET /admin/api/providers/presets -> 200 ct=application/json shape={data,success}
 GET /admin/api/providers -> 200 ct=application/json shape={data,success} data{accountHealth,health,providers}
 GET /admin/api/connections -> 200 ct=application/json shape={data,success} data{connections,flowLabels,flows}
 GET /admin/api/models -> 200 ct=application/json shape={data,success} data{lastSync,models}
-GET /admin/api/config -> 200 ct=application/json shape={data,success} data{address,build,defaultModel,excludedModels,hasPassword,headers,host,localIPs,maxRequestBodyBytes,modelAliases,modelChain,nonstreamKeepaliveSeconds,onlyFree,passthroughHeaders,poolPath,requestErrorRules,retry,sessionAffinity,strategy,stream,version,zenHeaders}
+GET /admin/api/config -> 200 ct=application/json shape={data,success} data{address,build,defaultModel,dispatchMode,excludedModels,hasPassword,headers,host,localIPs,maxRequestBodyBytes,modelAliases,modelChain,nonstreamKeepaliveSeconds,onlyFree,passthroughHeaders,poolPath,requestErrorRules,retry,runtimeState,sessionAffinity,strategy,stream,version,zenHeaders}
 GET /admin/api/keys -> 200 ct=application/json shape={data,success} data{keys}
 GET /admin/api/accounts -> 200 ct=application/json shape={data,success} data{accounts,poolIndex,total}
 GET /admin/api/combos -> 200 ct=application/json shape={data,success} data{combos,modelCatalog,reservedAliases}
@@ -15,6 +15,6 @@ GET /admin/api/cline-proxy/config -> 200 ct=application/json shape={data,success
 GET /admin/api/provider-instances -> 200 ct=application/json shape={data,success} data{instances}
 GET /admin/api/credentials -> 200 ct=application/json shape={data,success} data{credentials}
 GET /admin/api/model-offerings -> 200 ct=application/json shape={data,success} data{offerings}
-GET /admin/api/provider-state -> 200 ct=application/json shape={data,success} data{observations}
+GET /admin/api/provider-state -> 200 ct=application/json shape={data,success} data{observations,runtimeState}
 GET /admin/api/egress-profiles -> 200 ct=application/json shape={data,success} data{globalProfileId,profiles}
 POST /admin/api/login -> 400 ct=application/json shape={error,success}

@@ -917,7 +917,7 @@ func TestCallClineAPIDirectModelsNoFallbackOnServerError(t *testing.T) {
 	_ = upstreamModel
 }
 
-func TestHandleResponsesFreeReturnsTooManyRequestsWhenBothPoolsUnavailable(t *testing.T) {
+func TestHandleResponsesFreeReturnsServiceUnavailableWhenBothPoolsUnavailable(t *testing.T) {
 	oldPool := getTestPool()
 	oldConfig := admin.GetProxyConfig()
 	oldTransport := egress.Client.Transport
@@ -937,7 +937,7 @@ func TestHandleResponsesFreeReturnsTooManyRequestsWhenBothPoolsUnavailable(t *te
 		requestlog.Logs = oldLogs
 		requestlog.Mu.Unlock()
 	})
-	// zen 池指向死端口：本测试只验证「双池不可用 → 429」，
+	// zen 池指向死端口：本测试只验证「双池不可用 → 503」，
 	// zen 走独立 uTLS 客户端不受 egress.Client.Transport mock 拦截，
 	// 不隔离会真实打到 opencode（免费层补齐核心工具后请求会成功）
 	deadZen := *oldZenCfg
@@ -970,8 +970,8 @@ func TestHandleResponsesFreeReturnsTooManyRequestsWhenBothPoolsUnavailable(t *te
 	req := httptest.NewRequest(http.MethodPost, "/v1/responses", strings.NewReader(`{"model":"free","input":"hello"}`))
 	recorder := httptest.NewRecorder()
 	proxycore.HandleResponses(recorder, req)
-	if recorder.Code != http.StatusTooManyRequests {
-		t.Fatalf("response status = %d, want %d: %s", recorder.Code, http.StatusTooManyRequests, recorder.Body.String())
+	if recorder.Code != http.StatusServiceUnavailable {
+		t.Fatalf("response status = %d, want %d: %s", recorder.Code, http.StatusServiceUnavailable, recorder.Body.String())
 	}
 	if calls != len(routing.FreeModelChain) {
 		t.Fatalf("upstream calls = %d, want one attempt per model (%d)", calls, len(routing.FreeModelChain))

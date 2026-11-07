@@ -20,7 +20,7 @@ type configFixture struct {
 
 func newConfigHandler() (*Config, *configFixture) {
 	f := &configFixture{
-		cfg:          &configpkg.Proxy{Strategy: "round_robin", Headers: map[string]string{"A": "1"}},
+		cfg:          &configpkg.Proxy{Strategy: "round_robin", DispatchMode: configpkg.DispatchModeShadow, Headers: map[string]string{"A": "1"}},
 		defaultModel: "m1",
 		host:         "127.0.0.1",
 		restarted:    make(chan string, 1),
@@ -75,6 +75,9 @@ func TestConfigGet(t *testing.T) {
 	if data["version"] != "1.2.3" || data["defaultModel"] != "m1" {
 		t.Fatalf("unexpected data: %v", data)
 	}
+	if data["dispatchMode"] != "shadow" {
+		t.Fatalf("dispatchMode = %v", data["dispatchMode"])
+	}
 	if data["hasPassword"] != true {
 		t.Fatalf("hasPassword = %v", data["hasPassword"])
 	}
@@ -97,17 +100,40 @@ func TestConfigUpdateRejectsInvalidStrategy(t *testing.T) {
 	}
 }
 
+func TestConfigUpdateRejectsInvalidDispatchMode(t *testing.T) {
+	h, f := newConfigHandler()
+	rec := httptest.NewRecorder()
+	h.Update(rec, httptest.NewRequest(http.MethodPost, "/admin/api/config", strings.NewReader(`{"strategy":"fill","dispatchMode":"future"}`)))
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", rec.Code)
+	}
+	if resp := decodeEnvelope(t, rec); resp.Error != "invalid_dispatch_mode" {
+		t.Fatalf("error = %q", resp.Error)
+	}
+	if f.cfg.DispatchMode != configpkg.DispatchModeShadow {
+		t.Fatalf("dispatch mode mutated to %q", f.cfg.DispatchMode)
+	}
+	if f.cfg.Strategy != "round_robin" {
+		t.Fatalf("strategy mutated on rejected patch: %q", f.cfg.Strategy)
+	}
+}
+
 func TestConfigUpdateAppliesPatch(t *testing.T) {
 	h, f := newConfigHandler()
-	body := `{"strategy":"fill","headers":{"B":"2"},"onlyFree":true}`
+	body := `{"strategy":"fill","dispatchMode":"enforce","headers":{"B":"2"},"onlyFree":true}`
 	rec := httptest.NewRecorder()
 	h.Update(rec, httptest.NewRequest(http.MethodPost, "/admin/api/config", strings.NewReader(body)))
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200 (%s)", rec.Code, rec.Body.String())
 	}
-	if f.cfg.Strategy != "fill" || !f.cfg.OnlyFree {
+	if f.cfg.Strategy != "fill" || f.cfg.DispatchMode != configpkg.DispatchModeEnforce || !f.cfg.OnlyFree {
 		t.Fatalf("cfg = %+v", f.cfg)
+	}
+	data := decodeEnvelope(t, rec).Data.(map[string]any)
+	if data["dispatchMode"] != "enforce" {
+		t.Fatalf("dispatchMode echo = %v", data["dispatchMode"])
 	}
 	if f.cfg.Headers["A"] != "1" || f.cfg.Headers["B"] != "2" {
 		t.Fatalf("headers = %v", f.cfg.Headers)

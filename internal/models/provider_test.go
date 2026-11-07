@@ -254,3 +254,20 @@ func TestSetManualCostRules(t *testing.T) {
 		t.Fatal("missing id must report not found")
 	}
 }
+
+func TestProjectProviderSharedClaimDoesNotRewriteExistingCompatibilityRow(t *testing.T) {
+	withPool(t, &domain.AccountPool{Models: []domain.Model{{
+		ID: "shared/model", Provider: "Alpha", Source: SourceProvider,
+		Cost: CostPass, Status: "active",
+	}}})
+	if ProjectProvider([]ProviderClaim{{
+		ID: "shared/model", Provider: "Beta", Cost: CostFree,
+		TierSignal: "pricing-zero", Shared: true,
+	}}) {
+		t.Fatal("shared provider claim unexpectedly rewrote the compatibility row")
+	}
+	got := Snapshot()[0]
+	if got.Provider != "Alpha" || got.Cost != CostPass || got.TierSignal != "" || got.TierDecidedAt != 0 {
+		t.Fatalf("shared compatibility row changed: %+v", got)
+	}
+}

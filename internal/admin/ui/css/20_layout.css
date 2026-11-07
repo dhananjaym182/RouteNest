@@ -7,7 +7,7 @@
 .theme-switch svg{width:14px;height:14px}
 
 /* ===== 侧栏收起（html[data-nav="collapsed"]，窄屏媒体查询优先） ===== */
-html[data-nav="collapsed"] .layout{--nav-w:64px}
+html[data-nav="collapsed"] .layout{--nav-w:72px}
 html[data-nav="collapsed"] .sidebar-header{flex-direction:column;align-items:center;padding:14px 8px;gap:8px}
 html[data-nav="collapsed"] .sidebar-header .brand{flex:none;justify-content:center}
 html[data-nav="collapsed"] .brand-text,
@@ -15,8 +15,10 @@ html[data-nav="collapsed"] .nav-section-label,
 html[data-nav="collapsed"] .nav-item .nav-label{display:none}
 html[data-nav="collapsed"] .nav-section{padding:10px 8px 4px}
 html[data-nav="collapsed"] .nav-item{justify-content:center;padding:9px 0;gap:0}
-/* 收起态：分区之间以分隔线代替分组标题（对齐控制台 nav-group-divider） */
-html[data-nav="collapsed"] .nav-section+.nav-section{border-top:1px solid var(--border2);margin:6px 14px 0;padding-top:10px}
+/* 收起态：分区之间以分隔线代替分组标题（对齐控制台 nav-group-divider）。
+   收起轨道整宽容纳条目，分隔线只做内缩装饰，避免内容盒被左右外边距压窄。 */
+html[data-nav="collapsed"] .nav-section+.nav-section{position:relative;border-top:0;margin:6px 0 0;padding-top:10px}
+html[data-nav="collapsed"] .nav-section+.nav-section::before{content:"";position:absolute;top:0;left:14px;right:14px;height:1px;background:var(--border2)}
 /* 固定项在轨道态与其余条目同一几何：去掉底边线与多余外边距 */
 html[data-nav="collapsed"] .nav-pinned{border-bottom:none;margin-bottom:2px}
 /* 悬浮边缘收起/展开钮（控制台 sidebar-toggle-floating 等价）：位于侧栏之外，

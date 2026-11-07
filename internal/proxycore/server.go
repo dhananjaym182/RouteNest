@@ -175,6 +175,7 @@ func Start(host string, port int, registerAdmin func(*http.ServeMux)) error {
 	health := httpapi.Health{
 		Version:        func() string { return buildinfo.AppVersion },
 		ActiveAccounts: func() int { return activeCount },
+		RuntimeState:   providers.RuntimeStateHealth,
 	}
 	mux.HandleFunc("/v1/health", httpx.CORS(health.Handler))
 	mux.HandleFunc("/health", httpx.CORS(health.Handler))
@@ -203,7 +204,7 @@ func Start(host string, port int, registerAdmin func(*http.ServeMux)) error {
 	mux.HandleFunc("/v1/models", modelsHandler)
 	mux.HandleFunc("/models", modelsHandler)
 
-	chatHandler := apiKeyHandler(newChatCompletionsHandler(activeCount))
+	chatHandler := apiKeyHandler(newChatCompletionsHandler())
 	mux.HandleFunc("/v1/chat/completions", withBodyLimit(chatHandler))
 	mux.HandleFunc("/chat/completions", withBodyLimit(chatHandler))
 

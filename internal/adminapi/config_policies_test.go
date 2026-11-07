@@ -28,6 +28,7 @@ func TestConfigGetExposesTuningPolicies(t *testing.T) {
 	}
 	body := rec.Body.String()
 	for _, want := range []string{
+		`"dispatchMode":"shadow"`,
 		`"retry":{"maxRounds":3}`,
 		`"stream":{"bootstrapRetries":2}`,
 		`"sessionAffinity":{"enabled":true,"ttlSeconds":120}`,

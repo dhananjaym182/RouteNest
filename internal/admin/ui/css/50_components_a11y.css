@@ -29,7 +29,7 @@ input:focus-visible,textarea:focus-visible,select:focus-visible{outline:none}
 .login-card{width:min(360px,calc(100vw - 40px));padding:32px;background:var(--surface);border-radius:14px;border:1px solid var(--border2);text-align:center;box-shadow:var(--shadow-lg)}
 .login-card h2{margin:0 0 6px;font-size:20px;color:var(--text)}
 .login-card p{margin:0 0 22px;color:var(--text2);font-size:13px}
-#modelSyncOverlay{position:fixed;inset:0;z-index:var(--z-sync);background:var(--overlay-bg);display:none;align-items:center;justify-content:center;backdrop-filter:saturate(150%) blur(6px);-webkit-backdrop-filter:saturate(150%) blur(6px)}
+#modelSyncOverlay{position:fixed;inset:0;z-index:var(--z-topmost);background:var(--overlay-bg);display:none;align-items:center;justify-content:center;backdrop-filter:saturate(150%) blur(6px);-webkit-backdrop-filter:saturate(150%) blur(6px)}
 #modelSyncModal{border-radius:var(--radius);box-shadow:var(--shadow-lg);width:min(480px,calc(100vw - 40px));padding:24px;background:var(--surface);border:1px solid var(--border2)}
 
 /* 状态徽章：停用 = 中性灰（与 活跃/冷却/过期 同一视觉体系），不再借用日志红/绿 */

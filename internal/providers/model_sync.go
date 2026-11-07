@@ -53,34 +53,39 @@ func ensureSyncPath() {
 }
 
 func LoadRecheckState() {
-	ensureSyncPath()
 	provRecheckMu.Lock()
 	defer provRecheckMu.Unlock()
 	if provRecheckLoaded {
 		return
 	}
-	provRecheckLoaded = true
-	persisted, err := syncstate.Load(providerSyncFilePath)
-	if err != nil {
-		platform.BackupCorruptFile(providerSyncFilePath, err)
-		return
-	}
-	for id, st := range persisted {
-		if st != nil {
-			providerRecheckStat[id] = st
-		}
+	if err := loadProviderRuntimeStateLocked(nil); err != nil {
+		log.Printf("provider sync state load failed: %v", err)
 	}
 }
 
-func saveProviderRecheckStateLocked() {
+func saveProviderRecheckStateLocked() error {
 	ensureSyncPath()
+	if owner := providerRuntimeStateOwner; owner != nil && owner.path == providerSyncFilePath {
+		if err := owner.availableLocked(); err != nil {
+			return err
+		}
+		if err := owner.saveLocked(providerRecheckStat); err != nil {
+			log.Printf("provider sync state save failed: %v", err)
+			return err
+		}
+		return nil
+	}
 	out := make(map[string]providerRecheckState, len(providerRecheckStat))
 	for id, st := range providerRecheckStat {
-		out[id] = *st
+		if st != nil {
+			out[id] = cloneProviderRecheckState(*st)
+		}
 	}
 	if err := syncstate.Save(providerSyncFilePath, out); err != nil {
 		log.Printf("provider sync state save failed: %v", err)
+		return err
 	}
+	return nil
 }
 
 // recheckProviderModels 对单个 provider 检测一轮：下架标记 + 新模型入队。
@@ -106,11 +111,13 @@ func recheckProviderModels(p CustomProvider) providerRecheckState {
 		}
 	}
 
+	records := models.Snapshot()
+	offeringStates := providerOfferingStates(p, records)
 	current := map[string]models.PresenceState{}
-	for _, model := range models.Snapshot() {
-		if model.Source == models.SourceProvider && declared[model.ID] {
-			current[model.ID] = models.PresenceState{Delisted: model.Delisted, Protected: model.Custom}
-		}
+	for modelID, state := range offeringStates {
+		delisted := state.Delisted != nil && *state.Delisted
+		protected := state.Custom != nil && *state.Custom
+		current[modelID] = models.PresenceState{Delisted: delisted, Protected: protected}
 	}
 
 	// 1) 声明模型的缺失计数（连续 2 次才下架；出现即清零并撤标记）
@@ -132,15 +139,16 @@ func recheckProviderModels(p CustomProvider) providerRecheckState {
 		return st
 	}
 
-	// 2) 写池：打/撤 Delisted（只动 Source=provider 且在本 provider 声明内的条目）
-	marked, alreadyMarked := models.ApplyDelisting(declared, presence.ToDelist, upstream)
+	// 2) 写 provider-scoped offering：同 ID 的其他 provider 不受影响。
+	marked, _ := applyProviderOfferingDelisting(p, presence.ToDelist, upstream)
+	syncProviderDelistedProjection(providersIncluding(p))
 
 	// 3) 新上游模型 → Auto 预览批次（不在声明里也不在池里；每 provider 至多一个待审批次）
-	poolHas := map[string]bool{}
-	for _, m := range models.Snapshot() {
-		poolHas[m.ID] = true
+	providerHas := make(map[string]bool, len(offeringStates))
+	for modelID := range offeringStates {
+		providerHas[modelID] = true
 	}
-	fresh := modelcatalog.FilterNew(entries, declared, poolHas)
+	fresh := modelcatalog.FilterNew(entries, declared, providerHas)
 	batchID, queued := "", 0
 	if len(fresh) > 0 {
 		importsMu.Lock()
@@ -166,9 +174,11 @@ func recheckProviderModels(p CustomProvider) providerRecheckState {
 		}
 	}
 
+	delistedCount, delistedModels := providerDelistedSnapshot(p.ID, p.ModelIDs)
 	st = providerRecheckState{
 		LastCheckedMs:  time.Now().UnixMilli(),
-		DelistedMarked: alreadyMarked,
+		DelistedMarked: delistedCount,
+		DelistedModels: delistedModels,
 		MissCounting:   presence.MissingCounting,
 		NewQueued:      queued,
 		BatchID:        batchID,
@@ -182,22 +192,54 @@ func recheckProviderModels(p CustomProvider) providerRecheckState {
 
 func setProviderRecheckState(providerID string, st providerRecheckState) {
 	LoadRecheckState()
-	cp := st
 	provRecheckMu.Lock()
-	if prev, ok := providerRecheckStat[providerID]; ok && st.LastCheckedMs == 0 {
-		cp.LastCheckedMs = prev.LastCheckedMs // 失败轮保留上次成功时间
+	cp := cloneProviderRecheckState(st)
+	previous := providerRecheckStat[providerID]
+	if prev, ok := providerRecheckStat[providerID]; ok {
+		cp.Offerings = cloneOfferingStates(prev.Offerings)
+		cp.Runtime = nil
+		if prev.Runtime != nil {
+			runtime := prev.Runtime.Clone()
+			cp.Runtime = &runtime
+		}
+		if st.LastCheckedMs == 0 {
+			cp.LastCheckedMs = prev.LastCheckedMs // 失败轮保留上次成功状态
+			cp.DelistedMarked = prev.DelistedMarked
+			if prev.DelistedModels != nil {
+				cp.DelistedModels = append([]string{}, prev.DelistedModels...)
+			}
+			cp.MissCounting = prev.MissCounting
+			cp.NewQueued = prev.NewQueued
+			cp.BatchID = prev.BatchID
+		}
 	}
 	providerRecheckStat[providerID] = &cp
-	saveProviderRecheckStateLocked()
+	if err := saveProviderRecheckStateLocked(); err != nil {
+		if previous == nil {
+			delete(providerRecheckStat, providerID)
+		} else {
+			providerRecheckStat[providerID] = previous
+		}
+	}
 	provRecheckMu.Unlock()
 }
 
 // clearProviderRecheck provider 删除时清掉其检测状态与待审 Auto 批次。
 func clearProviderRecheck(providerID string) {
 	provRecheckMu.Lock()
+	previous, previousMiss := providerRecheckStat[providerID], provRecheckMiss[providerID]
 	delete(providerRecheckStat, providerID)
 	delete(provRecheckMiss, providerID)
-	saveProviderRecheckStateLocked()
+	if err := saveProviderRecheckStateLocked(); err != nil {
+		if previous != nil {
+			providerRecheckStat[providerID] = previous
+		}
+		if previousMiss != nil {
+			provRecheckMiss[providerID] = previousMiss
+		}
+		provRecheckMu.Unlock()
+		return
+	}
 	provRecheckMu.Unlock()
 	importsMu.Lock()
 	for id, b := range pendingImports {
@@ -252,7 +294,7 @@ func SyncStatusSnapshot() map[string]any {
 	provRecheckMu.Lock()
 	out := make(map[string]providerRecheckState, len(providerRecheckStat))
 	for id, st := range providerRecheckStat {
-		out[id] = *st
+		out[id] = cloneProviderRecheckState(*st)
 	}
 	provRecheckMu.Unlock()
 	for _, p := range List() {

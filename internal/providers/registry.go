@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"routenest/internal/domain"
 	"routenest/internal/platform"
 	providerstore "routenest/internal/store/providers"
 )
@@ -194,25 +195,36 @@ func Upsert(p *CustomProvider) CustomProvider {
 func Delete(id string) bool {
 	Load()
 	Mu.Lock()
-	defer Mu.Unlock()
 	for i, p := range CustomProviders {
 		if p.ID == id {
 			CustomProviders = append(CustomProviders[:i], CustomProviders[i+1:]...)
 			SaveLocked()
+			var scopes []domain.AvailabilityScope
 			// 冷却键是 "<providerID>:<model>"，删除 provider 时要连同全部
 			// 模型冷却一起清掉；同时保留裸 id 删除以兼容历史残留键。
-			delete(Cooldowns, id)
+			if _, exists := Cooldowns[id]; exists {
+				if scope, ok := legacyCooldownScope(id); ok {
+					scopes = append(scopes, scope)
+				}
+				delete(Cooldowns, id)
+			}
 			for k := range Cooldowns {
 				if strings.HasPrefix(k, id+":") {
+					if scope, ok := legacyCooldownScope(k); ok {
+						scopes = append(scopes, scope)
+					}
 					delete(Cooldowns, k)
 				}
 			}
+			saveProviderCooldownsLocked()
+			Mu.Unlock()
 			// 领到的粘贴会话不要再粘到已删除的 provider 上
 			stickyClearForProvider(id)
-			saveProviderCooldownsLocked()
+			recoverLegacyCooldownScopes(scopes)
 			return true
 		}
 	}
+	Mu.Unlock()
 	return false
 }
 
@@ -225,8 +237,14 @@ func ResetRoutingState() {
 	stickyMu.Unlock()
 
 	Mu.Lock()
+	var scopes []domain.AvailabilityScope
 	for key := range Cooldowns {
+		if scope, ok := legacyCooldownScope(key); ok {
+			scopes = append(scopes, scope)
+		}
 		delete(Cooldowns, key)
 	}
+	saveProviderCooldownsLocked()
 	Mu.Unlock()
+	recoverLegacyCooldownScopes(scopes)
 }

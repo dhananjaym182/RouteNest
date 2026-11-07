@@ -1,5 +1,5 @@
-GET /health -> 200 ct=application/json shape={activeAccounts,status,version}
-GET /v1/health -> 200 ct=application/json shape={activeAccounts,status,version}
+GET /health -> 200 ct=application/json shape={activeAccounts,runtimeState,status,version}
+GET /v1/health -> 200 ct=application/json shape={activeAccounts,runtimeState,status,version}
 GET /v1/models -> 200 ct=application/json shape={data,object}
 GET /models -> 200 ct=application/json shape={data,object}
 OPTIONS /v1/chat/completions -> 204 ct= shape=non-json

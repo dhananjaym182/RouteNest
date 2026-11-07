@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strings"
 
+	"routenest/internal/domain"
 	"routenest/internal/httpx"
 )
 
@@ -50,17 +51,30 @@ func (a *APIKeyAuth) Wrap(next http.HandlerFunc) http.HandlerFunc {
 	})
 }
 
-// Health reports liveness and account availability.
+// Health reports liveness, the active Cline account count, and redacted runtime
+// enforcement status. RuntimeState supplies public codes, never raw errors.
 type Health struct {
 	Version        func() string
 	ActiveAccounts func() int
+	RuntimeState   func() domain.RuntimeStateHealth
 }
 
 // Handler writes the health payload.
 func (h Health) Handler(w http.ResponseWriter, r *http.Request) {
+	runtimeState := domain.RuntimeStateHealth{
+		Backend:     "unknown",
+		Degraded:    true,
+		Stale:       true,
+		Enforcement: "unavailable",
+		Reason:      "runtime_state_unavailable",
+	}
+	if h.RuntimeState != nil {
+		runtimeState = h.RuntimeState()
+	}
 	httpx.WriteJSON(w, http.StatusOK, map[string]any{
 		"status":         "ok",
 		"version":        h.Version(),
 		"activeAccounts": h.ActiveAccounts(),
+		"runtimeState":   runtimeState,
 	})
 }

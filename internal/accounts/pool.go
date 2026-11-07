@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"routenest/internal/dispatch"
+	"routenest/internal/domain"
 	"routenest/internal/platform"
 	poolstore "routenest/internal/store/accounts"
 )
@@ -172,6 +173,20 @@ func GetAccountByID(accountID string) *Account {
 	for _, a := range p.Accounts {
 		if a.AccountID == accountID {
 			return a
+		}
+	}
+	return nil
+}
+
+// GetAccountByCredentialID resolves the global redacted credential identity to
+// its secret-bearing account record for the application dispatch resolver.
+func GetAccountByCredentialID(credentialID domain.CredentialID) *Account {
+	p := LoadPool()
+	PoolMu.Lock()
+	defer PoolMu.Unlock()
+	for _, account := range p.Accounts {
+		if domain.ClineCredentialID(account.AccountID, account.Email) == credentialID {
+			return account
 		}
 	}
 	return nil

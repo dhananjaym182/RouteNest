@@ -1,49 +1,46 @@
 package providers
 
 import (
+	"fmt"
 	"testing"
 	"time"
+
+	"routenest/internal/domain"
+	"routenest/internal/providerstate"
 )
 
 func TestProviderHealthSnapshot(t *testing.T) {
-	// 保存并恢复全部受影响的全局内存态
-	Mu.Lock()
-	oldProviders, oldLoaded, oldCooldowns := CustomProviders, Loaded, Cooldowns
-	CustomProviders = []*CustomProvider{
-		{ID: "provA", Name: "A", DailyLimit: 100, RpmLimit: 10},
-		{ID: "provB", Name: "B"},
-	}
-	Loaded = true
-	Cooldowns = map[string]time.Time{
-		"provA:gpt-x": time.Now().Add(5 * time.Minute),
-		"provA:gpt-y": time.Now().Add(2 * time.Minute),
-		"provB:m":     time.Now().Add(-time.Minute), // 已过期，不应出现
-		"gone:m":      time.Now().Add(time.Minute),  // provider 已删除，忽略
-	}
-	oldDaily, oldRPM, oldScores := providerDaily, providerRPM, providerScores
-	Mu.Unlock()
-	defer func() {
-		Mu.Lock()
-		CustomProviders, Loaded, Cooldowns = oldProviders, oldLoaded, oldCooldowns
-		Mu.Unlock()
-		budgetMu.Lock()
-		providerDaily, providerRPM = oldDaily, oldRPM
-		budgetMu.Unlock()
-		scoreMu.Lock()
-		providerScores = oldScores
-		scoreMu.Unlock()
-	}()
-
 	now := time.Now()
-	budgetMu.Lock()
-	providerDaily = map[string]map[string]int64{"provA": {now.UTC().Format("2006-01-02"): 42}}
-	providerRPM = map[string][]time.Time{
-		"provA:gpt-x": {now.Add(-10 * time.Second), now.Add(-70 * time.Second)}, // 只有 1 次在窗口内
-		"provB:m":     {now.Add(-5 * time.Second)},
+	installTestBudget(t, func() time.Time { return now })
+	installProviders(t,
+		&CustomProvider{ID: "provA", Name: "A", DailyLimit: 100, RpmLimit: 10},
+		&CustomProvider{ID: "provB", Name: "B"},
+	)
+	Mu.Lock()
+	Cooldowns = map[string]time.Time{
+		"provA:gpt-x": now.Add(5 * time.Minute),
+		"provA:gpt-y": now.Add(2 * time.Minute),
+		"provB:m":     now.Add(-time.Minute), // 已过期，不应出现
+		"gone:m":      now.Add(time.Minute),  // provider 已删除，忽略
 	}
-	budgetMu.Unlock()
+	Mu.Unlock()
+
+	providerA := *Find("provA")
+	providerA.RpmLimit, providerA.DailyLimit = 0, 0
+	for i := 0; i < 41; i++ {
+		if _, err := AdmitDispatch(t.Context(), providerA, "gpt-x", fmt.Sprintf("old-%d", i), now.Add(-70*time.Second)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := AdmitDispatch(t.Context(), providerA, "gpt-x", "current", now.Add(-10*time.Second)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := AdmitDispatch(t.Context(), *Find("provB"), "m", "b-current", now.Add(-5*time.Second)); err != nil {
+		t.Fatal(err)
+	}
 
 	scoreMu.Lock()
+	oldScores := providerScores
 	providerScores = map[string]*providerScore{}
 	s := &providerScore{}
 	for i, ok := range []bool{true, true, false} {
@@ -52,6 +49,11 @@ func TestProviderHealthSnapshot(t *testing.T) {
 	s.count = 3
 	providerScores["provA:gpt-x"] = s
 	scoreMu.Unlock()
+	t.Cleanup(func() {
+		scoreMu.Lock()
+		providerScores = oldScores
+		scoreMu.Unlock()
+	})
 
 	h := providerHealthSnapshot()
 	a := h["provA"]
@@ -102,24 +104,17 @@ func TestAccountRecentOutcomes(t *testing.T) {
 }
 
 func TestProviderCooldownResetAndListPayload(t *testing.T) {
-	Mu.Lock()
-	oldProviders, oldLoaded, oldCooldowns := CustomProviders, Loaded, Cooldowns
-	oldPath := CooldownsPath
-	CustomProviders = []*CustomProvider{{ID: "provR", Name: "R"}}
-	Loaded = true
-	Cooldowns = map[string]time.Time{
-		"provR:m1": time.Now().Add(time.Minute),
-		"provR:m2": time.Now().Add(time.Minute),
-		"other:m":  time.Now().Add(time.Minute),
+	installProviders(t, &CustomProvider{ID: "provR", Name: "R"})
+	if err := providerstate.Publish(providerstate.NewStore(time.Now)); err != nil {
+		t.Fatal(err)
 	}
-	CooldownsPath = t.TempDir() + "/.cline-providers-cooldowns.json"
-	Mu.Unlock()
-	defer func() {
-		Mu.Lock()
-		CustomProviders, Loaded, Cooldowns = oldProviders, oldLoaded, oldCooldowns
-		CooldownsPath = oldPath
-		Mu.Unlock()
-	}()
+	until := time.Now().Add(time.Minute)
+	SetCooldown("provR", "m1", until)
+	SetCooldown("provR", "m2", until)
+	SetCooldown("other", "m", until)
+	scope := func(providerID, model string) domain.AvailabilityScope {
+		return domain.AvailabilityScope{ProviderID: domain.ProviderInstanceID(providerID), ModelID: model}
+	}
 
 	// 只清 m1
 	if removed := ResetCooldowns("provR", "m1"); removed != 1 {
@@ -133,6 +128,12 @@ func TestProviderCooldownResetAndListPayload(t *testing.T) {
 	if m1 || !m2 || !other {
 		t.Fatalf("after scoped reset m1=%v m2=%v other=%v", m1, m2, other)
 	}
+	if got := providerstate.Default().Blocking(scope("provR", "m1")); len(got) != 0 {
+		t.Fatalf("scoped reset retained normalized observation: %+v", got)
+	}
+	if got := providerstate.Default().Blocking(scope("provR", "m2")); len(got) != 1 {
+		t.Fatalf("scoped reset removed sibling observation: %+v", got)
+	}
 
 	// 清整个 provider
 	if removed := ResetCooldowns("provR", ""); removed != 1 {
@@ -143,6 +144,17 @@ func TestProviderCooldownResetAndListPayload(t *testing.T) {
 	Mu.Unlock()
 	if remaining != 1 {
 		t.Fatalf("cooldowns left = %d, want only other:m", remaining)
+	}
+	if got := providerstate.Default().Blocking(scope("provR", "m2")); len(got) != 0 {
+		t.Fatalf("provider reset retained normalized observation: %+v", got)
+	}
+	if got := providerstate.Default().Blocking(scope("other", "m")); len(got) != 1 {
+		t.Fatalf("provider reset removed unrelated observation: %+v", got)
+	}
+
+	ResetRoutingState()
+	if got := providerstate.Default().Blocking(scope("other", "m")); len(got) != 0 {
+		t.Fatalf("routing reset retained normalized observation: %+v", got)
 	}
 
 	// 列表视图带 health 字段

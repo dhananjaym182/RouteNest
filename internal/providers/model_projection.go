@@ -18,12 +18,16 @@ import (
 //     模型的默认模型一并清空
 func SyncModels() {
 	provs := List() // Mu 自持自放；之后再拿 accounts.PoolMu，无反向持锁路径
+	records := models.Snapshot()
+	stateChanged := syncProviderOfferingDeclarations(provs, records)
+	claimCounts := providerClaimCounts(provs)
 	claimed := map[string]models.ProviderClaim{}
 	var ids []string
 	for _, p := range provs {
 		if !p.Enabled {
 			continue
 		}
+		offerings := providerOfferingStates(p, records)
 		for _, id := range p.ModelIDs {
 			if id == "" {
 				continue
@@ -35,9 +39,13 @@ func SyncModels() {
 				// flag all land in the pool as free immediately, without the
 				// import wizard. Only a parsed non-zero price (catalog path)
 				// can override to paid.
-				c := models.ProviderClaim{ID: id, Provider: p.Name, Cost: "pass"}
-				if tier, sig := classifyUpstreamModel(upstreamModelEntry{ID: id}, p.Free); tier == "free" {
-					c.Cost, c.TierSignal = "free", sig
+				state := offerings[id]
+				c := models.ProviderClaim{ID: id, Provider: p.Name, Cost: state.Cost, Shared: claimCounts[id] > 1}
+				if c.Cost == "" {
+					c.Cost = "pass"
+				}
+				if c.Cost == "free" {
+					c.TierSignal = state.TierSignal
 				}
 				claimed[id] = c
 				ids = append(ids, id)
@@ -49,7 +57,9 @@ func SyncModels() {
 	for _, id := range ids {
 		claims = append(claims, claimed[id])
 	}
-	if !models.ProjectProvider(claims) {
+	modelChanged := models.ProjectProvider(claims)
+	syncProviderDelistedProjection(provs)
+	if !modelChanged && !stateChanged {
 		return
 	}
 	log.Printf("provider models synced: %d model(s) from %d enabled provider(s)", len(claimed), len(provs))

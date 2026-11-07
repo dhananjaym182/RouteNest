@@ -83,3 +83,9 @@ routenest.log
 
 # local editor/tool state (not project config)
 .wu/
+
+# oh-my-codex local runtime state and locks; plans/context remain reviewable
+.omx/state/
+.omx/tmux-hook.json
+.omx-state-locks/
+.omx-state-locks.identity.json

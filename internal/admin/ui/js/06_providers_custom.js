@@ -36,6 +36,8 @@ async function loadProviders() {
     box.innerHTML = renderProvCooldownBar(list) +
       '<div class="prov-cards">' + list.map(provCardHTML).join('') + '</div>';
     refreshProvDetailIfOpen();
+    observeProviderSyncDelistings(list, _provSync);
+    if (list.some(p => (_provSync[p.id] || {}).delistedMarked)) await checkModelDelistings();
   } catch (e) {
     _provFirstLoad = false;
     const box = _('providersList');

@@ -46,6 +46,8 @@ function toggleModelUsage(forceOpen) {
   const body = _('modelUsageBody'), btn = _('modelUsageToggle');
   if (!body || !btn) return;
   const open = (forceOpen === undefined) ? body.style.display === 'none' : !!forceOpen;
+  const diagnostics = body.closest('details');
+  if (open && diagnostics) diagnostics.open = true;
   body.style.display = open ? '' : 'none';
   btn.innerHTML = open ? uiIcon('caretDown') : uiIcon('caretRight');
   const label = open ? '收起' : '展开';
@@ -55,9 +57,9 @@ function toggleModelUsage(forceOpen) {
   applyLang();
 }
 
-function showAccountLogin(subtab) {
-  applyTab('credentials');
-  switchPageSubTab('accounts', 'pool', true);
+async function showAccountLogin(subtab) {
+  await openProviderSetup('cline');
+  if (!_providerSetupMounted || _providerSetupMounted.node !== _('loginImportSection')) return;
   toggleLoginImport(true);
   if (subtab) {
     const tab = document.querySelector('#importTabs .tab[data-tab="' + subtab + '"]');
@@ -71,6 +73,7 @@ function applyTab(name){
   const fromImport = (name === 'import');
   const fromAccounts = (name === 'accounts');
   name = normalizeTabName(name);
+  if (name !== 'providers' && typeof closeProviderSetup === 'function' && _('providerSetup').classList.contains('open')) closeProviderSetup(false);
   // 非法/未知标签页（如手改 URL）回退到 dashboard，避免空白页
   if (!name || !_('tab-' + name)) name = 'dashboard';
   document.querySelectorAll('.nav-item').forEach(e => {
@@ -95,13 +98,13 @@ function applyTab(name){
   if (name !== 'logs' && typeof stopLogPolling === 'function') stopLogPolling();
   if (name === 'dashboard') { applyLang(); loadStats(); loadAccounts(); loadDashboardOverview(); if (typeof loadDashboardActivity === 'function') loadDashboardActivity(); startDashPolling(); }
   else if (name === 'credentials') { loadGlobal(); loadAccounts(); loadConnections(); loadStats(); }
-  if (fromImport) { switchPageSubTab('accounts', 'pool', true); toggleLoginImport(true); }
-  else if (fromAccounts) switchPageSubTab('accounts', 'pool', true);
+  if (fromImport || fromAccounts) switchPageSubTab('accounts', 'conns', true);
+  if (fromImport) openProviderSetup('cline', '', true);
   else if (name === 'logs') { loadRequestLogs(true); startLogPolling(); }
-  else if (name === 'routing') { loadModels().then(() => { loadConfig(); }); }
+  else if (name === 'routing') { loadModels().then(() => { loadConfig(); if (typeof loadRouteInspector === 'function') loadRouteInspector(); }); }
   else if (name === 'models') { loadGlobal(); loadModels().then(() => { loadConfig(); }); }
   else if (name === 'combos') { loadCombos(); }
-  else if (name === 'network') { loadGlobal(); loadOcConfig(); loadClineProxyConfig(); loadZenHeaders(); loadStats(); }
+  else if (name === 'network') { loadGlobal(); loadClineProxyConfig(); }
   else if (name === 'providers') { loadGlobal(); loadProviders(); loadConnections(); }
   else if (name === 'health') { loadGlobal(); }
   else if (name === 'security') { loadKeys(); loadConfig(); }
@@ -116,6 +119,9 @@ function switchTab(name) { applyTab(name); }
 // subtab happened to be active on the user's last visit.
 function showPageSubTab(page, sub) {
   if (page === 'routing' && sub === 'models') { applyTab('models'); return; }
+  if ((page === 'upstreams' || page === 'network') && sub === 'zen') { openProviderSetup('opencode'); return; }
+  if ((page === 'upstreams' || page === 'network') && sub === 'headers') { openProviderSetup('cline-config'); return; }
+  if (page === 'accounts') { applyTab('credentials'); switchPageSubTab('accounts', sub); return; }
   applyTab(page);
   switchPageSubTab(page, sub);
 }
@@ -206,6 +212,7 @@ applyNavOrder();
 const SUBTAB_KEY_PREFIX = 'cline_admin_subtab_';
 function switchPageSubTab(page, sub, skipSave) {
   if (page === 'routing' && sub === 'models') { applyTab('models'); return; }
+  if (page === 'accounts' && sub === 'pool') sub = 'conns';
   const nav = document.querySelector('.page-subtabs[data-page="' + page + '"]');
   if (!nav) return;
   nav.querySelectorAll('.subtab').forEach(e => {
@@ -231,7 +238,9 @@ function switchPageSubTab(page, sub, skipSave) {
 }
 
 // 子页显示时的按需加载钩子（用户点击切换时触发；首次进入由 applyTab 处理）
-function onPageSubTabShown(page, sub) {}
+function onPageSubTabShown(page, sub) {
+  if (page === 'providers' && sub === 'oauth') loadConnections();
+}
 document.querySelectorAll('.page-subtabs').forEach(nav => {
   nav.setAttribute('role', 'tablist');
   nav.querySelectorAll('.subtab').forEach(el => {

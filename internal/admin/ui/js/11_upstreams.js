@@ -8,9 +8,10 @@ async function syncOcModels() {
   try {
     const d = await api('POST', '/opencode/models/sync');
     const res = d.data || {};
+    _modelCatalogApplied = ++_modelCatalogRequest;
+    notifyModelSyncResult(res, 'OpenCode Zen');
     await loadModels();
     if (res.changed) {
-      showModelSyncModal(res);
       toast(t('OpenCode Zen 模型列表已更新'), 'success');
     } else {
       toast(t('模型无变化'), 'info');
@@ -22,7 +23,26 @@ async function syncOcModels() {
 }
 
 // ========== OpenCode Zen 免费模型配置 ==========
+let _ocConfigLoadPromise = null;
+let _ocProxyBaseline = '';
+let _clineProxyBaseline = '';
 async function loadOcConfig() {
+  if (_ocConfigLoadPromise) return _ocConfigLoadPromise;
+  const controls = Array.from(document.querySelectorAll('[onchange="saveOcConfig()"], [onclick="saveOcConfig(this)"]'));
+  const disabled = controls.map(el => el.disabled);
+  const panel = _('providerNativeOpenCode');
+  controls.forEach(el => { el.disabled = true; });
+  panel.setAttribute('aria-busy', 'true');
+  _ocConfigLoadPromise = loadOcConfigSnapshot();
+  try { return await _ocConfigLoadPromise; }
+  finally {
+    _ocConfigLoadPromise = null;
+    controls.forEach((el, i) => { el.disabled = disabled[i]; });
+    panel.removeAttribute('aria-busy');
+  }
+}
+
+async function loadOcConfigSnapshot() {
   try {
     const d = await api('GET', '/opencode/config');
     const c = d.data;
@@ -41,6 +61,7 @@ async function loadOcConfig() {
     _('ocCompactMaxSummary').value = cp.maxSummary != null ? cp.maxSummary : 4096;
     _('ocProxyStrategy').value = c.proxyStrategy || 'round_robin';
     _('ocProxies').value = (c.proxies || []).join('\n');
+    _ocProxyBaseline = _('ocProxies').value;
     // 运行状态与出口冷却
     const rt = c.runtime || {};
     let status;
@@ -54,6 +75,7 @@ async function loadOcConfig() {
     _('ocProxyCooldowns').textContent = entries.length
       ? entries.map(([p, until]) => maskProxyForDisplay(p) + ' → ' + until).join('; ')
       : t('无冷却');
+    await checkModelDelistings();
   } catch (e) { toast(t('加载失败') + ': ' + e.message, 'error'); }
 }
 
@@ -81,12 +103,20 @@ async function saveOcConfig(btn) {
       maxSummary: numOr('ocCompactMaxSummary', 4096),
     },
   };
+  // GET masks proxy credentials. Omit unchanged proxy lists so unrelated
+  // edits preserve the saved credentials instead of writing the mask back.
+  if (_('ocProxies').value === _ocProxyBaseline) delete payload.proxies;
+  if (payload.proxies && payload.proxies.some(p => /:\/\/\*\*\*@/.test(p))) {
+    toast(t('修改代理列表时，请重新输入包含完整凭据的地址。'), 'error');
+    return;
+  }
   const orig = btn ? btn.innerHTML : '';
   if (btn) { btn.disabled = true; btn.innerHTML = '<span class="loading"></span> ' + t('保存中...'); }
   try {
     await api('POST', '/opencode/config/update', payload);
     showSaveResult('ocSaveResult', true, t('OpenCode Zen 配置已保存'));
     await loadOcConfig();
+    loadGlobal(false);
   } catch (e) {
     toast(t('保存失败: ') + (e.message || ''), 'error');
   }
@@ -99,6 +129,7 @@ async function loadClineProxyConfig() {
     const c = d.data;
     _('clineProxyStrategy').value = c.proxyStrategy || 'round_robin';
     _('clineProxies').value = (c.proxies || []).join('\n');
+    _clineProxyBaseline = _('clineProxies').value;
   } catch (e) { toast(t('加载失败') + ': ' + e.message, 'error'); }
 }
 
@@ -107,12 +138,18 @@ async function saveClineProxyConfig(btn) {
     proxyStrategy: _('clineProxyStrategy').value,
     proxies: _('clineProxies').value.split('\n').map(s => s.trim()).filter(Boolean),
   };
+  if (_('clineProxies').value === _clineProxyBaseline) delete payload.proxies;
+  if (payload.proxies && payload.proxies.some(p => /:\/\/\*\*\*@/.test(p))) {
+    toast(t('修改代理列表时，请重新输入包含完整凭据的地址。'), 'error');
+    return;
+  }
   const orig = btn ? btn.innerHTML : '';
   if (btn) { btn.disabled = true; btn.innerHTML = '<span class="loading"></span> ' + t('保存中...'); }
   try {
     await api('POST', '/cline-proxy/config/update', payload);
     showSaveResult('clineProxySaveResult', true, t('Cline 代理配置已保存'));
     await loadClineProxyConfig();
+    loadGlobal(false);
   } catch (e) {
     toast(t('保存失败: ') + (e.message || ''), 'error');
   }

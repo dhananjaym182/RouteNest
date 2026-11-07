@@ -13,6 +13,7 @@ import (
 type OfferingSource struct {
 	Instance domain.ProviderInstance
 	ModelIDs []string
+	States   map[string]domain.ModelOfferingState
 }
 
 func offeringAccess(model domain.Model, providerID domain.ProviderInstanceID) domain.AccessClass {
@@ -32,8 +33,8 @@ func offeringAccess(model domain.Model, providerID domain.ProviderInstanceID) do
 	}
 }
 
-func makeOffering(model domain.Model, instance domain.ProviderInstance) domain.ModelOffering {
-	return domain.ModelOffering{
+func makeOffering(model domain.Model, instance domain.ProviderInstance, state domain.ModelOfferingState, hasState bool) domain.ModelOffering {
+	offering := domain.ModelOffering{
 		ProviderID:       instance.ID,
 		ModelID:          model.ID,
 		UpstreamModelID:  model.ID,
@@ -53,13 +54,65 @@ func makeOffering(model domain.Model, instance domain.ProviderInstance) domain.M
 		InputModalities:  append([]string(nil), model.InputModalities...),
 		OutputModalities: append([]string(nil), model.OutputModalities...),
 	}
+	if !hasState || !state.Valid() {
+		return offering
+	}
+	if state.UpstreamModelID != "" {
+		offering.UpstreamModelID = state.UpstreamModelID
+	}
+	if state.Access.Valid() {
+		offering.Access = state.Access
+	} else if state.Cost != "" {
+		offering.Access = offeringAccess(domain.Model{Cost: state.Cost, TierSignal: state.TierSignal}, instance.ID)
+	}
+	if state.Cost != "" {
+		offering.TierSignal = state.TierSignal
+		offering.TierDecidedAt = state.TierDecidedAt
+	}
+	if state.AllowanceVerified != nil {
+		offering.AllowanceVerified = *state.AllowanceVerified
+	}
+	if state.Status != nil {
+		offering.Status = *state.Status
+	}
+	if state.Disabled != nil {
+		offering.Disabled = *state.Disabled
+	}
+	if state.Delisted != nil {
+		offering.Delisted = *state.Delisted
+	}
+	if state.Manual != nil {
+		offering.Manual = *state.Manual
+	}
+	if state.Custom != nil {
+		offering.Custom = *state.Custom
+	}
+	if state.Context != nil {
+		offering.Context = *state.Context
+	}
+	if state.Output != nil {
+		offering.Output = *state.Output
+	}
+	if state.MetaLocked != nil {
+		offering.MetaLocked = *state.MetaLocked
+	}
+	if state.ThinkingLevels != nil {
+		offering.ThinkingLevels = append([]string(nil), (*state.ThinkingLevels)...)
+	}
+	if state.InputModalities != nil {
+		offering.InputModalities = append([]string(nil), (*state.InputModalities)...)
+	}
+	if state.OutputModalities != nil {
+		offering.OutputModalities = append([]string(nil), (*state.OutputModalities)...)
+	}
+	return offering
 }
 
-func addOffering(out map[domain.OfferingKey]domain.ModelOffering, model domain.Model, instance domain.ProviderInstance) {
+func addOffering(out map[domain.OfferingKey]domain.ModelOffering, model domain.Model, instance domain.ProviderInstance, state domain.ModelOfferingState, hasState bool) {
 	if model.ID == "" || !instance.ID.Valid() {
 		return
 	}
-	offering := makeOffering(model, instance)
+	offering := makeOffering(model, instance, state, hasState)
 	out[offering.Key()] = offering
 }
 
@@ -68,9 +121,11 @@ func addOffering(out map[domain.OfferingKey]domain.ModelOffering, model domain.M
 func ProjectOfferings(records []domain.Model, sources []OfferingSource) []domain.ModelOffering {
 	instances := make(map[domain.ProviderInstanceID]domain.ProviderInstance, len(sources))
 	byName := make(map[string]domain.ProviderInstance, len(sources))
+	states := make(map[domain.ProviderInstanceID]map[string]domain.ModelOfferingState, len(sources))
 	recordByID := make(map[string]domain.Model, len(records))
 	for _, source := range sources {
 		instances[source.Instance.ID] = source.Instance
+		states[source.Instance.ID] = source.States
 		if source.Instance.Name != "" {
 			byName[source.Instance.Name] = source.Instance
 		}
@@ -83,19 +138,20 @@ func ProjectOfferings(records []domain.Model, sources []OfferingSource) []domain
 	for _, model := range records {
 		switch model.Source {
 		case SourceRemote:
-			addOffering(projected, model, instances["cline"])
+			addOffering(projected, model, instances["cline"], domain.ModelOfferingState{}, false)
 		case SourceZen, SourceSeed:
-			addOffering(projected, model, instances["opencode"])
+			addOffering(projected, model, instances["opencode"], domain.ModelOfferingState{}, false)
 		case SourceProvider:
 			// Normal provider ownership comes from ModelIDs below. A name match
 			// preserves orphaned legacy projections until their provider is saved.
 			if instance, ok := byName[model.Provider]; ok {
-				addOffering(projected, model, instance)
+				state, hasState := states[instance.ID][model.ID]
+				addOffering(projected, model, instance, state, hasState)
 			}
 		case SourceCustom:
 			// Legacy manual models route through the Cline path when no custom
 			// provider claims them; preserve that behavior in the read model.
-			addOffering(projected, model, instances["cline"])
+			addOffering(projected, model, instances["cline"], domain.ModelOfferingState{}, false)
 		}
 	}
 
@@ -106,9 +162,10 @@ func ProjectOfferings(records []domain.Model, sources []OfferingSource) []domain
 		for _, modelID := range source.ModelIDs {
 			model, ok := recordByID[modelID]
 			if !ok {
-				continue
+				model = domain.Model{ID: modelID, Source: SourceProvider, Status: "active"}
 			}
-			addOffering(projected, model, source.Instance)
+			state, hasState := source.States[modelID]
+			addOffering(projected, model, source.Instance, state, hasState)
 		}
 	}
 

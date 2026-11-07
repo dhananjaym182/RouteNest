@@ -47,7 +47,8 @@ SOFTWARE.
 
 ## Admin UI fonts
 
-Inter and IBM Plex Mono are embedded as unmodified Latin WOFF2 assets in [01_fonts.css](internal/admin/ui/css/01_fonts.css). Their complete SIL Open Font License 1.1 texts, copyrights, source URLs and SHA-256 hashes are retained in that stylesheet and shipped with the standalone application. No external font service is contacted at runtime. Existing system fallbacks cover Chinese and other characters outside these Latin subsets.
+Inter and IBM Plex Mono are embedded as unmodified Latin WOFF2 fonts in [01_fonts.css](internal/admin/ui/css/01_fonts.css). A Noto Sans SC variable TrueType subset covers every CJK character used by the shipped admin UI. The complete SIL Open Font License 1.1 text, copyright, source URLs and SHA-256 hashes are retained in that stylesheet and shipped with the standalone application. No external font service is contacted at runtime. Existing system fallbacks cover characters outside the embedded subsets.
 
-- Inter: Copyright 2020 The Inter Project Authors; [source and license](https://github.com/google/fonts/tree/main/ofl/inter).
-- IBM Plex Mono: Copyright 2017 IBM Corp., Reserved Font Name "Plex"; [source and license](https://github.com/google/fonts/tree/main/ofl/ibmplexmono).
+- Inter: Copyright 2020 The Inter Project Authors; [source and license](https://github.com/google/fonts/tree/main/ofl/inter). Used for the interface face.
+- IBM Plex Mono: Copyright 2017 IBM Corp.; [source and license](https://github.com/IBM/plex). Used only for technical identifiers such as model IDs, request IDs, API paths, endpoints, keys and JSON.
+- Noto Sans SC: Copyright 2014-2021 Adobe and Google LLC; [source and license](https://github.com/notofonts/noto-cjk). Subset from the [Google Fonts distribution](https://github.com/google/fonts/tree/main/ofl/notosanssc) using fonttools and used only as the interface's CJK fallback.

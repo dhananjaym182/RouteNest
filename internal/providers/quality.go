@@ -52,12 +52,12 @@ func recordProviderOutcome(providerID, model string, ok bool, latMS int64) {
 
 // providerScoreStats 返回窗口内 (成功率, 成功样本平均时延 ms)；无样本返回
 // 中性值 (0.5, 0)。只用窗口内样本：早就废弃的历史不拖累当下的判断。
-func providerScoreStats(providerID, model string) (float64, float64) {
+func providerScoreSnapshot(providerID, model string) (float64, float64, bool) {
 	scoreMu.Lock()
 	defer scoreMu.Unlock()
 	s := providerScores[providerID+":"+model]
 	if s == nil || s.count == 0 {
-		return providerNeutralSuccess, 0
+		return providerNeutralSuccess, 0, false
 	}
 	cut := time.Now().Add(-providerScoreWindow)
 	var ok, total int
@@ -74,12 +74,29 @@ func providerScoreStats(providerID, model string) (float64, float64) {
 		}
 	}
 	if total == 0 {
-		return providerNeutralSuccess, 0
+		return providerNeutralSuccess, 0, false
 	}
 	ratio := float64(ok) / float64(total)
 	var latAvg float64
 	if latN > 0 {
 		latAvg = float64(latSum) / float64(latN)
 	}
-	return ratio, latAvg
+	return ratio, latAvg, true
+}
+
+func providerScoreStats(providerID, model string) (float64, float64) {
+	rate, latency, _ := providerScoreSnapshot(providerID, model)
+	return rate, latency
+}
+
+// SnapshotQuality returns one immutable provider/model quality sample for the
+// unified planner. It exposes no request or credential data.
+func SnapshotQuality(providerID, model string) (successRate, avgLatencyMS float64, hasSamples bool) {
+	return providerScoreSnapshot(providerID, model)
+}
+
+// RecordDispatchOutcome feeds the compatibility quality window after a unified
+// executor attempt. Legacy callers continue using recordProviderOutcome.
+func RecordDispatchOutcome(providerID, model string, ok bool, latencyMS int64) {
+	recordProviderOutcome(providerID, model, ok, latencyMS)
 }
