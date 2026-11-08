@@ -8,6 +8,7 @@
 .cline-providers-sync.json
 .cline-proxy.json
 .routenest-accounts.json
+.routenest-accounts.json.initialized
 .routenest-credentials.json
 .routenest-providers.json
 .routenest-request-logs.json
@@ -23,6 +24,7 @@ data/
 .cline-*.json.corrupt-*
 .routenest-*.json.tmp
 .routenest-*.json.corrupt-*
+.routenest-*.json-*.tmp
 routenest
 routenest.exe
 
@@ -32,6 +34,10 @@ cline-go-proxy
 routenest-debug
 
 # local secrets & runtime logs
+.env
+.env.*
+!.env.example
+admin-auth/
 credentials.txt
 proxy.log
 cline-proxy.log
@@ -74,7 +80,10 @@ frontend/wailsjs/
 # local planning docs: keep locally, never commit
 PLAN-*.md
 *.plan.md
-docs/
+/docs/*
+!/docs/adr/
+!/docs/adr/*.md
+!/docs/admin-security.md
 .omc/
 .freebuff/
 .qoder/

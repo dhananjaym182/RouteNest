@@ -165,6 +165,62 @@ func TestMigrateDataFilesCopiesCurrentStateAndPreservesSource(t *testing.T) {
 	}
 }
 
+func TestMigrateDataFilesCopiesAccountInitializationWitness(t *testing.T) {
+	src := t.TempDir()
+	dst := t.TempDir()
+	content := []byte(`{"version":1}`)
+	if err := os.WriteFile(filepath.Join(src, AccountPoolWitnessName), content, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := MigrateDataFiles(dst, func() []string { return []string{src} }); err != nil {
+		t.Fatal(err)
+	}
+	got, err := os.ReadFile(filepath.Join(dst, AccountPoolWitnessName))
+	if err != nil || string(got) != string(content) {
+		t.Fatalf("migrated witness = %q, err %v", got, err)
+	}
+	if source, err := os.ReadFile(filepath.Join(src, AccountPoolWitnessName)); err != nil || string(source) != string(content) {
+		t.Fatalf("source witness changed = %q, err %v", source, err)
+	}
+}
+
+func TestEstablishedDataEvidenceIgnoresOnlyPoolAndWitness(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, ".routenest-accounts.json")
+	if established, err := EstablishedDataEvidence(path); err != nil || established {
+		t.Fatalf("empty dir = %v, %v", established, err)
+	}
+	for _, name := range []string{filepath.Base(path), filepath.Base(path) + ".initialized"} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(`{}`), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if established, err := EstablishedDataEvidence(path); err != nil || established {
+		t.Fatalf("pool/witness only = %v, %v", established, err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, ".routenest-config.json"), []byte(`{}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if established, err := EstablishedDataEvidence(path); err != nil || !established {
+		t.Fatalf("independent state = %v, %v", established, err)
+	}
+}
+
+func TestEstablishedDataEvidenceIncludesRuntimeDirectories(t *testing.T) {
+	for _, name := range []string{"admin-auth", "capture-logs"} {
+		t.Run(name, func(t *testing.T) {
+			dir := t.TempDir()
+			if err := os.Mkdir(filepath.Join(dir, name), 0700); err != nil {
+				t.Fatal(err)
+			}
+			established, err := EstablishedDataEvidence(filepath.Join(dir, ".routenest-accounts.json"))
+			if err != nil || !established {
+				t.Fatalf("%s evidence = %v, %v", name, established, err)
+			}
+		})
+	}
+}
+
 func TestMigrateDataFilesIncludesProviderStateAddedAfterLegacyList(t *testing.T) {
 	src := t.TempDir()
 	dst := t.TempDir()

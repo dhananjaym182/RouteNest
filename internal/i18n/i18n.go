@@ -124,6 +124,18 @@ var apiMessages = map[string]map[locale]string{
 		localeZH: "全部账号已删除",
 		localeEN: "All accounts deleted",
 	},
+	"account_delete_all_unavailable": {
+		localeZH: "账号删除服务不可用",
+		localeEN: "account deletion service unavailable",
+	},
+	"account_delete_all_failed": {
+		localeZH: "删除全部账号失败：%s",
+		localeEN: "delete all accounts failed: %s",
+	},
+	"all_accounts_deleted": {
+		localeZH: "全部 Cline 账号已删除，客户端密钥和独立配置已保留",
+		localeEN: "All Cline accounts deleted; client keys and independent configuration were preserved",
+	},
 	"reset_failed": {
 		localeZH: "重置失败：%s",
 		localeEN: "reset failed: %s",

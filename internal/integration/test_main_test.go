@@ -13,6 +13,7 @@ import (
 // TestMain 把池文件与请求日志重定向到临时目录：
 // 单元测试绝不读写用户真实的 .cline-accounts.json。
 func TestMain(m *testing.M) {
+	_ = os.Setenv(accounts.InitializeEmptyAccountStoreEnv, "true")
 	app.Configure()
 	tmp, err := os.MkdirTemp("", "cline-proxy-test-*")
 	if err != nil {

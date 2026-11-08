@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
@@ -12,8 +13,8 @@ import (
 	"routenest/internal/domain"
 )
 
-func strKeys(keys ...string) func() []string {
-	return func() []string { return keys }
+func strKeys(keys ...string) func() ([]string, error) {
+	return func() ([]string, error) { return keys, nil }
 }
 
 func unauthorized(w http.ResponseWriter, r *http.Request) {
@@ -21,7 +22,7 @@ func unauthorized(w http.ResponseWriter, r *http.Request) {
 }
 
 func TestAPIKeyAuthOpenWhenNoKeys(t *testing.T) {
-	auth := &APIKeyAuth{Keys: strKeys(), Unauthorized: unauthorized}
+	auth := &APIKeyAuth{Snapshot: strKeys(), Unauthorized: unauthorized}
 	called := false
 	h := auth.Wrap(func(w http.ResponseWriter, r *http.Request) { called = true })
 	h(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/v1/models", nil))
@@ -30,8 +31,37 @@ func TestAPIKeyAuthOpenWhenNoKeys(t *testing.T) {
 	}
 }
 
+func TestAPIKeyAuthFailsClosedWhenStorageUnavailable(t *testing.T) {
+	auth := &APIKeyAuth{
+		Snapshot:     func() ([]string, error) { return nil, errors.New("corrupt pool") },
+		Unauthorized: unauthorized,
+	}
+	called := false
+	rec := httptest.NewRecorder()
+	auth.Wrap(func(w http.ResponseWriter, r *http.Request) { called = true })(rec, httptest.NewRequest(http.MethodGet, "/v1/models", nil))
+	if called {
+		t.Fatal("unavailable key storage must not call next")
+	}
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d, want 503", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), `"type":"auth_storage_error"`) || strings.Contains(rec.Body.String(), "corrupt pool") {
+		t.Fatalf("body = %s", rec.Body.String())
+	}
+}
+
+func TestAPIKeyAuthFailsClosedWithoutSnapshotProvider(t *testing.T) {
+	auth := &APIKeyAuth{Unauthorized: unauthorized}
+	called := false
+	rec := httptest.NewRecorder()
+	auth.Wrap(func(w http.ResponseWriter, r *http.Request) { called = true })(rec, httptest.NewRequest(http.MethodGet, "/v1/models", nil))
+	if called || rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("called=%v status=%d, want fail-closed 503", called, rec.Code)
+	}
+}
+
 func TestAPIKeyAuthAcceptsBothHeaders(t *testing.T) {
-	auth := &APIKeyAuth{Keys: strKeys("sk-1"), Unauthorized: unauthorized}
+	auth := &APIKeyAuth{Snapshot: strKeys("sk-1"), Unauthorized: unauthorized}
 	for _, tc := range []struct {
 		name  string
 		setup func(*http.Request)
@@ -52,7 +82,7 @@ func TestAPIKeyAuthAcceptsBothHeaders(t *testing.T) {
 }
 
 func TestAPIKeyAuthRejectsBadKey(t *testing.T) {
-	auth := &APIKeyAuth{Keys: strKeys("sk-1"), Unauthorized: unauthorized}
+	auth := &APIKeyAuth{Snapshot: strKeys("sk-1"), Unauthorized: unauthorized}
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/v1/models", nil)
 	req.Header.Set("x-api-key", "nope")
@@ -63,7 +93,7 @@ func TestAPIKeyAuthRejectsBadKey(t *testing.T) {
 }
 
 func TestAPIKeyAuthSetsCORS(t *testing.T) {
-	auth := &APIKeyAuth{Keys: strKeys(), Unauthorized: unauthorized}
+	auth := &APIKeyAuth{Snapshot: strKeys(), Unauthorized: unauthorized}
 	rec := httptest.NewRecorder()
 	auth.Wrap(func(w http.ResponseWriter, r *http.Request) {})(rec, httptest.NewRequest(http.MethodOptions, "/v1/models", nil))
 	if rec.Header().Get("Access-Control-Allow-Origin") == "" {

@@ -1,6 +1,7 @@
 package accounts
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -26,6 +27,16 @@ func TestLoadMissingFile(t *testing.T) {
 	}
 }
 
+func TestLoadUnreadablePathReturnsError(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "directory")
+	if err := os.Mkdir(path, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if p, err := Load(path); err == nil || p != nil {
+		t.Fatalf("Load(directory) = (%#v, %v), want nil error result with non-nil error", p, err)
+	}
+}
+
 func TestLoadCorruptFile(t *testing.T) {
 	path := filepath.Join(t.TempDir(), FileName)
 	if err := os.WriteFile(path, []byte("{oops"), 0600); err != nil {
@@ -37,6 +48,17 @@ func TestLoadCorruptFile(t *testing.T) {
 	}
 	if p == nil || p.Accounts == nil {
 		t.Errorf("corrupt load should still return an initialized pool: %+v", p)
+	}
+}
+
+func TestLoadRejectsNullDocument(t *testing.T) {
+	path := filepath.Join(t.TempDir(), FileName)
+	if err := os.WriteFile(path, []byte(`null`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	p, err := Load(path)
+	if !errors.Is(err, ErrInvalidDocument) || p == nil {
+		t.Fatalf("Load(null) = (%#v, %v)", p, err)
 	}
 }
 

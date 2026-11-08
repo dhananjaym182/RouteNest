@@ -48,7 +48,7 @@ func newAccountOps() (*AccountOps, *accountOpsFixture) {
 			f.refreshed++
 			return nil
 		},
-		ClearAll: func() { f.cleared++; f.accounts = nil },
+		ClearAll: func() error { f.cleared++; f.accounts = nil; return nil },
 		Probe: func(a *domain.Account) any {
 			return map[string]any{"accountId": a.AccountID, "ok": true}
 		},
@@ -87,8 +87,29 @@ func TestAccountOpsDeleteAll(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", rec.Code)
 	}
+	response := decodeEnvelope(t, rec)
+	if !response.Success || response.Message != "all_accounts_deleted" {
+		t.Fatalf("response = %+v", response)
+	}
 	if f.cleared != 1 || len(f.accounts) != 0 {
 		t.Fatalf("cleared = %d, accounts = %d", f.cleared, len(f.accounts))
+	}
+}
+
+func TestAccountOpsDeleteAllReportsPersistenceFailure(t *testing.T) {
+	h, f := newAccountOps()
+	h.ClearAll = func() error { return errors.New("disk full") }
+	rec := httptest.NewRecorder()
+	h.DeleteAll(rec, httptest.NewRequest(http.MethodPost, "/admin/api/accounts/delete-all", nil))
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want 500", rec.Code)
+	}
+	response := decodeEnvelope(t, rec)
+	if response.Success || response.Error != "account_delete_all_failed" {
+		t.Fatalf("response = %+v", response)
+	}
+	if f.cleared != 0 || len(f.accounts) != 2 {
+		t.Fatalf("failure changed fixture: cleared = %d, accounts = %d", f.cleared, len(f.accounts))
 	}
 }
 

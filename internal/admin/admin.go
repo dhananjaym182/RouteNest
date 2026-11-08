@@ -31,26 +31,9 @@ func writeAPI(w http.ResponseWriter, status int, resp apiResponse) {
 // adminKeys/adminMonitoring connect the root composition to adminapi handlers
 // without moving pool locking or persistence into the package.
 var adminKeys = &adminapi.KeyManager{
-	ListKeys: func() []string { return accounts.LoadPool().Keys },
-	AddKey: func(key string) {
-		p := accounts.LoadPool()
-		accounts.PoolMu.Lock()
-		p.Keys = append(p.Keys, key)
-		accounts.SavePoolLocked()
-		accounts.PoolMu.Unlock()
-	},
-	DeleteKey: func(key string) {
-		p := accounts.LoadPool()
-		accounts.PoolMu.Lock()
-		for i, k := range p.Keys {
-			if k == key {
-				p.Keys = append(p.Keys[:i], p.Keys[i+1:]...)
-				break
-			}
-		}
-		accounts.SavePoolLocked()
-		accounts.PoolMu.Unlock()
-	},
+	ListKeys:  accounts.ClientKeySnapshot,
+	AddKey:    accounts.AddClientKey,
+	DeleteKey: accounts.DeleteClientKey,
 	Translate: func(r *http.Request, key string) string { return i18n.TAPI(r, key) },
 }
 

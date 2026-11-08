@@ -279,7 +279,7 @@ func StartWithContext(ctx context.Context, host string, port int, registerAdmin 
 	}
 
 	apiKeyHandler := (&httpapi.APIKeyAuth{
-		Keys: func() []string { return accounts.LoadPool().Keys },
+		Snapshot: accounts.ClientAuthSnapshot,
 		Unauthorized: func(w http.ResponseWriter, r *http.Request) {
 			httpx.WriteJSON(w, http.StatusUnauthorized, map[string]any{
 				"error": map[string]string{

@@ -4,6 +4,7 @@
 package httpapi
 
 import (
+	"errors"
 	"net/http"
 	"strings"
 
@@ -11,14 +12,18 @@ import (
 	"routenest/internal/httpx"
 )
 
+var errClientAuthSnapshotUnavailable = errors.New("client authentication snapshot unavailable")
+
 // APIKeyAuth guards public endpoints with pool-managed API keys. When no keys
 // are configured the endpoint stays open, matching the historical behavior.
 type APIKeyAuth struct {
-	// Keys returns the currently configured keys. Empty means "no auth".
-	Keys func() []string
+	// Snapshot returns a detached, internally consistent key snapshot. An empty
+	// successful snapshot means "no auth"; an error fails closed.
+	Snapshot func() ([]string, error)
 	// Unauthorized writes the rejection body. It is injected so each protocol
 	// keeps its own error shape.
 	Unauthorized func(w http.ResponseWriter, r *http.Request)
+	Unavailable  func(w http.ResponseWriter, r *http.Request)
 }
 
 // ExtractKey reads x-api-key or a bearer Authorization header.
@@ -35,7 +40,24 @@ func ExtractKey(r *http.Request) string {
 // Wrap applies CORS and the key check around next.
 func (a *APIKeyAuth) Wrap(next http.HandlerFunc) http.HandlerFunc {
 	return httpx.CORS(func(w http.ResponseWriter, r *http.Request) {
-		keys := a.Keys()
+		var keys []string
+		err := errClientAuthSnapshotUnavailable
+		if a.Snapshot != nil {
+			keys, err = a.Snapshot()
+		}
+		if err != nil {
+			if a.Unavailable != nil {
+				a.Unavailable(w, r)
+			} else {
+				httpx.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{
+					"error": map[string]string{
+						"message": "client API-key storage is unavailable; restore or repair the account-pool file, then restart RouteNest",
+						"type":    "auth_storage_error",
+					},
+				})
+			}
+			return
+		}
 		if len(keys) == 0 {
 			next(w, r)
 			return

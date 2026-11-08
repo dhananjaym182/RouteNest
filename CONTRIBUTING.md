@@ -1,9 +1,18 @@
 # Contributing
 
-The repository root contains only the CLI and desktop entry points. Service
-composition lives in `internal/app`; implementation lives under `internal/`.
-The Go module path is `routenest`, so repository-local imports use
-`routenest/internal/...`.
+The repository root contains the CLI and desktop entry points plus the local
+administrator recovery command. Service composition lives in `internal/app`;
+implementation lives under `internal/`. The Go module path is `routenest`, so
+repository-local imports use `routenest/internal/...`.
+
+The Phase 1 authority and behavior proposal is recorded in
+[CONTRACTS.md](CONTRACTS.md). [CONTEXT.md](CONTEXT.md) is the domain glossary,
+[DESIGN.md](DESIGN.md) owns current UI design and interaction rules, and accepted ADRs
+own hard-to-reverse architecture and persistence decisions. Until the reconciliation
+proposal is accepted, accepted ADRs and server-enforced security policy retain their
+existing authority. Treat current code and tests as implementation evidence; do not
+silently convert an observed behavior into intended product policy.
+
 Keep the dependency direction:
 
 ```
@@ -52,6 +61,11 @@ HTTP types.
 | `internal/requestlog` | Request-log owner service. |
 | `internal/store/...` | JSON-file persistence, one package per domain. |
 | `internal/domain` | Shared domain types. |
+| `CONTEXT.md` | Domain vocabulary only. |
+| `CONTRACTS.md`, `DESIGN.md` | Phase 1 cross-cutting reconciliation proposal and current UI design contract. |
+| `docs/adr` | Accepted hard-to-reverse architecture and persistence decisions; `.gitignore` permits new ADR Markdown files. |
+| `docs/admin-security.md` | Current administrator security operations; intended to be tracked with this proposal. |
+| `docs/plans`, `docs/reports`, `.omx` | Local or dated planning/evidence unless explicitly promoted; not current contract authority. |
 | `internal/integration` | Cross-package tests, including the route inventory golden. |
 
 Put new behavior in its owning package rather than in an entry point. Cross-package
@@ -60,15 +74,35 @@ in the repository root.
 
 ### Which screen owns what
 
-| Admin page (hash) | Owns | Does not own |
+| Canonical admin page (hash) | Owns | Does not own |
 | --- | --- | --- |
-| Upstreams (`#upstreams`) | opencode Zen and Cline egress, request headers, proxy, health | provider instances, global model policy |
-| Providers (`#providers`) | preset selection, provider instance config, credential binding, per-source model import and recheck, per-source health | global model enable/disable and aliases |
-| Accounts (`#accounts`) | Cline account pool and provider connection pool (separate subtabs) | provider instance routing rules |
-| Routing and models (`#routing`) | model catalogue, source badges, global enable/disable, sync status, aliases, exclusions, fallback | provider credentials and instance CRUD |
-| Combos (`#combos`) | named, ordered route definitions and their tests | physical model-source configuration |
+| Overview (`#dashboard`) | read-only traffic, provider and model summaries; links to owner workflows | provider, credential, model or routing mutations |
+| Providers (`#providers`) | provider setup and instances, credential binding, source model membership/import/recheck, provider-native configuration | client API keys or global logical-model policy |
+| Accounts & Credentials (`#credentials`) | Cline accounts, Provider Connections and redacted API-credential inventory | Provider Instance routing rules or provider-secret editing |
+| Network & Egress (`#network`) | shared default egress pool and read-only named global/Zen profile inventory | provider-specific proxy/header settings or generic profile binding |
+| Models & Offerings (`#models`) | logical-model catalog, provider offerings, enablement, metadata, sync and provider-scoped removal | provider credentials or global fallback policy |
+| Routing Policy (`#routing`) | default model, global fallback, aliases, exclusions, retry/stream/affinity/error policy and read-only inspection | Provider Instance or credential CRUD |
+| Routing Combos (`#combos`) | named ordered route definitions and their tests | physical provider/model configuration |
+| Request Logs (`#logs`) | request records, filters, attempt traces, export and explicit clearing | routing-policy mutation |
+| Usage & Quotas (`#quota`) | read-only provider budget/usage summaries and provider cooldown reset | budget editing, credential or account editing |
+| Provider Health (`#health`) | read-only availability, cooldown and quota-reset evidence | provider mutation |
+| API Keys & Security (`#security`) | client keys; current-admin password; users, roles, sessions, SSO and listener security; explicitly scoped dangerous actions | Provider Credentials |
+| Settings & Runtime (`#about`) | process/version information and shortcuts to setting owners | independent copies of linked settings |
+| Quick Start (`#quickstart`) | static onboarding and links to owner workflows | mutable gateway state |
 
-Hash routes and DOM tab IDs are public. Do not rename them.
+Canonical hashes and DOM panel IDs are public interfaces. Do not rename them without
+an approved compatibility change. Keep these compatibility aliases:
+
+| Compatibility hash | Canonical destination |
+| --- | --- |
+| `#global` | `#providers` |
+| `#accounts` | `#credentials` |
+| `#import` | `#credentials`, then open Cline setup/import |
+| `#upstreams` | `#network` |
+
+Aliases remain supported but must not reappear as duplicate sidebar destinations. The
+route, primary/shared JavaScript owner, dependency and permission matrix is in
+[CONTRACTS.md](CONTRACTS.md).
 
 ## Adding an admin endpoint
 
@@ -76,12 +110,17 @@ Hash routes and DOM tab IDs are public. Do not rename them.
    method with no `net/http` types.
 2. Add the HTTP adapter in `internal/admin/<domain>_api.go`. It parses the request,
    calls the owner, and writes the envelope through `internal/httpx`.
-3. Register the route in `RegisterRoutes` in `internal/admin/admin.go` with the
-   domain's auth wrapper.
-4. Cover method rejection, auth, invalid JSON, not found, upstream error, and
-   redaction of any credential fields in the response.
+3. Register the route in `RegisterRoutes` in `internal/admin/admin.go` with one
+   explicit HTTP method, the least privilege required, and an explicit CSRF mode.
+   Read routes use `csrfSafe`; authenticated browser mutations normally use
+   `csrfSession`. Public local-entry/SSO exemptions are security contracts and may
+   not be added by analogy.
+4. Cover method rejection, authentication, every required permission, same-origin
+   and CSRF behavior, invalid JSON, not found, upstream error, and redaction of any
+   credential fields in the response.
 5. Run `go test ./internal/integration -run TestRouteInventoryStatic -update-route-golden`,
-   then review the golden diff. Only intended routes may change.
+   then review the golden diff. Only intended methods, paths, permissions and CSRF
+   policies may change.
 
 ## Adding admin UI assets
 
@@ -100,10 +139,32 @@ The admin page is assembled at startup from explicit manifests in
 The tests fail if a listed file is missing, a file is listed twice, or an embedded
 file is not listed. They also fail if a duplicate top-level function exists, or if an
 inline handler (`onclick="fn(...)"`) calls a function that no script declares.
-Run `node tools/ui_inventory.js <baseUrl> <out.json>` with `PLAYWRIGHT_CORE` set to a
-`playwright-core` install and `CHROME_PATH` set to a Chromium binary before and after a
-UI change. Compare the output to confirm that no control, element ID, or `/admin/api`
-call disappeared.
+The existing `tools/ui_inventory.js` script does not bootstrap or log in and therefore
+is historical until it gains the authenticated harness contract below. Do not cite its
+current output as protected-route coverage or feed it production diagnostic URLs. Once
+repaired, run it with `PLAYWRIGHT_CORE` and `CHROME_PATH` before and after a UI change,
+then compare controls, IDs, owner calls and diagnostics.
+
+## UI behavior and browser verification
+
+Review the proposed role, unavailable-state, dirty-form, confirmation, focus and
+responsive requirements in [CONTRACTS.md](CONTRACTS.md) before changing those
+behaviors. Server route policy remains the authorization authority; client-side
+visibility is presentation only.
+
+A browser result is current only when it records the source revision, disposable data
+directory and port, explicit bootstrap/login state, retained administrator cookies and
+CSRF state, role, viewport/theme/language matrix, fixture/interception scope and browser
+diagnostics. Route assertions cover final hash, active navigation, visible owner panel,
+key owner requests and unexpected login/403/5xx responses. Historical screenshots and
+assertion counts are dated evidence, not current passes. The navigation and provider
+setup and inventory harnesses must be updated for mandatory administrator
+authentication before their documented fresh-instance matrices are cited again.
+
+Do not run browser or smoke tests against a live RouteNest server. Use a scratch port
+and fresh `ROUTENEST_DATA_DIR`, record the process you start, and remove only its
+validated temporary data. Never log bootstrap secrets, passwords, cookies, CSRF
+tokens, Provider Credentials or client keys.
 
 ## State and secret handling
 
@@ -132,6 +193,15 @@ There are two different provider paths:
 
 A provider-level `kind`/`freeTier` flag is metadata used by the admin UI. It is
 not a per-model access entitlement.
+
+Provider-scoped custom offering state is identified by stable Provider Instance ID and
+model ID. Each custom provider's declared model IDs own the key set for its additive
+offering overlay in `.routenest-providers-sync.json`; the colocated runtime counters,
+receipts, observations and tombstones have separate retention rules. `AccountPool.Models`
+remains a compatibility logical-model/catalog projection. New mutations must not infer a custom
+Provider Instance from a raw model ID when more than one offering can match. Provider-
+scoped controls must submit the stable ID plus raw model ID and compatibility source;
+ID-wide logical-model controls must be named and tested as ID-wide.
 
 ### Adding an embedded preset
 
@@ -226,6 +296,13 @@ Dispatch owns the SSE writer and retry policy; the adapter only transforms
 bytes.
 
 ## Testing
+
+Documentation-only changes must at minimum run `git diff --check`, validate every
+changed local link against the intended final tracked-file inventory (including new
+untracked documents), compare English/Chinese public claims, and inspect the complete
+diff for application-code changes. Behavioral counts, security warnings and limitations
+must change in both public READMEs in the same patch. Contract changes that propose
+future behavior do not count as implementation tests.
 
 Run the full gates from the repository root:
 

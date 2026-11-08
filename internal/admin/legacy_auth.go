@@ -15,6 +15,9 @@ func legacyAdminCredential() *adminauth.LegacyCredential {
 	p := accounts.LoadPool()
 	accounts.PoolMu.Lock()
 	defer accounts.PoolMu.Unlock()
+	if err := accounts.PoolStorageErrorLocked(); err != nil {
+		return &adminauth.LegacyCredential{Hash: "!account-storage-unavailable!"}
+	}
 	if p.AdminPasswordHash == "" && p.AdminPasswordSalt == "" {
 		return nil
 	}

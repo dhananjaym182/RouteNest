@@ -496,13 +496,20 @@ async function resetAccount(id) {
   } catch (e) { toast(t('重置失败: ') + e.message, 'error'); }
 }
 
-async function deleteAllAccounts() {
-  if (!(await showConfirm(t('⚠️ 确定删除所有账号？不可撤销！')))) return;
+let _deleteAllAccountsBusy = false;
+async function deleteAllAccounts(btn) {
+  if (_deleteAllAccountsBusy || (btn && btn.disabled)) return;
+  if (!(await showConfirm(t('确定删除所有 Cline 账号及其账号内状态？客户端 API 密钥、模型、默认模型和监听设置将保留。此操作不可撤销。')))) return;
+  if (_deleteAllAccountsBusy || (btn && btn.disabled)) return;
+  _deleteAllAccountsBusy = true;
+  const orig = btn ? btn.innerHTML : '';
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="loading"></span> ' + t('删除中...'); }
   try {
     await api('POST', '/accounts/delete-all', {});
-    toast(t('全部账号已删除'), 'success');
-    loadAccounts(); loadStats(); loadGlobal(false);
+    toast(t('全部 Cline 账号已删除；客户端 API 密钥和独立配置已保留'), 'success');
+    await Promise.all([loadAccounts(), loadStats(), loadGlobal(false)]);
   } catch (e) { toast(t('删除失败: ') + e.message, 'error'); }
+  finally { _deleteAllAccountsBusy = false; if (btn) { btn.disabled = false; btn.innerHTML = orig; } }
 }
 
 async function refreshAllTokens(btn) {

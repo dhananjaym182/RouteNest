@@ -114,6 +114,7 @@ const okCompletion = `{"id":"ok","object":"chat.completion","choices":[{"index":
 // TestMain installs the composition root before any test runs. The wiring is
 // no longer applied by importing the package.
 func TestMain(m *testing.M) {
+	_ = os.Setenv(accounts.InitializeEmptyAccountStoreEnv, "true")
 	app.Configure()
 	os.Exit(m.Run())
 }

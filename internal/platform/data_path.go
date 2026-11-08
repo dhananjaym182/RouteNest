@@ -2,6 +2,7 @@ package platform
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -18,6 +19,10 @@ const DataDirEnv = "ROUTENEST_DATA_DIR"
 // LegacyDataDirEnv is the pre-rename data-directory variable. It is still
 // honored when DataDirEnv is unset so existing deployments keep working.
 const LegacyDataDirEnv = "CLINE2API_DATA_DIR"
+
+const AccountPoolWitnessName = ".routenest-accounts.json.initialized"
+
+var currentCompanionFiles = []string{AccountPoolWitnessName}
 
 // legacyDataFiles lists every LEGACY (pre-rename) data file name considered
 // when migrating an old data directory. Keep this list in sync with the files
@@ -53,19 +58,56 @@ func LegacyDataFileName(name string) (string, bool) {
 // CurrentDataFiles returns the current (post-rename) data file names, derived
 // from the legacy list so both lists stay in sync.
 func CurrentDataFiles() []string {
-	out := make([]string, 0, len(legacyDataFiles))
+	out := make([]string, 0, len(legacyDataFiles)+len(currentCompanionFiles))
 	for _, name := range legacyDataFiles {
 		out = append(out, CurrentDataFileName(name))
 	}
+	out = append(out, currentCompanionFiles...)
 	return out
 }
 
 // KnownDataFiles returns a copy of the legacy data file list so callers cannot
 // mutate the migration list.
 func KnownDataFiles() []string {
-	out := make([]string, len(legacyDataFiles))
-	copy(out, legacyDataFiles)
+	out := make([]string, 0, len(legacyDataFiles)+1)
+	out = append(out, legacyDataFiles...)
+	out = append(out, ".cline-accounts.json.initialized")
 	return out
+}
+
+// EstablishedDataEvidence reports whether the account-pool directory contains
+// independent evidence of an existing RouteNest/legacy installation. The pool
+// and its initialization witness are deliberately excluded: callers use this
+// only when both are missing and must not guess that the directory is fresh.
+func EstablishedDataEvidence(accountPath string) (bool, error) {
+	dir := filepath.Dir(accountPath)
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return false, nil
+		}
+		return false, err
+	}
+	poolName := filepath.Base(accountPath)
+	witnessName := poolName + ".initialized"
+	legacyPool, _ := LegacyDataFileName(poolName)
+	legacyWitness := legacyPool + ".initialized"
+	for _, entry := range entries {
+		name := entry.Name()
+		switch name {
+		case poolName, witnessName:
+			continue
+		}
+		if name == legacyPool || name == legacyWitness || name == "admin-auth" || name == "capture-logs" ||
+			strings.HasPrefix(name, poolName+".corrupt-") ||
+			strings.HasPrefix(name, witnessName+".corrupt-") {
+			return true, nil
+		}
+		if strings.HasPrefix(name, ".routenest-") || strings.HasPrefix(name, ".cline-") {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 // migrateOnce makes automatic legacy migration run at most once per process.
@@ -280,7 +322,11 @@ func MigrateDataFiles(dir string, legacyDirs func() []string) error {
 		legacy, _ := LegacyDataFileName(name)
 		copied := false
 		for _, sourceDir := range uniqueSources {
-			for _, sourceName := range []string{name, legacy} {
+			sourceNames := []string{name, legacy}
+			if name == AccountPoolWitnessName {
+				sourceNames = []string{name, ".cline-accounts.json.initialized"}
+			}
+			for _, sourceName := range sourceNames {
 				src := filepath.Join(sourceDir, sourceName)
 				if src == dst {
 					continue

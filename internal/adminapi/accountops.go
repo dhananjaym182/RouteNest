@@ -21,8 +21,8 @@ type AccountOps struct {
 	DoRefreshAll func()
 	// Refresh refreshes one account token.
 	Refresh func(*domain.Account) error
-	// ClearAll clears the account pool and persists it.
-	ClearAll func()
+	// ClearAll deletes every Cline account and durably persists the result.
+	ClearAll func() error
 	// Probe checks one account against the upstream and returns a JSON-able result.
 	Probe func(*domain.Account) any
 	// OpenBrowser launches the OS default browser for an already-validated URL.
@@ -61,7 +61,15 @@ func (h *AccountOps) DeleteAll(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteAPI(w, http.StatusMethodNotAllowed, httpx.Response{Error: h.msg(r, "method_not_allowed")})
 		return
 	}
-	h.ClearAll()
+	if h.ClearAll == nil {
+		httpx.WriteAPI(w, http.StatusInternalServerError, httpx.Response{Error: h.msg(r, "account_delete_all_unavailable")})
+		return
+	}
+	if err := h.ClearAll(); err != nil {
+		httpx.WriteAPI(w, http.StatusInternalServerError, httpx.Response{Error: h.msg(r, "account_delete_all_failed", err.Error())})
+		return
+	}
+	httpx.WriteAPI(w, http.StatusOK, httpx.Response{Success: true, Message: h.msg(r, "all_accounts_deleted")})
 }
 
 // Reset handles POST /admin/api/accounts/reset with body {accountId}.

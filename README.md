@@ -11,7 +11,7 @@ It provides provider presets, account management, model discovery, ordered fallb
 [![Go](https://img.shields.io/badge/Go-1.26-00ADD8?logo=go&logoColor=white)](https://go.dev)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux-blue)](#build-from-source)
-[![Provider presets](https://img.shields.io/badge/Provider%20presets-110-brightgreen)](#provider-coverage)
+[![Provider definitions](https://img.shields.io/badge/Provider%20definitions-111-brightgreen)](#provider-coverage)
 
 **中文:** [中文 README](README.zh-CN.md)
 
@@ -21,27 +21,33 @@ It provides provider presets, account management, model discovery, ordered fallb
 
 ## What RouteNest provides
 
-- **Multi-account routing** — select and rotate configured accounts, with cooldowns and retryable-error handling.
-- **Provider catalog** — 109 provider preset definitions, plus support for custom OpenAI-compatible endpoints. Availability and protocol support vary by provider.
-- **Multiple API formats** — OpenAI Chat Completions, supported Responses API functionality, and Anthropic Messages endpoints.
-- **Model combos** — define ordered model lists with fallback on eligible upstream failures.
-- **Model discovery** — synchronize supported model catalogs, configure custom model IDs, and select a default model.
-- **Admin console** — manage accounts, connections, providers, models, combos, API keys, proxies and request logs.
-- **Egress proxy pools** — configure outbound proxies for supported upstream connections.
-- **Request observability** — inspect request logs, latency, token usage and available provider statistics.
-- **Flexible deployment** — run the Go binary, use the desktop application, or deploy with Docker.
+The proposed contract authority, terminology and unresolved behavior decisions are
+recorded in [CONTRACTS.md](CONTRACTS.md) for review. Historical plans and verification
+reports are dated evidence, not current test results.
+
+- **Multi-account routing** - select and rotate configured accounts, with cooldowns and retryable-error handling.
+- **Provider catalog** - 111 built-in Provider Definitions, including 109 selectable setup presets, plus support for custom OpenAI-compatible endpoints. Availability and protocol support vary by provider.
+- **Multiple API formats** - OpenAI Chat Completions, supported Responses API functionality, and Anthropic Messages endpoints.
+- **Model combos** - define ordered model lists with fallback on eligible upstream failures.
+- **Model discovery** - synchronize supported model catalogs, configure custom model IDs, and select a default model.
+- **Admin console** - manage accounts, connections, providers, models, combos, client API keys, proxies and request logs.
+- **Egress proxy pools** - configure the shared Cline/default and native Zen pools plus custom-provider overrides; no generic profile-binding UI is claimed.
+- **Request observability** - inspect request logs, latency, token usage and available provider statistics.
+- **Flexible deployment** - run the Go binary, use the desktop application, or deploy with Docker.
 
 Provider availability, authentication requirements, free allowances and supported features depend on the upstream service. A preset is a configuration template, not a tested integration, and its inclusion does not guarantee that every model has been tested or is available to every account.
 
 ## Before you deploy
 
-> **Security:** RouteNest has no universal default password and never opens the admin API anonymously. A fresh install starts in one-time bootstrap mode and requires a permanent local administrator password before normal administration.
+> **Security:** RouteNest has no universal default password and never permits anonymous administrative operations. A fresh install starts in one-time bootstrap mode and requires a permanent local administrator password before normal administration. The static admin shell and narrow status, bootstrap, login and SSO protocol-entry routes are public but do not grant administrative access.
 
-- **Bootstrap:** the CLI prints a generated one-time secret only to its controlling terminal. Headless deployments must provide `ROUTENEST_ADMIN_BOOTSTRAP_PASSWORD` for the first start; completed bootstrap state permanently ignores it. The desktop app uses a one-shot native dialog.
+- **Bootstrap:** the CLI prints a generated one-time secret only to its controlling terminal. A first start without a controlling terminal must provide `ROUTENEST_ADMIN_BOOTSTRAP_PASSWORD`; the retained initialized authority ignores it. The desktop app uses a one-shot native dialog.
 - **Passwords:** permanent administrator passwords require at least 8 characters, with a maximum of 1024 UTF-8 bytes. Password changes revoke all sessions for that administrator.
-- **Separate controls:** API keys protect `/v1/*`; durable administrator sessions and server-side RBAC protect `/admin/*`. Admin sessions store only hashed tokens, survive restart, can be revoked, and require session-bound CSRF tokens for mutations.
-- **Hosted administration:** the binary and desktop app bind to `127.0.0.1` by default. Non-loopback administration is rejected unless an exact public URL, trusted-proxy mode and trusted proxy CIDRs are configured. RouteNest has no built-in TLS; terminate HTTPS at the trusted proxy.
-- **Sensitive data:** account refresh tokens, provider keys and generated API keys are stored in plaintext in the data directory. Protect that directory, and never commit or share it.
+- **Separate controls:** Client API keys protect model and inference routes, including the key-wrapped `/v1/*` routes, once at least one key is loaded; `/health` and `/v1/health` are always public. An empty key list leaves the key-wrapped routes open for compatibility. Durable administrator sessions and server-side RBAC protect administrative operations; the listed bootstrap/login/SSO entry routes remain public and separately validated. Admin sessions store only hashed tokens, survive restart, can be revoked, and require session-bound CSRF tokens for authenticated mutations.
+- **Account-only deletion:** **Delete All Accounts** removes Cline accounts and their account-owned state only. Client API keys, models, the default model, listener settings, removal reservations and legacy migration sentinels are preserved. The operation reports success only after durable persistence.
+- **Hosted administration:** the binary and desktop app bind to `127.0.0.1` by default. A production non-loopback listener is rejected unless an exact public URL, trusted-proxy mode and trusted proxy CIDRs are configured. RouteNest accepts an HTTP canonical origin when HSTS is off, so HTTPS termination at the trusted proxy remains a required deployment practice rather than a universal server invariant.
+- **Client-key limitation:** corrupt, unreadable, partially restored, or uncertain missing account-pool state fails closed on key-wrapped routes with an authentication-storage error. A confirmed fresh installation must set `ROUTENEST_INITIALIZE_EMPTY_ACCOUNT_STORE=true` for one startup; remove it after initialization. A verified intentionally empty key list remains anonymously accessible for compatibility. Console-generated client keys are still clock-derived, and ordinary key writes still use best-effort persistence. Do not treat them as an internet-grade security boundary without additional hardening; verify keys after restart and keep the gateway behind trusted network controls.
+- **Sensitive data:** account refresh tokens, Provider Credentials and generated client API keys are stored in plaintext in the data directory. Protect that directory, and never commit or share it.
 - **Docker:** the sample compose file binds the backend port to host loopback and requires explicit bootstrap/public-URL/proxy settings. Do not expose the backend port directly to the internet.
 
 See [Administrator security and SSO](docs/admin-security.md) for RBAC, OIDC, SAML, recovery and reverse-proxy configuration.
@@ -85,14 +91,15 @@ The container listens on `0.0.0.0:3457`, while the sample compose file publishes
 
 ### First run
 
-1. Read the one-time bootstrap secret from the local terminal/native dialog, open `/admin/`, and set a permanent password.
-2. Add a Cline account, an OpenCode Zen connection, or a provider API key.
-3. Generate an API key for your clients.
-4. Pick a default model, or leave it unset to use the first available free model.
+1. For a confirmed new data directory, set `ROUTENEST_INITIALIZE_EMPTY_ACCOUNT_STORE=true` for the first startup only, then remove it. Never use this variable to repair or reset an established installation.
+2. Read the one-time bootstrap secret from the local terminal/native dialog, open `/admin/`, and set a permanent password.
+3. Add a Cline account, enable native OpenCode Zen, or configure a provider API key.
+4. Generate a client API key. Until at least one key exists, key-wrapped model and inference routes accept anonymous requests.
+5. Pick a default model. If left unset, RouteNest prefers an active Cline model classified as free; after catalog initialization, it can fall back to the first active enabled model of any cost.
 
 ## Client setup
 
-Both protocol families run on the same port (default `3457`). API keys are accepted from `Authorization: Bearer <key>` or `x-api-key: <key>`.
+Both protocol families run on the same port (default `3457`). Once at least one client API key is loaded, keys are accepted from `Authorization: Bearer <key>` or `x-api-key: <key>`. With an empty key list, model and inference endpoints remain open for compatibility; `/health` and `/v1/health` are always public.
 
 ```bash
 export ROUTENEST_KEY="<key generated in the console>"
@@ -181,13 +188,13 @@ Add any OpenAI-compatible endpoint as a custom provider with its own base URL, k
 
 ## Provider coverage
 
-The shipped registry contains **109 provider preset definitions**:
+The built-in registry contains **111 Provider Definitions**: 21 RouteNest-maintained definitions plus 90 ExtremeRouter-derived imports. Two maintained definitions are fixed runtime providers (Cline and OpenCode Zen), so the Connect Provider directory exposes **109 selectable presets**.
 
-| Source | Count | Notes |
-| --- | --- | --- |
-| RouteNest-maintained presets | 19 | OpenRouter, Groq, Cerebras, Google AI Studio, Mistral, Together AI, DeepSeek, OpenAI, vLLM, Ollama, Qoder CN/Intl, Kilo Code, GitHub Copilot, Qwen Chat, Kimi for Coding, CodeBuddy CN/Intl, WorkBuddy |
-| ExtremeRouter-derived imports | 90 | Includes free, free-tier, API-key-with-free-tier and local-runtime entries |
-| **Total** | **109** | **34 marked `freeTier` as a provider-level hint** |
+| Source | Definitions | Selectable setup presets | Notes |
+| --- | ---: | ---: | --- |
+| RouteNest-maintained | 21 | 19 | Includes Cline and OpenCode Zen as fixed runtime providers |
+| ExtremeRouter-derived imports | 90 | 90 | Includes free, free-tier, API-key-with-free-tier and local-runtime entries |
+| **Total** | **111** | **109** | **34 selectable presets carry a `freeTier` provider-level hint** |
 
 `freeTier` and `kind` are display/grouping hints from the registry, not per-model access entitlements. Presets include seed model IDs and, where defined, a catalog fetcher. A registry entry does not establish that the service is currently reachable, that an account is entitled to a model, or that provider-specific features work.
 
@@ -196,7 +203,7 @@ Authentication depends on the provider:
 - API keys for most hosted providers.
 - Browser or device login for some presets (for example GitHub Copilot, Kilo Code, Kimi for Coding, Qwen Chat, CodeBuddy and WorkBuddy).
 - No authentication for local runtimes.
-- Cline account credentials and OpenCode Zen connections for those integrations.
+- Cline account credentials and native OpenCode Zen configuration for those integrations.
 
 Only a subset of presets and request patterns is exercised by the repository's tests and real deployments. Treat the catalog as a starting point and verify each provider with a small request before relying on it.
 
@@ -205,7 +212,7 @@ Only a subset of presets and request patterns is exercised by the repository's t
 - RouteNest fetches Cline's recommended-model list at startup, re-syncs hourly, and can sync on demand from the console.
 - Presets with a catalog fetcher can refresh their own model or pricing lists.
 - Custom model IDs can be added for endpoints that are not in any catalog.
-- The default model falls back to the first available free model when none is configured.
+- When no default is configured, RouteNest first prefers an active, enabled, non-delisted Cline model classified as free. After catalog initialization, if none exists, it can select the first active, enabled, non-delisted catalog model of any cost.
 - An optional free-only mode rejects models that are not classified as free. **This is not a zero-cost guarantee:**
   - Filtering relies on RouteNest's current model classification, which may be incomplete, stale or inaccurate.
   - A model or provider being labelled free does not guarantee that the underlying account, route or request is free of charge.
@@ -223,7 +230,7 @@ Combo order is authoritative: unhealthy entries are skipped, not reordered. Emer
 
 ## Admin console
 
-The console at `/admin/` manages the gateway:
+The console at `/admin/` requires administrator bootstrap/login and manages the gateway:
 
 - Dashboard, request volume and provider health.
 - Account pool, connections, rotation strategy and import/export.
@@ -231,7 +238,7 @@ The console at `/admin/` manages the gateway:
 - Model catalog, custom models, default model and model tests.
 - Model combos and ordered fallback.
 - Request logs with latency, tokens, TPS, upstream and model.
-- API keys, administrator users/roles/sessions, OIDC/SAML providers, listen security, password, egress proxies and runtime tuning.
+- Client API keys, administrator users/roles/sessions, OIDC/SAML providers, listen security, password, egress proxies and runtime tuning.
 
 The UI is bilingual (English/Chinese), follows the browser language, and can be switched from the sidebar. On desktop widths the sidebar collapses to a rail; `Ctrl+B` toggles it.
 
@@ -239,8 +246,8 @@ The UI is bilingual (English/Chinese), follows the browser language, and can be 
 
 For upstreams that are region-restricted or rate-limited:
 
-- **Cline egress pool** — used for chat, login/token refresh and model sync.
-- **OpenCode Zen egress pool** — separate pool with cooldown for rate-limited exits.
+- **Cline egress pool** - used for chat, login/token refresh and model sync.
+- **OpenCode Zen egress pool** - separate pool with cooldown for rate-limited exits.
 
 Priority is application proxy pool → environment proxy (`HTTPS_PROXY`) → direct. Loopback and private-network targets always connect directly.
 
@@ -259,13 +266,14 @@ compatibility override.
 
 | File | Purpose |
 | --- | --- |
-| `.routenest-accounts.json` | Account pool, API keys and model settings; legacy admin hashes are migration-only |
+| `.routenest-accounts.json` | Cline account pool, client API keys, logical-model settings, saved listener host, and legacy administrator migration sentinels |
+| `.routenest-accounts.json.initialized` | Initialization witness for the account/client-authentication store; back up and restore it with the account-pool file |
 | `admin-auth/.routenest-admin-auth.json` | Durable administrator users, role/provider metadata and hashed sessions |
-| `admin-auth/.routenest-admin-auth.journal` | Synced, hash-chained administrator security and audit journal |
+| `admin-auth/.routenest-admin-auth.journal` | Fsynced, hash-chained administrator security and audit journal |
 | `admin-auth/sso-secrets/` | Approved root for owner-only OIDC/SAML secret files |
 | `.routenest-config.json` | Proxy configuration, aliases, policies and model combos |
-| `.routenest-connections.json` | Non-Cline connection metadata (Zen, Qoder and others) |
-| `.routenest-credentials.json` | Stored connection credentials |
+| `.routenest-connections.json` | Provider Connection records and their access/refresh tokens (Qoder and other non-Cline logins) |
+| `.routenest-credentials.json` | Inert legacy single Cline refresh-token helper retained for file-format/migration compatibility; current account login and routing do not read or write it |
 | `.routenest-providers.json` | Custom providers |
 | `.routenest-providers-cooldowns.json` | Provider cooldown state |
 | `.routenest-providers-sync.json` | Provider catalog sync state |
@@ -281,13 +289,23 @@ On first use, RouteNest copies missing current `.routenest-*` files and legacy
 destination files always win, migration is idempotent, and source files are
 preserved as recovery backups.
 
+If the pool and witness are both absent, RouteNest will not infer that an existing
+or partially restored data directory is a fresh installation. Restore a valid pool
+file and restart. A valid restored pool without its witness is accepted and the
+witness is recreated only after the pool has been validated.
+
 On Unix-like systems the data and capture directories are restricted to `0700`
 and known state files to `0600`. Windows uses protected owner/SYSTEM ACLs for
 private RouteNest paths. RouteNest fails startup with an actionable error if it
 cannot establish safe permissions; it no longer falls back to writing secrets
 beside the executable.
 
-> The data files contain plaintext refresh tokens, provider keys and generated API keys. Back them up securely and never publish them or commit them to Git.
+The Windows durable writer uses `MoveFileEx` write-through replacement followed by
+a writable directory-handle flush. The correction is cross-compiled in CI/local
+verification, but real Windows runtime execution is still required before claiming
+full cross-platform C1 approval.
+
+> The data files contain plaintext refresh tokens, Provider Credentials and generated client API keys. Back them up securely and never publish them or commit them to Git.
 
 ## Build from source
 
@@ -335,18 +353,20 @@ internal/compaction/       context management and compaction
 internal/admin/            admin API plus embedded UI in internal/admin/ui/
 internal/accounts/, connections/, requestlog/, store/   persistent state
 desktop/                   Wails shell and build scripts
-docs/, scripts/            reference documents and operational scripts
+CONTRACTS.md, DESIGN.md     Phase 1 contract proposal and active UI design rules
+CONTEXT.md                  domain glossary
+docs/, scripts/             tracked references, local historical notes and operational scripts
 ```
 
-The Go module path is `routenest`. The repository root intentionally contains
-only the two `package main` entry points; application composition and all
-implementation code live under `internal/`.
+The Go module path is `routenest`. The repository root keeps the CLI and desktop entry
+points plus the local administrator recovery command; application composition and all
+service implementation code live under `internal/`.
 
 ## Attribution and license
 
 RouteNest is an independent fork of [Cline2API](https://github.com/luawei1/cline2api), originally created by luawei1, and is distributed under the MIT License. The upstream copyright notice is retained in [LICENSE](LICENSE).
 
-The 90 imported provider preset definitions are derived from the ExtremeRouter provider registry, which is MIT-licensed. The corresponding copyright and license notice is preserved in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+The 90 imported Provider Definitions are derived from the ExtremeRouter provider registry, which is MIT-licensed. The corresponding copyright and license notice is preserved in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 RouteNest is not affiliated with or endorsed by Cline, OpenCode, Qoder, or any provider listed in the catalog. Use it only with accounts and credentials you are authorized to use, and comply with each provider's terms of service. Provider names and trademarks belong to their owners.
 

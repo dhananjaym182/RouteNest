@@ -95,6 +95,19 @@ func TestAdminRouteRegistryPolicyIsDefensiveCopy(t *testing.T) {
 	}
 }
 
+func TestDeleteAllAccountsRequiresCredentialDangerousAndCSRF(t *testing.T) {
+	registry := newAdminRouteRegistry()
+	registerAccountsRoutes(registry)
+	policy, ok := registry.Policy(http.MethodPost, "/admin/api/accounts/delete-all")
+	if !ok {
+		t.Fatal("delete-all policy missing")
+	}
+	want := []adminauth.Permission{adminauth.PermissionCredentialWrite, adminauth.PermissionDangerousExecute}
+	if policy.CSRF != csrfSession || !reflect.DeepEqual(policy.Permissions, want) {
+		t.Fatalf("policy = %+v, want CSRF session and permissions %v", policy, want)
+	}
+}
+
 func TestConfigRoutesSeparateProviderAndSecurityPermissions(t *testing.T) {
 	registry := newAdminRouteRegistry()
 	registerConfigRoutes(registry)

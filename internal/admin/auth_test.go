@@ -176,6 +176,59 @@ func TestAdminSecurityHeadersAndOriginEnforcement(t *testing.T) {
 	}
 }
 
+func TestDeleteAllAccountsAuthorizationMatrix(t *testing.T) {
+	mux, runtime := newAdminAuthTestMux(t)
+	bootstrap, err := runtime.service.CompleteBootstrap(t.Context(), "one time bootstrap secret", "permanent admin password")
+	if err != nil {
+		t.Fatal(err)
+	}
+	breakGlass, err := runtime.service.Authenticate(t.Context(), bootstrap.Token)
+	if err != nil {
+		t.Fatal(err)
+	}
+	createSession := func(username string, role adminauth.Role) (string, string) {
+		t.Helper()
+		password := username + " permanent password"
+		if _, err := runtime.service.CreateLocalUser(t.Context(), breakGlass, username, password, []adminauth.Role{role}); err != nil {
+			t.Fatal(err)
+		}
+		credentials, err := runtime.service.Login(t.Context(), username, password, "127.0.0.1")
+		if err != nil {
+			t.Fatal(err)
+		}
+		return credentials.Token, credentials.CSRFToken
+	}
+	credentialToken, _ := createSession("credential-operator", adminauth.RoleCredentialAdmin)
+	providerToken, providerCSRF := createSession("provider-operator-c1", adminauth.RoleProviderAdmin)
+	request := func(token, csrf string) *http.Request {
+		req := adminTestRequest(http.MethodPost, "/admin/api/accounts/delete-all", `{}`)
+		if token != "" {
+			req.AddCookie(&http.Cookie{Name: adminapi.SessionCookieName, Value: token})
+		}
+		if csrf != "" {
+			req.Header.Set("X-RouteNest-CSRF", csrf)
+		}
+		return req
+	}
+	for _, tc := range []struct {
+		name        string
+		token, csrf string
+		want        int
+	}{
+		{name: "anonymous", want: http.StatusUnauthorized},
+		{name: "missing CSRF", token: credentialToken, want: http.StatusForbidden},
+		{name: "missing credential permission", token: providerToken, csrf: providerCSRF, want: http.StatusForbidden},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			recorder := httptest.NewRecorder()
+			mux.ServeHTTP(recorder, request(tc.token, tc.csrf))
+			if recorder.Code != tc.want {
+				t.Fatalf("status = %d, want %d: %s", recorder.Code, tc.want, recorder.Body.String())
+			}
+		})
+	}
+}
+
 func TestAdminConfigMutationRoleMatrix(t *testing.T) {
 	mux, runtime := newAdminAuthTestMux(t)
 	bootstrap, err := runtime.service.CompleteBootstrap(t.Context(), "one time bootstrap secret", "permanent admin password")

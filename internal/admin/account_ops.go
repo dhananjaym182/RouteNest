@@ -2,13 +2,13 @@ package admin
 
 import (
 	"log"
-	"routenest/internal/routing"
 	"time"
 
 	"routenest/internal/accounts"
 	"routenest/internal/adminapi"
 	"routenest/internal/domain"
 	"routenest/internal/i18n"
+	"routenest/internal/routing"
 )
 
 func snapshotAccounts() []*domain.Account {
@@ -32,11 +32,8 @@ func refreshAllAccounts() {
 	}
 }
 
-func clearAccountPool() {
-	accounts.PoolMu.Lock()
-	accounts.Pool = &AccountPool{Accounts: []*Account{}, Keys: []string{}}
-	accounts.SavePoolLocked()
-	accounts.PoolMu.Unlock()
+func clearAccountPool() error {
+	return accounts.DeleteAllAccountsStrict()
 }
 
 var adminAccountOps = &adminapi.AccountOps{

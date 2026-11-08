@@ -17,6 +17,7 @@ type AccountPool = domain.AccountPool
 // usePoolPath 把账号池文件指向指定路径并清空内存缓存，测试结束后恢复。
 func usePoolPath(t *testing.T, path string) {
 	t.Helper()
+	t.Setenv(accounts.InitializeEmptyAccountStoreEnv, "true")
 	oldPool, oldPath := accounts.Pool, accounts.PoolPath
 	accounts.Pool, accounts.PoolPath = nil, path
 	t.Cleanup(func() { accounts.Pool, accounts.PoolPath = oldPool, oldPath })
@@ -34,7 +35,10 @@ func TestLoadPoolCorruptFileBackup(t *testing.T) {
 
 	p := accounts.LoadPool()
 	if p == nil || len(p.Accounts) != 0 || len(p.Keys) != 0 {
-		t.Fatalf("expected fresh empty accounts.Pool, got %+v", p)
+		t.Fatalf("expected quarantined empty in-memory pool, got %+v", p)
+	}
+	if err := accounts.PoolStorageError(); err == nil {
+		t.Fatal("corrupt storage must remain unavailable")
 	}
 
 	backups, err := filepath.Glob(path + ".corrupt-*")
@@ -47,12 +51,12 @@ func TestLoadPoolCorruptFileBackup(t *testing.T) {
 	}
 
 	accounts.SavePool()
-	if _, err := os.Stat(path); err != nil {
-		t.Fatalf("fresh pool file missing after save: %v", err)
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatalf("corrupt authority was silently replaced: %v", err)
 	}
 	data, err = os.ReadFile(backups[0])
 	if err != nil || string(data) != corrupt {
-		t.Fatalf("backup modified after save: %q, err %v", data, err)
+		t.Fatalf("backup modified after rejected save: %q, err %v", data, err)
 	}
 }
 

@@ -1,8 +1,12 @@
 package accounts
 
 import (
+	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -19,7 +23,31 @@ var (
 	Pool     *AccountPool
 	PoolMu   sync.Mutex
 	PoolPath string
+
+	poolLoadErr     error
+	poolLoadErrPath string
 )
+
+type PoolStorageState string
+
+const (
+	PoolStorageFirstRun   PoolStorageState = "first_run"
+	PoolStorageReady      PoolStorageState = "ready"
+	PoolStorageMissing    PoolStorageState = "missing_after_initialization"
+	PoolStorageCorrupt    PoolStorageState = "corrupt"
+	PoolStorageUnreadable PoolStorageState = "unreadable"
+)
+
+var ErrPoolStorageUnavailable = errors.New("account storage unavailable")
+var errInvalidPoolMarker = errors.New("invalid account storage marker")
+
+const poolMarkerVersion = 1
+
+const InitializeEmptyAccountStoreEnv = "ROUTENEST_INITIALIZE_EMPTY_ACCOUNT_STORE"
+
+type poolMarker struct {
+	Version int `json:"version"`
+}
 
 // poolPathMu guards first-use resolution of PoolPath. Code that needs both
 // locks takes PoolMu first, then poolPathMu, matching LoadPool and persistence.
@@ -44,12 +72,144 @@ func LoadPool() *AccountPool {
 		return Pool
 	}
 
-	p, err := poolstore.Load(PoolPath)
+	p, _, err := loadPoolFromDisk(PoolPath)
 	if err != nil {
-		platform.BackupCorruptFile(PoolPath, err)
+		poolLoadErr = err
+		poolLoadErrPath = PoolPath
+		Pool = poolstore.Empty()
+		log.Printf("Client API-key storage unavailable at %s: %v", PoolPath, err)
+		return Pool
 	}
+	poolLoadErr = nil
+	poolLoadErrPath = ""
 	Pool = p
 	return Pool
+}
+
+func PoolStorageError() error {
+	LoadPool()
+	PoolMu.Lock()
+	defer PoolMu.Unlock()
+	return PoolStorageErrorLocked()
+}
+
+func PoolStorageErrorLocked() error {
+	if poolLoadErrPath != PoolPath {
+		return nil
+	}
+	return poolLoadErr
+}
+
+func LoadPoolFromDisk(path string) (*AccountPool, PoolStorageState, error) {
+	return loadPoolFromDisk(path)
+}
+
+func loadPoolFromDisk(path string) (*AccountPool, PoolStorageState, error) {
+	if strings.TrimSpace(path) == "" {
+		return nil, PoolStorageUnreadable, fmt.Errorf("%w: account storage path is empty", ErrPoolStorageUnavailable)
+	}
+	markerExists, markerErr := loadPoolMarker(path)
+	if markerErr != nil {
+		state := PoolStorageUnreadable
+		if jsonError(markerErr) || errors.Is(markerErr, errInvalidPoolMarker) {
+			state = PoolStorageCorrupt
+		}
+		return nil, state, fmt.Errorf("%w: inspect initialization marker for %s: %v", ErrPoolStorageUnavailable, path, markerErr)
+	}
+	_, statErr := os.Stat(path)
+	missing := errors.Is(statErr, os.ErrNotExist)
+	if statErr != nil && !missing {
+		return nil, PoolStorageUnreadable, fmt.Errorf("%w: read %s: %v", ErrPoolStorageUnavailable, path, statErr)
+	}
+	if missing {
+		if markerExists {
+			return nil, PoolStorageMissing, fmt.Errorf("%w: initialized account storage %s is missing; restore it from backup", ErrPoolStorageUnavailable, path)
+		}
+		backup, err := corruptPoolBackupExists(path)
+		if err != nil {
+			return nil, PoolStorageUnreadable, fmt.Errorf("%w: inspect backups for %s: %v", ErrPoolStorageUnavailable, path, err)
+		}
+		if backup {
+			return nil, PoolStorageCorrupt, fmt.Errorf("%w: %s is missing after a corrupt-file backup; restore or repair it", ErrPoolStorageUnavailable, path)
+		}
+		established, err := platform.EstablishedDataEvidence(path)
+		if err != nil {
+			return nil, PoolStorageUnreadable, fmt.Errorf("%w: inspect installation evidence for %s: %v", ErrPoolStorageUnavailable, path, err)
+		}
+		if established {
+			return nil, PoolStorageMissing, fmt.Errorf("%w: account storage and its initialization witness are missing from an established data directory; restore a valid account-pool file and restart RouteNest", ErrPoolStorageUnavailable)
+		}
+		if os.Getenv(InitializeEmptyAccountStoreEnv) != "true" {
+			return nil, PoolStorageMissing, fmt.Errorf("%w: account storage is uninitialized; for a confirmed fresh installation set %s=true for one startup, otherwise restore the account-pool file", ErrPoolStorageUnavailable, InitializeEmptyAccountStoreEnv)
+		}
+		p := poolstore.Empty()
+		if err := poolstore.SaveDurable(path, p); err != nil {
+			return nil, PoolStorageUnreadable, fmt.Errorf("%w: initialize %s: %v", ErrPoolStorageUnavailable, path, err)
+		}
+		if err := savePoolMarker(path); err != nil {
+			return nil, PoolStorageUnreadable, fmt.Errorf("%w: initialize marker for %s: %v", ErrPoolStorageUnavailable, path, err)
+		}
+		return p, PoolStorageFirstRun, nil
+	}
+	p, err := poolstore.Load(path)
+	if err != nil {
+		if jsonError(err) {
+			platform.BackupCorruptFile(path, err)
+			return nil, PoolStorageCorrupt, fmt.Errorf("%w: %s is corrupt and was preserved as a .corrupt-* backup: %v", ErrPoolStorageUnavailable, path, err)
+		}
+		return nil, PoolStorageUnreadable, fmt.Errorf("%w: read %s: %v", ErrPoolStorageUnavailable, path, err)
+	}
+	if !markerExists {
+		if err := savePoolMarker(path); err != nil {
+			return nil, PoolStorageUnreadable, fmt.Errorf("%w: initialize marker for %s: %v", ErrPoolStorageUnavailable, path, err)
+		}
+	}
+	return p, PoolStorageReady, nil
+}
+
+func loadPoolMarker(path string) (bool, error) {
+	markerPath := path + ".initialized"
+	info, err := os.Lstat(markerPath)
+	if err == nil && (!info.Mode().IsRegular() || info.Mode()&os.ModeSymlink != 0) {
+		return true, errInvalidPoolMarker
+	}
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return false, err
+	}
+	data, err := os.ReadFile(markerPath)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return false, nil
+		}
+		return false, err
+	}
+	var marker poolMarker
+	if err := json.Unmarshal(data, &marker); err != nil {
+		return true, err
+	}
+	if marker.Version != poolMarkerVersion {
+		return true, errInvalidPoolMarker
+	}
+	return true, nil
+}
+
+func savePoolMarker(path string) error {
+	data, err := json.Marshal(poolMarker{Version: poolMarkerVersion})
+	if err != nil {
+		return err
+	}
+	return platform.WriteFileAtomicDurable(path+".initialized", data, 0600)
+}
+
+func corruptPoolBackupExists(path string) (bool, error) {
+	matches, err := filepath.Glob(path + ".corrupt-*")
+	return len(matches) > 0, err
+}
+
+func jsonError(err error) bool {
+	var syntaxError *json.SyntaxError
+	var typeError *json.UnmarshalTypeError
+	return errors.As(err, &syntaxError) || errors.As(err, &typeError) || errors.Is(err, poolstore.ErrInvalidDocument)
 }
 
 func SavePool() {
@@ -80,7 +240,66 @@ func SavePoolStrict() error {
 // and save so JSON serialization never observes a partially updated pool.
 func SavePoolStrictLocked() error {
 	ensurePoolPath()
+	if poolLoadErr != nil && poolLoadErrPath == PoolPath {
+		return poolLoadErr
+	}
 	return poolstore.Save(PoolPath, Pool)
+}
+
+func DeleteAllAccountsStrict() error {
+	return deleteAllAccountsStrict(poolstore.SaveDurable)
+}
+
+func deleteAllAccountsStrict(save func(string, *AccountPool) error) error {
+	PoolMu.Lock()
+	defer PoolMu.Unlock()
+	ensurePoolPath()
+	p, _, err := loadPoolFromDisk(PoolPath)
+	if err != nil {
+		poolLoadErr = err
+		poolLoadErrPath = PoolPath
+		return err
+	}
+	next := clonePool(p)
+	next.Accounts = []*Account{}
+	next.CurrentIdx = 0
+	if err := save(PoolPath, next); err != nil {
+		if platform.AtomicWriteMayHaveReplaced(err) {
+			persisted, reloadErr := poolstore.Load(PoolPath)
+			if reloadErr != nil {
+				poolLoadErr = errors.Join(err, reloadErr)
+				poolLoadErrPath = PoolPath
+				Pool = poolstore.Empty()
+				return poolLoadErr
+			}
+			publishPoolLocked(persisted)
+		}
+		return err
+	}
+	publishPoolLocked(next)
+	poolLoadErr = nil
+	poolLoadErrPath = ""
+	return nil
+}
+
+func publishPoolLocked(next *AccountPool) {
+	if Pool == nil {
+		Pool = next
+		return
+	}
+	*Pool = *next
+}
+
+func clonePool(pool *AccountPool) *AccountPool {
+	if pool == nil {
+		return poolstore.Empty()
+	}
+	next := *pool
+	next.Accounts = append([]*Account(nil), pool.Accounts...)
+	next.Keys = append([]string(nil), pool.Keys...)
+	next.Models = append([]Model(nil), pool.Models...)
+	next.RemovedModelOfferings = append([]domain.ModelRemovalRef(nil), pool.RemovedModelOfferings...)
+	return &next
 }
 
 // AddAccount 添加账号。同一邮箱（不区分大小写，来自 Cline userInfo，即同一
