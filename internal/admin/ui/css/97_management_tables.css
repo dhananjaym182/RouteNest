@@ -40,6 +40,34 @@
 .mgmt-actions{display:flex;flex-wrap:wrap;align-items:center;justify-content:flex-end;gap:6px}
 .mgmt-actions .btn{font-size:12px;padding:4px 10px;white-space:nowrap}
 
+/* Reserve provider actions; long identity, authentication and URL values shrink. */
+#globalInstances{container-name:provider-inventory;container-type:inline-size}
+#globalInstances .provider-table{table-layout:fixed}
+#globalInstances .provider-table th,#globalInstances .provider-table td{padding:8px 6px}
+#globalInstances .provider-table th{font-size:11.5px}
+#globalInstances .provider-table td{height:48px;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#globalInstances .provider-table th:nth-child(1){width:18%}
+#globalInstances .provider-table th:nth-child(2){width:9%}
+#globalInstances .provider-table th:nth-child(3){width:7%}
+#globalInstances .provider-table th:nth-child(4){width:12%}
+#globalInstances .provider-table th:nth-child(5){width:9%;text-align:right}
+#globalInstances .provider-table th:nth-child(6){width:12%;text-align:right}
+#globalInstances .provider-table th:last-child{width:208px;z-index:2;background:var(--surface2)}
+#globalInstances .provider-table th:last-child,#globalInstances .provider-table td:last-child{position:sticky;right:0;text-align:right;box-shadow:-1px 0 0 var(--border2)}
+#globalInstances .provider-table td:last-child{z-index:1;background:var(--surface);overflow:visible}
+#globalInstances .provider-table tbody tr:hover td:last-child{background:var(--surface2)}
+#globalInstances .mgmt-provider-cell{gap:8px}
+#globalInstances .mgmt-primary,#globalInstances .mgmt-url{max-width:100%}
+#globalInstances .mgmt-name{font-size:13px}
+#globalInstances .mgmt-id{font-size:11px}
+#globalInstances .mgmt-url{display:block}
+#globalInstances .system-badge{padding:3px 6px}
+#globalInstances .mgmt-actions{flex-wrap:nowrap;gap:6px}
+#globalInstances .mgmt-actions .btn{min-height:30px;padding:4px 8px}
+#globalInstances .provider-compact-list{grid-template-columns:minmax(0,1fr)}
+#globalInstances .provider-compact-item{min-width:0}
+#globalInstances .pc-line2>span:first-child{flex-basis:100%;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
 /* ===== Compact summaries (mobile) ===== */
 .provider-compact-list,
 .credential-compact-list{display:none;gap:8px}
@@ -52,6 +80,13 @@
 .pc-actions{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:0}
 .pc-actions .btn{font-size:12px;padding:4px 10px}
 .pc-actions .mgmt-actions{justify-content:flex-start}
+
+@container provider-inventory (max-width:879px){
+  .provider-table-wrap{display:none}
+  .provider-compact-list{display:grid}
+  .pc-line2{min-width:0}
+  .pc-line2>span{max-width:100%;overflow-wrap:anywhere}
+}
 
 /* ===== Drawer details ===== */
 .detail-model-cooldowns{display:flex;flex-direction:column}

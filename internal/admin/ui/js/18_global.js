@@ -267,7 +267,7 @@ function renderGlobalInstances(data) {
   const compactRows = rows.map(row => {
     return '<article class="provider-compact-item">' +
       '<div class="pc-line1"><span class="provider-monogram mgmt-monogram" aria-hidden="true">' + esc(row.initial) + '</span><strong title="' + escAttr(row.name) + '">' + esc(row.name) + '</strong>' + globalBadge(row.enabled ? '已启用' : '已停用', row.enabled ? 'positive' : 'negative') + '</div>' +
-      '<div class="pc-line2"><span>' + esc(t(row.kindLabel)) + ' · ' + esc(row.authText) + '</span><span>' + esc(t('凭据')) + ' ' + formatNumber(row.credentialsCount) + ' · ' + esc(t('模型授权')) + ' ' + formatNumber(row.offeringsCount) + '</span></div>' +
+      '<div class="pc-line2"><span title="' + escAttr(row.authText) + '">' + esc(t(row.kindLabel)) + ' · ' + esc(row.authText) + '</span><span>' + esc(t('凭据')) + ' ' + formatNumber(row.credentialsCount) + ' · ' + esc(t('模型授权')) + ' ' + formatNumber(row.offeringsCount) + '</span></div>' +
       '<div class="pc-actions">' +
         '<button type="button" class="btn btn-sm btn-primary" onclick="openGlobalProviderDetail(' + globalJS(row.id) + ')">' + esc(t('详情')) + '</button>' +
         primaryAction(row) +
