@@ -74,7 +74,10 @@ type AccountPool struct {
 	Keys         []string   `json:"keys,omitempty"`
 	Models       []Model    `json:"models,omitempty"`
 	DefaultModel string     `json:"defaultModel,omitempty"`
-	ListenHost   string     `json:"listenHost,omitempty"`
+	// ModelCatalogInitialized distinguishes an intentionally emptied synced
+	// catalogue from an installation that still needs offline seed models.
+	ModelCatalogInitialized bool   `json:"modelCatalogInitialized,omitempty"`
+	ListenHost              string `json:"listenHost,omitempty"`
 	// AdminPasswordHash and AdminPasswordSalt are legacy migration fields. After
 	// a successful adminauth rotation both contain an unmatchable non-empty
 	// sentinel so older binaries fail locked rather than restoring anonymous

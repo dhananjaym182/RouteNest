@@ -1,0 +1,97 @@
+/* Access settings use the existing console tokens and controls. */
+.access-intro{margin-bottom:var(--sp-6)}
+.access-intro h2{font-size:var(--fs-xl);font-weight:650;line-height:1.35}
+.access-intro p{margin-top:var(--sp-1);color:var(--text2);font-size:var(--fs-base)}
+.access-overview{display:flex;flex-wrap:wrap;align-items:flex-start;gap:var(--sp-6)}
+.access-account-card,.access-side-stack{flex:1 1 400px;min-width:0}
+.access-side-stack{display:grid;gap:var(--sp-6)}
+.access-settings .access-card{margin:0;padding:var(--sp-6)}
+.access-settings>.access-card{margin-top:var(--sp-6)}
+.access-card-head,.access-heading-row,.access-editor-head{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:var(--sp-3)}
+.access-card-head{margin-bottom:var(--sp-4)}
+.access-card-head h3{display:flex;align-items:center;gap:var(--sp-2);min-width:0;font-size:16px;font-weight:650;line-height:1.45}
+.access-card-head h3 svg{width:20px;height:20px;flex:none;color:var(--text2)}
+.access-card-desc{margin-bottom:var(--sp-4);color:var(--text2);font-size:var(--fs-sm);line-height:1.6}
+.access-toolbar,.access-row-actions,.access-form-footer{display:flex;align-items:center;flex-wrap:wrap;gap:var(--sp-2)}
+.access-toolbar{margin-left:auto}
+.access-settings .btn{min-height:40px;box-shadow:none}
+.access-settings .btn-sm{min-height:36px}
+.access-settings .access-refresh,.access-settings .access-close{width:36px;padding:var(--sp-2);flex:none}
+.access-refresh svg,.access-close svg{width:18px;height:18px}
+.access-identity{display:flex;align-items:center;flex-wrap:wrap;gap:var(--sp-3);margin-bottom:var(--sp-3)}
+.access-identity>strong{font-size:24px;font-weight:650;line-height:1.3;overflow-wrap:anywhere}
+.access-role-badges{display:flex;flex-wrap:wrap;gap:var(--sp-2)}
+.access-badge,.access-role{display:inline-flex;align-items:center;gap:var(--sp-1);max-width:100%;padding:var(--sp-1) var(--sp-2);border:1px solid var(--border);border-radius:var(--radius-pill);background:var(--surface2);color:var(--text2);font-size:var(--fs-xs);font-weight:500;line-height:1.4;overflow-wrap:anywhere}
+.access-badge.is-success{border-color:transparent;background:var(--green-soft);color:var(--text)}
+.access-badge.is-warning{border-color:transparent;background:var(--yellow-soft);color:var(--text)}
+.access-password-area{margin-top:var(--sp-6);padding-top:var(--sp-6);border-top:1px solid var(--border2)}
+.access-heading-row{margin-bottom:var(--sp-4)}
+.access-heading-row h4,.access-editor-head h4{font-size:var(--fs-lg);font-weight:650;line-height:1.5}
+.access-form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));align-items:start;gap:var(--sp-4)}
+.access-form-grid-three{grid-template-columns:minmax(0,1.4fr) repeat(2,minmax(0,1fr))}
+.access-reference-grid{grid-template-columns:minmax(180px,.7fr) minmax(0,1.3fr)}
+.access-field-wide{grid-column:1/-1}
+.access-settings .field label,.access-field-label{display:block;margin-bottom:var(--sp-2);color:var(--text2);font-size:var(--fs-sm);font-weight:500;line-height:1.5}
+.access-settings input:not([type=checkbox],[type=hidden]),.access-settings select{min-height:44px;width:100%}
+.access-settings input[readonly]{background:var(--surface2);color:var(--text2)}
+.access-settings .field-hint{margin-top:var(--sp-2);color:var(--text2);font-size:var(--fs-xs);line-height:1.6}
+.access-code-input{font-family:var(--font-mono);font-size:var(--fs-sm)!important}
+.access-settings textarea{width:100%;resize:vertical;min-height:104px}
+.access-form-footer{margin-top:var(--sp-5)}
+.access-footnote{margin-top:var(--sp-3);color:var(--text2);font-size:var(--fs-xs);line-height:1.65;overflow-wrap:anywhere}
+.access-network-addresses{margin-top:var(--sp-4)}
+.access-network-addresses .access-role{font-family:var(--font-mono)}
+.access-settings .warn-box{margin-top:var(--sp-4);color:var(--text)}
+.access-list{overflow:hidden;border:1px solid var(--border);border-radius:var(--radius-sm)}
+#adminSessionsList{max-height:280px;overflow-y:auto;overscroll-behavior:contain}
+#adminSessionsList:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.access-list-row{display:flex;align-items:center;gap:var(--sp-4);padding:var(--sp-4);border-bottom:1px solid var(--border2)}
+.access-list-row:last-child{border-bottom:0}
+.access-row-info{flex:1;min-width:0}
+.access-row-title{display:flex;align-items:center;flex-wrap:wrap;gap:var(--sp-2)}
+.access-row-title strong{font-size:var(--fs-base);font-weight:600;overflow-wrap:anywhere}
+.access-row-meta{margin-top:var(--sp-2);color:var(--text2);font-size:var(--fs-xs);line-height:1.6;overflow-wrap:anywhere}
+.access-row-meta time{font-variant-numeric:tabular-nums}
+.access-row-meta.access-role-badges{gap:var(--sp-1)}
+.access-empty{padding:var(--sp-6);background:var(--surface2);color:var(--text2);text-align:center;font-size:var(--fs-sm);line-height:1.6}
+.access-editor{margin-top:var(--sp-6);padding:var(--sp-5);border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface2)}
+.access-editor-head{margin-bottom:var(--sp-5)}
+.access-form-group{min-width:0;margin:var(--sp-6) 0 0;padding:0;border:0}
+.access-form-group legend{width:100%;margin-bottom:var(--sp-3);padding:0;color:var(--text);font-size:var(--fs-base);font-weight:600;line-height:1.5}
+.access-role-options{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:var(--sp-2)}
+.access-role-option{display:flex;align-items:flex-start;gap:var(--sp-2);min-width:0;margin:0;padding:var(--sp-3);border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);cursor:pointer}
+.access-role-option:has(input:checked){border-color:var(--accent);background:var(--accent-soft)}
+.access-role-option:has(input:checked) small{color:var(--text)}
+.access-role-option:has(input:focus-visible){box-shadow:var(--ring)}
+.access-role-option:has(input:disabled){cursor:default}
+.access-settings input[type=checkbox]{width:16px;height:16px;min-height:0;margin-top:2px;flex:none;accent-color:var(--accent)}
+.access-role-option strong{display:block;color:var(--text);font-size:var(--fs-sm);font-weight:500;line-height:1.5}
+.access-role-option small{display:block;margin-top:var(--sp-1);color:var(--text2);font-size:var(--fs-xs);line-height:1.5}
+.access-check-row{display:flex;align-items:center;gap:var(--sp-2);margin-top:var(--sp-5);color:var(--text2);font-size:var(--fs-sm)}
+.access-details{margin-top:var(--sp-5);border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface)}
+.access-details summary{padding:var(--sp-4);color:var(--text2);font-size:var(--fs-sm);font-weight:600;cursor:pointer}
+.access-details summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:var(--radius-sm)}
+.access-details[open] summary{border-bottom:1px solid var(--border2);color:var(--text)}
+.access-details-body{padding:var(--sp-4)}
+.access-details-body .access-form-group{margin-top:var(--sp-5)}
+.access-settings .access-secret-note{margin-top:var(--sp-5);background:var(--surface)}
+.access-settings .access-form-error{margin:0 0 var(--sp-4);padding:var(--sp-3);border:1px solid var(--red);border-radius:var(--radius-xs);background:var(--red-soft);color:var(--text);text-align:left;line-height:1.6}
+.access-settings .access-form-error:empty{display:none}
+#adminPasswordError:not(:empty){margin-top:var(--sp-4);margin-bottom:0}
+@media (max-width:1100px){
+  .access-role-options{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media (max-width:600px){
+  .access-overview,.access-side-stack{gap:var(--sp-4)}
+  .access-settings .access-card{padding:var(--sp-4)}
+  .access-settings>.access-card{margin-top:var(--sp-4)}
+  .access-account-card,.access-side-stack{flex-basis:100%}
+  .access-card-head{align-items:flex-start}
+  .access-toolbar{width:100%;margin-left:0}
+  .access-settings .btn,.access-settings .btn-sm{min-height:44px}
+  .access-settings .access-refresh,.access-settings .access-close{width:44px}
+  .access-form-grid,.access-role-options{grid-template-columns:minmax(0,1fr)}
+  .access-list-row{flex-wrap:wrap;gap:var(--sp-3);padding:var(--sp-3)}
+  .access-row-actions{width:100%}
+  .access-editor{padding:var(--sp-4)}
+}

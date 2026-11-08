@@ -84,10 +84,12 @@ async function openNewestAutoBatch() {
 }
 
 async function openAutoBatch(batchId) {
+  const epochs = new Map(Object.keys(_provCache).map(id => [id, providerModelRemovalEpoch(id)]));
   try {
     const d = await api('GET', '/models/import/batch?id=' + encodeURIComponent(batchId));
     const r = d.data || {};
     if (!r.batch) { toast(t('批次不存在或已过期'), 'info'); loadProviders(); return; }
+    if (providerModelRemovalEpoch(r.batch.providerId) !== (epochs.get(r.batch.providerId) || 0)) return;
     _importBatch = r.batch;
     renderImportPreviewList();
     _('importPreviewModal').style.display = 'flex';
@@ -128,6 +130,7 @@ async function toggleProvider(id, enable, btn) {
 }
 
 function showProviderEditor(p) {
+  _provEditorRevision++;
   if (typeof _providerSetupAuthContext !== 'undefined') _providerSetupAuthContext = null;
   const authSetup = _('providerAuthSetup');
   if (authSetup) { authSetup.hidden = true; authSetup.innerHTML = ''; }
@@ -238,7 +241,7 @@ function discardProviderForm() {
   refreshSaveBar();
 }
 
-function hideProviderEditor() { closeDrawer('providerEditor'); }
+function hideProviderEditor() { _provEditorRevision++; closeDrawer('providerEditor'); }
 
 // 模型 ID 输入实时回显为芯片（真值仍是输入框文本，保存逻辑不变）
 function renderProvModelChips() {
@@ -321,7 +324,9 @@ async function saveProvider(btn) {
       if (newId) {
         _previewAfterSave = false;
         try {
+          const revision = _provEditorRevision, removalEpoch = providerModelRemovalEpoch(newId);
           const pd = await api('POST', '/models/import/preview', { id: newId });
+          if (_provEditorRevision !== revision || providerModelRemovalEpoch(newId) !== removalEpoch) return;
           const pr = pd.data || {};
           if (!pr.error && pr.batch) {
             _importBatch = pr.batch;

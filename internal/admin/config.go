@@ -59,8 +59,13 @@ var adminConfig = &adminapi.Config{
 		}
 		return m
 	},
-	ZenHeaders:      func() map[string]string { return zen.GetConfig().ZenHeaders },
-	PoolPath:        accounts.PoolPath,
+	ZenHeaders: func() map[string]string { return zen.GetConfig().ZenHeaders },
+	PoolPath: func() string {
+		accounts.LoadPool()
+		accounts.PoolMu.Lock()
+		defer accounts.PoolMu.Unlock()
+		return accounts.PoolPath
+	},
 	HasPassword:     hasAdminPassword,
 	RestartListener: proxycore.RestartListener,
 	FatalListenerFailure: func(err error) {

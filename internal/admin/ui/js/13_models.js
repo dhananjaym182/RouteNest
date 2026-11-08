@@ -1,14 +1,5 @@
 // ========== 模型列表 ==========
 let _cachedModels = [];
-const _modelSyncSeen = new Map();
-const _modelSyncGroups = new Map();
-let _modelDelistedSeen = new Set();
-let _providerSyncManagedIDs = new Set();
-let _providerSyncManagedNames = new Set();
-let _modelCatalogRequest = 0;
-let _modelCatalogApplied = 0;
-let _modelCatalogLatest = {};
-let _modelDelistingCheck = null;
 let _modelGroupOpen = {}; // 分组折叠状态（localStorage 持久化）
 const _modelFilters = { search: '', provider: '', cost: '', status: '' };
 const MODEL_GROUP_OPEN_KEY = 'cline_admin_model_groups_open';
@@ -575,193 +566,6 @@ function editModelMeta(id, ctx, out, cost, tierSignal) {
 
 // 模型分组渲染已迁移至 renderModelList（按提供商分组 + 筛选 + 批量启停）
 
-// Observe unmerged catalogue rows: removal belongs to a source/provider even
-// when another source still offers the same model ID. Recovery resets the mark
-// so a later delisting warns again; ordinary refreshes do not repeat notices.
-function observeModelDelistings(models) {
-  const next = new Set(), removed = new Map();
-  // Provider sync state is authoritative when it supplies delistedModels. Keep
-  // those keys separate from the legacy logical-model projection, which can be
-  // active while another provider's same-ID offering is delisted.
-  _modelDelistedSeen.forEach(key => {
-    try {
-      const parts = JSON.parse(key);
-      if (parts[0] === 'provider-sync' && _providerSyncManagedIDs.has(parts[1])) next.add(key);
-    } catch (e) {}
-  });
-  (models || []).forEach(m => {
-    if (!m.delisted) return;
-    const source = modelSource(m);
-    const provider = source === 'provider' ? (m.provider || 'Provider') : '';
-    if (source === 'provider' && _providerSyncManagedNames.has(provider)) return;
-    const key = JSON.stringify([source, provider, m.id]);
-    next.add(key);
-    if (_modelDelistedSeen.has(key)) return;
-    const label = provider
-      ? ((provider === 'Cline' || provider === 'OpenCode Zen') ? 'Provider: ' + provider : provider)
-      : (MODEL_SOURCE_LABEL[source] || t('用户自定义'));
-    const groupKey = JSON.stringify([source, provider]);
-    if (!removed.has(groupKey)) removed.set(groupKey, { label: label, ids: [] });
-    removed.get(groupKey).ids.push(m.id);
-  });
-  _modelDelistedSeen = next;
-  removed.forEach((group, key) => showModelSyncModal({ removed: group.ids }, group.label, key));
-}
-
-// Provider recheck state is provider-scoped, so it remains accurate when two
-// providers expose the same model ID. New servers return delistedModels; older
-// servers omit it and continue through the legacy catalogue observation below.
-function observeProviderSyncDelistings(providers, sync) {
-  const active = new Set(), managedIDs = new Set(), managedNames = new Set(), removed = [];
-  const nameCounts = new Map();
-  (providers || []).forEach(p => {
-    const name = p.name || p.id || 'Provider';
-    nameCounts.set(name, (nameCounts.get(name) || 0) + 1);
-  });
-  (providers || []).forEach(p => {
-    const st = (sync || {})[p.id] || {};
-    if (!Array.isArray(st.delistedModels)) return;
-    const provider = p.name || p.id || 'Provider';
-    const providerID = String(p.id || provider);
-    const label = (nameCounts.get(provider) || 0) > 1 ? provider + ' (' + providerID + ')' : provider;
-    managedIDs.add(providerID);
-    managedNames.add(provider);
-    const fresh = [];
-    st.delistedModels.forEach(id => {
-      const key = JSON.stringify(['provider-sync', providerID, id]);
-      active.add(key);
-      if (_modelDelistedSeen.has(key)) return;
-      _modelDelistedSeen.add(key);
-      fresh.push(id);
-    });
-    if (fresh.length) removed.push({ provider: label, ids: fresh, key: 'provider:' + providerID });
-  });
-  Array.from(_modelDelistedSeen).forEach(key => {
-    try {
-      const parts = JSON.parse(key);
-      if (parts[0] === 'provider-sync' && managedIDs.has(parts[1]) && !active.has(key)) _modelDelistedSeen.delete(key);
-    } catch (e) {}
-  });
-  _providerSyncManagedIDs = managedIDs;
-  _providerSyncManagedNames = managedNames;
-  removed.forEach(group => showModelSyncModal({ removed: group.ids }, group.provider, group.key));
-}
-
-async function readModelCatalog() {
-  const request = ++_modelCatalogRequest;
-  const d = await api('GET', '/models');
-  // A slower, older read must not undo a newer delisting/recovery observation.
-  if (request > _modelCatalogApplied) {
-    _modelCatalogApplied = request;
-    _modelCatalogLatest = d.data || {};
-    notifyModelSyncResult(_modelCatalogLatest.lastSync, 'Cline');
-    observeModelDelistings(_modelCatalogLatest.models || []);
-  }
-  return _modelCatalogLatest;
-}
-
-function checkModelDelistings() {
-  if (document.hidden) return Promise.resolve();
-  if (!_modelDelistingCheck) {
-    // These are local read models only. Do not redraw tables or config forms,
-    // trigger upstream discovery, or interrupt edits on a timer.
-    _modelDelistingCheck = Promise.all([
-      readModelCatalog(),
-      Promise.all([
-        api('GET', '/providers'),
-        api('GET', '/providers/sync-status'),
-      ]).then(([providers, sync]) => observeProviderSyncDelistings(
-        (providers.data && providers.data.providers) || [],
-        (sync.data && sync.data.providers) || {},
-      )),
-    ]).catch(() => {}).finally(() => { _modelDelistingCheck = null; });
-  }
-  return _modelDelistingCheck;
-}
-
-function notifyModelSyncResult(res, source) {
-  if (!res || !res.changed || res.error) return;
-  const signature = JSON.stringify([res.syncedAt, res.added || [], res.removed || []]);
-  const at = Date.parse(res.syncedAt) || 0;
-  const previous = _modelSyncSeen.get(source);
-  if (previous && (previous.signature === signature || previous.at > at)) return;
-  _modelSyncSeen.set(source, { signature: signature, at: at });
-  // The manual sync result can arrive before its catalogue refresh. Remember
-  // these removals now so dismissing the popup during that read stays dismissed.
-  const kind = source === 'OpenCode Zen' ? 'zen' : 'remote';
-  (res.removed || []).forEach(id => _modelDelistedSeen.add(JSON.stringify([kind, '', id])));
-  showModelSyncModal(res, source);
-}
-
-async function loadModels() {
-  try {
-    const d = await readModelCatalog();
-    const models = d.models || [];
-    _cachedModels = models;
-    renderModelList();
-    const ls = d.lastSync || {};
-    if (_('modelSyncTime')) {
-      _('modelSyncTime').innerHTML = formatDateTime(ls.syncedAt);
-    }
-  } catch (e) { _('modelsList').textContent = t('加载失败'); }
-}
-
-async function syncModels() {
-  const btn = _('syncModelsBtn');
-  const orig = btn ? btn.innerHTML : '';
-  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="loading"></span> ' + t('同步中...'); }
-  try {
-    const d = await api('POST', '/models/sync');
-    const res = d.data || {};
-    _modelCatalogApplied = ++_modelCatalogRequest;
-    notifyModelSyncResult(res, 'Cline');
-    await loadModels();
-    if (res.changed) {
-      toast(t('模型列表已更新'), 'success');
-    } else {
-      toast(t('模型无变化'), 'info');
-    }
-    if (_('settingDefModel')) await loadConfig();
-  } catch (e) {
-    toast(t('模型同步失败') + ': ' + (e.message || ''), 'error');
-  }
-  if (btn) { btn.disabled = false; btn.innerHTML = orig; }
-}
-
-function showModelSyncModal(res, source, groupKey) {
-  const ov = _('modelSyncOverlay');
-  if (!ov) return;
-  const box = _('modelSyncModal');
-  if (ov.style.display !== 'flex') _modelSyncGroups.clear();
-  const label = source || 'Cline';
-  const key = groupKey || JSON.stringify([label === 'OpenCode Zen' ? 'zen' : 'remote', '']);
-  if (!_modelSyncGroups.has(key)) _modelSyncGroups.set(key, { label: label, added: new Set(), removed: new Set() });
-  const group = _modelSyncGroups.get(key);
-  (res.added || []).forEach(id => group.added.add(id));
-  (res.removed || []).forEach(id => group.removed.add(id));
-  let body = '';
-  _modelSyncGroups.forEach(changes => {
-    const add = Array.from(changes.added).map(m => '<div class="p3-thin">+ <span class="mono">' + esc(m) + '</span></div>').join('');
-    const rem = Array.from(changes.removed).map(m => '<div class="p3-thin mut">- <span class="mono">' + esc(m) + '</span></div>').join('');
-    if (!add && !rem) return;
-    body += '<div class="txt-strong mt-10 mb-6">' + esc(changes.label) + '</div>';
-    if (add) body += '<div class="save-result ok mb-6">' + t('新增模型') + '</div>' + add;
-    if (rem) body += '<div class="txt-strong mt-10 mb-6">' + t('已下架（保留在列表，标记显示）') + '</div>' + rem;
-  });
-  if (!body) body = '<div class="hint-mut">' + t('模型无变化') + '</div>';
-  box.innerHTML =
-    '<h2 id="modelSyncTitle" class="sync-title">' + t('模型同步') + '</h2>' +
-    '<div class="sync-body">' + body + '</div>' +
-    '<div class="modal-foot"><button class="btn btn-primary" onclick="closeModelSyncModal()">OK</button></div>';
-  ov.style.display = 'flex';
-}
-
-function closeModelSyncModal() {
-  const ov = _('modelSyncOverlay');
-  if (ov) ov.style.display = 'none';
-  _modelSyncGroups.clear();
-}
-
 async function deleteModel(id) {
   if (!(await showConfirm(t('确认删除模型 ') + id + ' ?'))) return;
   try {
@@ -773,13 +577,14 @@ async function deleteModel(id) {
 }
 
 // ========== 配置加载 ==========
-async function loadConfig() {
+async function loadConfig(options = {}) {
   try {
     const d = await api('GET', '/config');
     const c = d.data;
     if (c.address) _('settingAddr').value = c.address;
     if (c.strategy) _('settingStrategy').value = c.strategy;
-    _('settingModelChain').value = (c.modelChain || []).join(', ');
+    const chainField = _('settingModelChain');
+    if (!options.preserveEdits || !chainField.dataset.dirty) chainField.value = (c.modelChain || []).join(', ');
     if (c.onlyFree !== undefined && _('settingOnlyFree')) _('settingOnlyFree').value = String(c.onlyFree);
     if (c.version) {
       if (_('settingVersion')) _('settingVersion').value = c.version;
@@ -816,7 +621,7 @@ async function loadConfig() {
     if (ips.length) {
       _('localIPsRow').style.display = '';
       _('localIPsList').innerHTML = ips.map(ip =>
-        '<span class="model-tag free">' + esc(ip) + '</span>'
+        '<span class="access-role">' + esc(ip) + '</span>'
       ).join('');
     } else {
       _('localIPsRow').style.display = 'none';
@@ -835,7 +640,7 @@ async function loadConfig() {
       if (c.host) listenSel.value = c.host;
     }
     // 管理员认证始终启用；不提供恢复匿名访问的开关。
-    if (_('passwordStatus')) _('passwordStatus').textContent = t('已启用（不可关闭）');
+    if (_('passwordStatus')) _('passwordStatus').textContent = t('始终启用');
     // 非回环监听安全警告（0.0.0.0 / 局域网 IP 都会暴露管理后台）
     const h = c.host || '';
     const safeHosts = ['', '127.0.0.1', 'localhost', '::1'];
@@ -850,7 +655,7 @@ async function loadConfig() {
         '</tr>'
       ).join('');
     }
-    if (typeof fillTuning === 'function') fillTuning(c);
+    if (typeof fillTuning === 'function') fillTuning(c, options);
     renderRouteSummary(c);
   } catch (e) { toast(t('加载失败') + ': ' + e.message, 'error'); }
 }

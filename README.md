@@ -38,6 +38,7 @@ Provider availability, authentication requirements, free allowances and supporte
 > **Security:** RouteNest has no universal default password and never opens the admin API anonymously. A fresh install starts in one-time bootstrap mode and requires a permanent local administrator password before normal administration.
 
 - **Bootstrap:** the CLI prints a generated one-time secret only to its controlling terminal. Headless deployments must provide `ROUTENEST_ADMIN_BOOTSTRAP_PASSWORD` for the first start; completed bootstrap state permanently ignores it. The desktop app uses a one-shot native dialog.
+- **Passwords:** permanent administrator passwords require at least 8 characters, with a maximum of 1024 UTF-8 bytes. Password changes revoke all sessions for that administrator.
 - **Separate controls:** API keys protect `/v1/*`; durable administrator sessions and server-side RBAC protect `/admin/*`. Admin sessions store only hashed tokens, survive restart, can be revoked, and require session-bound CSRF tokens for mutations.
 - **Hosted administration:** the binary and desktop app bind to `127.0.0.1` by default. Non-loopback administration is rejected unless an exact public URL, trusted-proxy mode and trusted proxy CIDRs are configured. RouteNest has no built-in TLS; terminate HTTPS at the trusted proxy.
 - **Sensitive data:** account refresh tokens, provider keys and generated API keys are stored in plaintext in the data directory. Protect that directory, and never commit or share it.

@@ -431,7 +431,7 @@ async function saveTuning(btn) {
 }
 
 // 用 GET /config 的策略字段回填调优表单；0/缺省显示为占位符（=内置默认）
-function fillTuning(c) {
+function populateTuningFields(c) {
   const num = (id, v) => { const el = _(id); if (el) el.value = v ? String(v) : ''; };
   const r = c.retry || {}, s = c.stream || {}, a = c.sessionAffinity || {};
   num('tunRetryRounds', r.maxRounds);
@@ -462,9 +462,15 @@ function fillTuning(c) {
   }
   if (_('tunExcluded')) _('tunExcluded').value = (c.excludedModels || []).join(', ');
   updateExcludedMatchCounts();
+}
+
+function fillTuning(c, options = {}) {
+  const draft = options.preserveEdits && tuningDirty() ? collectTuningPayload() : null;
+  populateTuningFields(c);
   // 回填完成 → 以此为脏检查基线；注册保存条（host=路由页可见）
   _tunBaseJson = JSON.stringify(collectTuningPayload());
   _tunBaseCfg = c;
+  if (draft) populateTuningFields(draft);
   setSaveBarCtx('tuning', {
     host: () => {
       if (typeof _activeTabName === 'undefined' || _activeTabName !== 'routing') return false;
@@ -516,12 +522,14 @@ async function waitForListenerOperation(id) {
 
 // 修改当前本地管理员密码。成功后服务端撤销该用户的全部会话。
 async function savePassword(btn) {
+  const error = _('adminPasswordError');
+  error.textContent = '';
   const oldPassword = _('settingCurrentPassword').value;
   const newPassword = _('settingPassword').value;
   const confirm = _('settingPasswordConfirm').value;
-  if (!oldPassword) { toast(t('请输入当前密码'), 'error'); return; }
-  if (newPassword.length < 12) { toast(t('新密码至少 12 位'), 'error'); return; }
-  if (newPassword !== confirm) { toast(t('两次输入的密码不一致'), 'error'); return; }
+  if (!oldPassword) { error.textContent = t('请输入当前密码'); return; }
+  if (adminPasswordTooShort(newPassword)) { error.textContent = t('新密码至少 8 位'); return; }
+  if (newPassword !== confirm) { error.textContent = t('两次输入的密码不一致'); return; }
   const orig = btn ? btn.innerHTML : '';
   if (btn) { btn.disabled = true; btn.innerHTML = '<span class="loading"></span> ' + t('保存中...'); }
   try {
@@ -531,7 +539,7 @@ async function savePassword(btn) {
     _('settingPasswordConfirm').value = '';
     toast(t('密码已更新，全部会话已撤销，请重新登录'), 'success');
     setTimeout(() => location.reload(), 500);
-  } catch (e) { toast(t('保存失败: ') + e.message, 'error'); }
+  } catch (e) { error.textContent = t('保存失败: ') + e.message; }
   finally { if (btn) { btn.disabled = false; btn.innerHTML = orig; } }
 }
 
@@ -541,27 +549,42 @@ async function loadAdminSessions() {
   try {
     const response = await api('GET', '/auth/sessions');
     const sessions = (response.data && response.data.sessions) || [];
-    host.innerHTML = sessions.length ? sessions.map(session =>
-      '<div class="action-row">' +
-        '<div class="f1"><strong>' + esc(session.method || 'local') + '</strong>' +
-        (session.current ? ' <span class="model-tag free">' + t('当前会话') + '</span>' : '') +
-        '<div class="hint-sm">' + esc(session.provider || session.userID || '') + ' · ' + esc(session.expiresAt || '') + '</div></div>' +
-        '<button class="btn btn-sm btn-danger" onclick="revokeAdminSession(\'' + esc(session.id) + '\',' + (session.current ? 'true' : 'false') + ')">' + t('撤销') + '</button>' +
-      '</div>'
-    ).join('') : '<div class="empty-state">' + t('没有活动会话') + '</div>';
+    host.textContent = '';
+    if (!sessions.length) {
+      const empty = document.createElement('div'); empty.className = 'access-empty'; empty.textContent = t('没有活动会话'); host.appendChild(empty); return;
+    }
+    sessions.forEach(session => {
+      const row = document.createElement('div'); row.className = 'access-list-row';
+      const info = document.createElement('div'); info.className = 'access-row-info';
+      const heading = document.createElement('div'); heading.className = 'access-row-title';
+      const title = document.createElement('strong'); title.textContent = !session.method || session.method === 'local' ? t('本地账号') : String(session.method).toUpperCase();
+      heading.appendChild(title);
+      if (session.current) {
+        const badge = document.createElement('span'); badge.className = 'access-badge is-success'; badge.textContent = t('当前会话'); heading.appendChild(badge);
+      }
+      const details = document.createElement('div'); details.className = 'access-row-meta';
+      const username = _adminPrincipal && session.userID === _adminPrincipal.userID ? _adminPrincipal.username : (session.provider || session.userID || '');
+      const expiry = document.createElement('time'); expiry.dateTime = session.expiresAt || ''; expiry.textContent = session.expiresAt ? formatDateTime(session.expiresAt) : '—';
+      details.appendChild(document.createTextNode((username ? username + ' · ' : '') + t('到期') + ' ')); details.appendChild(expiry);
+      info.appendChild(heading); info.appendChild(details); row.appendChild(info);
+      const revoke = document.createElement('button'); revoke.type = 'button'; revoke.className = 'btn btn-sm btn-danger'; revoke.textContent = t('撤销');
+      revoke.addEventListener('click', () => revokeAdminSession(session.id, session.current, revoke)); row.appendChild(revoke); host.appendChild(row);
+    });
   } catch (e) {
     host.innerHTML = '<div class="error-box">' + esc(e.message) + '</div>';
   }
 }
 
-async function revokeAdminSession(sessionHash, current) {
+async function revokeAdminSession(sessionHash, current, button) {
   if (!(await showConfirm(t('确认撤销此管理员会话？')))) return;
+  if (button) button.disabled = true;
   try {
     await api('POST', '/auth/sessions/revoke', { sessionHash: sessionHash });
     toast(t('会话已撤销'), 'success');
     if (current) { location.reload(); return; }
     await loadAdminSessions();
   } catch (e) { toast(t('操作失败: ') + e.message, 'error'); }
+  finally { if (button) button.disabled = false; }
 }
 
 // ========== 单点登录提供方：只编辑配置与密钥引用 ==========
@@ -582,20 +605,22 @@ async function loadSSOProviders() {
     _ssoProviderViews = providers;
     host.textContent = '';
     if (!providers.length) {
-      const empty = document.createElement('div'); empty.className = 'empty-state';
+      const empty = document.createElement('div'); empty.className = 'access-empty';
       empty.textContent = t('尚未配置 SSO 提供方'); host.appendChild(empty);
     }
     providers.forEach(provider => {
-      const row = document.createElement('div'); row.className = 'action-row';
-      const info = document.createElement('div'); info.className = 'f1';
-      const title = document.createElement('strong'); title.textContent = provider.id + ' · ' + String(provider.type || '').toUpperCase();
+      const row = document.createElement('div'); row.className = 'access-list-row';
+      const info = document.createElement('div'); info.className = 'access-row-info';
+      const heading = document.createElement('div'); heading.className = 'access-row-title';
+      const title = document.createElement('strong'); title.textContent = provider.id;
+      const protocol = document.createElement('span'); protocol.className = 'access-badge'; protocol.textContent = String(provider.type || '').toUpperCase();
       const status = document.createElement('span');
-      status.className = 'model-tag' + (provider.enabled && provider.ready ? ' free' : (provider.enabled ? ' pass' : ''));
-      status.textContent = !provider.enabled ? t('停用') : (provider.ready ? t('已就绪') : t('未就绪'));
-      const reason = document.createElement('div'); reason.className = 'hint-sm';
+      status.className = 'access-badge' + (provider.enabled && provider.ready ? ' is-success' : (provider.enabled ? ' is-warning' : ''));
+      status.textContent = !provider.enabled ? t('已停用') : (provider.ready ? t('已就绪') : t('未就绪'));
+      const reason = document.createElement('div'); reason.className = 'access-row-meta';
       reason.textContent = provider.reason || (provider.enabled && provider.ready ? t('登录入口可用') : t('登录入口未开放'));
-      info.appendChild(title); info.appendChild(status); info.appendChild(reason); row.appendChild(info);
-      const actions = document.createElement('div'); actions.className = 'form-actions';
+      heading.appendChild(title); heading.appendChild(protocol); heading.appendChild(status); info.appendChild(heading); info.appendChild(reason); row.appendChild(info);
+      const actions = document.createElement('div'); actions.className = 'access-row-actions';
       const edit = document.createElement('button'); edit.type = 'button'; edit.className = 'btn btn-sm'; edit.textContent = t('编辑');
       edit.addEventListener('click', () => editSSOProvider(provider.id));
       const toggle = document.createElement('button'); toggle.type = 'button'; toggle.className = 'btn btn-sm';
@@ -644,16 +669,22 @@ function fillSSOProviderEditor(config, existing) {
     ssoOIDCScopes: (oidc.scopes || []).join(', '), ssoOIDCUsernameClaim: oidc.usernameClaim || '', ssoOIDCGroupsClaim: oidc.groupsClaim || '',
     ssoSAMLMetadataURL: saml.metadataURL || '', ssoSAMLEntityID: saml.entityID || '', ssoSAMLMetadataEndpoint: saml.metadataEndpoint || '',
     ssoSAMLACSURL: saml.acsURL || '', ssoSAMLUsernameAttribute: saml.usernameAttribute || '', ssoSAMLGroupsAttribute: saml.groupsAttribute || '',
-    ssoDefaultRoles: JSON.stringify(protocol.defaultRoles || [], null, 2), ssoGroupRoleMap: JSON.stringify(protocol.groupRoleMap || {}, null, 2)
+    ssoGroupRoleMap: JSON.stringify(protocol.groupRoleMap || {}, null, 2)
   };
   Object.keys(values).forEach(id => { _(id).value = values[id]; });
+  const selectedRoles = new Set(protocol.defaultRoles || []);
+  document.querySelectorAll('#ssoDefaultRoles input').forEach(input => { input.checked = selectedRoles.has(input.value); });
   fillSSOSecretReference('ssoOIDCSecret', oidc.clientSecret);
   fillSSOSecretReference('ssoSAMLCertificate', saml.certificate);
   fillSSOSecretReference('ssoSAMLPrivateKey', saml.privateKey);
   _('ssoProviderID').disabled = !!existing; _('ssoProviderType').disabled = !!existing;
   _('ssoProviderEditorTitle').textContent = t(existing ? '编辑 SSO 提供方' : '添加 SSO 提供方');
   _('ssoProviderError').textContent = '';
+  _('ssoOIDCAdvanced').open = !!(oidc.usernameClaim || oidc.groupsClaim || (oidc.scopes && oidc.scopes.length));
+  _('ssoSAMLAdvanced').open = !!(saml.usernameAttribute || saml.groupsAttribute || saml.certificate || saml.privateKey);
+  _('ssoRoleMappingDetails').open = !!Object.keys(protocol.groupRoleMap || {}).length;
   setSSOProviderType();
+  _('ssoAddActions').hidden = true;
   _('ssoProviderEditor').style.display = '';
   (existing ? _('ssoProviderEnabled') : _('ssoProviderID')).focus();
 }
@@ -664,12 +695,14 @@ function setSSOProviderType() {
   _('ssoSAMLFields').style.display = saml ? '' : 'none';
 }
 
-function closeSSOProviderEditor() { _('ssoProviderEditor').style.display = 'none'; _('ssoProviderError').textContent = ''; }
+function closeSSOProviderEditor() {
+  _('ssoProviderEditor').style.display = 'none'; _('ssoProviderError').textContent = ''; _('ssoAddActions').hidden = false;
+}
 
 function readSSORoleMapping() {
-  let defaults, mapping;
+  const defaults = Array.from(document.querySelectorAll('#ssoDefaultRoles input:checked')).map(input => input.value);
+  let mapping;
   try {
-    defaults = JSON.parse(_('ssoDefaultRoles').value.trim() || '[]');
     mapping = JSON.parse(_('ssoGroupRoleMap').value.trim() || '{}');
   } catch (e) { throw new Error(t('角色映射必须是有效 JSON')); }
   const validRoles = roles => Array.isArray(roles) && roles.every(role => SSO_FEDERATED_ROLES.includes(role));
@@ -721,13 +754,15 @@ function collectSSOProvider() {
 async function saveSSOProvider(button) {
   const error = _('ssoProviderError'); error.textContent = '';
   let config;
-  try { config = collectSSOProvider(); } catch (e) { error.textContent = e.message; return; }
+  try { config = collectSSOProvider(); } catch (e) { error.textContent = e.message; error.scrollIntoView({ block: 'nearest' }); return; }
+  const original = button.innerHTML;
   button.disabled = true;
+  button.innerHTML = '<span class="loading"></span> ' + t('保存中...');
   try {
     await api('PUT', '/auth/sso/providers', config);
     toast(t('SSO 提供方已保存'), 'success'); closeSSOProviderEditor(); await loadSSOProviders();
-  } catch (e) { error.textContent = e.message; }
-  finally { button.disabled = false; }
+  } catch (e) { error.textContent = e.message; error.scrollIntoView({ block: 'nearest' }); }
+  finally { button.disabled = false; button.innerHTML = original; }
 }
 
 async function setSSOProviderEnabled(id, button) {

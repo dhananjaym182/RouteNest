@@ -14,9 +14,12 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 const MaxUsernameBytes = 128
+const MinPasswordCharacters = 8
+const MinBootstrapSecretBytes = 12
 const MaxPasswordBytes = 1024
 const MaxLoginBodyBytes = 4096
 
@@ -132,8 +135,17 @@ func (h *PasswordHasher) derive(ctx context.Context, fn func() []byte) ([]byte, 
 	}
 }
 func (h *PasswordHasher) Hash(ctx context.Context, password string) (string, error) {
-	if len(password) < 12 || len(password) > MaxPasswordBytes {
-		return "", fmt.Errorf("password must contain 12 to 1024 bytes")
+	if len(password) > MaxPasswordBytes || utf8.RuneCountInString(password) < MinPasswordCharacters {
+		return "", fmt.Errorf("password must contain at least %d characters and at most %d bytes", MinPasswordCharacters, MaxPasswordBytes)
+	}
+	return h.hash(ctx, password)
+}
+
+// hash also serves parameter upgrades for already verified passwords, which
+// must remain usable even when they predate the current new-password policy.
+func (h *PasswordHasher) hash(ctx context.Context, password string) (string, error) {
+	if len(password) > MaxPasswordBytes {
+		return "", fmt.Errorf("password must contain at most %d bytes", MaxPasswordBytes)
 	}
 	salt := make([]byte, h.params.SaltLength)
 	if _, e := io.ReadFull(h.random, salt); e != nil {

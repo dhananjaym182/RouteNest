@@ -56,7 +56,7 @@ func newConfigHandler() (*Config, *configFixture) {
 		ZenHeaders: func() map[string]string {
 			return map[string]string{"Z": "9"}
 		},
-		PoolPath:    "/tmp/pool.json",
+		PoolPath:    func() string { return "/tmp/pool.json" },
 		HasPassword: func() bool { return true },
 		RestartListener: func(host string, port int) error {
 			f.restarted <- host
@@ -89,6 +89,9 @@ func TestConfigGet(t *testing.T) {
 	}
 	if data["hasPassword"] != true {
 		t.Fatalf("hasPassword = %v", data["hasPassword"])
+	}
+	if data["poolPath"] != "/tmp/pool.json" {
+		t.Fatalf("poolPath = %v", data["poolPath"])
 	}
 	ips := data["localIPs"].([]any)
 	if len(ips) != 1 || ips[0] != "192.168.1.5" {

@@ -42,6 +42,40 @@ func TestPasswordPHC(t *testing.T) {
 		t.Fatal("oversized password accepted")
 	}
 }
+
+func TestPasswordMinimumCharactersAndByteLimit(t *testing.T) {
+	h := fastHasher(t)
+	for _, tc := range []struct {
+		name     string
+		password string
+		accepted bool
+	}{
+		{"seven ASCII characters", "Seven7!", false},
+		{"eight ASCII characters", "Eight8!!", true},
+		{"seven Chinese characters", strings.Repeat("密", 7), false},
+		{"eight Chinese characters", strings.Repeat("密", 8), true},
+		{"seven supplementary characters", strings.Repeat("🔒", 7), false},
+		{"eight supplementary characters", strings.Repeat("🔒", 8), true},
+		{"ASCII byte limit", strings.Repeat("x", 1024), true},
+		{"over ASCII byte limit", strings.Repeat("x", 1025), false},
+		{"Unicode byte limit", strings.Repeat("🔒", 256), true},
+		{"over Unicode byte limit", strings.Repeat("🔒", 257), false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			phc, err := h.Hash(context.Background(), tc.password)
+			if (err == nil) != tc.accepted {
+				t.Fatalf("accepted=%v, want %v: %v", err == nil, tc.accepted, err)
+			}
+			if !tc.accepted {
+				return
+			}
+			if ok, err := h.Verify(context.Background(), phc, tc.password); err != nil || !ok {
+				t.Fatalf("accepted password cannot authenticate: %v", err)
+			}
+		})
+	}
+}
+
 func TestPHCParserBounds(t *testing.T) {
 	salt := "MDEyMzQ1Njc4OWFiY2RlZg"
 	key := "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY"

@@ -21,6 +21,8 @@ var adminUIJSAssets = []string{
 	"ui/js/11_connections.js",
 	"ui/js/12_combos.js",
 	"ui/js/13_models.js",
+	"ui/js/13_model_sync.js",
+	"ui/js/13_model_cleanup.js",
 	"ui/js/14_logs.js",
 	"ui/js/15_dashboard.js",
 	"ui/js/17_quota.js",
@@ -85,4 +87,5 @@ var adminUICSSLayers = []string{
 	"ui/css/96_workflows.css",
 	"ui/css/97_management_tables.css",
 	"ui/css/98_routing_inspector.css",
+	"ui/css/99_access_settings.css",
 }

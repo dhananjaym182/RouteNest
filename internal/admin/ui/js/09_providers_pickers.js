@@ -13,6 +13,10 @@ function provEditorPayload() {
 }
 
 async function fetchProviderModels(btn) {
+  if (btn && btn.disabled) return;
+  const providerID = _editingProviderId, revision = _provEditorRevision;
+  const removalEpoch = providerModelRemovalEpoch(providerID);
+  const current = () => _editingProviderId === providerID && _provEditorRevision === revision && providerModelRemovalEpoch(providerID) === removalEpoch && !!_('providerEditor') && _('providerEditor').classList.contains('open');
   const payload = provEditorPayload();
   if (!_editingProviderId && !payload.baseURL) { toast(t('请先填写 Base URL'), 'info'); return; }
   if (!_editingProviderId) {
@@ -31,6 +35,7 @@ async function fetchProviderModels(btn) {
     if (!batch) {
       // 分级预览端点一次给回 id + free/paid 判定（pricing/后缀/白名单/整源免费有序信号）
       const d = await api('POST', '/models/import/preview', payload);
+      if (!current()) return;
       const r = d.data || {};
       batch = r.batch;
       if (!batch) {
@@ -62,9 +67,9 @@ async function fetchProviderModels(btn) {
     _('provPickerModal').style.display = 'flex';
     try { _('provPickerSearch').focus(); } catch (e) {}
   } catch (e) {
-    if (out) out.innerHTML = renderTestResultHTML(false, friendlyTestError(e));
+    if (current() && out) out.innerHTML = renderTestResultHTML(false, friendlyTestError(e));
   } finally {
-    if (btn) { btn.disabled = false; btn.innerHTML = orig; }
+    if (btn && _provEditorRevision === revision) { btn.disabled = false; btn.innerHTML = orig; }
   }
 }
 

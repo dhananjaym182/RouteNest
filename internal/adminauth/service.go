@@ -108,7 +108,10 @@ func NewService(repo Repository, opts Options) (*Service, error) {
 			return nil, fmt.Errorf("bootstrap needs a controlling TTY or native dialog; configure ROUTENEST_ADMIN_BOOTSTRAP_PASSWORD for a fresh headless installation")
 		}
 	}
-	phc, e := s.hasher.Hash(context.Background(), secret)
+	if len(secret) < MinBootstrapSecretBytes || len(secret) > MaxPasswordBytes {
+		return nil, fmt.Errorf("bootstrap secret must contain %d to %d bytes", MinBootstrapSecretBytes, MaxPasswordBytes)
+	}
+	phc, e := s.hasher.hash(context.Background(), secret)
 	if e != nil {
 		return nil, e
 	}
@@ -295,7 +298,7 @@ func (s *Service) Login(ctx context.Context, username, password, source string) 
 	}
 	var rehash string
 	if s.hasher.NeedsRehash(u.PasswordPHC) {
-		rehash, e = s.hasher.Hash(ctx, password)
+		rehash, e = s.hasher.hash(ctx, password)
 		if e != nil {
 			return Credentials{}, e
 		}

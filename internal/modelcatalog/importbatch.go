@@ -77,12 +77,12 @@ func BuildImportItems(entries []Entry, providerFree bool, existing map[string]Ex
 		}
 		items = append(items, item)
 	}
-	return items, computeBatchStats(items)
+	return items, ComputeBatchStats(items)
 }
 
-// computeBatchStats tallies a finished item slice in a single pass so every
-// view of a batch reports the same numbers.
-func computeBatchStats(items []ImportItem) BatchStats {
+// ComputeBatchStats tallies a finished item slice so every view reports the
+// same numbers, including after removed offerings are filtered from a batch.
+func ComputeBatchStats(items []ImportItem) BatchStats {
 	var s BatchStats
 	for _, it := range items {
 		free := it.Tier == "free"

@@ -17,6 +17,12 @@ import (
 //   - provider 删除 / 停用 / 移除模型后，对应池内条目自动清理；指向已清理
 //     模型的默认模型一并清空
 func SyncModels() {
+	modelLifecycleMu.Lock()
+	defer modelLifecycleMu.Unlock()
+	syncModels()
+}
+
+func syncModels() {
 	provs := List() // Mu 自持自放；之后再拿 accounts.PoolMu，无反向持锁路径
 	records := models.Snapshot()
 	stateChanged := syncProviderOfferingDeclarations(provs, records)

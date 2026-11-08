@@ -25,12 +25,35 @@ input:focus-visible,textarea:focus-visible,select:focus-visible{outline:none}
 /* 长文本稳健性：避免超长 URL / 模型 ID 撑破布局 */
 .section-desc,.combo-preview,.log-attempts li,.log-req-model{overflow-wrap:break-word}
 /* 弹层：统一遮罩模糊与阴影：登录 / 模型同步浮层 */
-#loginOverlay{position:fixed;inset:0;z-index:var(--z-login);background:var(--overlay-bg);backdrop-filter:saturate(150%) blur(6px);-webkit-backdrop-filter:saturate(150%) blur(6px);display:none;align-items:center;justify-content:center}
-.login-card{width:min(360px,calc(100vw - 40px));padding:32px;background:var(--surface);border-radius:14px;border:1px solid var(--border2);text-align:center;box-shadow:var(--shadow-lg)}
-.login-card h2{margin:0 0 6px;font-size:20px;color:var(--text)}
-.login-card p{margin:0 0 22px;color:var(--text2);font-size:13px}
+#loginOverlay{position:fixed;inset:0;z-index:var(--z-login);padding:var(--sp-5);background:var(--overlay-bg);backdrop-filter:saturate(150%) blur(6px);-webkit-backdrop-filter:saturate(150%) blur(6px);display:none;align-items:center;justify-content:center}
+.login-card{width:min(420px,100%);max-height:calc(100vh - var(--sp-8));max-height:calc(100dvh - var(--sp-8));overflow-y:auto;padding:var(--sp-7);background:var(--surface);border-radius:var(--radius);border:1px solid var(--border);text-align:left;box-shadow:var(--shadow-lg)}
+.login-card h2{margin:0;font-size:var(--fs-xl);line-height:1.4;color:var(--text)}
+.login-card #loginHelp{margin:var(--sp-2) 0 var(--sp-6);color:var(--text2);font-size:var(--fs-sm);line-height:1.65}
+.login-form,.login-password-fields{display:flex;flex-direction:column;gap:var(--sp-4)}
+.login-field{display:flex;flex-direction:column;gap:var(--sp-2)}
+.login-field label{color:var(--text2);font-size:var(--fs-base);font-weight:500;line-height:1.5}
+.login-card input{width:100%;min-height:44px;padding:var(--sp-3);border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);color:var(--text);font:inherit}
+.login-card input:focus{border-color:var(--accent);box-shadow:var(--ring);outline:none}
+.login-card .btn-block{min-height:44px;margin-top:0;white-space:normal;overflow-wrap:anywhere}
+.login-card #loginSSOProviders{margin-bottom:var(--sp-5)}
+.login-card #loginSSOButtons{display:grid;gap:var(--sp-2)}
+.login-card #loginLocalHelp{color:var(--text2);font-size:var(--fs-sm);line-height:1.6}
+.login-card .login-err{margin:0;padding:var(--sp-3);border:1px solid var(--red);border-radius:var(--radius-xs);background:var(--red-soft);color:var(--text);font-size:var(--fs-sm);line-height:1.6;overflow-wrap:anywhere}
+.login-card .login-err:empty{display:none}
+@media (max-width:600px){
+  #loginOverlay{padding:var(--sp-4)}
+  .login-card{padding:var(--sp-5)}
+}
 #modelSyncOverlay{position:fixed;inset:0;z-index:var(--z-topmost);background:var(--overlay-bg);display:none;align-items:center;justify-content:center;backdrop-filter:saturate(150%) blur(6px);-webkit-backdrop-filter:saturate(150%) blur(6px)}
-#modelSyncModal{border-radius:var(--radius);box-shadow:var(--shadow-lg);width:min(480px,calc(100vw - 40px));padding:24px;background:var(--surface);border:1px solid var(--border2)}
+#modelSyncModal{border-radius:var(--radius);box-shadow:var(--shadow-lg);width:min(560px,calc(100vw - 40px));max-height:calc(100dvh - 40px);display:flex;flex-direction:column;padding:var(--sp-6);background:var(--surface);border:1px solid var(--border)}
+#modelSyncModal .sync-body{min-height:0;overflow:auto;overscroll-behavior:contain}
+.model-sync-item{display:flex;align-items:center;justify-content:space-between;gap:var(--sp-4);padding:var(--sp-3) 0;border-bottom:1px solid var(--border2)}
+.model-sync-item .mono{min-width:0;overflow-wrap:anywhere;color:var(--text)}
+.model-sync-item button{flex-shrink:0;min-height:44px}
+#modelSyncModal .modal-foot{display:flex;justify-content:flex-end;flex-wrap:wrap;gap:var(--sp-2);flex-shrink:0}
+#modelSyncModal .modal-foot button{min-height:44px}
+.model-sync-error{max-height:min(8rem,20dvh);flex-shrink:0;overflow:auto;overscroll-behavior:contain;margin-top:var(--sp-3);padding:var(--sp-3);border:1px solid var(--red);border-radius:var(--radius-xs);background:var(--red-soft);color:var(--text);overflow-wrap:anywhere}
+@media (max-width:600px){#modelSyncModal{padding:var(--sp-5)}}
 
 /* 状态徽章：停用 = 中性灰（与 活跃/冷却/过期 同一视觉体系），不再借用日志红/绿 */
 .status.disabled{background:var(--surface2);color:var(--text3)}

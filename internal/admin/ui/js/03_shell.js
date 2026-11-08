@@ -30,11 +30,11 @@ async function api(method, path, body) {
     setGatewayReachability(false);
     throw e;
   }
+  const data = await res.json().catch(() => ({ error: 'invalid_response' }));
   if (res.status === 401) {
     showLogin();
     throw new Error(t('需要登录'));
   }
-  const data = await res.json().catch(() => ({ error: 'invalid_response' }));
   if (!data.success && data.error) throw new Error(data.error);
   return data;
 }
@@ -54,6 +54,11 @@ function setGatewayReachability(ok) {
 let _adminAuthMode = 'login';
 let _adminAuthStatus = null;
 let _adminPrincipal = null;
+const ADMIN_PASSWORD_MIN_LENGTH = 8;
+
+function adminPasswordTooShort(password) {
+  return Array.from(password).length < ADMIN_PASSWORD_MIN_LENGTH;
+}
 
 function setAdminAuthMode(mode) {
   _adminAuthMode = mode || 'login';
@@ -61,10 +66,18 @@ function setAdminAuthMode(mode) {
   const legacy = _adminAuthMode === 'legacy';
   const usernameRow = _('loginUsernameRow');
   const secretRow = _('bootstrapSecretRow');
+  const passwordRow = _('loginPasswordRow');
   const newPasswordRow = _('loginNewPasswordRow');
   if (usernameRow) usernameRow.style.display = bootstrap ? 'none' : '';
   if (secretRow) secretRow.style.display = bootstrap ? '' : 'none';
+  if (passwordRow) passwordRow.style.display = bootstrap ? 'none' : '';
   if (newPasswordRow) newPasswordRow.style.display = (bootstrap || legacy) ? '' : 'none';
+  if (_('loginUsername')) _('loginUsername').disabled = bootstrap;
+  if (_('bootstrapSecret')) _('bootstrapSecret').disabled = !bootstrap;
+  if (_('loginPassword')) _('loginPassword').disabled = bootstrap;
+  if (_('loginNewPassword')) _('loginNewPassword').disabled = !bootstrap && !legacy;
+  if (_('loginConfirmPassword')) _('loginConfirmPassword').disabled = !bootstrap && !legacy;
+  if (_('loginPasswordLabel')) _('loginPasswordLabel').textContent = t(legacy ? '当前密码' : '密码');
   if (_('loginLocalHelp')) _('loginLocalHelp').style.display = bootstrap ? 'none' : '';
   const title = _('loginTitle'), help = _('loginHelp'), button = _('loginSubmit');
   if (_adminAuthMode === 'bootstrap') {
@@ -77,7 +90,7 @@ function setAdminAuthMode(mode) {
     if (button) button.textContent = t('完成恢复');
   } else if (_adminAuthMode === 'legacy') {
     if (title) title.textContent = t('升级管理员密码');
-    if (help) help.textContent = t('旧密码验证成功后必须升级为至少 12 位的新密码。');
+    if (help) help.textContent = t('旧密码验证成功后必须升级为至少 8 位的新密码。');
     if (button) button.textContent = t('升级并登录');
   } else {
     if (title) title.textContent = 'RouteNest ' + t('管理后台');
@@ -139,18 +152,23 @@ async function startSSOLogin(provider) {
 }
 
 async function submitLogin() {
+  const button = _('loginSubmit');
+  if (button && button.disabled) return;
   const username = (_('loginUsername') && _('loginUsername').value.trim()) || 'admin';
   const pwd = (_('loginPassword') && _('loginPassword').value) || '';
   const secret = (_('bootstrapSecret') && _('bootstrapSecret').value) || '';
   const newPassword = (_('loginNewPassword') && _('loginNewPassword').value) || '';
   const confirm = (_('loginConfirmPassword') && _('loginConfirmPassword').value) || '';
-  const rotating = _adminAuthMode === 'bootstrap' || _adminAuthMode === 'recovery' || _adminAuthMode === 'legacy';
-  if ((!rotating && !pwd) || ((_adminAuthMode === 'bootstrap' || _adminAuthMode === 'recovery') && !secret)) return;
-  if (rotating && (newPassword.length < 12 || newPassword !== confirm)) {
-    _('loginError').textContent = newPassword.length < 12 ? t('永久密码至少 12 位') : t('两次输入的密码不一致');
+  const bootstrap = _adminAuthMode === 'bootstrap' || _adminAuthMode === 'recovery';
+  const rotating = bootstrap || _adminAuthMode === 'legacy';
+  if (!bootstrap && !pwd) { _('loginError').textContent = t('请输入管理员密码'); return; }
+  if (bootstrap && !secret) { _('loginError').textContent = t('请输入一次性本机密钥'); return; }
+  if (rotating && (adminPasswordTooShort(newPassword) || newPassword !== confirm)) {
+    _('loginError').textContent = adminPasswordTooShort(newPassword) ? t('永久密码至少 8 位') : t('两次输入的密码不一致');
     return;
   }
   _('loginError').textContent = '';
+  if (button) button.disabled = true;
   try {
     let path = '/login', body = { username: username, password: pwd };
     if (_adminAuthMode === 'bootstrap' || _adminAuthMode === 'recovery') {
@@ -173,14 +191,33 @@ async function submitLogin() {
       if (_('loginPassword')) _('loginPassword').value = '';
     }
   } catch (e) { _('loginError').textContent = t('网络错误，请重试'); }
+  finally { if (button) button.disabled = false; }
+}
+
+function adminRoleLabel(role) {
+  const labels = { viewer: '查看者', provider_admin: '提供方管理员', credential_admin: '凭据管理员', security_admin: '安全管理员', break_glass: '应急管理员' };
+  return t(labels[role] || role);
+}
+
+function renderAdminRoleBadges(host, roles) {
+  if (!host) return;
+  host.textContent = '';
+  if (!Array.isArray(roles) || !roles.length) { host.textContent = '—'; return; }
+  roles.forEach(role => {
+    const badge = document.createElement('span'); badge.className = 'access-role';
+    badge.textContent = adminRoleLabel(role); badge.title = role; host.appendChild(badge);
+  });
 }
 
 function renderAdminPrincipal(principal) {
   _adminPrincipal = principal || null;
   const identity = _('adminIdentity');
-  const roles = _('adminRoles');
-  if (identity) identity.textContent = principal ? (principal.username + ' · ' + principal.method) : t('未登录');
-  if (roles) roles.textContent = principal && principal.roles ? principal.roles.join(', ') : '—';
+  if (identity) identity.textContent = principal ? principal.username : t('未登录');
+  renderAdminRoleBadges(_('adminRoles'), principal && principal.roles);
+  const method = _('adminAuthMethod');
+  if (method) method.textContent = principal ? (principal.method === 'local' ? t('本地账号') : String(principal.method).toUpperCase() + (principal.provider ? ' · ' + principal.provider : '')) : '—';
+  if (_('localAdminPasswordForm')) _('localAdminPasswordForm').hidden = !principal || principal.method !== 'local';
+  if (_('ssoAdminPasswordNotice')) _('ssoAdminPasswordNotice').hidden = !principal || principal.method === 'local';
   applyAdminPermissionVisibility();
 }
 
@@ -218,11 +255,11 @@ async function initializeAdminAuth() {
     if (_adminAuthStatus.bootstrapRequired) { showLogin('bootstrap'); return false; }
     if (_adminAuthStatus.recoveryRequired) { showLogin('recovery'); return false; }
     const sessionResponse = await fetch(API + '/auth/session', { credentials: 'same-origin' });
+    const sessionEnvelope = await sessionResponse.json().catch(() => ({}));
     if (sessionResponse.status === 401) {
       showLogin(_adminAuthStatus.legacyRotationRequired ? 'legacy' : 'login');
       return false;
     }
-    const sessionEnvelope = await sessionResponse.json();
     if (!sessionResponse.ok || !sessionEnvelope.success) throw new Error(sessionEnvelope.error || 'session_unavailable');
     renderAdminPrincipal(sessionEnvelope.data.principal);
     return true;
@@ -300,11 +337,24 @@ window.addEventListener('resize', () => { if (window.innerWidth > 900) closeMobi
 
 // ========== 抽屉（右侧滑出编辑器） ==========
 const _openDrawers = [];
+// A closed drawer is only translated off-screen by CSS, so it stays visible to
+// assistive tech and keeps its buttons in the tab order. inert removes both.
+function setDrawerInert(dr, inert) {
+  if (!dr) return;
+  if (inert) {
+    dr.setAttribute('inert', '');
+    dr.setAttribute('aria-hidden', 'true');
+  } else {
+    dr.removeAttribute('inert');
+    dr.removeAttribute('aria-hidden');
+  }
+}
 function openDrawer(name) {
   const ov = _(name + 'Overlay'), dr = _(name);
   if (!dr) return;
   if (ov) ov.classList.add('open');
   dr.classList.add('open');
+  setDrawerInert(dr, false);
   if (!_openDrawers.includes(name)) _openDrawers.push(name);
   refreshSaveBar();
 }
@@ -320,6 +370,7 @@ async function closeDrawer(name) {
   const ov = _(name + 'Overlay'), dr = _(name);
   if (ov) ov.classList.remove('open');
   if (dr) dr.classList.remove('open');
+  setDrawerInert(dr, true);
   const i = _openDrawers.indexOf(name);
   if (i >= 0) _openDrawers.splice(i, 1);
   refreshSaveBar();
@@ -334,6 +385,8 @@ document.addEventListener('keydown', e => {
   if (e.key === 'Escape' && document.documentElement.dataset.mobileNav === 'open') { closeMobileNav(); return; }
   if (e.key === 'Escape' && _openDrawers.length && !_modalLayerOpen()) closeDrawer(_openDrawers[_openDrawers.length - 1]);
 });
+// Drawers ship closed in the markup, so seed inert before the first open.
+document.querySelectorAll('.drawer').forEach(dr => setDrawerInert(dr, !dr.classList.contains('open')));
 
 // ========== 未保存更改：悬浮保存条 + 变更预览弹窗 ==========
 var _verCheckDone = false; // 「关于」页更新检查只自动跑一次（checkForUpdate 在 05_settings 定义）
@@ -357,6 +410,14 @@ function refreshSaveBar() {
   if (!bar) return;
   const ctx = _currentSaveBarCtx();
   bar.classList.toggle('show', !!ctx);
+  // The bar fades out with opacity only; without this its buttons stay tabbable.
+  if (ctx) {
+    bar.removeAttribute('inert');
+    bar.removeAttribute('aria-hidden');
+  } else {
+    bar.setAttribute('inert', '');
+    bar.setAttribute('aria-hidden', 'true');
+  }
   const diffBtn = _('saveBarDiff');
   if (diffBtn) diffBtn.hidden = !(ctx && typeof ctx.diff === 'function');
   // 有未保存更改时，关闭/刷新页面前提示（浏览器统一展示原生确认文案）

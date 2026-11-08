@@ -41,7 +41,7 @@ type Config struct {
 	Version            string
 	Build              func() map[string]any
 	ZenHeaders         func() map[string]string
-	PoolPath           string
+	PoolPath           func() string
 	HasPassword        func() bool
 	// RestartListener rebinds the HTTP listener to a new host on the same port.
 	RestartListener func(host string, port int) error
@@ -89,6 +89,10 @@ func (h *Config) Get(w http.ResponseWriter, r *http.Request) {
 	if h.ListenHost != nil {
 		host = h.ListenHost()
 	}
+	poolPath := ""
+	if h.PoolPath != nil {
+		poolPath = h.PoolPath()
+	}
 	data := map[string]any{
 		"address":      h.address(host),
 		"host":         host,
@@ -96,7 +100,7 @@ func (h *Config) Get(w http.ResponseWriter, r *http.Request) {
 		"dispatchMode": cfg.DispatchMode,
 		"modelChain":   cfg.ModelChain,
 		"version":      h.Version,
-		"poolPath":     h.PoolPath,
+		"poolPath":     poolPath,
 		"defaultModel": h.DefaultModel(),
 		"headers":      cfg.Headers,
 		"onlyFree":     cfg.OnlyFree,

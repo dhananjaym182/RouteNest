@@ -71,7 +71,11 @@ func TestBootstrapAndSession(t *testing.T) {
 	if _, e := s.CompleteBootstrap(ctx, "wrong bootstrap", "permanent admin password"); !errors.Is(e, ErrUnauthorized) {
 		t.Fatal(e)
 	}
-	c := bootstrap(t, s)
+	const permanentPassword = "Admin8!!"
+	c, e := s.CompleteBootstrap(ctx, "one time bootstrap secret", permanentPassword)
+	if e != nil {
+		t.Fatal(e)
+	}
 	p, e := s.Authenticate(ctx, c.Token)
 	if e != nil || !p.HasPermission(PermissionSecurityWrite) {
 		t.Fatal(p, e)
@@ -86,7 +90,7 @@ func TestBootstrapAndSession(t *testing.T) {
 		t.Fatal(e)
 	}
 	persisted, _ := json.Marshal(r.state)
-	for _, secret := range []string{c.Token, c.CSRFToken, "one time bootstrap secret", "permanent admin password"} {
+	for _, secret := range []string{c.Token, c.CSRFToken, "one time bootstrap secret", permanentPassword} {
 		if strings.Contains(string(persisted), secret) {
 			t.Fatal("plaintext secret persisted")
 		}
@@ -97,6 +101,9 @@ func TestBootstrapAndSession(t *testing.T) {
 	}
 	if _, e = s2.Authenticate(ctx, c.Token); e != nil {
 		t.Fatal("session lost on restart", e)
+	}
+	if _, e = s2.Login(ctx, "admin", permanentPassword, "127.0.0.1"); e != nil {
+		t.Fatal("eight-character bootstrap password rejected", e)
 	}
 	if _, e = s2.CompleteBootstrap(ctx, "changed bootstrap env", "another admin password"); !errors.Is(e, ErrAlreadyInitialized) {
 		t.Fatal(e)
@@ -128,6 +135,36 @@ func TestPendingBootstrapRotatesOnRestartAndDelivery(t *testing.T) {
 		t.Fatal("headless anonymous startup accepted")
 	}
 }
+
+func TestBootstrapSecretRetainsBytePolicy(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		secret   string
+		accepted bool
+	}{
+		{"eight bytes", "Admin8!!", false},
+		{"eleven bytes", strings.Repeat("x", 11), false},
+		{"twelve bytes", strings.Repeat("x", 12), true},
+		{"twelve Unicode bytes", "一次密钥", true},
+		{"over byte limit", strings.Repeat("x", 1025), false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s, err := NewService(newMemoryRepo(), Options{
+				PasswordParams:    PasswordParams{19 * 1024, 2, 1, 16, 32},
+				BootstrapPassword: tc.secret,
+			})
+			if (err == nil) != tc.accepted {
+				t.Fatalf("accepted=%v, want %v: %v", err == nil, tc.accepted, err)
+			}
+			if tc.accepted {
+				if _, err := s.CompleteBootstrap(context.Background(), tc.secret, "Admin8!!"); err != nil {
+					t.Fatal("valid one-time secret could not complete bootstrap", err)
+				}
+			}
+		})
+	}
+}
+
 func TestSessionRevocationAndLockdown(t *testing.T) {
 	s, r := testService(t)
 	c := bootstrap(t, s)
@@ -218,7 +255,7 @@ func TestPasswordRotationRevokesAllSessions(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
-	if e = s.RotatePassword(ctx, c.Principal, "permanent admin password", "rotated permanent password"); e != nil {
+	if e = s.RotatePassword(ctx, c.Principal, "permanent admin password", "Rotate8!"); e != nil {
 		t.Fatal(e)
 	}
 	for _, token := range []string{c.Token, other.Token} {
@@ -226,7 +263,53 @@ func TestPasswordRotationRevokesAllSessions(t *testing.T) {
 			t.Fatal(e)
 		}
 	}
+	if _, e = s.Login(ctx, "admin", "Rotate8!", "127.0.0.1"); e != nil {
+		t.Fatal("eight-character rotated password rejected", e)
+	}
 }
+
+func TestLoginRehashPreservesPreviouslyAcceptedUnicodePassword(t *testing.T) {
+	s, r := testService(t)
+	bootstrap(t, s)
+	ctx := context.Background()
+	oldHasher, err := NewPasswordHasher(PasswordParams{19 * 1024, 3, 1, 16, 32}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The former 12-byte minimum accepted this four-character password.
+	const oldPassword = "旧密码好"
+	oldPHC, err := oldHasher.hash(ctx, oldPassword)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.mu.Lock()
+	u := r.state.Users[BreakGlassID]
+	u.PasswordPHC = oldPHC
+	r.state.Users[u.ID] = u
+	r.mu.Unlock()
+	if _, err = s.hasher.Hash(ctx, oldPassword); err == nil {
+		t.Fatal("old short Unicode password accepted as a new password")
+	}
+	credentials, err := s.Login(ctx, "admin", oldPassword, "127.0.0.1")
+	if err != nil {
+		t.Fatal("parameter upgrade rejected an existing password", err)
+	}
+	state, err := s.State(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	updatedPHC := state.Users[BreakGlassID].PasswordPHC
+	if updatedPHC == oldPHC || s.hasher.NeedsRehash(updatedPHC) {
+		t.Fatal("existing password was not upgraded to current parameters")
+	}
+	if ok, err := s.hasher.Verify(ctx, updatedPHC, oldPassword); err != nil || !ok {
+		t.Fatal("rehash changed the existing password", err)
+	}
+	if _, err := s.Authenticate(ctx, credentials.Token); err != nil {
+		t.Fatal("rehash login did not issue a usable session", err)
+	}
+}
+
 func TestRBACMatrix(t *testing.T) {
 	for role, permissions := range rolePermissions {
 		p := Principal{Roles: []Role{role}, Method: MethodLocal}
@@ -404,11 +487,11 @@ func TestLocalUserRolesAndPasswordResetRevoke(t *testing.T) {
 	s, _ := testService(t)
 	admin := bootstrap(t, s)
 	ctx := context.Background()
-	u, e := s.CreateLocalUser(ctx, admin.Principal, "Viewer", "viewer permanent password", []Role{RoleViewer})
+	u, e := s.CreateLocalUser(ctx, admin.Principal, "Viewer", "Viewer8!", []Role{RoleViewer})
 	if e != nil {
 		t.Fatal(e)
 	}
-	viewer, e := s.Login(ctx, "viewer", "viewer permanent password", "192.0.2.1")
+	viewer, e := s.Login(ctx, "viewer", "Viewer8!", "192.0.2.1")
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -418,7 +501,7 @@ func TestLocalUserRolesAndPasswordResetRevoke(t *testing.T) {
 	if _, e = s.CreateLocalUser(ctx, viewer.Principal, "intruder", "intruder permanent password", []Role{RoleSecurityAdmin}); !errors.Is(e, ErrForbidden) {
 		t.Fatal("viewer creates security admin", e)
 	}
-	if e = s.SetLocalPassword(ctx, admin.Principal, u.ID, "updated viewer password"); e != nil {
+	if e = s.SetLocalPassword(ctx, admin.Principal, u.ID, "Reset8!!"); e != nil {
 		t.Fatal(e)
 	}
 	if _, e = s.Authenticate(ctx, viewer.Token); !errors.Is(e, ErrUnauthorized) {
@@ -430,6 +513,9 @@ func TestLocalUserRolesAndPasswordResetRevoke(t *testing.T) {
 	sessions, e := s.ListSessions(ctx, admin.Principal)
 	if e != nil || len(sessions) != 1 {
 		t.Fatal(sessions, e)
+	}
+	if _, e = s.Login(ctx, "viewer", "Reset8!!", "192.0.2.1"); e != nil {
+		t.Fatal("eight-character reset password rejected", e)
 	}
 	if e = s.SetLocalPassword(ctx, admin.Principal, BreakGlassID, "bypassed permanent password"); !errors.Is(e, ErrForbidden) {
 		t.Fatal("break-glass password reset bypass", e)

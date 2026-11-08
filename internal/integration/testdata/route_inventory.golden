@@ -64,6 +64,7 @@
 /admin/api/models/context	POST	routes.go	wrap=security[provider.write,csrf=session]	handler=registry
 /admin/api/models/cost	POST	routes.go	wrap=security[provider.write,csrf=session]	handler=registry
 /admin/api/models/delete	POST	routes.go	wrap=security[provider.write,csrf=session]	handler=registry
+/admin/api/models/delisted/remove	POST	routes.go	wrap=security[provider.write,csrf=session]	handler=registry
 /admin/api/models/import/apply	POST	routes.go	wrap=security[provider.write,csrf=session]	handler=registry
 /admin/api/models/import/batch	GET	routes.go	wrap=security[admin.view,csrf=safe]	handler=registry
 /admin/api/models/import/discard	POST	routes.go	wrap=security[provider.write,csrf=session]	handler=registry

@@ -148,6 +148,22 @@ func PreviewImport(src ImportSource) (*importBatch, error) {
 	if err != nil {
 		return nil, &DiscoveryError{Message: err.Error()}
 	}
+	modelLifecycleMu.Lock()
+	defer modelLifecycleMu.Unlock()
+	if src.ID != "" {
+		current := Find(src.ID)
+		if current == nil {
+			return nil, ErrProviderNotFound
+		}
+		filtered := entries[:0]
+		for _, entry := range entries {
+			if containsModel(prov.ModelIDs, entry.ID) && !containsModel(current.ModelIDs, entry.ID) {
+				continue
+			}
+			filtered = append(filtered, entry)
+		}
+		entries, prov = filtered, current
+	}
 	return buildImportBatch(*prov, entries), nil
 }
 
@@ -160,6 +176,8 @@ type ImportApplyResult struct {
 // ApplyImport writes the approved add and tier_change items of a pending batch
 // into the pool and the provider's model list. The batch is consumed on success.
 func ApplyImport(batchID string, approve []string) (ImportApplyResult, error) {
+	modelLifecycleMu.Lock()
+	defer modelLifecycleMu.Unlock()
 	importsMu.Lock()
 	batch := pendingImports[batchID]
 	importsMu.Unlock()
@@ -232,7 +250,7 @@ func ApplyImport(batchID string, approve []string) (ImportApplyResult, error) {
 	importsMu.Lock()
 	delete(pendingImports, batch.ID)
 	importsMu.Unlock()
-	SyncModels()
+	syncModels()
 	log.Printf("model import applied: batch %s provider %s added=%d tierChanged=%d", batch.ID, prov.Name, added, changed)
 	return ImportApplyResult{Added: added, Changed: changed}, nil
 }
@@ -280,6 +298,8 @@ func DiscardImport(id string) {
 // SetModelCost sets a model's manual tier. An empty cost restores automatic
 // classification; the tier stays as it is until the next import or sync.
 func SetModelCost(providerID, id, cost string) error {
+	modelLifecycleMu.Lock()
+	defer modelLifecycleMu.Unlock()
 	if id == "" || (cost != "free" && cost != "pass" && cost != "") {
 		return ErrInvalidModelCost
 	}

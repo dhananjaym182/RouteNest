@@ -93,12 +93,35 @@ func saveProviderRecheckStateLocked() error {
 // 返回本轮展示状态副本。上游失败只记 error，不动缺失计数与标记。
 func recheckProviderModels(p CustomProvider) providerRecheckState {
 	LoadRecheckState()
+	savedAtStart := Find(p.ID) != nil
 	st := providerRecheckState{}
 	entries, err := DiscoverModels(p, DiscoveryOverrides{})
 	if err != nil {
 		st.LastError = err.Error()
+		if savedAtStart && Find(p.ID) == nil {
+			return st
+		}
 		setProviderRecheckState(p.ID, st)
 		return st
+	}
+	// Discovery does not hold administration locks. Re-read declarations before
+	// applying its result so a concurrently removed offering cannot be restored
+	// by the stale provider snapshot supplied at the start of this check.
+	modelLifecycleMu.Lock()
+	defer modelLifecycleMu.Unlock()
+	if current := Find(p.ID); current != nil {
+		previous := p.ModelIDs
+		p = *current
+		filtered := entries[:0]
+		for _, entry := range entries {
+			if containsModel(previous, entry.ID) && !containsModel(p.ModelIDs, entry.ID) {
+				continue
+			}
+			filtered = append(filtered, entry)
+		}
+		entries = filtered
+	} else if savedAtStart {
+		return providerRecheckState{LastError: ErrProviderNotFound.Error()}
 	}
 
 	upstream := make(map[string]bool, len(entries))

@@ -92,6 +92,9 @@ func ReplaceSource(source string, build func(current []domain.Model) []domain.Mo
 		}
 		update.Total = len(desired)
 		p.Models = kept
+		if source == SourceRemote || source == SourceZen {
+			p.ModelCatalogInitialized = true
+		}
 		return true
 	})
 	return update, err
@@ -108,6 +111,9 @@ func RemoveDelisted(id string) bool {
 				continue
 			}
 			p.Models = append(p.Models[:i], p.Models[i+1:]...)
+			if m.Source == SourceRemote || m.Source == SourceZen || m.Source == SourceSeed {
+				p.ModelCatalogInitialized = true
+			}
 			if p.DefaultModel == id {
 				p.DefaultModel = ""
 			}

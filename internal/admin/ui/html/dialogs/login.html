@@ -1,23 +1,36 @@
 <div id="loginOverlay">
-  <div class="login-card" role="dialog" aria-modal="true" aria-labelledby="loginTitle" aria-describedby="loginHelp" style="max-height:calc(100vh - 40px);overflow-y:auto">
+  <div class="login-card" role="dialog" aria-modal="true" aria-labelledby="loginTitle" aria-describedby="loginHelp">
     <h2 id="loginTitle">RouteNest 管理后台</h2>
     <p id="loginHelp">请输入管理员用户名和密码。</p>
     <div id="loginSSOProviders" style="display:none" aria-label="单点登录">
       <div id="loginSSOButtons"></div>
     </div>
-    <div id="loginLocalHelp" class="hint-sm mt-12">本地应急管理员登录</div>
-    <div id="loginUsernameRow">
-      <input type="text" id="loginUsername" value="admin" placeholder="管理员用户名" aria-label="管理员用户名" autocomplete="username">
-    </div>
-    <div id="bootstrapSecretRow" style="display:none">
-      <input type="password" id="bootstrapSecret" placeholder="一次性本机密钥" autocomplete="off">
-    </div>
-    <input type="password" id="loginPassword" placeholder="当前密码" aria-label="当前密码" autocomplete="current-password" onkeydown="if(event.key==='Enter')submitLogin()">
-    <div id="loginNewPasswordRow" style="display:none">
-      <input type="password" id="loginNewPassword" placeholder="新的永久密码（至少 12 位）" autocomplete="new-password">
-      <input type="password" id="loginConfirmPassword" placeholder="再次输入新的永久密码" autocomplete="new-password" onkeydown="if(event.key==='Enter')submitLogin()">
-    </div>
-    <button id="loginSubmit" class="btn btn-primary btn-block" onclick="submitLogin()">登录</button>
-    <div id="loginError" class="login-err" aria-live="polite"></div>
+    <form id="loginForm" class="login-form" novalidate onsubmit="event.preventDefault();submitLogin()">
+      <div id="loginLocalHelp">本地应急管理员登录</div>
+      <div id="loginUsernameRow" class="login-field">
+        <label for="loginUsername">用户名</label>
+        <input type="text" id="loginUsername" value="admin" placeholder="管理员用户名" autocomplete="username" required aria-describedby="loginError">
+      </div>
+      <div id="bootstrapSecretRow" class="login-field" style="display:none">
+        <label for="bootstrapSecret">一次性本机密钥</label>
+        <input type="password" id="bootstrapSecret" autocomplete="off" required disabled aria-describedby="loginError">
+      </div>
+      <div id="loginPasswordRow" class="login-field">
+        <label id="loginPasswordLabel" for="loginPassword">密码</label>
+        <input type="password" id="loginPassword" autocomplete="current-password" required aria-describedby="loginError">
+      </div>
+      <div id="loginNewPasswordRow" class="login-password-fields" style="display:none">
+        <div class="login-field">
+          <label for="loginNewPassword">新的永久密码（至少 8 位）</label>
+          <input type="password" id="loginNewPassword" placeholder="新的永久密码（至少 8 位）" aria-label="新的永久密码（至少 8 位）" minlength="8" autocomplete="new-password" required disabled aria-describedby="loginError">
+        </div>
+        <div class="login-field">
+          <label for="loginConfirmPassword">再次输入新的永久密码</label>
+          <input type="password" id="loginConfirmPassword" autocomplete="new-password" minlength="8" required disabled aria-describedby="loginError">
+        </div>
+      </div>
+      <button type="submit" id="loginSubmit" class="btn btn-primary btn-block">登录</button>
+      <div id="loginError" class="login-err" role="alert" aria-live="polite"></div>
+    </form>
   </div>
 </div>

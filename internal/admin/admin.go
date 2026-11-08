@@ -207,6 +207,7 @@ func registerModelsRoutes(registry *adminRouteRegistry) {
 	registerProtectedRoute(registry, http.MethodPost, "/admin/api/models/sync", csrfSession, handleAdminModelSync, adminauth.PermissionProviderWrite)
 	registerProtectedRoute(registry, http.MethodPost, "/admin/api/models/add", csrfSession, handleAdminModelAdd, adminauth.PermissionProviderWrite)
 	registerProtectedRoute(registry, http.MethodPost, "/admin/api/models/delete", csrfSession, handleAdminModelDelete, adminauth.PermissionProviderWrite)
+	registerProtectedRoute(registry, http.MethodPost, "/admin/api/models/delisted/remove", csrfSession, handleDelistedModelRemoval, adminauth.PermissionProviderWrite)
 	registerProtectedRoute(registry, http.MethodPost, "/admin/api/models/context", csrfSession, handleAdminModelContext, adminauth.PermissionProviderWrite)
 	registerProtectedRoute(registry, http.MethodPost, "/admin/api/models/capabilities", csrfSession, handleAdminModelCapabilities, adminauth.PermissionProviderWrite)
 	registerProtectedRoute(registry, http.MethodPost, "/admin/api/models/toggle", csrfSession, HandleAdminModelToggle, adminauth.PermissionProviderWrite)

@@ -88,6 +88,12 @@ function setLang(l){
   if (_('modelsList')) loadModels();
   if (_('settingDefModel')) loadConfig();
   if (typeof renderGlobal === 'function' && typeof _globalData !== 'undefined' && _globalData) renderGlobal();
+  if (typeof _adminPrincipal !== 'undefined' && _adminPrincipal) {
+    renderAdminPrincipal(_adminPrincipal);
+    if (typeof _activeTabName !== 'undefined' && _activeTabName === 'security' && adminHasPermission('security.write')) {
+      loadAdminSessions(); loadAdminUsers(); loadSSOProviders();
+    }
+  }
   toast(l === 'en' ? 'Language switched to English' : '语言已切换为中文', 'success');
 }
 LANG = detectLang();

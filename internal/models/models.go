@@ -33,6 +33,21 @@ const (
 	CostPass = "pass"
 )
 
+// CatalogInitialized reads catalogue initialization from an already-held pool
+// snapshot. Older documents with synchronized rows remain initialized without
+// requiring a migration or a nested pool read.
+func CatalogInitialized(pool *domain.AccountPool) bool {
+	if pool.ModelCatalogInitialized {
+		return true
+	}
+	for _, model := range pool.Models {
+		if model.Source == SourceRemote || model.Source == SourceZen {
+			return true
+		}
+	}
+	return false
+}
+
 // Snapshot returns a deep copy of the live model list. Callers may modify the
 // result freely; it never aliases the pool.
 func Snapshot() []domain.Model {

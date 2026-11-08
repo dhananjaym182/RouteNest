@@ -13,22 +13,26 @@ async function loadAdminUsers() {
     _adminUsers = users.slice().sort((a, b) => String(a.username || '').localeCompare(String(b.username || '')));
     host.textContent = '';
     if (!_adminUsers.length) {
-      const empty = document.createElement('div'); empty.className = 'empty-state'; empty.textContent = t('尚未配置管理员用户'); host.appendChild(empty); return;
+      const empty = document.createElement('div'); empty.className = 'access-empty'; empty.textContent = t('尚未配置管理员用户'); host.appendChild(empty); return;
     }
     _adminUsers.forEach(user => {
-      const row = document.createElement('div'); row.className = 'action-row';
-      const info = document.createElement('div'); info.className = 'f1';
+      const row = document.createElement('div'); row.className = 'access-list-row';
+      const info = document.createElement('div'); info.className = 'access-row-info';
+      const heading = document.createElement('div'); heading.className = 'access-row-title';
       const title = document.createElement('strong'); title.textContent = user.username || user.id;
-      const kind = document.createElement('span'); kind.className = 'model-tag' + (user.disabled ? ' pass' : ' free');
+      const kind = document.createElement('span'); kind.className = 'access-badge' + (user.disabled ? ' is-warning' : '');
       kind.textContent = user.disabled ? t('已停用') : (user.provider ? String(user.provider) : t('本地账号'));
-      const details = document.createElement('div'); details.className = 'hint-sm'; details.textContent = (user.roles || []).join(', ') || '—';
-      info.appendChild(title); info.appendChild(kind); info.appendChild(details); row.appendChild(info);
-      const actions = document.createElement('div'); actions.className = 'form-actions';
+      const details = document.createElement('div'); details.className = 'access-row-meta access-role-badges';
+      renderAdminRoleBadges(details, user.roles);
+      heading.appendChild(title); heading.appendChild(kind); info.appendChild(heading); info.appendChild(details); row.appendChild(info);
+      const actions = document.createElement('div'); actions.className = 'access-row-actions';
       const immutable = user.id === 'break-glass' || (_adminPrincipal && user.id === _adminPrincipal.userID);
-      const edit = document.createElement('button'); edit.type = 'button'; edit.className = 'btn btn-sm'; edit.textContent = t('编辑'); edit.disabled = immutable;
-      edit.addEventListener('click', () => openAdminUserEditor(user.id)); actions.appendChild(edit);
-      if (!user.provider && user.id !== 'break-glass') {
-        const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'btn btn-sm btn-danger'; remove.textContent = t('删除'); remove.disabled = immutable;
+      if (!immutable) {
+        const edit = document.createElement('button'); edit.type = 'button'; edit.className = 'btn btn-sm'; edit.textContent = t('编辑');
+        edit.addEventListener('click', () => openAdminUserEditor(user.id)); actions.appendChild(edit);
+      }
+      if (!user.provider && !immutable) {
+        const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'btn btn-sm btn-danger'; remove.textContent = t('删除');
         remove.addEventListener('click', () => deleteAdminUser(user.id, remove)); actions.appendChild(remove);
       }
       row.appendChild(actions); host.appendChild(row);
@@ -53,6 +57,7 @@ function setAdminUserRoles(roles, disabled) {
 function openAdminUserEditor(id) {
   const user = id ? _adminUsers.find(candidate => candidate.id === id) : null;
   if (id && !user) return;
+  if (user && (user.id === 'break-glass' || (_adminPrincipal && user.id === _adminPrincipal.userID))) return;
   _editingAdminUser = user || null;
   _('adminUserID').value = user ? user.id : '';
   _('adminUserRevision').value = user ? String(user.revision || 0) : '0';
@@ -60,10 +65,12 @@ function openAdminUserEditor(id) {
   _('adminUserUsername').value = user ? user.username : '';
   _('adminUserUsername').disabled = !!user;
   _('adminUserPassword').value = '';
-  _('adminUserPassword').placeholder = user ? t('留空则不重置密码') : t('永久密码（至少 12 位）');
+  _('adminUserPassword').placeholder = user ? t('留空则不重置密码') : t('永久密码（至少 8 位）');
   _('adminUserPassword').disabled = !!(user && user.provider);
+  _('adminUserPasswordField').hidden = !!(user && user.provider);
   _('adminUserDisabled').checked = !!(user && user.disabled);
   _('adminUserDisabled').disabled = !user;
+  _('adminUserDisabledRow').hidden = !user;
   setAdminUserRoles(user ? user.roles : ['viewer'], !!(user && user.provider));
   _('adminUserEditorTitle').textContent = t(user ? '编辑管理员' : '添加本地管理员');
   _('adminUserError').textContent = '';
@@ -75,6 +82,7 @@ function closeAdminUserEditor() {
   _editingAdminUser = null;
   if (_('adminUserEditor')) _('adminUserEditor').style.display = 'none';
   if (_('adminUserError')) _('adminUserError').textContent = '';
+  if (_('adminUserPassword')) _('adminUserPassword').value = '';
 }
 
 async function saveAdminUser(button) {
@@ -82,9 +90,11 @@ async function saveAdminUser(button) {
   const roles = adminUserSelectedRoles();
   const password = _('adminUserPassword').value;
   if (!roles.length) { error.textContent = t('至少选择一个角色'); return; }
-  if (!_editingAdminUser && password.length < 12) { error.textContent = t('永久密码至少 12 位'); return; }
-  if (_editingAdminUser && password && password.length < 12) { error.textContent = t('新密码至少 12 位'); return; }
+  if (!_editingAdminUser && adminPasswordTooShort(password)) { error.textContent = t('永久密码至少 8 位'); return; }
+  if (_editingAdminUser && password && adminPasswordTooShort(password)) { error.textContent = t('新密码至少 8 位'); return; }
+  const original = button.innerHTML;
   button.disabled = true;
+  button.innerHTML = '<span class="loading"></span> ' + t('保存中...');
   try {
     if (!_editingAdminUser) {
       const username = _('adminUserUsername').value.trim();
@@ -102,7 +112,7 @@ async function saveAdminUser(button) {
     }
     toast(t('管理员用户已保存'), 'success'); closeAdminUserEditor(); await loadAdminUsers();
   } catch (e) { error.textContent = e.message; }
-  finally { button.disabled = false; }
+  finally { button.disabled = false; button.innerHTML = original; }
 }
 
 async function deleteAdminUser(id, button) {

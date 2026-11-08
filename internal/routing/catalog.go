@@ -34,14 +34,14 @@ var builtinModels = []domain.Model{
 //   - 未同步 / 离线：内置 fallback（Cline + zen 种子表）+ 用户自定义
 func AllModels() []domain.Model {
 	var result []domain.Model
-	models.Read(func(list []domain.Model) {
-		result = allModelsFrom(list)
+	models.View(func(pool *domain.AccountPool) {
+		result = allModelsFrom(pool.Models, models.CatalogInitialized(pool))
 	})
 	return result
 }
 
 // allModelsFrom computes AllModels for a list read under the pool lock.
-func allModelsFrom(list []domain.Model) []domain.Model {
+func allModelsFrom(list []domain.Model, initialized bool) []domain.Model {
 
 	var custom []domain.Model
 	var remote []domain.Model
@@ -57,7 +57,7 @@ func allModelsFrom(list []domain.Model) []domain.Model {
 		}
 	}
 
-	if len(remote) > 0 || len(zenModels) > 0 || zen.RemoteActive() {
+	if initialized || len(remote) > 0 || len(zenModels) > 0 || zen.RemoteActive() {
 		result := make([]domain.Model, 0, len(remote)+len(zenModels)+len(custom))
 		result = append(result, remote...)
 		result = append(result, zenModels...)
@@ -150,31 +150,33 @@ func DefaultModel() string {
 
 // defaultModelFrom resolves the default model for a pool read under the lock.
 func defaultModelFrom(p *domain.AccountPool) string {
+	initialized := models.CatalogInitialized(p) || RemoteModelsActive()
 	if p.DefaultModel != "" {
-		defaultDisabled := false
+		defaultDisabled, defaultLive := false, false
 		for _, m := range p.Models {
-			if m.ID == p.DefaultModel && m.Disabled {
-				defaultDisabled = true
-				break
+			if m.ID == p.DefaultModel {
+				defaultDisabled = defaultDisabled || m.Disabled
+				defaultLive = defaultLive || !m.Disabled && (!m.Delisted || m.Custom)
 			}
 		}
-		if !defaultDisabled && (!RemoteModelsActive() || LiveModelSet(p.Models)[p.DefaultModel]) {
+		if !defaultDisabled && (!initialized || defaultLive) {
 			return p.DefaultModel
 		}
 	}
 
 	for _, m := range p.Models {
-		if m.Source == "remote" && m.Cost == "free" && !m.Disabled {
+		if m.Source == "remote" && m.Cost == "free" && !m.Disabled && !m.Delisted {
 			return m.ID
 		}
 	}
 
-	if RemoteModelsActive() {
+	if initialized {
 		for _, m := range p.Models {
-			if m.Status == "active" && !m.Disabled {
+			if m.Status == "active" && !m.Disabled && (!m.Delisted || m.Custom) {
 				return m.ID
 			}
 		}
+		return ""
 	}
 
 	for _, m := range builtinModels {
@@ -228,13 +230,17 @@ func defaultFreeChain() []string {
 	known := map[string]bool{}
 	var remoteFree []string
 	// One locked pass collects the ids and the free classifications.
-	models.Read(func(list []domain.Model) {
-		for _, m := range list {
+	models.View(func(pool *domain.AccountPool) {
+		remote = remote || models.CatalogInitialized(pool)
+		for _, m := range pool.Models {
+			if m.Disabled || m.Delisted && !m.Custom {
+				continue
+			}
 			known[m.ID] = true
-			if remote && m.Source == "remote" && m.Cost == "free" && m.Status == "active" {
+			if remote && m.Cost == "free" && m.Status == "active" {
 				remoteFree = append(remoteFree, m.ID)
 			}
-			if m.Source == "provider" && m.Cost == "free" && m.Status == "active" && !m.Disabled {
+			if !remote && m.Source == "provider" && m.Cost == "free" && m.Status == "active" {
 				remoteFree = append(remoteFree, m.ID)
 			}
 		}
@@ -254,7 +260,7 @@ func defaultFreeChain() []string {
 		seen[m] = true
 		chain = append(chain, m)
 	}
-	if len(chain) == 0 {
+	if len(chain) == 0 && !remote {
 		return FreeModelChain
 	}
 	return chain

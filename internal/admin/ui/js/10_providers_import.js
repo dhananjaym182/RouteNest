@@ -143,6 +143,10 @@ function importGroupStats(action, st, rows) {
 }
 
 async function previewModelImport(btn) {
+  if (btn && btn.disabled) return;
+  const providerID = _editingProviderId, revision = _provEditorRevision;
+  const removalEpoch = providerModelRemovalEpoch(providerID);
+  const current = () => _editingProviderId === providerID && _provEditorRevision === revision && providerModelRemovalEpoch(providerID) === removalEpoch && !!_('providerEditor') && _('providerEditor').classList.contains('open');
   const body = _editingProviderId
     ? { id: _editingProviderId }
     : { baseURL: _('provBaseURL').value.trim(), apiKey: _('provKey').value.trim(),
@@ -161,6 +165,7 @@ async function previewModelImport(btn) {
   if (btn) { btn.disabled = true; btn.innerHTML = '<span class="loading"></span> ' + t('扫描中...'); }
   try {
     const d = await api('POST', '/models/import/preview', body);
+    if (!current()) return;
     const r = d.data || {};
     if (r.error) { toast(t('上游拉取失败') + ': ' + r.error, 'error'); return; }
     _importBatch = r.batch;
@@ -168,9 +173,9 @@ async function previewModelImport(btn) {
     renderImportPreviewList();
     _('importPreviewModal').style.display = 'flex';
   } catch (e) {
-    toast(t('加载失败') + ': ' + esc(e.message), 'error');
+    if (current()) toast(t('加载失败') + ': ' + esc(e.message), 'error');
   } finally {
-    if (btn) { btn.disabled = false; btn.innerHTML = orig; }
+    if (btn && _provEditorRevision === revision) { btn.disabled = false; btn.innerHTML = orig; }
   }
 }
 

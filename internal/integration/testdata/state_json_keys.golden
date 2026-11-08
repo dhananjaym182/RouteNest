@@ -29,6 +29,7 @@ currentIdx
 defaultModel
 keys
 listenHost
+modelCatalogInitialized
 models
 models[].context
 models[].cost

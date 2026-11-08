@@ -46,6 +46,9 @@ func Delete(id string) DeleteOutcome {
 				return false
 			}
 			p.Models = append(p.Models[:i], p.Models[i+1:]...)
+			if !m.Custom && (m.Source == SourceRemote || m.Source == SourceZen || m.Source == SourceSeed) {
+				p.ModelCatalogInitialized = true
+			}
 			if p.DefaultModel == id {
 				p.DefaultModel = ""
 			}

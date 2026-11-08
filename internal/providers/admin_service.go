@@ -50,6 +50,8 @@ func AccountOutcomes(logs []domain.RequestLog) map[string][]int {
 // model projection. A validation failure returns an error whose message is
 // meant for the operator.
 func SaveCustomProvider(p CustomProvider) (CustomProvider, error) {
+	modelLifecycleMu.Lock()
+	defer modelLifecycleMu.Unlock()
 	p.Name = strings.TrimSpace(p.Name)
 	p.BaseURL = strings.TrimSpace(strings.TrimRight(p.BaseURL, "/"))
 	p.APIKey = strings.TrimSpace(p.APIKey)
@@ -124,17 +126,19 @@ func SaveCustomProvider(p CustomProvider) (CustomProvider, error) {
 		p.ConnectionID = ""
 	}
 	saved := Upsert(&p)
-	SyncModels() // 模型列表 / 回退链立即反映变更
+	syncModels() // 模型列表 / 回退链立即反映变更
 	log.Printf("admin: provider saved name=%s models=%d enabled=%v", saved.Name, len(saved.ModelIDs), saved.Enabled)
 	return saved, nil
 }
 
 // DeleteCustomProvider removes a saved provider and its model and recheck state.
 func DeleteCustomProvider(id string) error {
+	modelLifecycleMu.Lock()
+	defer modelLifecycleMu.Unlock()
 	if !Delete(id) {
 		return ErrProviderNotFound
 	}
-	SyncModels() // 清理该 provider 声明的池内模型条目
+	syncModels() // 清理该 provider 声明的池内模型条目
 	clearProviderRecheck(id)
 	log.Printf("admin: provider deleted id=%s", id)
 	return nil

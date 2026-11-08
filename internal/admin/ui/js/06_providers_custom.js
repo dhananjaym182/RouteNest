@@ -1,5 +1,6 @@
 // ========== 自定义 Provider ==========
 let _editingProviderId = '';
+let _provEditorRevision = 0;
 // 从免费类预设新建并保存后，自动触发一次分级导入预览（用户勾选后才写入）
 let _previewAfterSave = false;
 
