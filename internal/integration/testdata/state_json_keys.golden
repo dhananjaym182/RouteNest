@@ -85,6 +85,8 @@ modelChain
 nonstreamKeepaliveSeconds
 onlyFree
 passthroughHeaders
+providerModelPrefixes
+providerModelPrefixes.fixture-key
 retry
 retry.maxCredentialsPerRound
 retry.maxFailoverModels

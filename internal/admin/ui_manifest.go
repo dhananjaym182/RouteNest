@@ -19,6 +19,7 @@ var adminUIJSAssets = []string{
 	"ui/js/10_providers_import.js",
 	"ui/js/11_upstreams.js",
 	"ui/js/11_connections.js",
+	"ui/js/12_combo_catalog.js",
 	"ui/js/12_combos.js",
 	"ui/js/13_models.js",
 	"ui/js/13_model_sync.js",

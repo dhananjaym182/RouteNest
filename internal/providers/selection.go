@@ -6,7 +6,9 @@ import (
 	"sync"
 	"time"
 
+	"routenest/internal/config"
 	"routenest/internal/connections"
+	"routenest/internal/domain"
 )
 
 // ResolveForModel 找到该模型所有可用 provider（启用中、未冷却），按
@@ -179,15 +181,24 @@ func orderProviderCands(cs []providerCand, model string) []providerCand {
 	return cs
 }
 
-// NameServesModel 判断是否存在**启用中**的 provider，其 Name 匹配（去空白、
-// 大小写不敏感）且模型列表包含该模型。校验用：不关心冷却/预算（那是运行时的事）。
+// NameServesModel accepts a stable provider ID or a legacy display-name pin.
+// An ID wins over matching display names, including while its provider is
+// disabled or does not serve the model. Validation ignores cooldown and budget.
 func NameServesModel(name, model string) bool {
 	name = strings.TrimSpace(name)
 	if name == "" {
 		return false
 	}
-	for _, p := range List() {
-		if !p.Enabled || !strings.EqualFold(strings.TrimSpace(p.Name), name) {
+	list := List()
+	idPin := GeneratedProviderIDPin(name) || config.ProviderModelIDReserved(name)
+	for _, p := range list {
+		if p.ID == name {
+			idPin = true
+			break
+		}
+	}
+	for _, p := range list {
+		if !p.Enabled || !providerPinMatches(p, name, idPin) {
 			continue
 		}
 		for _, id := range p.ModelIDs {
@@ -197,6 +208,19 @@ func NameServesModel(name, model string) bool {
 		}
 	}
 	return false
+}
+
+// GeneratedProviderIDPin identifies the IDs assigned by this registry. They
+// remain ID pins after deletion rather than acquiring display-name meaning.
+func GeneratedProviderIDPin(pin string) bool {
+	return strings.HasPrefix(strings.ToLower(pin), "prov_") && domain.ProviderInstanceID(pin).Valid()
+}
+
+func providerPinMatches(provider CustomProvider, pin string, idPin bool) bool {
+	if idPin {
+		return provider.ID == pin
+	}
+	return strings.EqualFold(strings.TrimSpace(provider.Name), pin)
 }
 
 // SplitPin parses the request-level qualified name "model@ProviderName"
@@ -215,9 +239,9 @@ func SplitPin(model string) (bare, pin string) {
 	return bare, pin
 }
 
-// ResolveNamedForModel 与 ResolveForModel 同规则（启用、未冷却、
-// 未超预算、服务该模型），但只保留 Name 匹配给定名称（去空白、大小写不敏感）的
-// provider。用于组合条目把模型钉到某一家上游。
+// ResolveNamedForModel resolves an exact provider ID before legacy name groups.
+// Eligibility cannot turn an unavailable ID pin into a display-name fallback.
+// Model IDs, including embedded '@' characters, are passed through unchanged.
 func ResolveNamedForModel(model, name string) []*CustomProvider {
 	Load()
 	Mu.Lock()
@@ -226,11 +250,18 @@ func ResolveNamedForModel(model, name string) []*CustomProvider {
 	if name == "" {
 		return nil
 	}
+	idPin := GeneratedProviderIDPin(name) || config.ProviderModelIDReserved(name)
+	for _, p := range CustomProviders {
+		if p.ID == name {
+			idPin = true
+			break
+		}
+	}
 	var cs []providerCand
 	now := time.Now()
 	legacyOwners := providerLegacyOwnerCountsLocked()
 	for _, p := range CustomProviders {
-		if !p.Enabled || !strings.EqualFold(strings.TrimSpace(p.Name), name) {
+		if !p.Enabled || !providerPinMatches(*p, name, idPin) {
 			continue
 		}
 		for _, m := range p.ModelIDs {

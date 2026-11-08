@@ -6,7 +6,7 @@ import vm from 'node:vm';
 
 const assets = [
   '05_settings.js', '06_providers_custom.js', '07_providers_detail.js', '08_providers_detect.js',
-  '09_providers_pickers.js', '10_providers_import.js', '11_upstreams.js', '12_combos.js',
+  '09_providers_pickers.js', '10_providers_import.js', '11_upstreams.js', '12_combo_catalog.js', '12_combos.js',
   '13_models.js', '13_model_sync.js', '13_model_cleanup.js', '18_global.js',
 ];
 

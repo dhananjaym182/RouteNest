@@ -492,6 +492,13 @@ func ModelForCompaction(model string) domain.Model {
 	if model == "" {
 		return domain.Model{}
 	}
+	bare, pin, err := routing.ResolveModelReference(model)
+	if err == nil && (pin.ProviderID != "" || pin.ProviderName != "") {
+		if m, ok := routing.ModelForReference(model); ok {
+			return m
+		}
+		return domain.Model{ID: bare}
+	}
 	if zm, ok := zen.ResolveInfo(model); ok {
 		return zm
 	}

@@ -140,7 +140,6 @@ func TestProjectOfferingsProviderOverlayOverridesLegacy(t *testing.T) {
 		modelIDs []string
 	}{
 		{name: "declared model", modelIDs: []string{legacy.ID}},
-		{name: "legacy provider name match"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			offerings := ProjectOfferings([]domain.Model{legacy}, []OfferingSource{{

@@ -44,8 +44,18 @@ func installPool(t *testing.T, models []Model, accs ...*Account) {
 func installConfig(t *testing.T, cfg *admin.ProxyConfig) {
 	t.Helper()
 	t.Setenv(platform.DataDirEnv, t.TempDir()) // 配置落盘隔离到临时目录
-	old := admin.GetProxyConfig()
-	t.Cleanup(func() { admin.SetProxyConfig(old) })
+	old := config.Snapshot()
+	// Serial fixtures replace private test state. Production publication keeps
+	// namespace reservations, so it cannot serve as a test reset operation.
+	config.Mu.Lock()
+	*config.Held() = *config.DefaultProxy()
+	config.Mu.Unlock()
+	t.Cleanup(func() {
+		config.Mu.Lock()
+		*config.Held() = *old.Clone()
+		config.SaveLocked()
+		config.Mu.Unlock()
+	})
 	admin.SetProxyConfig(cfg)
 }
 

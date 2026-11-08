@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"routenest/internal/config"
 	"routenest/internal/domain"
 	"routenest/internal/egress"
 	"routenest/internal/providerstate"
@@ -90,14 +91,15 @@ type CandidatePlanInput struct {
 	Budgets      map[domain.ProviderInstanceID]bool
 	// BudgetExhausted is the provider/model-scoped budget snapshot. Budgets is
 	// retained during migration for compatibility with older planner callers.
-	BudgetExhausted     map[domain.OfferingKey]bool
-	CredentialRequired  map[domain.ProviderInstanceID]bool
-	Egress              map[domain.ProviderInstanceID]egress.Decision
-	Signals             map[domain.ProviderInstanceID]CandidateSignals
-	OfferingSignals     map[domain.OfferingKey]CandidateSignals
-	AffinityModelID     string
-	PreferredProviderID domain.ProviderInstanceID
-	PreferredCredential domain.CredentialID
+	BudgetExhausted       map[domain.OfferingKey]bool
+	CredentialRequired    map[domain.ProviderInstanceID]bool
+	Egress                map[domain.ProviderInstanceID]egress.Decision
+	Signals               map[domain.ProviderInstanceID]CandidateSignals
+	OfferingSignals       map[domain.OfferingKey]CandidateSignals
+	AffinityModelID       string
+	PreferredProviderID   domain.ProviderInstanceID
+	PreferredCredential   domain.CredentialID
+	ProviderModelPrefixes map[string]string
 }
 
 // Candidate is one routable provider offering with its eligible credentials
@@ -475,7 +477,16 @@ func PlanFallbackChain(input CandidatePlanInput, chain []string) CandidatePlan {
 			continue
 		}
 		seen[modelID] = true
-		plan := planForModel(input, modelID, group)
+		bare, pin, err := resolveModelReference(modelID, &config.Proxy{ProviderModelPrefixes: input.ProviderModelPrefixes}, input.Instances, input.Offerings)
+		if err != nil {
+			group++
+			continue
+		}
+		entryInput := input
+		if pin.active() {
+			entryInput.Pin = pin
+		}
+		plan := planForModel(entryInput, bare, group)
 		combined.Candidates = append(combined.Candidates, plan.Candidates...)
 		combined.Excluded = append(combined.Excluded, plan.Excluded...)
 		group++

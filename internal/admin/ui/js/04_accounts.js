@@ -103,6 +103,7 @@ async function loadAccounts() {
       tbody.innerHTML = '<tr><td colspan="12" class="empty">' + emptyMsg + '</td></tr>';
       cards.innerHTML = listEmptyState(ICON_ACCOUNTS, emptyMsg);
       renderModelUsage();
+      renderCredentialSummary();
       return;
     }
     // 分页：前端切片，页码越界时收敛
@@ -115,6 +116,7 @@ async function loadAccounts() {
     renderAccountPager(view.length);
     const sn = { active: t('活跃'), cooldown: t('冷却'), expired: t('已过期') };
     renderModelUsage();
+    renderCredentialSummary();
     tbody.innerHTML = pageList.map((a, i) => {
       const seq = start + i + 1;
       const statusBadge = acctStatusBadge(a, sn);
@@ -164,6 +166,37 @@ async function loadAccounts() {
 }
 
 // 分页器：页码按钮 + 总数（total 为缓存列表长度）
+// One summary for the whole page: OAuth accounts and API credentials are two
+// halves of the same credential inventory, so they are counted together instead
+// of leaving the operator to add up two sections.
+// "1 providers" reads wrong; English needs the singular. Chinese has no plural
+// marker, so the same key serves both and only the count differs.
+function countLabel(n, one, many) {
+  return n + ' ' + t(n === 1 ? one : many);
+}
+
+function renderCredentialSummary() {
+  const box = _('credentialSummary');
+  if (!box) return;
+  const oauthAccounts = _connList.length;
+  const oauthActive = _connList.filter(c => c.status === 'active').length;
+  const oauthProviders = new Set(_connList.map(c => c.provider)).size;
+  const apiCreds = (_globalData && _globalData.credentials) || [];
+  const credProvider = c => (c.providerIds && c.providerIds[0]) || c.provider || '';
+  const apiProviders = new Set(apiCreds.map(credProvider).filter(Boolean)).size;
+  const apiRequests = apiCreds.reduce((sum, c) => sum + (Number(c.usageCount) || 0), 0);
+  const clineAccounts = (_lastAccountList || []).length;
+  const pool = _('statTotal');
+  const tile = (label, value, sub) =>
+    '<div class="credential-summary-tile"><div class="credential-summary-value">' + esc(value) + '</div>' +
+    '<div class="credential-summary-label">' + esc(t(label)) + '</div>' +
+    (sub ? '<div class="credential-summary-sub">' + esc(sub) + '</div>' : '') + '</div>';
+  box.innerHTML =
+    tile('OAuth 账号', String(oauthAccounts), oauthAccounts ? t('活跃') + ' ' + oauthActive + ' · ' + countLabel(oauthProviders, '个服务（单数）', '个服务') : t('尚未登录')) +
+    tile('API 凭据', String(apiCreds.length), apiCreds.length ? countLabel(apiProviders, '个 Provider（单数）', '个 Provider') + ' · ' + formatNumber(apiRequests) + ' ' + t('请求') : t('尚未配置')) +
+    tile('Cline 账号池', clineAccounts ? String(clineAccounts) : (pool ? pool.textContent : '0'), t('内置账号池'));
+}
+
 function renderAccountPager(total) {
   const pager = _('accountPager');
   if (!pager) return;
@@ -548,7 +581,7 @@ function tokenFormResult(ok, html) {
 }
 // 提交后引导：跳到账号列表核对结果
 function viewAccountsLink() {
-  return '<a href="#credentials" onclick="showPageSubTab(\'accounts\',\'conns\');return false" class="lnk-a ml-8">' + t('查看账号列表') + ' →</a>';
+  return '<a href="#credentials" onclick="showPageSubTab(\'credentials\',\'conns\');return false" class="lnk-a ml-8">' + t('查看账号列表') + ' →</a>';
 }
 
 async function addByToken(btn) {

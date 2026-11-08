@@ -5,14 +5,6 @@ var _comboReserved = [];
 var _comboEntries = [];
 var _editingComboId = '';
 
-// 组合模型来源显示名：provider → 真实 Provider 名；remote → Cline；zen/seed → OpenCode Zen；其余 → 自定义
-function comboSourceName(m) {
-  if (m.source === 'provider') return m.provider || t('自定义');
-  if (m.source === 'remote') return 'Cline';
-  if (m.source === 'zen' || m.source === 'seed') return 'OpenCode Zen';
-  return t('自定义');
-}
-
 // loadCombos 拉取组合列表 + 模型目录 + 保留别名；可安全地重复调用
 async function loadCombos() {
   try {
@@ -28,10 +20,6 @@ async function loadCombos() {
     const box = _('combosList');
     if (box) box.innerHTML = '<div class="empty">' + t('加载失败') + ': ' + esc(e.message) + '</div>';
   }
-}
-
-function comboCatalogEntry(id) {
-  return _comboCatalog.find(m => m.id === id) || null;
 }
 
 // 组合列表渲染：id / 名称 / 分类 / 条目数 / 状态 / 操作
@@ -106,131 +94,6 @@ function hideComboEditor() {
   _comboEntries = [];
 }
 
-// 组合下拉/条目标签：id · <来源名> · 免费/付费（不重复显示 Provider 名）
-function comboModelLabel(m) {
-  return m.id + '  ·  ' + comboSourceName(m) + '  ·  ' + (m.cost === 'free' ? t('免费') : t('付费'));
-}
-
-// 组合下拉分组：按来源归组（Provider 用真实名）
-function comboOptgroupKey(m) {
-  if (m.source === 'provider') return 'prov:' + (m.provider || 'Provider');
-  if (m.source === 'remote') return 'remote';
-  if (m.source === 'zen' || m.source === 'seed') return 'zen';
-  return 'custom';
-}
-function comboGroupSortKey(a, b) {
-  const ord = k => k === 'remote' ? 0 : (k === 'zen' ? 1 : (k.indexOf('prov:') === 0 ? 2 : 3));
-  const oa = ord(a), ob = ord(b);
-  if (oa !== ob) return oa - ob;
-  return a.localeCompare(b);
-}
-
-// 构建模型下拉：按来源分 <optgroup>；排除管理页已停用的模型；当前条目即使停用/缺失也始终保留为选中项
-function buildComboModelOptions(current, chosenMap) {
-  let html = '<option value=""' + (!current ? ' selected' : '') + '>' + t('— 选择模型 —') + '</option>';
-  const cur = current ? comboCatalogEntry(current) : null;
-  // 保留当前引用：停用标记为「模型已停用」，不在目录中标记为「目录中未找到」，绝不静默丢弃
-  if (current && (!cur || cur.disabled)) {
-    const label = cur
-      ? esc(comboModelLabel(cur)) + '  ·  ' + t('模型已停用')
-      : esc(current) + '  ·  ' + t('目录中未找到');
-    html += '<option value="' + escAttr(current) + '" selected>' + label + '</option>';
-  }
-  const groups = new Map(); // groupKey -> { label, items[] }
-  const seen = {};
-  for (const m of _comboCatalog) {
-    if (m.disabled) continue;         // 已停用模型不可选
-    if (seen[m.id]) continue;
-    seen[m.id] = true;
-    const gk = comboOptgroupKey(m);
-    if (!groups.has(gk)) groups.set(gk, { label: comboSourceName(m), items: [] });
-    groups.get(gk).items.push(m);
-  }
-  const gkeys = Array.from(groups.keys()).sort(comboGroupSortKey);
-  for (const gk of gkeys) {
-    const g = groups.get(gk);
-    html += '<optgroup label="' + escAttr(g.label) + '">';
-    g.items.sort((a, b) => a.id.localeCompare(b.id));
-    for (const m of g.items) {
-      const used = chosenMap[m.id] && m.id !== current;
-      html += '<option value="' + escAttr(m.id) + '"' + (m.id === current ? ' selected' : '') + (used ? ' disabled' : '') + '>' +
-        esc(comboModelLabel(m)) + (used ? '  ·  ' + t('已使用') : '') + '</option>';
-    }
-    html += '</optgroup>';
-  }
-  return html;
-}
-
-// 选中模型的小徽章：来源 / 提供商 / 计费 / 停用 / 下架
-function comboEntryBadges(id) {
-  if (!id) return '<span class="hint-xs">' + t('未选择模型') + '</span>';
-  const m = comboCatalogEntry(id);
-  if (!m) return '<span class="delisted-badge warn-soft">' + t('目录中未找到') + '</span>';
-  let b = '';
-  let srcKey = 'custom';
-  if (m.source === 'provider') srcKey = 'provider';
-  else if (m.source === 'remote') srcKey = 'remote';
-  else if (m.source === 'zen' || m.source === 'seed') srcKey = 'zen';
-  b += '<span class="model-source-badge ' + srcKey + '">' + esc(comboSourceName(m)) + '</span>';
-  if (m.provider && m.source !== 'provider') b += '<span class="model-source-badge">' + esc(m.provider) + '</span>';
-  b += m.cost === 'free'
-    ? '<span class="model-tag free tag-xs">' + t('免费') + '</span>'
-    : '<span class="model-tag pass tag-xs">' + t('付费') + '</span>';
-  if (m.disabled) b += '<span class="delisted-badge warn-soft">' + t('模型已停用') + '</span>';
-  if (m.delisted) b += '<span class="delisted-badge">' + t('已下架') + '</span>';
-  return b;
-}
-
-// 目录行 → 上游 pin 元组（与后端 source 取值一致：cline / zen / provider）
-function comboCatalogPin(m) {
-  if (m.source === 'provider') return { source: 'provider', provider: m.provider || '' };
-  if (m.source === 'zen' || m.source === 'seed') return { source: 'zen', provider: '' };
-  return { source: 'cline', provider: '' }; // remote 或 ""
-}
-
-function comboPinKey(pin) {
-  return (pin && pin.source ? pin.source : '') + '|' + ((pin && pin.provider) ? pin.provider : '');
-}
-
-function comboPinLabel(pin) {
-  if (!pin || !pin.source) return '';
-  if (pin.source === 'zen') return 'opencode';
-  if (pin.source === 'cline') return 'Cline';
-  return pin.provider || t('自定义');
-}
-
-// 同一模型 ID 在目录中可用的去重上游列表（按 pin 元组去重；<2 个时不需选择器）
-function comboEntryUpstreams(modelId) {
-  if (!modelId) return [];
-  const map = new Map();
-  for (const m of _comboCatalog) {
-    if (m.id !== modelId) continue;
-    const pin = comboCatalogPin(m);
-    const k = comboPinKey(pin);
-    if (!map.has(k)) map.set(k, pin);
-  }
-  const pins = Array.from(map.values());
-  const ord = p => p.source === 'cline' ? 0 : (p.source === 'zen' ? 1 : 2);
-  pins.sort((a, b) => {
-    const oa = ord(a), ob = ord(b);
-    return oa !== ob ? oa - ob : comboPinLabel(a).localeCompare(comboPinLabel(b));
-  });
-  return pins;
-}
-
-// 仅当该模型有多个上游时渲染「上游」选择器；value: "" 自动 | cline | zen | provider|<Name>
-function comboSourceSelectHtml(i, e) {
-  const ups = comboEntryUpstreams(e.model);
-  if (ups.length < 2) return '';
-  const curKey = comboPinKey({ source: e.source, provider: e.provider });
-  let opts = '<option value=""' + (!e.source ? ' selected' : '') + '>' + t('自动') + '</option>';
-  for (const p of ups) {
-    const val = p.source === 'provider' ? ('provider|' + p.provider) : p.source;
-    opts += '<option value="' + escAttr(val) + '"' + (comboPinKey(p) === curKey ? ' selected' : '') + '>' + esc(comboPinLabel(p)) + '</option>';
-  }
-  return '<span class="combo-entry-source"><select title="' + t('上游') + '" onchange="onComboEntrySourceChange(' + i + ', this.value)">' + opts + '</select></span>';
-}
-
 // 条目编辑器渲染 + 优先级预览
 // 行结构：拖拽手柄 / 优先级序号 / 模型下拉 / 上游钉选 / 徽章 / 启停与排序操作
 // 拖拽：以 ⠿ 手柄作为 HTML5 drag 源，行本身作为落点（dragover/drop），落点用
@@ -244,16 +107,16 @@ function renderComboEntries() {
     return;
   }
   const chosen = {};
-  _comboEntries.forEach(e => { if (e.model) chosen[e.model] = true; });
+  _comboEntries.forEach(e => { if (e.model) chosen[comboEntryKey(e)] = true; });
   box.innerHTML = _comboEntries.map((e, i) => {
-    const opts = buildComboModelOptions(e.model, chosen);
+    const opts = buildComboModelOptions(e, chosen);
     const dis = e.disabled ? ' disabled-entry' : '';
     return '<div class="combo-entry' + dis + '" data-entry-idx="' + i + '" ondragover="comboDragOver(event, ' + i + ')" ondrop="comboDrop(event, ' + i + ')">' +
       '<span class="combo-entry-grip" draggable="true" ondragstart="comboDragStart(event, ' + i + ')" ondragend="comboDragEnd(event)" title="' + t('拖动调整顺序') + '" role="button" tabindex="0" aria-label="' + t('拖动调整顺序') + '">⠿</span>' +
       '<span class="combo-entry-idx">' + (i + 1) + '</span>' +
       '<span class="combo-entry-select"><select onchange="onComboEntryModelChange(' + i + ', this.value)">' + opts + '</select></span>' +
       comboSourceSelectHtml(i, e) +
-      '<span class="combo-entry-badges">' + comboEntryBadges(e.model) + '</span>' +
+      '<span class="combo-entry-badges">' + comboEntryBadges(e) + '</span>' +
       '<span class="combo-entry-actions">' +
         '<label class="switch" title="' + t('启用/停用该条目') + '"><input type="checkbox"' + (e.disabled ? '' : ' checked') + ' onchange="onComboEntryDisabled(' + i + ', !this.checked)"><span class="slider"></span></label>' +
         '<button class="btn btn-sm" onclick="moveComboEntry(' + i + ', -1)"' + (i === 0 ? ' disabled' : '') + ' title="' + t('上移') + '" aria-label="' + t('上移') + '">↑</button>' +
@@ -276,7 +139,7 @@ function renderComboPreview(order) {
     return;
   }
   box.innerHTML = enabled.map((k, i) =>
-    '<span class="step">' + (i + 1) + '. ' + esc(_comboEntries[k].model) + '</span>'
+    '<span class="step">' + (i + 1) + '. ' + esc(comboEntryLabel(_comboEntries[k])) + '</span>'
   ).join('<span class="arrow">→</span>');
 }
 
@@ -294,13 +157,16 @@ function removeComboEntry(i) {
 function onComboEntryModelChange(i, val) {
   const e = _comboEntries[i];
   if (!e) return;
+  const offering = comboDecodeOfferingKey(val);
+  if (offering) {
+    const selected = comboSelectionEntry(val);
+    e.model = selected.model; e.source = selected.source; e.provider = selected.provider;
+    renderComboEntries();
+    return;
+  }
   e.model = val;
   // 新模型若不再提供当前 pin 的上游，则清空为「自动」，避免残留无效钉选
-  if (e.source) {
-    const key = comboPinKey({ source: e.source, provider: e.provider });
-    const stillValid = comboEntryUpstreams(val).some(p => comboPinKey(p) === key);
-    if (!stillValid) { e.source = ''; e.provider = ''; }
-  }
+  if (e.source && !comboCatalogEntry(e)) { e.source = ''; e.provider = ''; }
   renderComboEntries();
 }
 
@@ -312,10 +178,16 @@ function onComboEntrySourceChange(i, value) {
     e.source = value; e.provider = '';
   } else if (value && value.indexOf('provider|') === 0) {
     e.source = 'provider'; e.provider = value.slice(9);
+  } else if (value) {
+    try {
+      const pin = JSON.parse(value);
+      if (!Array.isArray(pin) || pin.length !== 2 || !pin.every(part => typeof part === 'string') || !['cline', 'zen', 'provider'].includes(pin[0])) return;
+      e.source = pin[0]; e.provider = pin[0] === 'provider' ? pin[1] : '';
+    } catch (error) { return; }
   } else {
     e.source = ''; e.provider = '';
   }
-  renderComboPreview();
+  renderComboEntries();
 }
 
 function onComboEntryDisabled(i, disabled) {
@@ -421,7 +293,7 @@ function comboDragEnd() {
 }
 
 // ========== 组合：多选模型选择器（从 /admin/api/combos 的 modelCatalog 取数） ==========
-var _pickerOrder = []; // 勾选顺序（model id，先勾先排；确认后即 entries 追加顺序）
+var _pickerOrder = []; // Offering keys in selection order.
 
 function openComboModelPicker() {
   if (!_comboCatalog || !_comboCatalog.length) {
@@ -443,15 +315,16 @@ function closeComboModelPicker() {
 }
 
 function comboPickerToggle(model, checked) {
-  const idx = _pickerOrder.indexOf(model);
-  if (checked && idx === -1) _pickerOrder.push(model);
+  const key = comboDecodeOfferingKey(model) ? comboEntryKey(comboDecodeOfferingKey(model)) : comboEntryKey({ model: model });
+  const idx = _pickerOrder.indexOf(key);
+  if (checked && idx === -1) _pickerOrder.push(key);
   if (!checked && idx !== -1) _pickerOrder.splice(idx, 1);
   renderComboPickerList();
 }
 
 // 工具条「全选」：把当前筛选结果里所有可选模型按显示顺序补进勾选序列
 function comboPickerSelectAllShown() {
-  pickerMergeIds(_pickerOrder, comboPickerVisibleModels().map(m => m.id));
+  pickerMergeIds(_pickerOrder, comboPickerVisibleModels().map(comboOfferingKey));
   renderComboPickerList();
 }
 
@@ -464,7 +337,7 @@ function comboPickerClear() {
 function comboPickerVisibleModels() {
   const q = (_('comboPickerSearch').value || '').trim().toLowerCase();
   const rx = q.replace(/[.*+\-?^${}()|[\]\\]/g, '\\$&');
-  return _comboCatalog.filter(m => !m.disabled && (!rx || (m.id + ' ' + (m.provider || '')).toLowerCase().search(rx) !== -1));
+  return _comboCatalog.filter(m => !m.disabled && (!rx || (m.id + ' ' + (m.qualifiedId || '') + ' ' + comboSourceName(m)).toLowerCase().search(rx) !== -1));
 }
 
 // 已在组合中的模型不允许重复勾选（标记「已添加」且复选框禁用）
@@ -473,7 +346,7 @@ function renderComboPickerList() {
   if (!box) return;
   const scrollTop = box.scrollTop;
   const inCombo = {};
-  _comboEntries.forEach(e => { if (e.model) inCombo[e.model] = true; });
+  _comboEntries.forEach(e => { if (e.model) inCombo[comboEntryKey(e)] = true; });
   const visible = comboPickerVisibleModels();
   if (!visible.length) {
     box.innerHTML = '<div class="empty">' + t('没有符合条件的模型') + '</div>';
@@ -485,10 +358,11 @@ function renderComboPickerList() {
   const seenSrc = {}; // 同一模型多上游时只展示一次
   for (const m of visible) {
     const gk = comboOptgroupKey(m);
-    if (!groups.has(gk)) groups.set(gk, { label: comboSourceName(m), pin: comboPinKey(comboCatalogPin(m)), items: [] });
+    if (!groups.has(gk)) groups.set(gk, { label: comboGroupLabel(m), items: [] });
     const g = groups.get(gk);
-    if (!g.pin || !seenSrc[g.pin + '|' + m.id]) {
-      seenSrc[g.pin + '|' + m.id] = true;
+    const key = comboOfferingKey(m);
+    if (!seenSrc[key]) {
+      seenSrc[key] = true;
       g.items.push(m);
     }
   }
@@ -499,11 +373,11 @@ function renderComboPickerList() {
     html += '<div class="combo-pick-group">' + esc(g.label) + '</div>';
     g.items.sort((a, b) => a.id.localeCompare(b.id));
     for (const m of g.items) {
-      const rank = _pickerOrder.indexOf(m.id);
-      const used = inCombo[m.id];
+      const key = comboOfferingKey(m), rank = _pickerOrder.indexOf(key);
+      const used = inCombo[key];
       html += '<label class="combo-pick-row' + (used ? ' combo-pick-used' : '') + '">' +
-        '<input type="checkbox"' + (rank !== -1 ? ' checked' : '') + (used ? ' disabled' : '') + ' onchange="comboPickerToggle(\'' + escAttr(m.id) + '\', this.checked)">' +
-        '<span class="combo-pick-id">' + esc(m.id) + '</span>' +
+        '<input type="checkbox" value="' + escAttr(key) + '"' + (rank !== -1 ? ' checked' : '') + (used ? ' disabled' : '') + ' onchange="comboPickerToggle(this.value, this.checked)">' +
+        '<span class="combo-pick-id">' + esc(m.qualifiedId || m.id) + '</span>' +
         '<span class="model-source-badge ' + (m.source === 'provider' ? 'provider' : (m.source === 'zen' || m.source === 'seed' ? 'zen' : (m.source === 'remote' ? 'remote' : 'custom'))) + '">' + esc(comboSourceName(m)) + '</span>' +
         (m.cost === 'free'
           ? '<span class="model-tag free tag-xs">' + t('免费') + '</span>'
@@ -528,17 +402,18 @@ function renderComboPickerCount() {
 // 确认：append=false 追加到现有条目之后；append=true（替换整表）用勾选顺序重构全部条目
 function comboPickerConfirm(replace) {
   if (!_pickerOrder.length) { toast(t('请先勾选至少一个模型'), 'error'); return; }
+  const selected = _pickerOrder.map(comboSelectionEntry).filter(entry => entry.model);
   if (replace) {
-    _comboEntries = _pickerOrder.map(id => ({ model: id, disabled: false, source: '', provider: '' }));
+    _comboEntries = selected;
   } else {
-    for (const id of _pickerOrder) {
-      if (_comboEntries.some(e => e.model === id)) continue; // 防重复：已在组合中的跳过
-      _comboEntries.push({ model: id, disabled: false, source: '', provider: '' });
+    for (const entry of selected) {
+      if (_comboEntries.some(current => comboEntryKey(current) === comboEntryKey(entry))) continue;
+      _comboEntries.push(entry);
     }
   }
   closeComboModelPicker();
   renderComboEntries();
-  toast(replace ? t('已按勾选顺序替换全部条目') : t('已按勾选顺序追加 ') + _pickerOrder.length + t(' 个条目'), 'success');
+  toast(replace ? t('已按勾选顺序替换全部条目') : t('已按勾选顺序追加 ') + selected.length + t(' 个条目'), 'success');
 }
 
 async function saveCombo() {
@@ -559,8 +434,9 @@ async function saveCombo() {
   });
   const seen = {};
   for (const e of entries) {
-    if (seen[e.model]) { toast(t('条目中存在重复模型: ') + e.model, 'error'); return; }
-    seen[e.model] = true;
+    const key = comboEntryKey(e);
+    if (seen[key]) { toast(t('条目中存在重复模型: ') + e.model, 'error'); return; }
+    seen[key] = true;
   }
   const payload = {
     id: id,
@@ -666,32 +542,26 @@ async function testCombo(id, btn) {
   }
 }
 
-// 结果与条目关联：结果仅含启用条目且与条目同序 → 依次配对；配对不上（停用/为空）显示为跳过
+// Results retain the original offering identity when entries are toggled or removed.
 function comboTestResultDetails() {
-  const details = [];
-  let ri = 0;
-  for (const e of (_comboTestCopy ? _comboTestCopy.entries : [])) {
-    if (e.model && !e.disabled && ri < _comboTestResults.length && _comboTestResults[ri].model === e.model) {
-      details.push({ entry: e, res: _comboTestResults[ri] });
-      ri++;
-    } else {
-      details.push({ entry: e, res: null });
-    }
-  }
-  return details;
+  const results = new Map(_comboTestResults.map(result => [comboEntryKey(result), result]));
+  return (_comboTestCopy ? _comboTestCopy.entries : []).map(entry => ({
+    entry,
+    res: entry.model && !entry.disabled ? results.get(comboEntryKey(entry)) || null : null,
+  }));
 }
 
 // 复用 comboPinLabel 的上游-pin 文案：结果自带 upstream（"provider"|"opencode"|"cline"）
-function comboTestUpstreamBadge(upstream) {
+function comboTestUpstreamBadge(upstream, entry, result) {
   if (!upstream) return '';
   const map = { opencode: 'zen', cline: 'remote', provider: 'provider' };
-  const label = upstream === 'opencode' ? 'OpenCode Zen' : (upstream === 'cline' ? 'Cline' : 'Provider');
+  const label = upstream === 'opencode' ? 'OpenCode Zen' : (upstream === 'cline' ? 'Cline' : comboPinLabel({ source: 'provider', provider: result && result.provider || entry && entry.provider || '', providerName: result && result.providerName }));
   return '<span class="model-source-badge ' + (map[upstream] || '') + '" title="' + t('上游') + '">' + esc(label) + '</span>';
 }
 
-function comboTestSourcePin(e, res) {
-  const src = res && res.source ? res.source : (e.source || '');
-  if (src === 'provider') return '<span class="model-source-badge provider">' + esc((res && res.provider) || e.provider || 'Provider') + '</span>';
+function comboTestSourcePin(e) {
+  const src = comboRouteSource(e.source);
+  if (src === 'provider') return '<span class="model-source-badge provider">' + esc(comboPinLabel(e)) + '</span>';
   if (src === 'zen') return '<span class="model-source-badge zen">OpenCode Zen</span>';
   if (src === 'cline') return '<span class="model-source-badge remote">Cline</span>';
   return '<span class="model-source-badge" title="' + t('自动') + '">' + t('自动') + '</span>';
@@ -702,20 +572,28 @@ function renderComboTestModal() {
   if (!box) return;
   const idLbl = _('comboTestId');
   if (idLbl) idLbl.textContent = _comboTestCopy ? _comboTestCopy.id : '';
+  const details = comboTestResultDetails();
+  const active = details.filter(d => d.entry.model && !d.entry.disabled);
+  const results = active.map(d => d.res).filter(Boolean);
+  const pending = active.length - results.length;
   // 摘要头：全绿 → 紧凑 ✓ 徽章；有失败 → 失败计数徽章（明细在行内）
-  const allOk = _comboTestResults.length > 0 && _comboTestResults.every(r => !!r.ok);
+  const allOk = results.length > 0 && pending === 0 && results.every(r => !!r.ok);
   const summary = _('comboTestSummary');
   if (summary) {
-    const fails = _comboTestResults.filter(r => !r.ok).length;
-    if (!_comboTestResults.length) {
+    const fails = results.filter(r => !r.ok).length;
+    if (!active.length) {
       summary.style.display = 'none';
     } else if (allOk) {
       summary.textContent = t('✓ 全部通过');
       summary.className = 'model-source-badge zen';
       summary.style.display = '';
-    } else {
+    } else if (fails) {
       summary.textContent = fails + ' ✗ ' + t('失败');
       summary.className = 'model-source-badge remote';
+      summary.style.display = '';
+    } else {
+      summary.textContent = pending + ' · ' + t('未测试');
+      summary.className = 'model-source-badge';
       summary.style.display = '';
     }
   }
@@ -723,7 +601,6 @@ function renderComboTestModal() {
   if (resLbl) resLbl.textContent = '';
   const saveBtn = _('comboTestSaveBtn');
   if (saveBtn) saveBtn.style.display = _comboTestChanged ? '' : 'none';
-  const details = comboTestResultDetails();
   if (!details.length) {
     box.innerHTML = '<div class="empty">' + t('（暂无启用的条目）') + '</div>';
     return;
@@ -744,9 +621,9 @@ function renderComboTestModal() {
       : '';
     return '<div class="combo-test-row' + (e.disabled ? ' combo-test-disabled' : '') + '">' +
       '<span class="combo-entry-idx">' + (i + 1) + '</span>' +
-      '<span class="combo-pick-id" style="flex:1 1 160px">' + esc(e.model) + '</span>' +
-      comboTestSourcePin(e, res) +
-      (res ? comboTestUpstreamBadge(res.upstream) : '') +
+      '<span class="combo-pick-id" style="flex:1 1 160px">' + esc(comboEntryLabel(e)) + '</span>' +
+      comboTestSourcePin(e) +
+      (res ? comboTestUpstreamBadge(res.upstream, e, res) : '') +
       verdict + errHtml +
       '<span class="combo-entry-actions">' +
         '<label class="switch" title="' + t('启用/停用该条目') + '"><input type="checkbox"' + (e.disabled ? '' : ' checked') + ' onchange="comboTestToggleEntry(' + i + ', !this.checked)"><span class="slider"></span></label>' +

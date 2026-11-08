@@ -330,6 +330,14 @@ func (legacyDispatchExecutor) ExecuteLegacy(_ context.Context, request dispatch.
 		}
 		return legacyResult(request.RequestID, params, run.Resp, run.Acc, comboTrace(run.Trace)), nil
 	}
+	_, pin, err := routing.ResolveModelReference(model)
+	if err != nil {
+		return dispatch.Result{}, err
+	}
+	if pin.ProviderID != "" || pin.ProviderName != "" {
+		response, account, err := routing.CallClineAPI(params, request.Stream)
+		return legacyResult(request.RequestID, params, response, account, nil), err
+	}
 	switch zen.RouteModel(model) {
 	case "reject":
 		return dispatch.Result{}, fmt.Errorf("model %q is a paid opencode model; only free models are proxied", model)

@@ -45,6 +45,14 @@ func prepareUnifiedParams(params map[string]any, model, sessionID, protocol stri
 		}
 		return combo, true, nil
 	}
+	_, pin, err := routing.ResolveModelReference(model)
+	if err != nil {
+		return domain.ModelCombo{}, false, err
+	}
+	if pin.ProviderID != "" || pin.ProviderName != "" {
+		compaction.CompactForRequest(params, compaction.ModelForCompaction(model), sessionID, protocol)
+		return domain.ModelCombo{}, false, nil
+	}
 	if mode != config.DispatchModeEnforce && zen.RouteModel(model) == "reject" {
 		return domain.ModelCombo{}, false, fmt.Errorf("model %q is a paid opencode model; only free models are proxied", model)
 	}
@@ -66,8 +74,11 @@ func unifiedPlan(cfg *config.Proxy, model string, params map[string]any, combo d
 	if isCombo {
 		return routing.SnapshotAndPlanCombo(options, combo)
 	}
-	_, rawPin := providers.SplitPin(model)
-	if rawPin != "" {
+	_, pin, err := routing.ResolveModelReference(model)
+	if err != nil {
+		return routing.CandidatePlan{}, routing.PlanDiagnostics{}, err
+	}
+	if pin.ProviderID != "" || pin.ProviderName != "" {
 		return routing.SnapshotAndPlan(options, nil)
 	}
 	return routing.SnapshotAndPlan(options, routing.ModelFallbackChain(model))
@@ -156,6 +167,8 @@ func (call *unifiedDispatchCall) apply(result dispatch.Result) {
 	stampUpstream(call.reqLog, call.params)
 	if serving.ProviderID == "opencode" {
 		call.reqLog.Upstream = zen.UpstreamOpenCode
+	} else if serving.ProviderID == "cline" {
+		call.reqLog.Upstream = zen.UpstreamCline
 	}
 	if result.Account != nil {
 		call.reqLog.AccountID = result.Account.AccountID

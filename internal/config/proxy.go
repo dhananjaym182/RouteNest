@@ -66,6 +66,10 @@ type Proxy struct {
 	ModelAliases      []ModelAlias          `json:"modelAliases,omitempty"`
 	ExcludedModels    []string              `json:"excludedModels,omitempty"`
 	RequestErrorRules []RequestErrorRule    `json:"requestErrorRules,omitempty"`
+
+	// ProviderModelPrefixes binds compact client model namespaces to stable
+	// provider IDs. Deleted provider bindings remain reserved to prevent reuse.
+	ProviderModelPrefixes map[string]string `json:"providerModelPrefixes,omitempty"`
 }
 
 // DefaultProxy returns the built-in proxy configuration.

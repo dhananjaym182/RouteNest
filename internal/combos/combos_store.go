@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"routenest/internal/domain"
+	"routenest/internal/routing"
 	"strings"
 	"time"
 )
@@ -92,6 +93,13 @@ func EnabledList() []domain.ModelCombo {
 // UpsertCombo 新建或更新组合（ID 为主键）并持久化。
 func UpsertCombo(c domain.ModelCombo) (domain.ModelCombo, error) {
 	c = normalizeCombo(c)
+	for index, entry := range c.Entries {
+		resolved, err := routing.ResolveComboEntry(entry)
+		if err != nil {
+			return domain.ModelCombo{}, err
+		}
+		c.Entries[index] = resolved
+	}
 
 	// 校验在**不持有** proxyConfigMu 的情况下进行：ValidateCombo 会读取模型目录、
 	// provider 列表并做 zen 路由判定（涉及 accounts.PoolMu / providersMu / zen.ConfigMu）。

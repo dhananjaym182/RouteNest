@@ -86,6 +86,35 @@ func TestAliasForAndValidate(t *testing.T) {
 	}
 }
 
+func TestValidateModelPoliciesProtectsProviderNamespaces(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		bindings map[string]string
+		alias    string
+	}{
+		{name: "legacy cline namespace", alias: "cl/model"},
+		{name: "legacy opencode namespace", alias: "op/model"},
+		{name: "persisted custom namespace", bindings: map[string]string{"as": "antseed"}, alias: "as/model"},
+		{name: "retargeted builtin", bindings: map[string]string{"op": "other"}, alias: "fast"},
+		{name: "duplicate identity", bindings: map[string]string{"as": "antseed", "an": "antseed"}, alias: "fast"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := DefaultProxy()
+			cfg.ProviderModelPrefixes = tc.bindings
+			cfg.ModelAliases = []ModelAlias{{Alias: tc.alias, Target: "real-model", Force: true}}
+			if err := cfg.ValidateModelPolicies(); err == nil {
+				t.Fatal("model policies accepted a reserved or invalid provider namespace")
+			}
+		})
+	}
+	cfg := DefaultProxy()
+	cfg.ProviderModelPrefixes = map[string]string{"as": "antseed"}
+	cfg.ModelAliases = []ModelAlias{{Alias: "fast", Target: "as/vendor/model@reasoning"}, {Alias: "vendor/real-alias", Target: "model"}}
+	if err := cfg.ValidateModelPolicies(); err != nil {
+		t.Fatalf("valid provider targets and unrelated alias were rejected: %v", err)
+	}
+}
+
 func TestPolicyJSONRoundTrip(t *testing.T) {
 	c := DefaultProxy()
 	c.Retry.MaxRounds = 2

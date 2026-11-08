@@ -35,6 +35,11 @@
 .gateway-status.is-online .gateway-status-dot{background:var(--green);box-shadow:0 0 0 3px var(--green-soft)}
 .gateway-status.is-offline{border-color:color-mix(in srgb,var(--red) 35%,var(--border));color:var(--red)}
 .gateway-status.is-offline .gateway-status-dot{background:var(--red)}
+.gateway-url{display:inline-flex;align-items:center;gap:6px;padding:0;border:0;background:none;color:inherit;font:inherit;font-weight:600;cursor:pointer;max-width:280px}
+.gateway-url svg{width:13px;height:13px;flex:none;opacity:.7}
+.gateway-url:hover svg,.gateway-url:focus-visible svg{opacity:1;color:var(--green)}
+.gateway-url.is-copied svg{opacity:1}
+.gateway-url #gatewayStatusLabel{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .top-tools .seg{background:var(--surface);border-color:var(--border2)}
 .top-tools .seg button{min-width:34px;padding:5px 9px}
 .top-tools .lang-switch button{min-width:56px}
@@ -219,7 +224,8 @@ tbody tr:hover{background:color-mix(in srgb,var(--accent-soft) 45%,transparent)}
   .main{height:auto;min-height:100vh}
   .top-tools{min-height:68px;padding:9px 16px}
   .content-shell{padding:24px 16px 48px}
-  .gateway-status span:last-child{display:none}
+  .gateway-status .gateway-url #gatewayStatusLabel{display:none}
+  .gateway-status .gateway-url{max-width:none}
   .top-tools .lang-switch{display:none}
   .system-hero{grid-template-columns:1fr}
   .system-toolbar-grid{grid-template-columns:1fr 1fr}

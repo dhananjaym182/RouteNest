@@ -2,9 +2,10 @@ package combos
 
 import (
 	"fmt"
+	"log"
 	"routenest/internal/domain"
+	"routenest/internal/providers"
 	"routenest/internal/routing"
-	"routenest/internal/zen"
 	"sort"
 	"strings"
 )
@@ -59,21 +60,47 @@ func TraceSummary(combo domain.ModelCombo, run Run) string {
 
 // Catalog 返回组合条目可引用的模型目录（供管理页选择器使用）。
 func Catalog() []map[string]any {
-	models := routing.ModelsProvider()
-	out := make([]map[string]any, 0, len(models))
-	for _, m := range models {
-		cost := m.Cost
-		if zen.IsSource(m) && zen.IsFreeModel(m) {
-			cost = "free" // 与路由判定保持一致
+	offerings, err := routing.ModelOfferings()
+	if err != nil {
+		log.Printf("combo model catalog: %v", err)
+		return nil
+	}
+	instances, err := providers.SnapshotInstances()
+	if err != nil {
+		log.Printf("combo provider catalog: %v", err)
+		return nil
+	}
+	byID := make(map[domain.ProviderInstanceID]domain.ProviderInstance, len(instances))
+	for _, instance := range instances {
+		byID[instance.ID] = instance
+	}
+	cfg := GetConfig()
+	out := make([]map[string]any, 0, len(offerings))
+	for _, offering := range offerings {
+		instance := byID[offering.ProviderID]
+		cost := "pass"
+		if offering.FreeOnlyEligible() {
+			cost = "free"
+		} else if offering.Access == domain.AccessUnknown {
+			cost = "unknown"
 		}
-		out = append(out, map[string]any{
-			"id":       m.ID,
-			"provider": m.Provider,
-			"source":   m.Source,
-			"cost":     cost,
-			"disabled": m.Disabled,
-			"delisted": m.Delisted,
-		})
+		source := "provider"
+		switch offering.ProviderID {
+		case "cline":
+			source = "cline"
+		case "opencode":
+			source = "zen"
+		}
+		entry := map[string]any{
+			"id": offering.ModelID, "providerId": string(offering.ProviderID),
+			"provider": instance.Name, "providerName": instance.Name, "source": source,
+			"cost": cost, "access": offering.Access, "context": offering.Context, "output": offering.Output,
+			"disabled": offering.Disabled || !instance.Enabled, "delisted": offering.Delisted,
+		}
+		if prefix := cfg.ProviderModelPrefix(string(offering.ProviderID)); prefix != "" {
+			entry["qualifiedId"] = prefix + "/" + offering.ModelID
+		}
+		out = append(out, entry)
 	}
 	return out
 }

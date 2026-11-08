@@ -83,6 +83,7 @@ routenest.log
 
 # local editor/tool state (not project config)
 .wu/
+.perch/
 
 # oh-my-codex local runtime state and locks; plans/context remain reviewable
 .omx/state/

@@ -26,17 +26,33 @@ func PruneModelReferences(ref domain.ModelRemovalRef, removeGlobal, removeSource
 	}
 	pinMatches := func(pin string) bool {
 		pin = strings.TrimSpace(pin)
-		return removeSource && (pin == providerID || removeName && strings.EqualFold(pin, ref.Provider))
+		return pin != "" && removeSource && (pin == providerID || removeName && ref.Provider != "" && strings.EqualFold(pin, ref.Provider))
 	}
 	modelMatches := func(model, pin string) bool {
-		bare := strings.TrimSpace(model)
-		if index := strings.LastIndex(bare, "@"); index > 0 {
-			if pin == "" {
-				pin = bare[index+1:]
-			}
-			bare = bare[:index]
+		model = strings.TrimSpace(model)
+		pin = strings.TrimSpace(pin)
+		matchesExact := func(id, provider string) bool {
+			return id == ref.ID && (provider == "" && removeGlobal || pinMatches(provider))
 		}
-		return bare == ref.ID && (removeGlobal || pinMatches(pin))
+		if model == ref.ID {
+			return matchesExact(model, pin)
+		}
+		upstreamID, namespaceProvider, qualified := before.SplitProviderModel(model)
+		if qualified {
+			pin = namespaceProvider
+		}
+		if upstreamID == ref.ID {
+			return matchesExact(upstreamID, pin)
+		}
+		// Treat @ as legacy pin syntax only when the suffix identifies this
+		// removal's provider. An unknown suffix remains part of the upstream ID.
+		if index := strings.LastIndex(upstreamID, "@"); index > 0 {
+			legacyPin := upstreamID[index+1:]
+			if pinMatches(legacyPin) && (pin == "" || pinMatches(pin)) {
+				return upstreamID[:index] == ref.ID
+			}
+		}
+		return false
 	}
 	chain := make([]string, 0, len(next.ModelChain))
 	for _, model := range next.ModelChain {

@@ -18,6 +18,24 @@ func ModelRouteAccess(id string) dispatch.RouteAccess {
 	if id == "" {
 		return dispatch.RouteAccess{Class: domain.AccessUnknown}
 	}
+	modelID, pin, err := ResolveModelReference(id)
+	if err != nil {
+		return dispatch.RouteAccess{Class: domain.AccessUnknown}
+	}
+	if pin.active() {
+		if pin.ProviderID == "" {
+			return ModelRouteAccess(modelID)
+		}
+		offerings, err := ModelOfferings()
+		if err == nil {
+			for _, offering := range offerings {
+				if offering.ModelID == modelID && offering.ProviderID == pin.ProviderID {
+					return dispatch.RouteAccess{Class: offering.Access, AllowanceVerified: offering.AllowanceVerified}
+				}
+			}
+		}
+		return dispatch.RouteAccess{Class: domain.AccessUnknown}
+	}
 	bare := strings.TrimPrefix(id, "opencode/")
 	if m, ok := models.Find(func(m domain.Model) bool { return m.ID == bare }); ok {
 		return dispatch.RouteAccess{Class: dispatch.ModelAccessClass(m.Cost, m.TierSignal, m.Source)}

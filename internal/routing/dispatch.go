@@ -21,19 +21,49 @@ func CallClineAPI(params map[string]any, stream bool) (*http.Response, *domain.A
 	delete(params, ProviderNameParam)
 	delete(params, providers.ProviderIDParam)
 
-	if bare, pin := providers.SplitPin(model); pin != "" {
-		params["model"] = bare
-		if liveConfig().OnlyFree && !ModelFreeOnlyEligible(bare) {
-			return nil, nil, fmt.Errorf("model %q is not eligible while onlyFree is enabled (access class: %s)", bare, ModelRouteAccess(bare).Class)
+	bare, pin, refErr := ResolveModelReference(model)
+	if refErr != nil {
+		if legacyBare, legacyPin := providers.SplitPin(model); legacyPin != "" && liveConfig().OnlyFree && !ModelFreeOnlyEligible(legacyBare) {
+			return nil, nil, fmt.Errorf("model %q is not eligible while onlyFree is enabled (access class: %s)", model, ModelRouteAccess(legacyBare).Class)
 		}
-		resp, perr, attempted, provName := providers.CallAPINamed(params, stream, pin)
+		return nil, nil, refErr
+	}
+	if pin.active() {
+		if liveConfig().OnlyFree && !ModelFreeOnlyEligible(model) {
+			return nil, nil, fmt.Errorf("model %q is not eligible while onlyFree is enabled (access class: %s)", model, ModelRouteAccess(model).Class)
+		}
+		params["model"] = bare
+		params[providers.ProviderIDParam] = string(pin.ProviderID)
+		switch pin.ProviderID {
+		case "cline":
+			return callPinnedClineModel(params, stream, bare)
+		case "opencode":
+			if !zen.GetConfig().Enabled {
+				return nil, nil, &FreeModelUnavailableError{Message: "pinned OpenCode provider is disabled"}
+			}
+			zm, ok := zen.ResolveInfo(bare)
+			if !ok || !zen.IsFreeModel(zm) {
+				return nil, nil, &FreeModelUnavailableError{Message: fmt.Sprintf("model %q is not an available free OpenCode model", bare)}
+			}
+			resp, err := zen.Call(params, stream)
+			return resp, nil, err
+		}
+		params[ServedByParam] = zen.UpstreamProvider
+		if provider := providers.Find(string(pin.ProviderID)); provider != nil {
+			params[ProviderNameParam] = provider.Name
+		}
+		providerPin := string(pin.ProviderID)
+		if providerPin == "" {
+			providerPin = pin.ProviderName
+		}
+		resp, perr, attempted, provName := providers.CallAPINamed(params, stream, providerPin)
 		switch {
 		case attempted && perr == nil:
 			params[ServedByParam] = zen.UpstreamProvider
 			params[ProviderNameParam] = provName
 			return resp, nil, nil
 		case !attempted:
-			return nil, nil, &FreeModelUnavailableError{Message: fmt.Sprintf("no enabled provider named %q serves model %q", pin, bare)}
+			return nil, nil, &FreeModelUnavailableError{Message: fmt.Sprintf("no enabled provider %q serves model %q", providerPin, bare)}
 		default:
 			return nil, nil, perr
 		}
@@ -94,8 +124,22 @@ func CallClineAPI(params map[string]any, stream bool) (*http.Response, *domain.A
 			time.Sleep(roundInterval)
 		}
 		for _, m := range chain {
+			_, chainPin, refErr := ResolveModelReference(m)
+			if refErr != nil {
+				continue
+			}
+			if chainPin.active() {
+				ep := WithModel(params, m)
+				resp, acc, err := CallClineAPI(ep, stream)
+				if err == nil {
+					copyServingParams(params, ep)
+					return resp, acc, nil
+				}
+				continue
+			}
 
-			if pResp, pErr, attempted, provName := providers.CallAPI(WithModel(params, m), stream); attempted {
+			ep := WithModel(params, m)
+			if pResp, pErr, attempted, provName := providers.CallAPI(ep, stream); attempted {
 				if pErr == nil {
 					if m != model {
 						log.Printf("  model fallback: %q unavailable, serving via provider %q", model, m)
@@ -103,6 +147,7 @@ func CallClineAPI(params map[string]any, stream bool) (*http.Response, *domain.A
 					params["model"] = m
 					params[ServedByParam] = zen.UpstreamProvider
 					params[ProviderNameParam] = provName
+					params[providers.ProviderIDParam] = ep[providers.ProviderIDParam]
 					return pResp, nil, nil
 				}
 
@@ -185,6 +230,7 @@ func CallClineAPI(params map[string]any, stream bool) (*http.Response, *domain.A
 			}
 			if v, ok := fp[ProviderNameParam].(string); ok {
 				params[ProviderNameParam] = v
+				params[providers.ProviderIDParam] = fp[providers.ProviderIDParam]
 			} else {
 				delete(params, ProviderNameParam)
 				delete(params, providers.ProviderIDParam)
@@ -251,6 +297,21 @@ func CallFreeClineAPI(params map[string]any, stream bool) (*http.Response, *doma
 	lastWas429 := false
 	for _, model := range chain {
 		params["model"] = model
+		_, pin, refErr := ResolveModelReference(model)
+		if refErr != nil {
+			lastErr = refErr
+			continue
+		}
+		if pin.active() {
+			ep := WithModel(params, model)
+			resp, acc, err := CallClineAPI(ep, stream)
+			if err == nil {
+				copyServingParams(params, ep)
+				return resp, acc, nil
+			}
+			lastErr = err
+			continue
+		}
 
 		if pResp, pErr, attempted, provName := providers.CallAPI(params, stream); attempted {
 			if pErr == nil {
@@ -329,4 +390,43 @@ func CallFreeClineAPI(params map[string]any, stream bool) (*http.Response, *doma
 		return nil, nil, lastErr
 	}
 	return nil, nil, &FreeModelUnavailableError{Message: "no eligible accounts available for free models"}
+}
+
+func copyServingParams(dst, src map[string]any) {
+	for _, key := range []string{"model", ServedByParam, ProviderNameParam, providers.ProviderIDParam} {
+		if value, ok := src[key]; ok {
+			dst[key] = value
+		} else {
+			delete(dst, key)
+		}
+	}
+}
+
+// A Cline pin can rotate credentials for this model, but never changes the
+// model or falls through to a custom provider or OpenCode.
+func callPinnedClineModel(params map[string]any, stream bool, model string) (*http.Response, *domain.Account, error) {
+	tried := map[string]bool{}
+	for {
+		account := accounts.PickAccountForModelStrict(model)
+		if account == nil || tried[account.AccountID] {
+			return nil, nil, &FreeModelUnavailableError{Message: fmt.Sprintf("model %q has no eligible Cline accounts", model)}
+		}
+		tried[account.AccountID] = true
+		resp, used, err := CallClineAPIWithAccountCtx(context.Background(), account, params, stream)
+		if err == nil {
+			return resp, used, nil
+		}
+		var unavailable *ClineAccountUnavailableError
+		if errors.As(err, &unavailable) {
+			continue
+		}
+		status := egress.ErrorStatus(err)
+		if status == http.StatusTooManyRequests || status == http.StatusPaymentRequired {
+			if status == http.StatusPaymentRequired && used != nil {
+				SetModelCooldown(used, model, time.Now().Add(30*time.Minute))
+			}
+			continue
+		}
+		return nil, used, err
+	}
 }

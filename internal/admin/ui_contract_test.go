@@ -358,7 +358,7 @@ func TestAdminUIDirectSubtabLinks(t *testing.T) {
 		t.Error("proxy settings do not link directly to routing policy")
 	}
 	quickstart := adminUIAsset(t, "ui/html/pages/quickstart.html")
-	if !strings.Contains(quickstart, `showPageSubTab('accounts', 'pool')`) {
+	if !strings.Contains(quickstart, `showPageSubTab('credentials', 'pool')`) {
 		t.Error("quick start does not link directly to Cline accounts")
 	}
 	if !strings.Contains(quickstart, `showPageSubTab('upstreams', 'zen')`) {
@@ -369,10 +369,10 @@ func TestAdminUIDirectSubtabLinks(t *testing.T) {
 		t.Error("combo editor does not link directly to routing policy")
 	}
 	dashboard := adminUIAsset(t, "ui/js/15_dashboard.js")
-	if !strings.Contains(dashboard, `showPageSubTab('accounts', 'pool')`) {
+	if !strings.Contains(dashboard, `showPageSubTab('credentials', 'pool')`) {
 		t.Error("dashboard account alerts do not link directly to Cline accounts")
 	}
-	if !strings.Contains(dashboard, `showPageSubTab('accounts', 'conns')`) {
+	if !strings.Contains(dashboard, `showPageSubTab('credentials', 'conns')`) {
 		t.Error("dashboard login alerts do not link directly to Provider OAuth")
 	}
 }

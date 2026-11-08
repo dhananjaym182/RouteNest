@@ -8,7 +8,9 @@ package admin
 import (
 	"net/http"
 
+	"routenest/internal/config"
 	"routenest/internal/credentials"
+	"routenest/internal/domain"
 	"routenest/internal/egress"
 	"routenest/internal/httpx"
 	"routenest/internal/i18n"
@@ -58,6 +60,14 @@ func handleProviderCredentials(w http.ResponseWriter, r *http.Request) {
 	}})
 }
 
+// Display aliases are added at the API boundary; the offering's stored and
+// upstream model identities remain unchanged.
+type modelOfferingView struct {
+	domain.ModelOffering
+	QualifiedID  string `json:"qualifiedId,omitempty"`
+	ProviderName string `json:"providerName,omitempty"`
+}
+
 // GET /admin/api/model-offerings
 func handleModelOfferings(w http.ResponseWriter, r *http.Request) {
 	if !requireGET(w, r) {
@@ -68,8 +78,25 @@ func handleModelOfferings(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteAPI(w, http.StatusInternalServerError, httpx.Response{Error: err.Error()})
 		return
 	}
+	instances, err := providers.SnapshotInstances()
+	if err != nil {
+		httpx.WriteAPI(w, http.StatusInternalServerError, httpx.Response{Error: err.Error()})
+		return
+	}
+	names := make(map[domain.ProviderInstanceID]string, len(instances))
+	for _, instance := range instances {
+		names[instance.ID] = instance.Name
+	}
+	cfg := config.Live()
+	views := make([]modelOfferingView, len(offerings))
+	for i, offering := range offerings {
+		views[i] = modelOfferingView{ModelOffering: offering, ProviderName: names[offering.ProviderID]}
+		if prefix := cfg.ProviderModelPrefix(string(offering.ProviderID)); prefix != "" {
+			views[i].QualifiedID = prefix + "/" + offering.ModelID
+		}
+	}
 	httpx.WriteAPI(w, http.StatusOK, httpx.Response{Success: true, Data: map[string]any{
-		"offerings": offerings,
+		"offerings": views,
 	}})
 }
 

@@ -104,11 +104,16 @@ func ValidateCombo(c domain.ModelCombo, existing []domain.ModelCombo) error {
 	seen := make(map[string]bool, len(c.Entries))
 	enabledCount := 0
 	for _, en := range c.Entries {
+		var err error
+		en, err = routing.ResolveComboEntry(en)
+		if err != nil {
+			return err
+		}
 		m := strings.TrimSpace(en.Model)
 		if m == "" {
 			return errors.New("combo entry has an empty model id")
 		}
-		if m == "free" {
+		if m == "free" && strings.TrimSpace(en.Source) == "" {
 			return errors.New(`the "free" alias cannot be used as a combo entry; add concrete models instead`)
 		}
 		key := EntryKey(en)
@@ -119,13 +124,13 @@ func ValidateCombo(c domain.ModelCombo, existing []domain.ModelCombo) error {
 		if !known[m] {
 			return fmt.Errorf("unknown model reference %q", m)
 		}
-		if zen.RouteModel(m) == "reject" {
+		if strings.TrimSpace(en.Source) == "" && zen.RouteModel(m) == "reject" {
 			return fmt.Errorf("model %q is a paid opencode model and cannot be used in a combo", m)
 		}
 		if err := validateComboEntryPin(en, m); err != nil {
 			return err
 		}
-		if !en.Disabled && !routing.IsModelDisabled(m) {
+		if !en.Disabled && !routing.IsModelDisabled(routing.ComboEntryModelReference(en)) {
 			enabledCount++
 		}
 	}
@@ -190,7 +195,7 @@ func validateComboEntryPin(en domain.ComboEntry, model string) error {
 		if name == "" {
 			return &comboPinError{
 				key: "combo_entry_provider_required",
-				msg: "provider name is required when source=provider",
+				msg: "provider ID or name is required when source=provider",
 			}
 		}
 		if !providers.NameServesModel(name, model) {

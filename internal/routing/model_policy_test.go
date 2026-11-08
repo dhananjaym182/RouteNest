@@ -19,13 +19,13 @@ func TestResolveClientModelAlias(t *testing.T) {
 	defer policyTestPool(Model{ID: "gpt-5", Provider: "openai"})()
 
 	cfg := defaultProxyConfig()
-	cfg.ModelAliases = []config.ModelAlias{{Alias: "fast", Target: "gpt-5", Provider: "OpenRouter"}}
+	cfg.ModelAliases = []config.ModelAlias{{Alias: "fast", Target: "gpt-5"}}
 	setProxyConfig(cfg)
 	defer setProxyConfig(defaultProxyConfig())
 
 	got, reject := ResolveClientModel("fast")
-	if reject != "" || got != "gpt-5@OpenRouter" {
-		t.Fatalf("alias rewrite = %q reject=%q, want gpt-5@OpenRouter", got, reject)
+	if reject != "" || got != "gpt-5" {
+		t.Fatalf("alias rewrite = %q reject=%q, want gpt-5", got, reject)
 	}
 }
 

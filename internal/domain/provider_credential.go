@@ -41,11 +41,11 @@ type ProviderCredential struct {
 	ModelCooldowns   map[string]time.Time `json:"modelCooldowns,omitempty"`
 	Refreshable      bool                 `json:"refreshable,omitempty"`
 	SecretConfigured bool                 `json:"secretConfigured"`
-	UsageCount       int64                `json:"usageCount,omitempty"`
-	PromptTokens     int64                `json:"promptTokens,omitempty"`
-	CompletionTokens int64                `json:"completionTokens,omitempty"`
-	TotalTokens      int64                `json:"totalTokens,omitempty"`
-	CachedTokens     int64                `json:"cachedTokens,omitempty"`
+	UsageCount       int64                `json:"usageCount"`
+	PromptTokens     int64                `json:"promptTokens"`
+	CompletionTokens int64                `json:"completionTokens"`
+	TotalTokens      int64                `json:"totalTokens"`
+	CachedTokens     int64                `json:"cachedTokens"`
 }
 
 // ClineCredentialID is the canonical global identity for a Cline account. Old

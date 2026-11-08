@@ -85,8 +85,8 @@ func CallAPI(params map[string]any, stream bool) (*http.Response, error, bool, s
 	return nil, lastErr, true, lastName
 }
 
-// CallAPINamed 与 CallAPI 类似，但只考虑 Name 匹配的
-// provider（模型固定到某一家上游）：失败时**不**回退到组内其他 provider。
+// CallAPINamed accepts an exact provider ID or a legacy name-group pin.
+// An ID-pinned failure never falls through to another provider instance.
 // 故意不读取/写入粘性会话——显式固定应当压过自动粘贴，且固定到 A 家的调用不应
 // 污染另一家的粘贴状态。无匹配候选时 attempted=false（调用方决定是否兜底）。
 // 供请求日志归因。

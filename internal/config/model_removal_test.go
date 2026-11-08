@@ -24,7 +24,7 @@ func TestPruneModelReferencesPreservesPublishedSnapshotAndOrder(t *testing.T) {
 	if !reflect.DeepEqual(before.ModelChain, base.ModelChain) || len(before.ModelAliases) != 2 || len(before.Combos[0].Entries) != 1 {
 		t.Fatal("cleanup mutated an already published snapshot")
 	}
-	if !reflect.DeepEqual(Live().ModelChain, []string{"a", "b"}) || len(Live().ModelAliases) != 1 || Live().Combos[0].Enabled {
+	if !reflect.DeepEqual(Live().ModelChain, []string{"a", "b", "gone@Alpha"}) || len(Live().ModelAliases) != 1 || Live().Combos[0].Enabled {
 		t.Fatalf("pruned config = %+v", Live())
 	}
 }

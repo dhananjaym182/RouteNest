@@ -58,9 +58,10 @@ func Snapshot() *Proxy {
 	return current().Clone()
 }
 
-// Publish stores a clone of c as the live configuration and persists it. Cloning
-// on publish means a caller that keeps editing its own value cannot change what
-// readers observe.
+// Publish stores a clone of c as the live configuration and persists it. Stable
+// provider namespaces are retained across stale snapshots, and configurations
+// carrying those namespaces are persisted before publication. Rejected updates
+// are logged; callers cannot observe a partially published configuration.
 func Publish(c *Proxy) {
 	if c == nil {
 		return
@@ -69,6 +70,28 @@ func Publish(c *Proxy) {
 	defer Mu.Unlock()
 	next := c.Clone()
 	next.RuntimeState.Normalize()
+	for prefix, providerID := range heldLocked().ProviderModelPrefixes {
+		if incoming, present := next.ProviderModelPrefixes[prefix]; present && incoming != providerID {
+			log.Printf("proxy config publish rejected: provider model prefix %q is reserved for provider %q", prefix, providerID)
+			return
+		}
+		if next.ProviderModelPrefixes == nil {
+			next.ProviderModelPrefixes = make(map[string]string)
+		}
+		next.ProviderModelPrefixes[prefix] = providerID
+	}
+	if err := next.ValidateProviderModelPrefixes(); err != nil {
+		log.Printf("proxy config publish rejected: %v", err)
+		return
+	}
+	if len(next.ProviderModelPrefixes) > 0 {
+		if err := SaveProxy(platform.ResolveDataPath(ProxyPath, nil), next); err != nil {
+			log.Printf("proxy config save failed: %v", err)
+			return
+		}
+		live.Store(next)
+		return
+	}
 	live.Store(next)
 	SaveLocked()
 }

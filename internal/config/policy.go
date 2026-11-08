@@ -277,6 +277,9 @@ func (c *Proxy) ExcludesModel(id string) bool {
 
 // ValidateModelPolicies returns a user-facing error for an invalid policy set.
 func (c *Proxy) ValidateModelPolicies() error {
+	if err := c.ValidateProviderModelPrefixes(); err != nil {
+		return err
+	}
 	seen := map[string]bool{}
 	for _, a := range c.ModelAliases {
 		if strings.TrimSpace(a.Alias) == "" || strings.TrimSpace(a.Target) == "" {

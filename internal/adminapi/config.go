@@ -110,6 +110,7 @@ func (h *Config) Get(w http.ResponseWriter, r *http.Request) {
 		"sessionAffinity":           cfg.SessionAffinity,
 		"runtimeState":              runtimeState,
 		"modelAliases":              cfg.ModelAliases,
+		"providerModelPrefixes":     cfg.ProviderModelPrefixes,
 		"excludedModels":            cfg.ExcludedModels,
 		"requestErrorRules":         cfg.RequestErrorRules,
 		"maxRequestBodyBytes":       cfg.MaxRequestBodyBytes,
@@ -229,9 +230,10 @@ func (h *Config) Update(w http.ResponseWriter, r *http.Request) {
 	// normalization never mutate the live config's backing arrays.
 	if req.ModelAliases != nil || req.ExcludedModels != nil || req.RequestErrorRules != nil {
 		scratch := configpkg.Proxy{
-			ModelAliases:      copyAliases(valueOr(req.ModelAliases, cfg.ModelAliases)),
-			ExcludedModels:    copyStrings(valueOr(req.ExcludedModels, cfg.ExcludedModels)),
-			RequestErrorRules: copyRules(valueOr(req.RequestErrorRules, cfg.RequestErrorRules)),
+			ModelAliases:          copyAliases(valueOr(req.ModelAliases, cfg.ModelAliases)),
+			ProviderModelPrefixes: cfg.ProviderModelPrefixes,
+			ExcludedModels:        copyStrings(valueOr(req.ExcludedModels, cfg.ExcludedModels)),
+			RequestErrorRules:     copyRules(valueOr(req.RequestErrorRules, cfg.RequestErrorRules)),
 		}
 		if err := scratch.ValidateModelPolicies(); err != nil {
 			httpx.WriteAPI(w, http.StatusBadRequest, httpx.Response{Error: err.Error()})
@@ -392,6 +394,7 @@ func (h *Config) Update(w http.ResponseWriter, r *http.Request) {
 		"sessionAffinity":           cfg.SessionAffinity,
 		"runtimeState":              runtimeState,
 		"modelAliases":              cfg.ModelAliases,
+		"providerModelPrefixes":     cfg.ProviderModelPrefixes,
 		"excludedModels":            cfg.ExcludedModels,
 		"requestErrorRules":         cfg.RequestErrorRules,
 		"maxRequestBodyBytes":       cfg.MaxRequestBodyBytes,

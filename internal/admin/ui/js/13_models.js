@@ -8,6 +8,28 @@ try {
   if (_mgo && typeof _mgo === 'object') _modelGroupOpen = _mgo;
 } catch (e) {}
 
+function modelProviderNameIndex() {
+  const index = new Map();
+  const offerings = typeof _globalData !== 'undefined' && _globalData ? _globalData.offerings || [] : [];
+  for (const offering of offerings) {
+    if (!offering.qualifiedId) continue;
+    if (!index.has(offering.modelId)) index.set(offering.modelId, new Map());
+    index.get(offering.modelId).set(offering.qualifiedId, offering);
+  }
+  return new Map(Array.from(index, ([id, names]) => [id,
+    Array.from(names.values()).sort((a, b) => a.qualifiedId.localeCompare(b.qualifiedId)),
+  ]));
+}
+
+function modelProviderNameButton(offering) {
+  const name = offering.qualifiedId;
+  const label = t('复制模型名') + ': ' + name;
+  return '<button type="button" class="model-provider-name" onclick="copyText(' + escAttr(JSON.stringify(name)) + ')"' +
+    ' title="' + escAttr(label + (offering.providerName ? ' · ' + offering.providerName : '')) + '" aria-label="' + escAttr(label) + '">' +
+    '<code>' + esc(name) + '</code>' +
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>';
+}
+
 // ===== 分组：一级 = 真实来源（Cline / Zen / Provider / 自定义），列表只按这一级渲染 =====
 // mergedSourceKey：合并行的主来源，优先级 自定义 > Provider > zen > Cline
 function mergedSourceKey(m) {
@@ -71,6 +93,7 @@ const MODEL_SOURCE_LABEL = { zen: 'OpenCode Zen', remote: 'Cline', provider: 'Pr
 // （任一来源仍在官方列表就不算整体下架）；启停开关按 ID 作用到所有来源条目。
 function mergeModelsById(models) {
   const map = new Map();
+  const providerNames = modelProviderNameIndex();
   for (const m of models) {
     const prev = map.get(m.id);
     if (!prev) {
@@ -86,6 +109,7 @@ function mergeModelsById(models) {
         _delistedAll: !!m.delisted,
         _customAny: !!m.custom,
         _disabled: !!m.disabled,
+        _providerModelNames: providerNames.get(m.id) || [],
       });
       continue;
     }
@@ -116,7 +140,8 @@ function onModelFilterChange(key, value) {
 // 状态筛选走工具栏下拉（与来源/计费同款式）：''|enabled|disabled|failed|delisted
 
 function modelMatchesFilters(m) {
-  if (_modelFilters.search && m.id.toLowerCase().indexOf(_modelFilters.search.toLowerCase()) === -1) return false;
+  const searchable = [m.id].concat((m._providerModelNames || []).flatMap(o => [o.qualifiedId, o.providerName])).filter(Boolean).join(' ').toLowerCase();
+  if (_modelFilters.search && !searchable.includes(_modelFilters.search.toLowerCase())) return false;
   if (_modelFilters.provider && sourceGroupKey(m) !== _modelFilters.provider) return false;
   if (_modelFilters.cost && m._costs.indexOf(_modelFilters.cost) === -1) return false;
   if (_modelFilters.status === 'disabled' && !m._disabled) return false;
@@ -211,7 +236,8 @@ function renderModelRow(m) {
   }
   return '<div class="model-row' + (m._disabled ? ' disabled-row' : '') + '">' +
     '<label class="switch model-col-switch" title="' + (m._disabled ? t('点击启用该模型') : t('点击停用该模型')) + '"><input type="checkbox"' + (m._disabled ? '' : ' checked') + ' onchange="toggleModel(\'' + esc(m.id) + '\', !this.checked)"><span class="slider"></span></label>' +
-    '<div class="model-row-main"><span class="model-row-id mono">' + esc(m.id) + '</span>' + (tags ? '<span class="model-row-tags">' + tags + '</span>' : '') + '</div>' +
+    '<div class="model-row-main"><span class="model-row-id mono">' + esc(m.id) + '</span>' + (tags ? '<span class="model-row-tags">' + tags + '</span>' : '') +
+      (m._providerModelNames && m._providerModelNames.length ? '<div class="model-provider-names"><span class="hint-xs">' + esc(t('Provider 模型名')) + '</span>' + m._providerModelNames.map(modelProviderNameButton).join('') + '</div>' : '') + '</div>' +
     '<div class="model-row-cell mono" title="' + t('上下文') + '">' + (m.context ? formatTokenCount(m.context) : '—') + '</div>' +
     '<div class="model-row-cell mono" title="' + t('输出') + '">' + (m.output ? formatTokenCount(m.output) : '—') + '</div>' +
     '<div class="model-row-test" title="' + (prevTest && !prevTest.ok ? escAttr(prevTest.text) : '') + '" ' + (prevTest ? 'data-tested="1"' : '') + '>' + (prevTest ? renderTestResultHTML(prevTest.ok, prevTest.text) : '<span class="model-untested">—</span>') + '</div>' +
@@ -348,7 +374,7 @@ function renderModelList() {
   };
   listEl.innerHTML = modelColHead() + Array.from(sources.keys()).sort(sourceSortKey).map(sk => {
     const rows = sources.get(sk).slice().sort(modelSortCmp);
-    const sOpen = _modelGroupOpen[sk] === true;
+    const sOpen = !!_modelFilters.search || _modelGroupOpen[sk] === true;
     return '<div class="model-group model-group-src">' +
       groupHead(sk, sourceGroupLabel(sk), rows, sOpen, true) +
       '<div class="model-group-body" style="display:' + (sOpen ? 'block' : 'none') + '">' + rows.map(renderModelRow).join('') + '</div>' +

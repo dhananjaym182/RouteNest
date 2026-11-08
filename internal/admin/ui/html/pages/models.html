@@ -25,10 +25,11 @@
         </span>
       </div>
       <div class="section-desc">管理模型启停、上下文窗口与计费。模型从 Provider 接入，停用后无法通过 API 请求。</div>
+      <div class="system-note model-name-note">带前缀的模型名固定使用对应 Provider，点击模型名即可复制。</div>
       <div class="section-body">
         <div id="modelStatsBar" class="model-stats-bar"></div>
         <div class="model-toolbar">
-          <input type="text" id="modelSearch" placeholder="搜索模型 ID..." aria-label="搜索模型" oninput="onModelFilterChange('search', this.value)">
+          <input type="text" id="modelSearch" placeholder="搜索模型 ID 或 Provider 模型名…" aria-label="搜索模型" oninput="onModelFilterChange('search', this.value)">
           <select id="modelFilterProvider" onchange="onModelFilterChange('provider', this.value)"><option value="">全部来源</option></select>
           <select id="modelFilterCost" onchange="onModelFilterChange('cost', this.value)">
             <option value="">全部计费</option>
@@ -71,11 +72,12 @@
         </span>
       </div>
       <div class="section-desc">同一模型可由多个 Provider 独立提供。访问类别未知时保持未知，不按免费处理。</div>
+      <div class="system-note model-name-note">带前缀的模型名固定使用对应 Provider，点击模型名即可复制。</div>
       <div class="system-toolbar">
         <div class="system-toolbar-grid">
           <div class="field system-filter-field system-search-field">
             <label for="globalOfferingSearch">搜索模型</label>
-            <input type="search" id="globalOfferingSearch" placeholder="搜索逻辑模型或上游模型 ID…" oninput="setGlobalOfferingSearch(this.value)">
+            <input type="search" id="globalOfferingSearch" placeholder="搜索模型 ID 或 Provider 模型名…" oninput="setGlobalOfferingSearch(this.value)">
           </div>
           <div class="field system-filter-field">
             <label for="globalModelProviderFilter">Provider</label>

@@ -149,12 +149,29 @@ function reconcileRemovedModelDrafts(completedRefs, confirmedRemovedRefs) {
   });
   affectedProviders.forEach(id => _providerModelRemovalEpochs.set(id, providerModelRemovalEpoch(id) + 1));
 
-  const bareModel = value => {
+  const prefixes = typeof _tunBaseCfg !== 'undefined' && _tunBaseCfg && _tunBaseCfg.providerModelPrefixes || {};
+  const bareModel = (value, explicitPin) => {
     const model = text(value), at = model.lastIndexOf('@');
-    return at > 0 ? { id: model.slice(0, at), pin: text(model.slice(at + 1)) } : { id: model, pin: '' };
+    // Exact catalogue IDs may contain @. Only legacy references that are not
+    // actual model IDs use the suffix as an inline provider pin.
+    if (poolByID.has(model) || offeringByID.has(model) || declaredByID.has(model) ||
+        rules.some(ref => ref.id === model) || typeof _comboCatalog !== 'undefined' && _comboCatalog.some(row => text(row.id) === model)) {
+      return { id: model, pin: '' };
+    }
+    const slash = model.indexOf('/'), prefix = model.slice(0, slash);
+    if (slash > 0 && model.slice(slash + 1) && Object.prototype.hasOwnProperty.call(prefixes, prefix) && text(prefixes[prefix])) {
+      return { id: model.slice(slash + 1), pin: text(prefixes[prefix]) };
+    }
+    // Explicit provider fields already scope raw IDs. In free-text legacy
+    // chains, only a recognized provider suffix represents an inline pin.
+    if (explicitPin || at <= 0) return { id: model, pin: '' };
+    const pin = text(model.slice(at + 1));
+    const knownPin = providers.has(pin) || pin === 'cline' || pin === 'opencode' || providerNames.has(nameKey(pin)) ||
+      rules.some(ref => ref.providerId === pin || ref.provider && nameKey(ref.provider) === nameKey(pin));
+    return knownPin ? { id: model.slice(0, at), pin } : { id: model, pin: '' };
   };
   const matches = (model, pin) => {
-    const target = bareModel(model), explicitPin = text(pin) || target.pin;
+    const target = bareModel(model, text(pin)), explicitPin = text(pin) || target.pin;
     return rules.some(ref => target.id === ref.id && (ref.removeGlobal || ref.removeSource &&
       (explicitPin === ref.providerId || ref.removeName && ref.provider && nameKey(explicitPin) === nameKey(ref.provider))));
   };
@@ -226,23 +243,17 @@ function reconcileRemovedModelDrafts(completedRefs, confirmedRemovedRefs) {
     comboChanged = comboChanged || next.length !== _comboCatalog.length;
     _comboCatalog = next;
   }
-  if (typeof _pickerOrder !== 'undefined') _pickerOrder = _pickerOrder.filter(id => !globallyRemoved.has(bareModel(id).id));
+  if (typeof _pickerOrder !== 'undefined') _pickerOrder = _pickerOrder.filter(key => {
+    const offering = typeof comboDecodeOfferingKey === 'function' ? comboDecodeOfferingKey(key) : null;
+    return !entryMatches(offering || { model: key });
+  });
   if (comboChanged && typeof renderComboEntries === 'function') renderComboEntries();
   if (typeof renderComboPickerList === 'function' && _('comboPickerList')) renderComboPickerList();
   if (typeof _comboTestCopy !== 'undefined' && _comboTestCopy && Array.isArray(_comboTestCopy.entries)) {
     const entries = _comboTestCopy.entries, next = entries.filter(entry => !entryMatches(entry));
     if (next.length !== entries.length) {
       if (typeof _comboTestResults !== 'undefined') {
-        const keptResults = [];
-        let resultIndex = 0;
-        entries.forEach(entry => {
-          const result = _comboTestResults[resultIndex];
-          if (entry.model && !entry.disabled && result && result.model === entry.model) {
-            resultIndex++;
-            if (!entryMatches(entry)) keptResults.push(result);
-          }
-        });
-        _comboTestResults = keptResults;
+        _comboTestResults = _comboTestResults.filter(result => !entryMatches(result));
       }
       _comboTestCopy.entries = next;
       if (typeof _comboTestChanged !== 'undefined') _comboTestChanged = true;

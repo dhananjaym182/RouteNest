@@ -26,6 +26,7 @@ import (
 
 	"routenest/internal/accounts"
 	"routenest/internal/combos"
+	"routenest/internal/config"
 	"routenest/internal/egress"
 	"routenest/internal/i18n"
 	"routenest/internal/platform"
@@ -120,8 +121,36 @@ func RunQuickModelTest(model string, forcedProvider *CustomProvider, pinSource s
 		return result
 	}
 
-	// 同模型串行化：锁内覆盖整次上游调用（成功或失败都会释放）。
-	lk := quickTestLock(model)
+	// Resolve client namespaces before dispatch. An explicit pin stays strict,
+	// but provider probes continue to bypass selection cooldown and budgets.
+	entry := ComboEntry{Model: model, Source: strings.TrimSpace(pinSource)}
+	if forcedProvider != nil {
+		if entry.Source == "" {
+			entry.Source = "provider"
+		}
+		if entry.Source == "provider" {
+			entry.Provider = forcedProvider.ID
+			if entry.Provider == "" {
+				entry.Provider = forcedProvider.Name
+			}
+		}
+	}
+	resolved, err := routing.ResolveComboEntry(entry)
+	if err != nil {
+		setResult("", err.Error())
+		return result
+	}
+	model, pinSource = resolved.Model, resolved.Source
+	if pinSource == "provider" && forcedProvider == nil {
+		forcedProvider = FindEnabledProviderByName(resolved.Provider)
+		if forcedProvider == nil {
+			setResult(zen.UpstreamProvider, fmt.Sprintf("provider %q not found or disabled", resolved.Provider))
+			return result
+		}
+	}
+
+	// Serialize probes for the same offering, keeping sibling providers separate.
+	lk := quickTestLock(routing.ComboEntryModelReference(resolved))
 	lk.Lock()
 	defer lk.Unlock()
 
@@ -129,6 +158,8 @@ func RunQuickModelTest(model string, forcedProvider *CustomProvider, pinSource s
 
 	// ---- provider 路径 ----
 	tryProvider := func(p *CustomProvider) {
+		result["providerId"] = p.ID
+		result["providerName"] = p.Name
 		resp, err := providers.Call(p, params, false)
 		if err != nil {
 			setResult(zen.UpstreamProvider, err.Error())
@@ -139,6 +170,10 @@ func RunQuickModelTest(model string, forcedProvider *CustomProvider, pinSource s
 
 	// ---- zen 路径 ----
 	tryZen := func() {
+		if !zen.GetConfig().Enabled {
+			setResult(zen.UpstreamOpenCode, "OpenCode provider is disabled")
+			return
+		}
 		zm, ok := zen.ResolveInfo(model)
 		if !ok || !zen.IsFreeModel(zm) {
 			setResult(zen.UpstreamOpenCode, fmt.Sprintf("model %q is not an available free zen model", model))
@@ -202,6 +237,8 @@ func RunQuickModelTest(model string, forcedProvider *CustomProvider, pinSource s
 	for _, p := range providers.ResolveForModel(model) {
 		resp, err := providers.Call(p, params, false)
 		if err == nil {
+			result["providerId"] = p.ID
+			result["providerName"] = p.Name
 			recordSuccess(zen.UpstreamProvider, resp)
 			return result
 		}
@@ -311,14 +348,28 @@ func HandleAdminModelTest(w http.ResponseWriter, r *http.Request) {
 
 // ---- EP4：组合测试 ------------------------------------------------------
 
-// FindEnabledProviderByName 仅在存在「启用中」且 Name 匹配（去空白、大小写
-// 不敏感）的 provider 时返回其副本；供组合条目 source=provider 测试用。
+// FindEnabledProviderByName accepts stable IDs first, then legacy display names.
+// A disabled or deleted identity cannot fall back to a sibling's display name.
+// Probes deliberately ignore provider selection cooldowns and budget limits.
 func FindEnabledProviderByName(name string) *CustomProvider {
 	name = strings.TrimSpace(name)
 	if name == "" {
 		return nil
 	}
-	for _, p := range providers.List() {
+	list := providers.List()
+	for _, p := range list {
+		if p.ID == name {
+			if !p.Enabled {
+				return nil
+			}
+			cp := p
+			return &cp
+		}
+	}
+	if config.ProviderModelIDReserved(name) || providers.GeneratedProviderIDPin(name) {
+		return nil
+	}
+	for _, p := range list {
 		if p.Enabled && strings.EqualFold(strings.TrimSpace(p.Name), name) {
 			cp := p
 			return &cp
@@ -329,6 +380,14 @@ func FindEnabledProviderByName(name string) *CustomProvider {
 
 // comboEntryTest 按条目的上游固定语义测一个条目（不改动组合本身）。
 func comboEntryTest(entry ComboEntry) map[string]any {
+	resolved, err := routing.ResolveComboEntry(entry)
+	if err != nil {
+		return map[string]any{
+			"ok": false, "model": strings.TrimSpace(entry.Model), "upstream": "", "durationMs": 0,
+			"error": err.Error(),
+		}
+	}
+	entry = resolved
 	m := strings.TrimSpace(entry.Model)
 	switch strings.TrimSpace(entry.Source) {
 	case "provider":
@@ -354,9 +413,11 @@ func comboEntryTest(entry ComboEntry) map[string]any {
 	}
 }
 
-// comboTestResult 把 QuickModelTest 的结果包上条目元数据（source/固定 provider）。
-func comboTestResult(entry ComboEntry) map[string]any {
-	out := comboEntryTest(entry)
+// comboTestResult preserves the stored identity around a possibly narrowed probe.
+func comboTestResult(entry, probeEntry ComboEntry) map[string]any {
+	out := comboEntryTest(probeEntry)
+	// Keep the stored identity for UI result association; dispatch uses the raw ID.
+	out["model"] = strings.TrimSpace(entry.Model)
 	out["source"] = strings.TrimSpace(entry.Source)
 	if name := strings.TrimSpace(entry.Provider); name != "" {
 		out["provider"] = name
@@ -387,6 +448,15 @@ func HandleComboTest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	filter := strings.TrimSpace(req.Model)
+	filterEntry := ComboEntry{Model: filter}
+	if filter != "" {
+		var err error
+		filterEntry, err = routing.ResolveComboEntry(filterEntry)
+		if err != nil {
+			writeAPI(w, http.StatusBadRequest, apiResponse{Error: err.Error()})
+			return
+		}
+	}
 
 	results := make([]map[string]any, 0, len(combo.Entries))
 	for _, entry := range combo.Entries {
@@ -394,10 +464,39 @@ func HandleComboTest(w http.ResponseWriter, r *http.Request) {
 			continue // 禁用条目不测
 		}
 		m := strings.TrimSpace(entry.Model)
-		if m == "" || (filter != "" && m != filter) {
+		if m == "" {
 			continue
 		}
-		results = append(results, comboTestResult(entry))
+		probeEntry := entry
+		if filter != "" {
+			resolved, err := routing.ResolveComboEntry(entry)
+			if err != nil {
+				if m != filter {
+					continue
+				}
+			} else {
+				if resolved.Model != filterEntry.Model || filterEntry.Source != "" && resolved.Source != filterEntry.Source {
+					continue
+				}
+				if filterEntry.Source == "provider" && resolved.Provider != filterEntry.Provider {
+					actual := FindEnabledProviderByName(resolved.Provider)
+					wanted := FindEnabledProviderByName(filterEntry.Provider)
+					if actual == nil || wanted == nil || actual.ID != wanted.ID {
+						continue
+					}
+				}
+				if filterEntry.Source == "provider" {
+					// Carry the matched identity into the probe so a legacy name
+					// cannot select a sibling after a concurrent rename or disable.
+					probeEntry = resolved
+					probeEntry.Provider = filterEntry.Provider
+					if wanted := FindEnabledProviderByName(filterEntry.Provider); wanted != nil {
+						probeEntry.Provider = wanted.ID
+					}
+				}
+			}
+		}
+		results = append(results, comboTestResult(entry, probeEntry))
 	}
 	if filter != "" && len(results) == 0 {
 		writeAPI(w, http.StatusNotFound, apiResponse{Error: fmt.Sprintf("enabled entry %q not found in combo %q", filter, combo.ID)})

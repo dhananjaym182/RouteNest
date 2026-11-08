@@ -470,7 +470,7 @@ function renderGlobalOfferings(data) {
   const offerings = (data.offerings || []).filter(o => {
     if (!globalMatches(o.providerId)) return false;
     if (_globalOfferingAccess && String(o.access || 'unknown') !== _globalOfferingAccess) return false;
-    if (q && ![o.modelId, o.upstreamModelId, o.providerId, globalProviderName(o.providerId)].filter(Boolean).join(' ').toLowerCase().includes(q)) return false;
+    if (q && ![o.modelId, o.qualifiedId, o.upstreamModelId, o.providerId, o.providerName, globalProviderName(o.providerId)].filter(Boolean).join(' ').toLowerCase().includes(q)) return false;
     return true;
   }).sort((a, b) => {
     if (_globalOfferingSort === 'provider') return String(globalProviderName(a.providerId)).localeCompare(String(globalProviderName(b.providerId))) || String(a.modelId).localeCompare(String(b.modelId));
@@ -484,13 +484,13 @@ function renderGlobalOfferings(data) {
     ? '<div class="system-note offering-preview-note">' + esc(t('仅预览前 12 条，共 N 条').replace('N', offerings.length)) + '</div>'
     : '';
   el.innerHTML = previewNote + '<div class="offerings-table-wrap"><table class="offerings-table"><thead><tr>' +
-    '<th>' + esc(t('逻辑模型')) + '</th><th>Provider</th><th>' + esc(t('上游模型')) + '</th><th>' + esc(t('访问类别')) + '</th><th>' + esc(t('授权')) + '</th><th>' + esc(t('上下文')) + '</th><th>' + esc(t('状态')) + '</th></tr></thead><tbody>' + shown.map(o => {
+    '<th>' + esc(t('客户端模型名')) + '</th><th>Provider</th><th>' + esc(t('上游模型')) + '</th><th>' + esc(t('访问类别')) + '</th><th>' + esc(t('授权')) + '</th><th>' + esc(t('上下文')) + '</th><th>' + esc(t('状态')) + '</th></tr></thead><tbody>' + shown.map(o => {
     const signal = o.tierSignal ? (_tierSignals[o.tierSignal] || o.tierSignal) : '';
     const rawStatus = o.status || 'active';
     const state = o.disabled ? '已停用' : (o.delisted ? '已下架' : (_globalStatuses[rawStatus] || rawStatus));
     const stateTone = o.disabled || o.delisted ? 'negative' : globalStatusTone(rawStatus);
-    return '<tr><td class="mono-heading" title="' + escAttr(o.modelId) + '">' + esc(o.modelId) + '</td>' +
-      '<td><span class="provider-byline">' + esc(globalProviderName(o.providerId) || o.providerId) + '</span><code>' + esc(o.providerId) + '</code></td>' +
+    return '<tr><td class="mono-heading" title="' + escAttr(o.modelId) + '">' + (o.qualifiedId ? modelProviderNameButton(o) : esc(o.modelId)) + '</td>' +
+      '<td><span class="provider-byline">' + esc(o.providerName || globalProviderName(o.providerId) || o.providerId) + '</span><code>' + esc(o.providerId) + '</code></td>' +
       '<td title="' + escAttr(o.upstreamModelId || o.modelId) + '">' + esc(o.upstreamModelId || o.modelId) + '</td>' +
       '<td>' + globalBadge(_globalAccess[o.access] || '未知', accessTone(o.access || 'unknown')) + (signal ? '<div class="hint-xs mt-4">' + esc(t(signal)) + '</div>' : '') + '</td>' +
       '<td>' + globalBadge(o.allowanceVerified ? '授权已验证' : '授权未验证', o.allowanceVerified ? 'positive' : 'unknown') + '</td>' +
@@ -655,7 +655,7 @@ function openGlobalProviderView(tab, providerID) {
   if (tab === 'credentials') {
     const credentials = ((_globalData && _globalData.credentials) || []).filter(c => (c.providerIds || []).includes(providerID));
     const oauth = providerID === 'cline' || credentials.some(c => ['oauth_account', 'refresh_token', 'imported_token'].includes(c.kind));
-    switchPageSubTab('accounts', oauth ? 'conns' : 'inventory', true);
+    switchPageSubTab('credentials', oauth ? 'conns' : 'inventory', true);
   }
   if (tab === 'models') switchPageSubTab('modelviews', 'offerings');
   if (_globalData) renderGlobal();
@@ -688,6 +688,8 @@ async function loadGlobal(showSkeleton) {
       globalProfileId: (egress.data && egress.data.globalProfileId) || '',
     };
     renderGlobal();
+    if (typeof renderModelList === 'function') renderModelList();
+    if (typeof renderCredentialSummary === 'function') renderCredentialSummary();
     if (_globalData.offerings.some(o => o.delisted)) await checkModelDelistings();
   } catch (e) {
     if (generation !== _globalLoadGeneration) return;

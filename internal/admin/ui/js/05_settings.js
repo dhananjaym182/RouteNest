@@ -70,11 +70,13 @@ async function deleteAllKeys() {
 }
 
 function copyText(textValue) {
-  navigator.clipboard.writeText(textValue).then(() => toast(t('已复制到剪贴板'), 'success')).catch(() => {
-    const ta = document.createElement('textarea');
-    ta.value = textValue; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta);
+  const done = () => toast(t('已复制到剪贴板'), 'success');
+  const fallback = () => {
+    fallbackCopy(textValue);
     toast(t('已复制到剪贴板'), 'success');
-  });
+  };
+  if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(textValue).then(done).catch(fallback);
+  else fallback();
 }
 
 // ========== 配置管理 ==========

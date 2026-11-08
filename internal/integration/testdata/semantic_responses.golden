@@ -35,7 +35,7 @@
       "created": "\u003ctimestamp\u003e",
       "id": "fixture/one",
       "object": "model",
-      "owned_by": "cline"
+      "owned_by": "Fixture Provider"
     },
     {
       "created": "\u003ctimestamp\u003e",
@@ -49,6 +49,32 @@
       "id": "fixture-fast",
       "object": "model",
       "owned_by": "alias"
+    },
+    {
+      "alias_of": "custom/beta",
+      "created": "\u003ctimestamp\u003e",
+      "id": "cl/custom/beta",
+      "object": "model",
+      "owned_by": "cline",
+      "providerId": "cline",
+      "providerName": "Cline",
+      "source": "cline",
+      "thinking_levels": [
+        "low",
+        "high"
+      ]
+    },
+    {
+      "alias_of": "remote/alpha",
+      "context_length": 200000,
+      "created": "\u003ctimestamp\u003e",
+      "id": "cl/remote/alpha",
+      "max_output_tokens": 8192,
+      "object": "model",
+      "owned_by": "cline",
+      "providerId": "cline",
+      "providerName": "Cline",
+      "source": "cline"
     }
   ],
   "object": "list"

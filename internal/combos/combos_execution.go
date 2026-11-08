@@ -131,6 +131,11 @@ func ClinePoolModelExists(model string) bool {
 //     "unavailable"（跳过）。
 //   - 其他（未知，通常已被 ValidateCombo 拦截）→ 回退到自动派发，避免运行时误伤。
 func EntryRouteKind(e domain.ComboEntry) string {
+	var err error
+	e, err = routing.ResolveComboEntry(e)
+	if err != nil {
+		return "unavailable"
+	}
 	base := RouteKind(e.Model)
 	switch strings.TrimSpace(e.Source) {
 	case "":
@@ -146,6 +151,9 @@ func EntryRouteKind(e domain.ComboEntry) string {
 	case "provider":
 		return "cline"
 	case "zen":
+		if !zen.GetConfig().Enabled {
+			return "unavailable"
+		}
 		// 显式 zen 固定压过 AUTO 的「同名 cline 冲突」降级：这正是用 zen 固定来
 		// 消歧的用途。只按 zen 自身状态判定，与 validateComboEntryPin 保持一致。
 		zm, ok := zen.ResolveInfo(e.Model)
@@ -172,11 +180,17 @@ func EntryRouteKind(e domain.ComboEntry) string {
 // 返回：resp / 使用的账号（若有）/ 上游归因 / 实际服务的自定义 provider 显示名
 // （upstream=="provider" 时非空，cline/opencode 为空）/ error。
 func CallSingleModel(params map[string]any, entry domain.ComboEntry, stream bool, sessionID string) (*http.Response, *domain.Account, string, string, error) {
+	var err error
+	entry, err = routing.ResolveComboEntry(entry)
+	if err != nil {
+		return nil, nil, "", "", newUnavailableError(err.Error())
+	}
 	model := strings.TrimSpace(entry.Model)
 	ep := routing.WithModel(params, model)
 	delete(ep, servedByParam)
 	delete(ep, providerNameParam)
 	delete(ep, providers.ProviderIDParam)
+	delete(params, providers.ProviderIDParam)
 
 	switch EntryRouteKind(entry) {
 	case "reject":
@@ -223,7 +237,16 @@ func CallSingleModel(params map[string]any, entry domain.ComboEntry, stream bool
 	case "provider":
 		// 显式固定到某一家 provider：只看它，失败也**不**回退到 Cline 账号池
 		// （用户明确指定了唯一上游）。
+		if provider := providers.Find(entry.Provider); provider != nil {
+			params[providers.ProviderIDParam] = provider.ID
+			params[providerNameParam] = provider.Name
+		} else if providers.GeneratedProviderIDPin(entry.Provider) {
+			params[providers.ProviderIDParam] = entry.Provider
+		}
 		resp, perr, attempted, provName := providers.CallAPINamed(ep, stream, entry.Provider)
+		if id, ok := ep[providers.ProviderIDParam]; ok {
+			params[providers.ProviderIDParam] = id
+		}
 		if !attempted {
 			return nil, nil, zen.UpstreamProvider, "", newUnavailableError(
 				fmt.Sprintf("model %q is not served by provider %q", model, strings.TrimSpace(entry.Provider)),
@@ -241,6 +264,9 @@ func CallSingleModel(params map[string]any, entry domain.ComboEntry, stream bool
 		// 显式固定到 Cline 账号池：跳过自定义 provider 尝试，直接走账号池。
 	default:
 		if resp, perr, attempted, provName := providers.CallAPI(ep, stream); attempted {
+			if id, ok := ep[providers.ProviderIDParam]; ok {
+				params[providers.ProviderIDParam] = id
+			}
 			if perr == nil {
 				return resp, nil, zen.UpstreamProvider, provName, nil
 			}
@@ -295,11 +321,16 @@ func CompactionModel(combo domain.ModelCombo) domain.Model {
 	var chosen domain.Model
 	best := 0
 	for _, e := range combo.Entries {
+		var err error
+		e, err = routing.ResolveComboEntry(e)
+		if err != nil {
+			continue
+		}
 		m := strings.TrimSpace(e.Model)
 		if m == "" || e.Disabled {
 			continue
 		}
-		zm := compaction.ModelForCompaction(m)
+		zm := compaction.ModelForCompaction(routing.ComboEntryModelReference(e))
 		ctx := compaction.EffectiveCompactContext(zm)
 		if best == 0 || ctx < best {
 			best = ctx
@@ -329,6 +360,12 @@ func RunCombo(params map[string]any, combo domain.ModelCombo, stream bool, sessi
 	truncatedForRun := false
 
 	for i, entry := range combo.Entries {
+		var refErr error
+		entry, refErr = routing.ResolveComboEntry(entry)
+		if refErr != nil {
+			trace = append(trace, domain.AttemptLog{Model: entry.Model, Order: i + 1, Outcome: "skipped", Reason: refErr.Error(), Source: entry.Source, Provider: entry.Provider})
+			continue
+		}
 		m := strings.TrimSpace(entry.Model)
 		if m == "" {
 			continue
@@ -345,16 +382,16 @@ func RunCombo(params map[string]any, combo domain.ModelCombo, stream bool, sessi
 				Source: strings.TrimSpace(entry.Source), Provider: strings.TrimSpace(entry.Provider)})
 			continue
 		}
-		if routing.IsModelDisabled(m) {
+		reference := routing.ComboEntryModelReference(entry)
+		if routing.IsModelDisabled(reference) {
 			trace = append(trace, domain.AttemptLog{Model: m, Order: order, Outcome: "skipped", Reason: "model disabled by admin",
 				Source: strings.TrimSpace(entry.Source), Provider: strings.TrimSpace(entry.Provider)})
 			continue
 		}
 		if GetConfig().OnlyFree {
-			bare, _ := providers.SplitPin(m)
-			if !routing.ModelFreeOnlyEligible(bare) {
+			if !routing.ModelFreeOnlyEligible(reference) {
 				trace = append(trace, domain.AttemptLog{Model: m, Order: order, Outcome: "skipped",
-					Reason: fmt.Sprintf("not eligible under onlyFree (access class: %s)", routing.ModelRouteAccess(bare).Class),
+					Reason: fmt.Sprintf("not eligible under onlyFree (access class: %s)", routing.ModelRouteAccess(reference).Class),
 					Source: strings.TrimSpace(entry.Source), Provider: strings.TrimSpace(entry.Provider)})
 				continue
 			}
@@ -370,7 +407,7 @@ func RunCombo(params map[string]any, combo domain.ModelCombo, stream bool, sessi
 		if err != nil && routing.IsContextLengthError(err) && !truncatedForRun {
 			truncatedForRun = true
 			log.Printf("  combo %q: entry %d %q context length exceeded, truncating and retrying", combo.ID, order, m)
-			if out := compaction.FallbackTruncate(params, compaction.ModelForCompaction(m)); out.Changed {
+			if out := compaction.FallbackTruncate(params, compaction.ModelForCompaction(reference)); out.Changed {
 				log.Printf("  combo %s", out.Note)
 				start = time.Now()
 				resp, acc, upstream, provName, err = CallSingleModel(params, entry, stream, sessionID)

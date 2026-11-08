@@ -93,6 +93,12 @@ func StreamAnthropicCombo(ctx context.Context, w http.ResponseWriter, params map
 	seen := map[string]bool{}
 	trace := make([]domain.AttemptLog, 0, len(combo.Entries))
 	for i, e := range combo.Entries {
+		var refErr error
+		e, refErr = routing.ResolveComboEntry(e)
+		if refErr != nil {
+			trace = append(trace, domain.AttemptLog{Model: e.Model, Order: i + 1, Outcome: "skipped", Reason: refErr.Error(), Source: e.Source, Provider: e.Provider})
+			continue
+		}
 		m := strings.TrimSpace(e.Model)
 		if m == "" {
 			continue
@@ -103,13 +109,18 @@ func StreamAnthropicCombo(ctx context.Context, w http.ResponseWriter, params map
 			continue
 		}
 		key := combos.EntryKey(e)
-		if seen[key] || routing.IsModelDisabled(m) {
+		reference := routing.ComboEntryModelReference(e)
+		if seen[key] || routing.IsModelDisabled(reference) {
 			reason := "duplicate entry"
-			if routing.IsModelDisabled(m) {
+			if routing.IsModelDisabled(reference) {
 				reason = "model disabled by admin"
 			}
 			trace = append(trace, domain.AttemptLog{Model: m, Order: i + 1, Outcome: "skipped", Reason: reason,
 				Source: strings.TrimSpace(e.Source), Provider: strings.TrimSpace(e.Provider)})
+			continue
+		}
+		if liveConfig().OnlyFree && !routing.ModelFreeOnlyEligible(reference) {
+			trace = append(trace, domain.AttemptLog{Model: m, Order: i + 1, Outcome: "skipped", Reason: "not eligible under onlyFree", Source: e.Source, Provider: e.Provider})
 			continue
 		}
 		seen[key] = true
@@ -145,7 +156,7 @@ func StreamAnthropicCombo(ctx context.Context, w http.ResponseWriter, params map
 		if err != nil && routing.IsContextLengthError(err) && !truncatedForRun {
 			truncatedForRun = true
 			log.Printf("  combo %q: entry %d %q context length exceeded, truncating and retrying", combo.ID, c.order, c.model)
-			if out := compaction.FallbackTruncate(params, compaction.ModelForCompaction(c.model)); out.Changed {
+			if out := compaction.FallbackTruncate(params, compaction.ModelForCompaction(routing.ComboEntryModelReference(c.entry))); out.Changed {
 				log.Printf("  combo %s", out.Note)
 				start = time.Now()
 				resp, acc, upstream, provName, err = combos.CallSingleModel(params, c.entry, true, sessionID)

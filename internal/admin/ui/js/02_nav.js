@@ -98,7 +98,7 @@ function applyTab(name){
   if (name !== 'logs' && typeof stopLogPolling === 'function') stopLogPolling();
   if (name === 'dashboard') { applyLang(); loadStats(); loadAccounts(); loadDashboardOverview(); if (typeof loadDashboardActivity === 'function') loadDashboardActivity(); startDashPolling(); }
   else if (name === 'credentials') { loadGlobal(); loadAccounts(); loadConnections(); loadStats(); }
-  if (fromImport || fromAccounts) switchPageSubTab('accounts', 'conns', true);
+  if (fromImport || fromAccounts) switchPageSubTab('credentials', 'conns', true);
   if (fromImport) openProviderSetup('cline', '', true);
   else if (name === 'logs') { loadRequestLogs(true); startLogPolling(); }
   else if (name === 'routing') { loadModels().then(() => { loadConfig(); if (typeof loadRouteInspector === 'function') loadRouteInspector(); }); }
@@ -127,10 +127,10 @@ function switchTab(name) { applyTab(name); }
 // Open a settings area at a specific subtab instead of restoring whichever
 // subtab happened to be active on the user's last visit.
 function showPageSubTab(page, sub) {
+  if (page === 'accounts') page = 'credentials'; // legacy alias
   if (page === 'routing' && sub === 'models') { applyTab('models'); return; }
   if ((page === 'upstreams' || page === 'network') && sub === 'zen') { openProviderSetup('opencode'); return; }
   if ((page === 'upstreams' || page === 'network') && sub === 'headers') { openProviderSetup('cline-config'); return; }
-  if (page === 'accounts') { applyTab('credentials'); switchPageSubTab('accounts', sub); return; }
   applyTab(page);
   switchPageSubTab(page, sub);
 }
@@ -221,7 +221,8 @@ applyNavOrder();
 const SUBTAB_KEY_PREFIX = 'cline_admin_subtab_';
 function switchPageSubTab(page, sub, skipSave) {
   if (page === 'routing' && sub === 'models') { applyTab('models'); return; }
-  if (page === 'accounts' && sub === 'pool') sub = 'conns';
+  if (page === 'accounts') page = 'credentials'; // legacy alias
+  if (page === 'credentials' && sub === 'pool') sub = 'conns';
   const nav = document.querySelector('.page-subtabs[data-page="' + page + '"]');
   if (!nav) return;
   nav.querySelectorAll('.subtab').forEach(e => {

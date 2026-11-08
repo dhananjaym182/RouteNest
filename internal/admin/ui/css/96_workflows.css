@@ -57,6 +57,14 @@ input,select,textarea{font-size:14px}
 #tab-models .model-row-id{font-family:var(--font-mono);font-size:13px;font-weight:500;line-height:1.5}
 #tab-models .model-row-cell{font-size:14px}
 #tab-models .model-row-test{font-size:13px}
+#tab-models .model-name-note{margin:0 0 16px}
+#tab-models .model-provider-names{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:6px;max-width:100%}
+#tab-models .model-provider-names>.hint-xs{flex-basis:100%;font-size:12px}
+#tab-models .model-provider-name{display:inline-flex;align-items:center;gap:7px;max-width:100%;padding:4px 7px;border:1px solid var(--border2);border-radius:6px;background:var(--surface2);color:var(--text2);font-size:12px;line-height:1.5;text-align:left;cursor:pointer}
+#tab-models .model-provider-name code{min-width:0;white-space:normal;overflow-wrap:anywhere;font-family:var(--font-mono);font-size:12px}
+#tab-models .model-provider-name svg{width:14px;height:14px;flex-shrink:0;color:var(--text3)}
+#tab-models .model-provider-name:hover{color:var(--text);border-color:var(--accent)}
+#tab-models .model-provider-name:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 #tab-models .model-list .model-group-head{padding:12px 14px;font-size:14px}
 #tab-models .model-source-badge,#tab-models .model-tag{font-size:12px;line-height:1.4}
 #tab-models .model-col-head{font-size:12px;letter-spacing:0;text-transform:none}
@@ -78,6 +86,16 @@ input,select,textarea{font-size:14px}
 #providerSetup .drawer-close{min-width:36px;min-height:36px}
 #providerSetup .connect-intro,#providerSetup .setup-intro{margin:0;color:var(--text2);font-size:14px;line-height:1.6}
 #providerSetupChoices.connect-provider-grid,#providerSetupChoices .connect-provider-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+#providerSetup .connect-filter-row{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 20px}
+#providerSetup .connect-filter-chip{display:inline-flex;align-items:center;gap:8px;padding:7px 12px;border:1px solid var(--border);border-radius:999px;background:var(--surface);color:var(--text2);font-family:var(--font-ui);font-size:13px;line-height:1.4;cursor:pointer;transition:border-color .15s var(--ease),color .15s var(--ease),background .15s var(--ease)}
+#providerSetup .connect-filter-chip:hover{border-color:var(--border2);color:var(--text)}
+#providerSetup .connect-filter-chip:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+#providerSetup .connect-filter-chip.is-active{border-color:var(--accent);background:var(--accent-soft,var(--surface2));color:var(--text);font-weight:600}
+#providerSetup .connect-filter-count{color:var(--text3);font-variant-numeric:tabular-nums;font-size:12px}
+#providerSetup .connect-filter-chip.is-active .connect-filter-count{color:var(--text2)}
+#providerSetup .connect-provider-group-note{margin-left:10px;color:var(--text3);font-size:12px;font-weight:400}
+#providerSetup .connect-group-more{display:block;margin:12px auto 0;font-family:var(--font-ui);font-size:13px}
+#providerSetup .connect-provider-directory{display:block}
 #providerSetupChoices .connect-provider-choice{display:flex;align-items:flex-start;gap:12px;width:100%;min-width:0;padding:18px;border:1px solid var(--border);border-radius:12px;background:var(--surface);color:var(--text);font-family:var(--font-ui);font-size:14px;line-height:1.5;text-align:left;cursor:pointer;transition:border-color .15s var(--ease),background .15s var(--ease)}
 #providerSetupChoices .connect-provider-choice:hover{border-color:var(--accent);background:var(--surface2)}
 #providerSetupChoices .connect-provider-choice:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
@@ -144,7 +162,8 @@ input,select,textarea{font-size:14px}
   #providerSetup .drawer-header,#providerSetup .drawer-footer{padding:16px}
   #providerSetup .drawer-body{padding:16px}
   #providerSetupChoices.connect-provider-grid,#providerSetupChoices .connect-provider-grid{grid-template-columns:minmax(0,1fr)}
-  #providerSetupChoices .connect-provider-choice{padding:16px}
+  #providerSetup .connect-provider-group-note{display:none}
+  #providerSetup .connect-provider-choice{padding:16px}
   #providerSetupContent .form-row{flex-direction:column}
   #providerSetupContent .field{width:100%;flex:auto}
   #providerSetupContent .section-body{padding:16px}
@@ -161,8 +180,7 @@ input,select,textarea{font-size:14px}
   #providerSetupChoices .connect-provider-choice{transition:none}
 }
 
-.provider-overview-strip{display:flex;flex-wrap:wrap;gap:16px;margin-bottom:20px;padding:16px 20px;border:1px solid var(--border);border-radius:12px;background:var(--surface)}
-.provider-overview-strip .system-stat{display:flex;align-items:baseline;gap:10px;flex:1;min-width:140px;min-height:0;padding:0;background:none;backdrop-filter:none}
+.provider-overview-strip{display:flex;flex-wrap:wrap;gap:16px;margin-bottom:20px;padding:16px 20px;border:1px solid var(--border);border-radius:12px;background:var(--surface)}.provider-overview-strip .system-stat{display:flex;align-items:baseline;gap:10px;flex:1;min-width:140px;min-height:0;padding:0;background:none;backdrop-filter:none}
 .provider-overview-strip .system-stat strong{font-size:23px;font-weight:650}
 .provider-overview-strip .system-stat span{margin:0;font-size:13px;letter-spacing:0;text-transform:none}
 .provider-auth-setup{margin-bottom:20px;padding:18px;border:1px solid var(--border);border-radius:12px;background:var(--accent-soft);font-size:14px;line-height:1.6}
@@ -188,3 +206,12 @@ input,select,textarea{font-size:14px}
   #tab-credentials .credential-oauth-section .title-tools{width:100%;margin-left:0}
   #tab-credentials .credential-diagnostics-body{padding:14px}
 }
+
+/* Accounts & Credentials: one inventory summary over both credential stores. */
+.credential-summary{display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; margin:0 0 20px}
+.credential-summary-tile{padding:14px 16px; border:1px solid var(--border); border-radius:12px; background:var(--surface)}
+.credential-summary-value{font-size:22px; font-weight:650; line-height:1.2; color:var(--text); font-variant-numeric:tabular-nums}
+.credential-summary-label{margin-top:4px; color:var(--text2); font-size:13px; font-weight:600}
+.credential-summary-sub{margin-top:2px; color:var(--text3); font-size:12px; line-height:1.5}
+.conn-provider-host{min-width:0}
+@media (max-width:900px){.credential-summary{grid-template-columns:minmax(0,1fr)}}

@@ -40,6 +40,10 @@ async function api(method, path, body) {
 }
 
 let _gatewayReachable = null;
+function gatewayV1URL() {
+  const { protocol, host } = window.location;
+  return protocol + '//' + host + '/v1';
+}
 function setGatewayReachability(ok) {
   _gatewayReachable = ok;
   const el = _('gatewayStatus'), label = _('gatewayStatusLabel');
@@ -47,7 +51,30 @@ function setGatewayReachability(ok) {
   el.classList.toggle('is-online', ok === true);
   el.classList.toggle('is-offline', ok === false);
   el.classList.toggle('is-checking', ok == null);
-  label.textContent = ok === true ? t('管理 API 可访问') : (ok === false ? t('管理 API 不可访问') : t('正在检查网关'));
+  label.textContent = gatewayV1URL();
+}
+function copyGatewayUrl(btn) {
+  const url = gatewayV1URL();
+  const done = () => {
+    if (!btn) return;
+    const prev = btn.innerHTML;
+    btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="var(--green)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>';
+    btn.classList.add('is-copied');
+    setTimeout(() => { btn.innerHTML = prev; btn.classList.remove('is-copied'); }, 1200);
+  };
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(url).then(done).catch(() => { fallbackCopy(url); done(); });
+  } else {
+    fallbackCopy(url); done();
+  }
+  try { toast(t('已复制到剪贴板'), 'success'); } catch (e) {}
+}
+function fallbackCopy(text) {
+  const ta = document.createElement('textarea');
+  ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+  document.body.appendChild(ta); ta.select();
+  try { document.execCommand('copy'); } catch (e) {}
+  document.body.removeChild(ta);
 }
 
 // ========== 后台登录 ==========

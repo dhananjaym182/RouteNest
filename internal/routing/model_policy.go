@@ -73,15 +73,39 @@ func ResolveClientModel(raw string) (resolved string, reject string) {
 	if _, isCombo := comboCatalog.FindCombo(id); !isCombo && id != "free" {
 		if alias, ok := cfg.AliasFor(id); ok && (alias.Force || !catalogHasModel(id)) {
 			target := alias.Target
-			bare, pin := providers.SplitPin(target)
-			if pin == "" && alias.Provider != "" {
-				target = bare + "@" + alias.Provider
+			bare, pin, err := ResolveModelReference(target)
+			if err != nil {
+				return id, err.Error()
+			}
+			if alias.Provider != "" {
+				instances, err := providers.SnapshotInstances()
+				if err != nil {
+					return id, err.Error()
+				}
+				explicit, err := resolveCandidatePin(instances, alias.Provider)
+				if err != nil {
+					return id, err.Error()
+				}
+				if pin.active() && pin.ProviderID != explicit.ProviderID {
+					return id, "model alias has conflicting provider references"
+				} else if prefix := cfg.ProviderModelPrefix(string(explicit.ProviderID)); prefix != "" {
+					target = prefix + "/" + bare
+				} else {
+					return id, "provider " + alias.Provider + " has no registered model namespace"
+				}
 			}
 			id = target
 		}
 	}
+	bare, _, err := ResolveModelReference(id)
+	if err != nil {
+		if _, _, qualified := cfg.SplitProviderModel(id); qualified {
+			return id, err.Error()
+		}
+		bare, _ = providers.SplitPin(id)
+	}
 
-	if cfg.ExcludesModel(id) || (id != raw && cfg.ExcludesModel(raw)) {
+	if cfg.ExcludesModel(id) || cfg.ExcludesModel(bare) || (id != raw && cfg.ExcludesModel(raw)) {
 		return id, "model " + raw + " is excluded by administrator policy"
 	}
 	return id, ""
@@ -90,26 +114,13 @@ func ResolveClientModel(raw string) (resolved string, reject string) {
 // catalogHasModel reports whether id is a real catalog model (so a non-forced
 // alias only shadows unknown ids).
 func catalogHasModel(id string) bool {
-	id = strings.TrimPrefix(strings.TrimSpace(id), "opencode/")
-	bare, _ := providers.SplitPin(id)
-	for _, m := range ModelsProvider() {
-		if m.ID == bare || m.ID == id {
-			return true
-		}
-	}
-	return false
+	_, ok := ModelForReference(id)
+	return ok
 }
 
 // modelEntryMeta returns the capability metadata stored for a model id.
 func modelEntryMeta(id string) (model, bool) {
-	id = strings.TrimPrefix(strings.TrimSpace(id), "opencode/")
-	bare, _ := providers.SplitPin(id)
-	for _, m := range ModelsProvider() {
-		if m.ID == bare || m.ID == id {
-			return m, true
-		}
-	}
-	return model{}, false
+	return ModelForReference(id)
 }
 
 // ApplyThinkingPolicy drops reasoning-effort parameters the resolved model does
@@ -151,14 +162,15 @@ func ExcludedForListing(id string) bool {
 
 // AliasListingEntries returns client-visible alias entries whose targets are
 // not themselves excluded or disabled.
-func AliasListingEntries() []map[string]any {
+func AliasListingEntries(onlyFree bool) []map[string]any {
 	cfg := liveConfig()
 	out := make([]map[string]any, 0, len(cfg.ModelAliases))
 	for _, a := range cfg.ModelAliases {
-		if ExcludedForListing(a.Alias) || ExcludedForListing(a.Target) {
+		resolved, reject := ResolveClientModel(a.Alias)
+		if reject != "" || ExcludedForListing(a.Alias) || ExcludedForListing(resolved) {
 			continue
 		}
-		if IsModelDisabled(a.Target) {
+		if IsModelDisabled(resolved) || onlyFree && !ModelFreeOnlyEligible(resolved) {
 			continue
 		}
 		out = append(out, map[string]any{

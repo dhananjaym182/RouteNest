@@ -2,6 +2,7 @@ package routing
 
 import (
 	"fmt"
+	"maps"
 	"net/url"
 	"sort"
 	"strings"
@@ -9,6 +10,7 @@ import (
 	"time"
 
 	"routenest/internal/accounts"
+	"routenest/internal/config"
 	"routenest/internal/credentials"
 	"routenest/internal/dispatch"
 	"routenest/internal/domain"
@@ -50,6 +52,9 @@ func resolveCandidatePin(instances []domain.ProviderInstance, raw string) (Candi
 		if string(instance.ID) == raw {
 			return CandidatePin{ProviderID: instance.ID}, nil
 		}
+	}
+	if providers.GeneratedProviderIDPin(raw) || config.ProviderModelIDReserved(raw) {
+		return CandidatePin{ProviderID: domain.ProviderInstanceID(raw)}, nil
 	}
 	matches := make([]domain.ProviderInstanceID, 0, 1)
 	for _, instance := range instances {
@@ -274,7 +279,10 @@ func ensureLegacyClineOfferings(input *CandidatePlanInput, modelIDs []string) {
 		catalog[model.ID] = model
 	}
 	for _, raw := range modelIDs {
-		modelID, _ := providers.SplitPin(strings.TrimSpace(raw))
+		modelID, pin, err := resolveModelReference(raw, &config.Proxy{ProviderModelPrefixes: input.ProviderModelPrefixes}, input.Instances, input.Offerings)
+		if err != nil || pin.active() && pin.ProviderID != "cline" {
+			continue
+		}
 		if modelID == "" {
 			continue
 		}
@@ -314,7 +322,7 @@ func BuildCandidateSnapshot(options SnapshotOptions) (CandidatePlanInput, error)
 	if err != nil {
 		return CandidatePlanInput{}, err
 	}
-	offerings, err := providers.SnapshotModelOfferings()
+	offerings, err := ModelOfferings()
 	if err != nil {
 		return CandidatePlanInput{}, err
 	}
@@ -327,15 +335,17 @@ func BuildCandidateSnapshot(options SnapshotOptions) (CandidatePlanInput, error)
 	if err != nil {
 		return CandidatePlanInput{}, err
 	}
-	modelID := strings.TrimSpace(options.ModelID)
+	cfg := liveConfig()
+	modelID, parsedPin, err := resolveModelReference(options.ModelID, cfg, instances, offerings)
+	if err != nil {
+		return CandidatePlanInput{}, err
+	}
 	pin := options.Pin
-	if bare, rawPin := providers.SplitPin(modelID); rawPin != "" {
-		modelID = bare
+	if parsedPin.active() {
 		if !pin.active() {
-			pin, err = resolveCandidatePin(instances, rawPin)
-			if err != nil {
-				return CandidatePlanInput{}, err
-			}
+			pin = parsedPin
+		} else if pin.ProviderID != parsedPin.ProviderID {
+			return CandidatePlanInput{}, fmt.Errorf("model reference %q conflicts with its provider pin", options.ModelID)
 		}
 	}
 	now := options.Now
@@ -345,12 +355,13 @@ func BuildCandidateSnapshot(options SnapshotOptions) (CandidatePlanInput, error)
 	input := CandidatePlanInput{
 		ModelID: modelID, OnlyFree: options.OnlyFree, Strategy: options.Strategy,
 		Pin: pin, Now: now, Instances: instances, Offerings: offerings,
-		Credentials:        normalizeCredentialSnapshot(credentialSnapshot, custom),
-		Observations:       providerstate.Default().Snapshot(""),
-		BudgetExhausted:    providers.SnapshotBudgetExhaustion(offerings),
-		CredentialRequired: snapshotCredentialPolicy(custom),
-		Egress:             egressSnapshot,
-		OfferingSignals:    snapshotSignals(options.Strategy, instances, offerings, custom),
+		Credentials:           normalizeCredentialSnapshot(credentialSnapshot, custom),
+		Observations:          providerstate.Default().Snapshot(""),
+		BudgetExhausted:       providers.SnapshotBudgetExhaustion(offerings),
+		CredentialRequired:    snapshotCredentialPolicy(custom),
+		Egress:                egressSnapshot,
+		OfferingSignals:       snapshotSignals(options.Strategy, instances, offerings, custom),
+		ProviderModelPrefixes: maps.Clone(cfg.ProviderModelPrefixes),
 	}
 	if options.AffinityKey != "" {
 		input.AffinityModelID = modelID
@@ -398,11 +409,7 @@ func comboPin(instances []domain.ProviderInstance, entry domain.ComboEntry) (Can
 	case "provider":
 		return resolveCandidatePin(instances, entry.Provider)
 	default:
-		_, rawPin := providers.SplitPin(entry.Model)
-		if rawPin == "" {
-			return CandidatePin{}, nil
-		}
-		return resolveCandidatePin(instances, rawPin)
+		return CandidatePin{}, nil
 	}
 }
 
@@ -422,8 +429,12 @@ func SnapshotAndPlanCombo(options SnapshotOptions, combo domain.ModelCombo) (Can
 	combined := CandidatePlan{}
 	seen := make(map[string]bool)
 	for index, entry := range combo.Entries {
+		entry, err = ResolveComboEntry(entry)
+		if err != nil {
+			return CandidatePlan{}, PlanDiagnostics{}, err
+		}
 		modelID := strings.TrimSpace(entry.Model)
-		if modelID == "" || entry.Disabled || IsModelDisabled(modelID) {
+		if modelID == "" || entry.Disabled {
 			continue
 		}
 		key := modelID + "\x00" + strings.TrimSpace(entry.Source) + "\x00" + strings.TrimSpace(entry.Provider)
@@ -435,9 +446,8 @@ func SnapshotAndPlanCombo(options SnapshotOptions, combo domain.ModelCombo) (Can
 		if err != nil {
 			return CandidatePlan{}, PlanDiagnostics{}, err
 		}
-		bare, _ := providers.SplitPin(modelID)
 		entryInput := input
-		entryInput.ModelID = bare
+		entryInput.ModelID = modelID
 		entryInput.Pin = pin
 		plan := PlanCandidates(entryInput)
 		for i := range plan.Candidates {

@@ -7,27 +7,35 @@
       <div class="large-subtitle">统一管理已连接的 OAuth 账号与 API 凭据。</div>
     </div>
     <div class="action-row">
-      <button type="button" class="btn btn-sm" onclick="loadGlobal(true);loadAccounts();loadConnections()">刷新</button>
+      <button type="button" class="btn btn-sm" onclick="loadGlobal(true);loadAccounts();loadConnections();loadStats()">刷新</button>
       <button type="button" class="btn btn-primary" onclick="openProviderSetup()">连接 Provider</button>
     </div>
   </div>
-  <div class="subtabs page-subtabs credential-view-tabs" data-page="accounts">
+  <div id="credentialSummary" class="credential-summary" aria-live="polite"></div>
+  <div class="subtabs page-subtabs credential-view-tabs" data-page="credentials">
     <button type="button" class="subtab active" data-sub="conns">OAuth 已连接账号</button>
     <button type="button" class="subtab" data-sub="inventory">API 凭据</button>
   </div>
 
   <div class="page-subpage" data-subpage="conns">
     <div class="section credential-oauth-section">
-      <div class="section-title"><span>OAuth 已连接账号</span>
+      <div class="section-title"><span>连接 OAuth 服务</span>
         <span class="title-tools"><button type="button" class="btn btn-sm" onclick="showPageSubTab('providers','oauth')">管理 OAuth 服务</button></span>
       </div>
-      <div class="section-desc">查看已登录账号的状态与用量。连接新服务或添加账号，请前往 Providers 的 OAuth 设置。</div>
+      <div class="section-desc">选择一个服务登录账号。已登录的账号在下方统一管理。</div>
+      <div class="section-body"><div data-conn-provider-groups class="conn-provider-host"></div></div>
+    </div>
+    <div class="section credential-oauth-section">
+      <div class="section-title"><span>已连接的 OAuth 账号</span>
+        <span class="title-tools"><button type="button" class="btn btn-sm" onclick="loadConnections(true)">刷新</button></span>
+      </div>
+      <div class="section-desc">查看已登录账号的状态与用量，可测试或删除单个连接。</div>
       <div class="section-body flush">
         <div id="connectionsList" class="table-sheet"></div>
       </div>
     </div>
   <div class="section">
-    <div class="section-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg><span>Cline 已连接账号</span>
+    <div class="section-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg><span>Cline 账号</span>
       <span class="title-tools action-row">
         <button class="btn btn-sm" onclick="testAllAccounts(this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>测试全部</button>
         <button class="btn btn-sm" onclick="exportAccounts(this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>导出全部</button>
@@ -125,7 +133,7 @@
 <aside id="credentialDetail" class="drawer drawer-wide" role="dialog" aria-modal="true" aria-labelledby="credentialDetailTitle">
   <div class="drawer-header">
     <div class="drawer-title" id="credentialDetailTitle">凭据详情</div>
-    <button type="button" class="drawer-close" onclick="closeCredentialDetail()" aria-label="关闭"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+    <button type="button" class="drawer-close" onclick="closeCredentialDetail()" aria-label="关闭面板"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
   </div>
   <div class="drawer-body" id="credentialDetailBody">
     <div class="sk-stack"><span class="skeleton"></span><span class="skeleton w70"></span><span class="skeleton w45"></span></div>

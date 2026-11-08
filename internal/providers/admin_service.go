@@ -7,6 +7,7 @@ package providers
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log"
 	"strings"
@@ -124,6 +125,9 @@ func SaveCustomProvider(p CustomProvider) (CustomProvider, error) {
 	p.ConnectionIDs = cids
 	if p.ConnectionID != "" && !connections.ConnectionExists(p.ConnectionID) {
 		p.ConnectionID = ""
+	}
+	if err := ensureModelPrefixForProvider(&p); err != nil {
+		return CustomProvider{}, fmt.Errorf("reserve provider model namespace: %w", err)
 	}
 	saved := Upsert(&p)
 	syncModels() // 模型列表 / 回退链立即反映变更

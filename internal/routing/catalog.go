@@ -84,6 +84,7 @@ func allModelsFrom(list []domain.Model, initialized bool) []domain.Model {
 func BuildModelsList(onlyFree bool) []map[string]any {
 	all := AllModels()
 	list := make([]map[string]any, 0, len(all))
+	seen := make(map[string]int, len(all))
 	for _, m := range all {
 
 		if m.Disabled {
@@ -96,9 +97,17 @@ func BuildModelsList(onlyFree bool) []map[string]any {
 		if onlyFree && !IsFreeModelEntry(m) {
 			continue
 		}
+		if _, exists := seen[m.ID]; exists {
+			continue
+		}
+		if _, _, reserved := liveConfig().SplitProviderModel(m.ID); reserved {
+			continue
+		}
 		ownedBy := "cline"
 		if m.Source == "zen" || m.Provider == "opencode" {
 			ownedBy = "opencode"
+		} else if m.Source == models.SourceProvider {
+			ownedBy = m.Provider
 		}
 		entry := map[string]any{
 			"id":       m.ID,
@@ -121,12 +130,14 @@ func BuildModelsList(onlyFree bool) []map[string]any {
 		if len(m.OutputModalities) > 0 {
 			entry["output_modalities"] = m.OutputModalities
 		}
+		seen[m.ID] = len(list)
 		list = append(list, entry)
 	}
 	for _, c := range comboCatalog.EnabledCombos() {
 		if ExcludedForListing(c.ID) {
 			continue
 		}
+		seen[c.ID] = len(list)
 		list = append(list, map[string]any{
 			"id":       c.ID,
 			"object":   "model",
@@ -134,7 +145,18 @@ func BuildModelsList(onlyFree bool) []map[string]any {
 			"owned_by": "combo",
 		})
 	}
-	list = append(list, AliasListingEntries()...)
+	for _, entry := range AliasListingEntries(onlyFree) {
+		id, _ := entry["id"].(string)
+		if index, exists := seen[id]; exists {
+			if alias, ok := liveConfig().AliasFor(id); ok && alias.Force {
+				list[index] = entry
+			}
+			continue
+		}
+		seen[id] = len(list)
+		list = append(list, entry)
+	}
+	list = append(list, ProviderModelListingEntries(onlyFree)...)
 	return list
 }
 
@@ -201,6 +223,21 @@ func IsFreeModelEntry(m domain.Model) bool {
 // （remote 同步 / 管理页设置 / 用户自定义模型）。zen 模型的 Output 是压缩预算
 // 用的估值（未知模型默认 32768），作为硬上限会误伤长输出，跳过。
 func ModelMaxOutputLimit(model string) int {
+	bare, pin, err := ResolveModelReference(model)
+	if err != nil {
+		return 0
+	}
+	if pin.active() {
+		if pin.ProviderID == "cline" {
+			if meta, ok := LookupClineModelMeta(bare); ok && meta.Output > 0 {
+				return meta.Output
+			}
+		}
+		if m, ok := ModelForReference(model); ok && pin.ProviderID != "opencode" {
+			return m.Output
+		}
+		return 0
+	}
 	if meta, ok := LookupClineModelMeta(model); ok && meta.Output > 0 {
 		return meta.Output
 	}
@@ -300,6 +337,11 @@ func LiveModelSet(list []domain.Model) map[string]bool {
 // 停用语义：不进客户端模型列表、直接请求在入口处拒绝、默认模型与回退链跳过。
 func IsModelDisabled(id string) bool {
 	id = strings.TrimSpace(id)
+	_, pin, err := ResolveModelReference(id)
+	if err == nil && pin.active() {
+		m, ok := ModelForReference(id)
+		return ok && m.Disabled
+	}
 	id = strings.TrimPrefix(id, "opencode/")
 	if id == "" {
 		return false

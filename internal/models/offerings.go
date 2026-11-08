@@ -2,6 +2,7 @@ package models
 
 import (
 	"sort"
+	"strings"
 
 	"routenest/internal/domain"
 )
@@ -120,14 +121,15 @@ func addOffering(out map[domain.OfferingKey]domain.ModelOffering, model domain.M
 // mutating the persisted catalogue or provider records.
 func ProjectOfferings(records []domain.Model, sources []OfferingSource) []domain.ModelOffering {
 	instances := make(map[domain.ProviderInstanceID]domain.ProviderInstance, len(sources))
-	byName := make(map[string]domain.ProviderInstance, len(sources))
-	states := make(map[domain.ProviderInstanceID]map[string]domain.ModelOfferingState, len(sources))
 	recordByID := make(map[string]domain.Model, len(records))
+	nameOwners := make(map[string]int, len(sources))
 	for _, source := range sources {
 		instances[source.Instance.ID] = source.Instance
-		states[source.Instance.ID] = source.States
-		if source.Instance.Name != "" {
-			byName[source.Instance.Name] = source.Instance
+		if source.Instance.ID != "cline" && source.Instance.ID != "opencode" {
+			name := strings.ToLower(strings.TrimSpace(source.Instance.Name))
+			for _, modelID := range source.ModelIDs {
+				nameOwners[name+"\x00"+modelID]++
+			}
 		}
 	}
 	for _, model := range records {
@@ -141,13 +143,6 @@ func ProjectOfferings(records []domain.Model, sources []OfferingSource) []domain
 			addOffering(projected, model, instances["cline"], domain.ModelOfferingState{}, false)
 		case SourceZen, SourceSeed:
 			addOffering(projected, model, instances["opencode"], domain.ModelOfferingState{}, false)
-		case SourceProvider:
-			// Normal provider ownership comes from ModelIDs below. A name match
-			// preserves orphaned legacy projections until their provider is saved.
-			if instance, ok := byName[model.Provider]; ok {
-				state, hasState := states[instance.ID][model.ID]
-				addOffering(projected, model, instance, state, hasState)
-			}
 		case SourceCustom:
 			// Legacy manual models route through the Cline path when no custom
 			// provider claims them; preserve that behavior in the read model.
@@ -165,6 +160,14 @@ func ProjectOfferings(records []domain.Model, sources []OfferingSource) []domain
 				model = domain.Model{ID: modelID, Source: SourceProvider, Status: "active"}
 			}
 			state, hasState := source.States[modelID]
+			// Runtime provider overlays are seeded with their own evidence. A
+			// sparse overlay may inherit only an unambiguous legacy owner;
+			// another provider's limits and status are not defaults for it.
+			name := strings.ToLower(strings.TrimSpace(source.Instance.Name))
+			if hasState && state.Valid() && (model.Source != SourceProvider ||
+				!strings.EqualFold(strings.TrimSpace(model.Provider), strings.TrimSpace(source.Instance.Name)) || nameOwners[name+"\x00"+modelID] != 1) {
+				model = domain.Model{ID: modelID, Source: SourceProvider, Status: "active"}
+			}
 			addOffering(projected, model, source.Instance, state, hasState)
 		}
 	}

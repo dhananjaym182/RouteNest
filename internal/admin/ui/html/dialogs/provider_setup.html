@@ -2,13 +2,14 @@
 <aside id="providerSetup" class="drawer drawer-connect" role="dialog" aria-modal="true" aria-labelledby="providerSetupTitle">
   <div class="drawer-header">
     <div><div class="drawer-title" id="providerSetupTitle">连接 Provider</div><p class="setup-intro">选择服务，然后完成登录或连接设置。</p></div>
-    <button type="button" class="drawer-close" onclick="closeProviderSetup()" aria-label="关闭">×</button>
+    <button type="button" class="drawer-close" onclick="closeProviderSetup()" aria-label="关闭面板">×</button>
   </div>
   <div class="drawer-body">
     <div id="providerSetupDirectory">
       <label for="providerSetupSearch">搜索服务</label>
       <input type="search" id="providerSetupSearch" placeholder="搜索 Provider 名称或连接方式…" oninput="renderProviderSetupChoices()">
-      <div id="providerSetupChoices" class="connect-provider-grid" aria-live="polite"></div>
+      <div id="providerSetupFilters" class="connect-filter-row" role="group" aria-label="按连接方式筛选"></div>
+      <div id="providerSetupChoices" class="connect-provider-directory" aria-live="polite"></div>
     </div>
     <div id="providerSetupWorkspace" hidden>
       <button type="button" class="btn btn-sm" onclick="showProviderSetupDirectory()">← 选择其他服务</button>
@@ -16,5 +17,5 @@
       <div id="providerSetupContent"></div>
     </div>
   </div>
-  <div class="drawer-footer"><span class="setup-footer-note">凭据仅保存在您的服务器。</span><button type="button" class="btn btn-sm" onclick="closeProviderSetup()">关闭</button></div>
+  <div class="drawer-footer"><span class="setup-footer-note">凭据仅保存在您的服务器。</span><button type="button" class="btn btn-sm" onclick="closeProviderSetup()">关闭面板</button></div>
 </aside>

@@ -25,6 +25,9 @@ func configureRuntimeState() error {
 		return fmt.Errorf("hydrate provider availability: %w", err)
 	}
 	providers.Load()
+	if err := providers.EnsureModelPrefixes(); err != nil {
+		return fmt.Errorf("reserve provider model namespaces: %w", err)
+	}
 	if err := importLegacyProviderCooldowns(availability, providers.LegacyCooldowns(now())); err != nil {
 		return fmt.Errorf("import legacy provider cooldowns: %w", err)
 	}

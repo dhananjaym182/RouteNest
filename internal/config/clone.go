@@ -14,6 +14,7 @@ func (p *Proxy) Clone() *Proxy {
 	c.ModelChain = cloneSlice(p.ModelChain)
 	c.Combos = cloneCombosDeep(p.Combos)
 	c.ModelAliases = cloneSlice(p.ModelAliases)
+	c.ProviderModelPrefixes = cloneStringMap(p.ProviderModelPrefixes)
 	c.ExcludedModels = cloneSlice(p.ExcludedModels)
 	if p.RequestErrorRules != nil {
 		c.RequestErrorRules = make([]RequestErrorRule, len(p.RequestErrorRules))

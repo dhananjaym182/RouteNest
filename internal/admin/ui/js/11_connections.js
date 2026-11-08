@@ -35,6 +35,7 @@ async function loadConnectionSnapshot() {
   }
   renderConnectionProviders();
   renderConnectionsList();
+  if (typeof renderCredentialSummary === 'function') renderCredentialSummary();
   // 导入弹窗的 Provider 下拉随连接列表刷新（流程 / 已有连接分组可能变化）
   const imp = _('connImportModal');
   if (imp && imp.style.display === 'flex') connImportBuildSelect();
@@ -55,9 +56,12 @@ function flowIconText(provider) {
 }
 
 function renderConnectionProviders() {
-  const box = _('connProviderGroups');
-  if (!box) return;
-  if (!_connFlows.length) { box.innerHTML = ''; return; }
+  // The tile grid is the one place a service can be connected from. Providers
+  // and Accounts & Credentials both host it; render into whichever mounts exist
+  // so the two pages cannot drift into different connection stories.
+  const hosts = Array.from(document.querySelectorAll('[data-conn-provider-groups]'));
+  if (!hosts.length) return;
+  if (!_connFlows.length) { hosts.forEach(box => { box.innerHTML = ''; }); return; }
 
   const byProv = {};
   _connList.forEach(c => { const k = c.provider || ''; (byProv[k] = byProv[k] || []).push(c); });
@@ -102,7 +106,8 @@ function renderConnectionProviders() {
       '<div class="conn-provider-group-title">' + title + ' <span class="conn-provider-count">' + list.length + '</span></div>' +
       '<div class="conn-provider-grid">' + list.map(tile).join('') + '</div>' +
     '</div>';
-  box.innerHTML = group(t('已连接'), connected) + group(t('未连接'), unconnected);
+  const html = group(t('已连接'), connected) + group(t('未连接'), unconnected);
+  hosts.forEach(box => { box.innerHTML = html; });
 }
 
 // Token 到期倒计时：<1h 红（紧急）、<24h 琥珀、其余灰
