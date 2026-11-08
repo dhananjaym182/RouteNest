@@ -39,6 +39,7 @@ func ReplaceSource(source string, build func(current []domain.Model) []domain.Mo
 				current = append(current, cloneModel(m))
 			}
 		}
+		current = FilterRemovedModelRecords(p, current)
 		desired := build(current)
 
 		oldIDs := make(map[string]bool, len(current))
@@ -61,6 +62,9 @@ func ReplaceSource(source string, build func(current []domain.Model) []domain.Mo
 			err = reconcileErr
 			return false
 		}
+		// Validate the authoritative upstream list before filtering. A successful
+		// list containing only removed offerings is an intentional empty source.
+		desired = FilterRemovedModelRecords(p, desired)
 		toDelist := make(map[string]bool, len(presence.ToDelist))
 		for _, id := range presence.ToDelist {
 			toDelist[id] = true

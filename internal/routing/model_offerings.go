@@ -50,8 +50,11 @@ func ModelOfferings() ([]domain.ModelOffering, error) {
 		}
 	}
 	out := make([]domain.ModelOffering, 0, len(byKey))
+	removed := models.OfferingRemovalReservations()
 	for _, offering := range byKey {
-		out = append(out, offering)
+		if !removed[offering.Key()] {
+			out = append(out, offering)
+		}
 	}
 	sort.Slice(out, func(i, j int) bool {
 		if out[i].ProviderID != out[j].ProviderID {

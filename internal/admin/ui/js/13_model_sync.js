@@ -127,10 +127,12 @@ function observeProviderSyncDelistings(providers, sync) {
 
 function readProviderModelSync() {
   if (!_modelProviderStatusRead) {
+    const providerAdmin = modelSyncCanRemove();
     _modelProviderStatusRead = Promise.all([
-      api('GET', '/providers'), api('GET', '/providers/sync-status'),
+      api('GET', providerAdmin ? '/providers' : '/provider-instances'), api('GET', '/providers/sync-status'),
     ]).then(([providers, sync]) => observeProviderSyncDelistings(
-      (providers.data && providers.data.providers) || [],
+      providerAdmin ? (providers.data && providers.data.providers) || [] :
+        ((providers.data && providers.data.instances) || []).filter(p => p.id !== 'cline' && p.id !== 'opencode'),
       (sync.data && sync.data.providers) || {},
     )).finally(() => { _modelProviderStatusRead = null; });
   }
@@ -299,6 +301,21 @@ function modelRemovalBatches(targets) {
   return batches;
 }
 
+function removeCompletedModelSyncNotices(completed) {
+  _modelSyncGroups.forEach((group, key) => {
+    group.removed.forEach(id => {
+      const target = modelSyncRemovalRef(key, id);
+      if (target && completed.some(item => sameModelSyncRemoval(target, item))) group.removed.delete(id);
+    });
+    if (!group.added.size && !group.removed.size) _modelSyncGroups.delete(key);
+  });
+  const overlay = _('modelSyncOverlay');
+  if (!_modelSyncRemoving && overlay && overlay.style.display === 'flex') {
+    if (!_modelSyncGroups.size && !_modelSyncRemovalError) closeModelSyncModal();
+    else renderModelSyncModal();
+  }
+}
+
 async function removeDelistedModels(indices) {
   if (_modelSyncRemoving || !modelSyncCanRemove()) return;
   const targets = indices ? indices.map(index => _modelSyncRemovalTargets[index]).filter(Boolean) : _modelSyncRemovalTargets.slice();
@@ -321,13 +338,7 @@ async function removeDelistedModels(indices) {
       }
     }
     const completed = result.removed.concat(result.skipped);
-    _modelSyncGroups.forEach((group, key) => {
-      group.removed.forEach(id => {
-        const target = modelSyncRemovalRef(key, id);
-        if (target && completed.some(item => sameModelSyncRemoval(target, item))) group.removed.delete(id);
-      });
-      if (!group.added.size && !group.removed.size) _modelSyncGroups.delete(key);
-    });
+    removeCompletedModelSyncNotices(completed);
     _modelSyncRemovalError = Array.from(new Set((result.errors || []).map(item => item.error).filter(Boolean))).join('; ');
     if (result.removed.length) toast(t('已移除 ') + result.removed.length, 'success');
     if (result.skipped.length) toast(t('模型已恢复或已移除，无需清理'), 'info');

@@ -23,10 +23,11 @@ function modelProviderNameIndex() {
 
 function modelProviderNameButton(offering) {
   const name = offering.qualifiedId;
+  const slash = name.indexOf('/');
   const label = t('复制模型名') + ': ' + name;
   return '<button type="button" class="model-provider-name" onclick="copyText(' + escAttr(JSON.stringify(name)) + ')"' +
     ' title="' + escAttr(label + (offering.providerName ? ' · ' + offering.providerName : '')) + '" aria-label="' + escAttr(label) + '">' +
-    '<code>' + esc(name) + '</code>' +
+    '<code><span class="model-provider-prefix">' + esc(name.slice(0, slash + 1)) + '</span><span class="model-provider-model">' + esc(name.slice(slash + 1)) + '</span></code>' +
     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>';
 }
 
@@ -197,6 +198,7 @@ function renderModelStats(merged) {
 }
 
 function renderModelRow(m) {
+  const argument = value => escAttr(JSON.stringify(value));
   let tags = '';
   const hasFree = m._costs.indexOf('free') !== -1;
   const hasPass = m._costs.indexOf('pass') !== -1;
@@ -211,7 +213,7 @@ function renderModelRow(m) {
   // cost, matching the provider import preview (manual tiering shows no badge).
   if (m.tierSignal && m.tierSignal !== 'manual' && _tierSignals[m.tierSignal]) {
     const sigLabel = t(_tierSignals[m.tierSignal]);
-    tags += '<span class="model-source-badge" title="' + escAttr(t('自动判定层级') + ': ' + sigLabel) + '">' + esc(sigLabel) + '</span>';
+    tags += '<span class="model-source-badge model-tier-signal" title="' + escAttr(t('自动判定层级') + ': ' + sigLabel) + '" aria-label="' + escAttr(sigLabel) + '"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7v1"/></svg></span>';
   }
   if (m._delistedAll) {
     tags += '<span class="delisted-badge" title="' + t('已从上游官方列表移除，实测可能仍可用；同步只标记不删除，上游报模型不存在时自动清理') + '">' + t('已下架') + '</span>';
@@ -221,7 +223,7 @@ function renderModelRow(m) {
     else if (s === 'provider') {
       // 别名标识： Provider 来源的 badge 显示真实名称（多源同名模型全部列出）
       const n = (m._provNames && m._provNames.length) ? m._provNames.join(' · ') : (m.provider || MODEL_SOURCE_LABEL[s]);
-      tags += '<span class="model-source-badge provider" title="' + esc(m.id) + '">' + esc(n) + '</span>';
+      tags += '<span class="model-source-badge provider" title="' + escAttr(n) + '">' + esc(n) + '</span>';
     }
     else tags += '<span class="model-source-badge ' + s + '">' + MODEL_SOURCE_LABEL[s] + '</span>';
   }
@@ -229,15 +231,17 @@ function renderModelRow(m) {
   // 手动设置的 Output 会作为 modelMaxOutputLimit 的封顶值生效
   const prevTest = _modelTestResults[m.id] || null;
   let actions =
-    '<button class="btn btn-sm btn-xs" onclick="testModelRow(\'' + escAttr(m.id) + '\', this)" title="' + t('测试') + '" aria-label="' + t('测试') + '">' + t('测试') + '</button>' +
-    '<button class="btn btn-sm btn-xs" onclick="editModelMeta(\'' + esc(m.id) + '\',' + m.context + ',' + m.output + ',\'' + esc(m.cost || '') + '\',\'' + esc(m.tierSignal || '') + '\')" title="' + t('上下文窗口 / 最大输出 (token)，点击⚙修改') + '" aria-label="' + t('上下文窗口 / 最大输出 (token)，点击⚙修改') + '">⚙</button>';
+    '<button class="btn btn-sm btn-xs" onclick="testModelRow(' + argument(m.id) + ', this)" title="' + t('测试') + '" aria-label="' + t('测试') + '">' + t('测试') + '</button>' +
+    '<button class="btn btn-sm btn-xs" onclick="editModelMeta(' + [m.id, m.context, m.output, m.cost || '', m.tierSignal || ''].map(argument).join(',') + ')" title="' + t('上下文窗口 / 最大输出 (token)，点击⚙修改') + '" aria-label="' + t('上下文窗口 / 最大输出 (token)，点击⚙修改') + '">⚙</button>';
   if (m._customAny || m._delistedAny) {
-    actions += '<button class="btn btn-sm btn-danger btn-xs" onclick="deleteModel(\'' + esc(m.id) + '\')" title="' + (m._delistedAny ? t('移除（已下架模型支持手动移除）') : t('删除')) + '" aria-label="' + (m._delistedAny ? t('移除（已下架模型支持手动移除）') : t('删除')) + '">'+uiIcon('close')+'</button>';
+    actions += '<button class="btn btn-sm btn-danger btn-xs" onclick="deleteModel(' + argument(m.id) + ')" title="' + (m._delistedAny ? t('移除（已下架模型支持手动移除）') : t('删除')) + '" aria-label="' + (m._delistedAny ? t('移除（已下架模型支持手动移除）') : t('删除')) + '">'+uiIcon('close')+'</button>';
   }
   return '<div class="model-row' + (m._disabled ? ' disabled-row' : '') + '">' +
-    '<label class="switch model-col-switch" title="' + (m._disabled ? t('点击启用该模型') : t('点击停用该模型')) + '"><input type="checkbox"' + (m._disabled ? '' : ' checked') + ' onchange="toggleModel(\'' + esc(m.id) + '\', !this.checked)"><span class="slider"></span></label>' +
-    '<div class="model-row-main"><span class="model-row-id mono">' + esc(m.id) + '</span>' + (tags ? '<span class="model-row-tags">' + tags + '</span>' : '') +
-      (m._providerModelNames && m._providerModelNames.length ? '<div class="model-provider-names"><span class="hint-xs">' + esc(t('Provider 模型名')) + '</span>' + m._providerModelNames.map(modelProviderNameButton).join('') + '</div>' : '') + '</div>' +
+    '<label class="switch model-col-switch" title="' + (m._disabled ? t('点击启用该模型') : t('点击停用该模型')) + '"><input type="checkbox"' + (m._disabled ? '' : ' checked') + ' onchange="toggleModel(' + argument(m.id) + ', !this.checked)"><span class="slider"></span></label>' +
+    '<div class="model-row-main' + (m._providerModelNames && m._providerModelNames.length > 1 ? ' has-many-provider-names' : '') + '"><div class="model-row-names"><span class="model-row-id mono" title="' + escAttr(m.id) + '">' + esc(m.id) + '</span>' +
+      (m._providerModelNames && m._providerModelNames.length ? '<div class="model-provider-names" role="group" aria-label="' + escAttr(t('Provider 模型名')) + '">' + m._providerModelNames.map(modelProviderNameButton).join('') + '</div>' : '') +
+      '</div>' +
+      (tags ? '<span class="model-row-tags">' + tags + '</span>' : '') + '</div>' +
     '<div class="model-row-cell mono" title="' + t('上下文') + '">' + (m.context ? formatTokenCount(m.context) : '—') + '</div>' +
     '<div class="model-row-cell mono" title="' + t('输出') + '">' + (m.output ? formatTokenCount(m.output) : '—') + '</div>' +
     '<div class="model-row-test" title="' + (prevTest && !prevTest.ok ? escAttr(prevTest.text) : '') + '" ' + (prevTest ? 'data-tested="1"' : '') + '>' + (prevTest ? renderTestResultHTML(prevTest.ok, prevTest.text) : '<span class="model-untested">—</span>') + '</div>' +
@@ -349,10 +353,13 @@ function renderModelList() {
     if (!sources.has(sk)) sources.set(sk, []);
     sources.get(sk).push(m);
   }
-  const groupActions = () =>
+  const groupActions = key =>
     '<span class="model-group-actions" onclick="event.stopPropagation()">' +
       '<button class="btn" onclick="toggleModelsBatchEl(this, false)">' + t('全部启用') + '</button>' +
       '<button class="btn" onclick="toggleModelsBatchEl(this, true)">' + t('全部停用') + '</button>' +
+      (modelSyncCanRemove() && key !== 'src:other' ?
+        '<button type="button" class="btn" data-model-provider-action="edit" onclick="openModelProviderAction(this, &quot;edit&quot;)">' + t('编辑 Provider') + '</button>' +
+        '<button type="button" class="btn btn-danger" data-model-provider-action="remove" onclick="openModelProviderAction(this, &quot;remove&quot;)">' + t('移除模型') + '</button>' : '') +
     '</span>';
   const groupStats = rows => {
     let en = 0, fail = 0;
@@ -364,12 +371,12 @@ function renderModelList() {
   };
   const groupHead = (key, label, rows, open, src) => {
     const st = groupStats(rows);
-    return '<div class="model-group-head' + (src ? ' model-group-src-head' : '') + (open ? ' expanded' : '') + '" data-key="' + escAttr(key) + '" onclick="toggleModelGroupEl(this)" title="' + t('点击展开/折叠') + '">' +
+    return '<div class="model-group-head' + (src ? ' model-group-src-head' : '') + (open ? ' expanded' : '') + '" data-key="' + escAttr(key) + '" data-provider-ids="' + escAttr(JSON.stringify(modelGroupProviders(key).map(p => p.id))) + '" onclick="toggleModelGroupEl(this)" title="' + t('点击展开/折叠') + '">' +
       '<span class="model-group-caret">' + uiIcon('caretRight') + '</span>' +
       '<span class="model-group-label">' + esc(label) + '</span>' +
       '<span class="model-group-count">' + st.en + '/' + rows.length + '</span>' +
       (st.fail ? '<span class="model-group-fail">' + st.fail + ' ' + t('测试失败') + '</span>' : '') +
-      groupActions() +
+      groupActions(key) +
     '</div>';
   };
   listEl.innerHTML = modelColHead() + Array.from(sources.keys()).sort(sourceSortKey).map(sk => {
@@ -576,6 +583,7 @@ document.addEventListener('keydown', e => {
   if (!e || e.key !== 'Escape') return;
   if (_('confirmModal') && _('confirmModal').style.display === 'flex') { resolveConfirm(false); return; }
   if (_('diffModal') && _('diffModal').style.display === 'flex') { resolveDiff(false); return; }
+  if (_('modelProviderActionModal') && _('modelProviderActionModal').style.display === 'flex') { closeModelProviderAction(); return; }
   if (_('modelMetaEditor') && _('modelMetaEditor').style.display === 'flex') { hideModelMetaEditor(); return; }
   if (_('provPickerModal') && _('provPickerModal').style.display === 'flex') { closeProvModelPicker(); return; }
   if (_('presetPickerModal') && _('presetPickerModal').style.display === 'flex') { closePresetPicker(); return; }
@@ -604,6 +612,7 @@ async function deleteModel(id) {
 
 // ========== 配置加载 ==========
 async function loadConfig(options = {}) {
+  if (typeof adminHasPermission === 'function' && !adminHasPermission('provider.write')) return;
   try {
     const d = await api('GET', '/config');
     const c = d.data;

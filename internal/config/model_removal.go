@@ -77,10 +77,10 @@ func PruneModelReferences(ref domain.ModelRemovalRef, removeGlobal, removeSource
 		entries := make([]domain.ComboEntry, 0, len(combo.Entries))
 		for _, entry := range combo.Entries {
 			pin := entry.Provider
-			if entry.Source == "cline" {
+			switch strings.TrimSpace(entry.Source) {
+			case "cline", "remote":
 				pin = "cline"
-			}
-			if entry.Source == "zen" {
+			case "zen":
 				pin = "opencode"
 			}
 			if !modelMatches(entry.Model, pin) {

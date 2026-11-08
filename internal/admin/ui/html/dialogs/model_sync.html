@@ -2,6 +2,29 @@
   <div id="modelSyncModal" role="dialog" aria-modal="true" aria-labelledby="modelSyncTitle"></div>
 </div>
 
+<div id="modelProviderActionModal" class="overlay-modal overlay-top" onclick="if(event.target===this)closeModelProviderAction()">
+  <div class="modal-card modal-card-col" role="dialog" aria-modal="true" aria-labelledby="modelProviderActionTitle" aria-describedby="modelProviderActionNote">
+    <h2 id="modelProviderActionTitle" class="modal-title">移除模型</h2>
+    <p id="modelProviderActionNote" class="modal-sub"></p>
+    <div id="modelProviderActionProviderField" class="field">
+      <label for="modelProviderActionProvider">选择 Provider 实例</label>
+      <select id="modelProviderActionProvider" onchange="selectModelProviderAction(this.value)"></select>
+    </div>
+    <div id="modelProviderActionSearchRow" class="modal-search-row">
+      <input type="search" id="modelProviderActionSearch" placeholder="搜索模型 ID 或 Provider 模型名…" aria-label="搜索模型" oninput="renderModelProviderActionList()">
+      <button type="button" class="btn btn-sm" id="modelProviderActionSelectAll" onclick="selectAllModelProviderRemovals()">全选当前结果</button>
+      <button type="button" class="btn btn-sm" id="modelProviderActionClear" onclick="clearModelProviderRemovals()">清空</button>
+    </div>
+    <div id="modelProviderActionList" class="combo-picker-list"></div>
+    <p id="modelProviderActionError" class="model-sync-error" role="alert" hidden></p>
+    <div class="modal-actions">
+      <span id="modelProviderActionCount" class="mr-auto hint-mut" role="status"></span>
+      <button type="button" class="btn btn-sm" id="modelProviderActionCancel" onclick="closeModelProviderAction()">取消</button>
+      <button type="button" class="btn btn-sm btn-danger" id="modelProviderActionSubmit" onclick="submitModelProviderAction()" disabled>移除所选模型</button>
+    </div>
+  </div>
+</div>
+
       <div id="modelMetaEditor" class="overlay-modal">
         <div class="modal-card w500">
         <div class="form-row">

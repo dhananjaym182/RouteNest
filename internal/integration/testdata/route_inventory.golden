@@ -70,6 +70,7 @@
 /admin/api/models/import/discard	POST	routes.go	wrap=security[provider.write,csrf=session]	handler=registry
 /admin/api/models/import/pending	GET	routes.go	wrap=security[admin.view,csrf=safe]	handler=registry
 /admin/api/models/import/preview	POST	routes.go	wrap=security[provider.write,csrf=session]	handler=registry
+/admin/api/models/remove	POST	routes.go	wrap=security[provider.write,csrf=session]	handler=registry
 /admin/api/models/sync	POST	routes.go	wrap=security[provider.write,csrf=session]	handler=registry
 /admin/api/models/test	POST	routes.go	wrap=security[provider.write,csrf=session]	handler=registry
 /admin/api/models/toggle	POST	routes.go	wrap=security[provider.write,csrf=session]	handler=registry

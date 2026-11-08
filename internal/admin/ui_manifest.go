@@ -24,6 +24,7 @@ var adminUIJSAssets = []string{
 	"ui/js/13_models.js",
 	"ui/js/13_model_sync.js",
 	"ui/js/13_model_cleanup.js",
+	"ui/js/13_model_provider_actions.js",
 	"ui/js/14_logs.js",
 	"ui/js/15_dashboard.js",
 	"ui/js/17_quota.js",

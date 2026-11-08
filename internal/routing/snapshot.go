@@ -268,6 +268,7 @@ func ensureLegacyClineOfferings(input *CandidatePlanInput, modelIDs []string) {
 	if !cline.ID.Valid() {
 		return
 	}
+	removed := models.OfferingRemovalReservations()
 	existing := make(map[domain.OfferingKey]bool, len(input.Offerings))
 	offered := make(map[string]bool, len(input.Offerings))
 	for _, offering := range input.Offerings {
@@ -287,6 +288,9 @@ func ensureLegacyClineOfferings(input *CandidatePlanInput, modelIDs []string) {
 			continue
 		}
 		key := domain.OfferingKey{ProviderID: "cline", ModelID: modelID}
+		if removed[key] {
+			continue
+		}
 		if existing[key] {
 			continue
 		}

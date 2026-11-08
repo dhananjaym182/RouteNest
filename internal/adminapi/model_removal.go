@@ -10,7 +10,8 @@ import (
 )
 
 type ModelRemoval struct {
-	Remove func(domain.ModelRemovalRef) (bool, error)
+	Remove   func(domain.ModelRemovalRef) (bool, error)
+	Validate func([]domain.ModelRemovalRef) error
 }
 
 // ServeHTTP handles explicit individual or bulk cleanup. Validation is completed
@@ -42,6 +43,12 @@ func (handler *ModelRemoval) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		request.Models[index] = ref
+	}
+	if handler.Validate != nil {
+		if err := handler.Validate(request.Models); err != nil {
+			httpx.WriteAPI(w, http.StatusBadRequest, httpx.Response{Error: err.Error()})
+			return
+		}
 	}
 	result := domain.ModelRemovalResult{Removed: []domain.ModelRemovalRef{}, Skipped: []domain.ModelRemovalRef{}, Errors: []domain.ModelRemovalError{}}
 	for _, model := range request.Models {

@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer as createHTTPServer } from 'node:http';
 import { createRequire } from 'node:module';
 import { createServer as createTCPServer } from 'node:net';
@@ -22,16 +22,32 @@ for (const name of process.env.PLAYWRIGHT_MODULE ? [process.env.PLAYWRIGHT_MODUL
 if (!chromium) throw new Error('An existing Playwright installation is required.');
 const binary = process.env.ROUTENEST_TEST_BINARY || '/tmp/routenest-provider-model-isolation-verification';
 if (!existsSync(binary)) throw new Error('The isolated verification binary is required: ' + binary);
+const verificationSlice = process.env.ROUTENEST_VERIFY_SLICE || 'all';
+assert.ok(['all', 'management', 'viewer'].includes(verificationSlice), 'Verification slice must be all, management or viewer');
 
 const providerID = 'antseed_primary';
 const sharedID = 'deepseek-4-1';
 const rawAtID = 'vendor/shared@reasoning';
 const longID = 'vendor/' + 'long-model-family-'.repeat(4) + 'shared@reasoning';
 const modelIDs = [sharedID, rawAtID, longID];
+const removalSharedID = 'org/shared-model@revision';
+const removalBulkIDs = ['fixture/removal-bulk-alpha', 'fixture/removal-bulk-beta'];
+const removalKeepID = 'fixture/removal-keep';
+const removalZenOnlyID = 'fixture/zen-only@reasoning';
+const removalTwinID = 'fixture/twin-model@reasoning';
+const removalTwinKeepID = 'fixture/twin-keep';
+const siblingProviderID = 'provider_sibling';
+const twinProviderIDs = ['provider_twin_a', 'provider_twin_b'];
+const discoveryCatalogs = new Map();
 const result = {
+  slice: verificationSlice,
   checks: 0, cases: 0, forbiddenWrites: [], browserErrors: [],
   upstreamRequests: [], savePayloads: [], serverTestResults: [],
   modelNameProjections: [], clipboardCopies: [], pageLayouts: [],
+  denseRowLayouts: [], removalPayloads: [], removalResults: [], removalFixtures: [], permissionProbes: [],
+  acknowledgedNotices: [],
+  browserHTTPFailures: [],
+  browserErrorDetails: [], requestFailures: [], fixtureLogs: [],
 };
 const check = (value, label) => { assert.ok(value, label); result.checks++; };
 const identities = entries => entries.map(entry => ({
@@ -43,6 +59,9 @@ const report = () => JSON.stringify({
   savePayloads: result.savePayloads.length, serverTestResults: result.serverTestResults.length,
   modelNameProjections: result.modelNameProjections.length,
   clipboardCopies: result.clipboardCopies.length, pageLayouts: result.pageLayouts.length,
+  denseRowLayouts: result.denseRowLayouts.length, removalPayloads: result.removalPayloads.length,
+  removalResults: result.removalResults.length, permissionProbes: result.permissionProbes.length,
+  acknowledgedNotices: result.acknowledgedNotices.length,
 });
 const expected = [
   { model: sharedID, source: 'zen', provider: '', disabled: false },
@@ -63,7 +82,8 @@ const upstream = createHTTPServer(async (request, response) => {
     result.upstreamRequests.push({ method: request.method, path, model: body.model || '' });
     response.setHeader('Content-Type', 'application/json');
     if (request.method === 'GET' && path.endsWith('/models')) {
-      response.end(JSON.stringify({ data: modelIDs.map(id => ({ id, pricing: { prompt: '0', completion: '0' } })) }));
+      const ids = discoveryCatalogs.get(path) || modelIDs;
+      response.end(JSON.stringify({ data: ids.map(id => ({ id, pricing: { prompt: '0', completion: '0' } })) }));
     } else if (request.method === 'POST' && path.endsWith('/chat/completions') && body.model && modelIDs.includes(body.model)) {
       if (path.startsWith('/opencode/')) {
         response.writeHead(400);
@@ -122,16 +142,195 @@ const bootstrapSecret = randomBytes(24).toString('base64url');
 const testPassword = randomBytes(6).toString('base64url');
 const serverEnv = { ...process.env, ROUTENEST_DATA_DIR: dataDir, ROUTENEST_ADMIN_BOOTSTRAP_PASSWORD: bootstrapSecret };
 delete serverEnv.CLINE2API_DATA_DIR;
-const server = spawn(binary, ['--host', '127.0.0.1', '--port', String(port)], { env: serverEnv, stdio: 'ignore' });
+const server = spawn(binary, ['--host', '127.0.0.1', '--port', String(port)], { env: serverEnv, stdio: ['ignore', 'pipe', 'pipe'] });
+captureFixtureLogs(server, 'main');
 let startupError, browser, storageState;
 server.on('error', error => { startupError = error; });
 const base = 'http://127.0.0.1:' + port + '/admin/';
 const apiURL = path => new URL('api/' + path, base).href;
 
+function captureFixtureLogs(child, label) {
+  for (const stream of ['stdout', 'stderr']) {
+    const path = join(artifactDir, 'fixture-' + label + '-' + stream + '.log');
+    result.fixtureLogs.push({ label, stream, path });
+    child[stream].on('data', data => appendFileSync(path, data, { mode: 0o600 }));
+  }
+}
+
+function captureBrowserEvidence(page, role, suffix, phase) {
+  const starts = new WeakMap();
+  const locationURL = value => {
+    if (!value) return '';
+    try { const url = new URL(value); return url.origin + url.pathname; } catch { return value; }
+  };
+  page.on('request', request => starts.set(request, { phase: phase(), at: Date.now() }));
+  page.on('pageerror', error => {
+    result.browserErrors.push(error.message);
+    result.browserErrorDetails.push({ role, suffix, phase: phase(), type: 'pageerror', message: error.message });
+  });
+  page.on('console', message => {
+    if (message.type() !== 'error') return;
+    result.browserErrors.push(message.text());
+    const location = message.location();
+    result.browserErrorDetails.push({ role, suffix, phase: phase(), type: 'console', message: message.text(), location: { ...location, url: locationURL(location.url) } });
+  });
+  page.on('response', response => {
+    if (response.status() >= 400) result.browserHTTPFailures.push({ role, suffix, phase: phase(), method: response.request().method(), url: locationURL(response.url()), status: response.status() });
+  });
+  page.on('requestfailed', request => {
+    result.requestFailures.push({ role, suffix, phase: phase(), started: starts.get(request), method: request.method(), url: locationURL(request.url()), error: request.failure()?.errorText });
+  });
+}
+
+async function stopFixtureServer(child) {
+  if (!child.pid || child.exitCode !== null || child.signalCode !== null) return;
+  const stopped = new Promise(resolve => child.once('exit', resolve));
+  child.kill('SIGTERM');
+  const force = setTimeout(() => child.kill('SIGKILL'), 5000);
+  await stopped;
+  clearTimeout(force);
+}
+
+async function startRemovalFixture(suffix) {
+  const temporarySocket = createTCPServer();
+  const fixturePort = await listen(temporarySocket);
+  await new Promise(resolve => temporarySocket.close(resolve));
+  assert.notEqual(fixturePort, 3457, 'Removal verification must never use the live service port');
+  const fixtureDir = mkdtempSync(join(tmpdir(), 'routenest-model-removal-data-'));
+  const fixtureBase = 'http://127.0.0.1:' + fixturePort + '/admin/';
+  const fixtureAPI = path => new URL('api/' + path, fixtureBase).href;
+  const fixtureOrigin = new URL(fixtureBase).origin;
+  const fixtureSeed = (name, value) => writeFileSync(join(fixtureDir, name), JSON.stringify(value, null, 2) + '\n', { mode: 0o600 });
+  const primaryIDs = [removalSharedID, longID, ...removalBulkIDs, removalKeepID];
+  const fixtureProviders = [
+    { id: providerID, name: 'AntSeed', modelIds: primaryIDs },
+    { id: siblingProviderID, name: 'Sibling Provider', modelIds: [...primaryIDs, 'fixture/sibling-only'] },
+    ...twinProviderIDs.map(id => ({ id, name: 'Twin Provider', modelIds: [removalTwinID, removalTwinKeepID] })),
+  ].map(provider => ({
+    ...provider, baseURL: 'http://127.0.0.1:' + upstreamPort + '/removal-' + suffix + '/' + provider.id + '/v1',
+    apiKey: 'fixture-credential-' + provider.id, enabled: true, priority: 10, free: true,
+    timeoutSec: 3, proxyUrl: 'direct', createdAt: new Date().toISOString(),
+  }));
+  for (const provider of fixtureProviders) discoveryCatalogs.set(new URL(provider.baseURL + '/models').pathname, provider.modelIds);
+  const zenBaseURL = 'http://127.0.0.1:' + upstreamPort + '/removal-' + suffix + '/opencode/v1';
+  discoveryCatalogs.set(new URL(zenBaseURL + '/models').pathname, [...primaryIDs, removalZenOnlyID]);
+  const fixtureModel = (id, source, provider, custom = false) => ({
+    id, provider, source, custom, cost: 'free', status: 'active', context: 200000, output: 32768,
+    tierSignal: 'manual', tierDecidedAt: Math.floor(Date.now() / 1000),
+  });
+  fixtureSeed('.routenest-config.json', {
+    strategy: 'round_robin', dispatchMode: 'enforce', onlyFree: false,
+    providerModelPrefixes: { cl: 'cline', op: 'opencode', as: providerID, sy: siblingProviderID, ta: twinProviderIDs[0], tb: twinProviderIDs[1] },
+    combos: [{
+      id: 'removal-sibling-pins', name: 'Preserve other provider pins', strategy: 'priority', enabled: true,
+      entries: [
+        { model: removalSharedID, source: 'provider', provider: providerID },
+        { model: removalSharedID, source: 'provider', provider: siblingProviderID },
+        { model: removalSharedID, source: 'zen' },
+        { model: removalSharedID, source: 'remote' },
+        { model: removalSharedID },
+      ],
+    }, {
+      id: 'removal-twin-pins', name: 'Preserve duplicate-name provider pins', strategy: 'priority', enabled: true,
+      entries: twinProviderIDs.map(provider => ({ model: removalTwinID, source: 'provider', provider })),
+    }],
+  });
+  fixtureSeed('.routenest-providers.json', fixtureProviders);
+  fixtureSeed('.routenest-accounts.json', {
+    accounts: [], keys: ['fixture-gateway-key'], currentIdx: 0, modelCatalogInitialized: true,
+    models: [
+      ...primaryIDs.map(id => fixtureModel(id, 'provider', 'AntSeed', id === removalSharedID)),
+      ...primaryIDs.map(id => fixtureModel(id, 'zen', 'opencode')),
+      ...primaryIDs.map(id => fixtureModel(id, 'remote', 'fixture-vendor')),
+      fixtureModel(removalZenOnlyID, 'zen', 'opencode'),
+      fixtureModel('fixture/sibling-only', 'provider', 'Sibling Provider'),
+      fixtureModel(removalTwinID, 'provider', 'Twin Provider'),
+      fixtureModel(removalTwinKeepID, 'provider', 'Twin Provider'),
+    ],
+  });
+  fixtureSeed('.routenest-zen.json', {
+    enabled: true, key: 'fixture-opencode-credential', baseURL: zenBaseURL, retries: 0, failover: false,
+    maxConcurrency: 2, sessionAutoHarvest: false, proxies: [], proxyStrategy: 'round_robin', compaction: { auto: false },
+  });
+  const bootstrapPassword = randomBytes(24).toString('base64url');
+  const fixturePassword = randomBytes(6).toString('base64url');
+  const fixtureViewerPassword = randomBytes(6).toString('base64url');
+  const fixtureEnv = { ...process.env, ROUTENEST_DATA_DIR: fixtureDir, ROUTENEST_ADMIN_BOOTSTRAP_PASSWORD: bootstrapPassword };
+  delete fixtureEnv.CLINE2API_DATA_DIR;
+  const child = spawn(binary, ['--host', '127.0.0.1', '--port', String(fixturePort)], { env: fixtureEnv, stdio: ['ignore', 'pipe', 'pipe'] });
+  captureFixtureLogs(child, 'management-' + suffix);
+  let launchError;
+  child.on('error', error => { launchError = error; });
+  const metadata = { suffix, port: fixturePort, dataDir: fixtureDir, cleaned: false };
+  result.removalFixtures.push(metadata);
+  const close = async () => {
+    await stopFixtureServer(child);
+    rmSync(fixtureDir, { recursive: true, force: true });
+    metadata.cleaned = !existsSync(fixtureDir);
+  };
+  try {
+    let ready = false;
+    const deadline = Date.now() + 20000;
+    while (Date.now() < deadline) {
+      if (launchError) throw launchError;
+      if (child.exitCode !== null) throw new Error('Removal fixture exited before startup');
+      try {
+        const response = await fetch(fixtureAPI('auth/status'), { signal: AbortSignal.timeout(1000) });
+        if (response.ok && (await response.json()).success) { ready = true; break; }
+      } catch {}
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+    check(ready, suffix + ': isolated removal server is HTTP-ready');
+    const setup = await browser.newContext();
+    let administratorState;
+    try {
+      const bootstrap = await setup.request.post(fixtureAPI('auth/bootstrap'), {
+        headers: { Origin: fixtureOrigin }, data: { secret: bootstrapPassword, password: fixturePassword },
+      });
+      check(bootstrap.status() === 200, suffix + ': removal fixture administrator is initialized');
+      const csrfCookie = (await setup.cookies()).find(cookie => cookie.name === 'routenest_admin_csrf');
+      check(!!csrfCookie, suffix + ': removal administrator has a session CSRF cookie');
+      const viewer = await setup.request.post(fixtureAPI('auth/users'), {
+        headers: { Origin: fixtureOrigin, 'X-RouteNest-CSRF': decodeURIComponent(csrfCookie.value) },
+        data: { username: 'fixture_viewer', password: fixtureViewerPassword, roles: ['viewer'] },
+      });
+      check(viewer.status() === 201, suffix + ': isolated viewer account is created for permission verification');
+      administratorState = await setup.storageState();
+    } finally { await setup.close(); }
+    const viewerSetup = await browser.newContext();
+    let viewerState, viewerCSRF;
+    try {
+      const login = await viewerSetup.request.post(fixtureAPI('login'), {
+        headers: { Origin: fixtureOrigin }, data: { username: 'fixture_viewer', password: fixtureViewerPassword },
+      });
+      check(login.status() === 200, suffix + ': isolated viewer login succeeds');
+      const csrfCookie = (await viewerSetup.cookies()).find(cookie => cookie.name === 'routenest_admin_csrf');
+      check(!!csrfCookie, suffix + ': removal viewer has a session CSRF cookie');
+      viewerCSRF = decodeURIComponent(csrfCookie.value);
+      viewerState = await viewerSetup.storageState();
+    } finally { await viewerSetup.close(); }
+    return { suffix, base: fixtureBase, apiURL: fixtureAPI, origin: fixtureOrigin, dataDir: fixtureDir,
+      primaryIDs, administratorState, viewerState, viewerCSRF, close };
+  } catch (error) { await close(); throw error; }
+}
+
 async function getCombos(page) {
   const response = await page.request.get(apiURL('combos'));
   check(response.status() === 200, 'real combo catalogue is readable');
   return (await response.json()).data;
+}
+
+async function acknowledgeFixtureNotices(page, label) {
+  await page.waitForFunction(() => typeof checkModelDelistings === 'function');
+  await page.evaluate(() => checkModelDelistings());
+  await page.waitForLoadState('networkidle');
+  const overlay = page.locator('#modelSyncOverlay');
+  for (let index = 0; index < 5 && await overlay.isVisible(); index++) {
+    result.acknowledgedNotices.push({ label, title: await page.locator('#modelSyncTitle').innerText() });
+    await overlay.getByRole('button', { name: 'OK', exact: true }).click();
+    await page.waitForLoadState('networkidle');
+  }
+  check(await overlay.isHidden(), label + ': real fixture startup notices are acknowledged without removal');
 }
 
 async function save(page, button, label) {
@@ -208,6 +407,64 @@ async function checkNameWrapping(button, label) {
   check(layout.noOverflow, label + ': wrapped name fits its copy button');
 }
 
+async function checkCatalogDensity(row, id, suffix) {
+  const layout = await row.evaluate(element => {
+    const original = element.querySelector('.model-row-id');
+    const names = element.querySelector('.model-provider-names');
+    const badges = element.querySelector('.model-row-tags');
+    const identity = element.querySelector('.model-row-names');
+    const rowRect = element.getBoundingClientRect();
+    const originalRect = original.getBoundingClientRect();
+    const namesRect = names.getBoundingClientRect();
+    const badgesRect = badges.getBoundingClientRect();
+    const identityRect = identity.getBoundingClientRect();
+    const centers = [originalRect, namesRect, badgesRect].map(rect => rect.y + rect.height / 2);
+    const buttons = Array.from(names.querySelectorAll('.model-provider-name'));
+    const visibleBadges = Array.from(badges.children).filter(badge => badge.getClientRects().length);
+    return {
+      width: innerWidth, height: rowRect.height, originalTitle: original.title,
+      nameGroupWidth: namesRect.width, identityWidth: identityRect.width,
+      originalBeforeNames: !!(original.compareDocumentPosition(names) & Node.DOCUMENT_POSITION_FOLLOWING),
+      namesBeforeBadges: !!(names.compareDocumentPosition(badges) & Node.DOCUMENT_POSITION_FOLLOWING),
+      oneLine: Math.max(...centers) - Math.min(...centers) <= 8,
+      inlineOrder: originalRect.right <= namesRect.left + 1 && namesRect.right <= badgesRect.left + 1,
+      noOverflow: element.scrollWidth <= element.clientWidth + 1,
+      namesFitContainer: namesRect.x >= identityRect.x - 1 && namesRect.right <= identityRect.right + 1,
+      badgesUnclipped: visibleBadges.every(badge => {
+        const rect = badge.getBoundingClientRect();
+        return rect.x >= badgesRect.x - 1 && rect.right <= badgesRect.right + 1 && rect.y >= rowRect.y - 1 && rect.bottom <= rowRect.bottom + 1;
+      }),
+      buttonSizes: buttons.map(button => {
+        const rect = button.getBoundingClientRect();
+        const prefix = button.querySelector('.model-provider-prefix');
+        const prefixRect = prefix && prefix.getBoundingClientRect();
+        return {
+          width: rect.width, height: rect.height, title: button.title, name: button.querySelector('code').textContent,
+          prefix: prefix && prefix.textContent,
+          prefixVisible: !!prefixRect && prefixRect.x >= rect.x - 1 && prefixRect.right <= rect.right + 1 && prefixRect.x >= identityRect.x - 1 && prefixRect.right <= identityRect.right + 1 && prefix.scrollWidth <= prefix.clientWidth + 1,
+          buttonContained: rect.x >= namesRect.x - 1 && rect.right <= namesRect.right + 1 && rect.x >= identityRect.x - 1 && rect.right <= identityRect.right + 1,
+        };
+      }),
+    };
+  });
+  result.denseRowLayouts.push({ suffix, id, ...layout });
+  equal(layout.originalTitle, id, suffix + ': original model tooltip preserves the complete raw ID');
+  check(layout.originalBeforeNames && layout.namesBeforeBadges, suffix + ': logical row orders original ID, aliases, then badges');
+  check(layout.noOverflow, suffix + ': dense logical row has no horizontal overflow');
+  check(layout.namesFitContainer, suffix + ': alias group fits its bounded identity container');
+  check(layout.badgesUnclipped, suffix + ': inline badges are fully visible without partial clipping');
+  for (const button of layout.buttonSizes) {
+    check(button.title.includes(button.name), suffix + ': alias tooltip preserves the complete qualified ID');
+    check(button.width >= 20 && button.height >= 20, suffix + ': alias copy control remains usable');
+    equal(button.prefix, button.name.slice(0, button.name.indexOf('/') + 1), suffix + ': alias exposes its complete provider prefix');
+    check(button.prefixVisible && button.buttonContained, suffix + ': both provider prefixes remain visible in the compact model line');
+  }
+  if (layout.width >= 1000) {
+    check(layout.oneLine && layout.inlineOrder, suffix + ': desktop original, aliases and badges occupy one model line');
+    check(layout.height <= 72, suffix + ': desktop model row stays dense');
+  }
+}
+
 async function checkModelNames(page, suffix) {
   await page.goto(base + '#models', { waitUntil: 'networkidle' });
   await page.locator('#tab-models').waitFor({ state: 'visible' });
@@ -243,14 +500,14 @@ async function checkModelNames(page, suffix) {
   for (const id of modelIDs) {
     const row = catalogRows.filter({ has: page.getByText(id, { exact: true }) });
     check(await row.count() === 1, suffix + ': catalog has one logical row for ' + id);
-    equal(await row.locator('.model-provider-names > .hint-xs').innerText(), 'Provider model names', suffix + ': catalog labels the provider model names');
+    check(await row.getByText('Provider model names', { exact: true }).count() === 0, suffix + ': catalog omits the repeated provider-model caption');
     const names = fixtureOfferings.filter(offering => offering.modelId === id).map(offering => offering.qualifiedId).sort();
     equal((await row.locator('.model-provider-name code').allTextContents()).sort(), names, suffix + ': catalog displays the API qualified names for ' + id);
     check(names.includes('as/' + id) && names.includes('op/' + id), suffix + ': logical row exposes both same-ID provider names');
+    await checkCatalogDensity(row, id, suffix);
     for (const name of names) {
       const button = providerNameButton(page, row, name);
       await checkClipboard(page, button, name, 'catalog-' + suffix + '-' + name);
-      if (id === longID) await checkNameWrapping(button, 'catalog-' + suffix + '-' + name);
     }
   }
   await pageShot(page, 'catalog-model-names-' + suffix, '#modelCatalogView');
@@ -290,6 +547,380 @@ async function checkModelNames(page, suffix) {
   await page.locator('#globalOfferingSearch').fill('as/' + rawAtID);
   equal(await offeringRows.locator('td:first-child code').allTextContents(), ['as/' + rawAtID], suffix + ': offerings searches the exact qualified literal @ model');
   result.cases++;
+}
+
+const removalRefs = refs => refs.map(ref => ({ id: ref.id, source: ref.source, providerId: ref.providerId }))
+  .sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)));
+
+async function removalSnapshot(page, fixture) {
+  const responses = await Promise.all(['model-offerings', 'credentials'].map(path => page.request.get(fixture.apiURL(path))));
+  const bodies = await Promise.all(responses.map(response => response.json()));
+  for (let index = 0; index < responses.length; index++) {
+    check(responses[index].status() === 200 && bodies[index].success, fixture.suffix + ': removal baseline projection ' + index + ' is readable');
+  }
+  check(Array.isArray(bodies[0].data.offerings), fixture.suffix + ': offering baseline contains the actual model list');
+  check(Array.isArray(bodies[1].data.credentials) && bodies[1].data.credentials.length >= 5, fixture.suffix + ': credential baseline includes OpenCode and every custom provider');
+  const read = name => JSON.parse(readFileSync(join(fixture.dataDir, name), 'utf8'));
+  return {
+    config: read('.routenest-config.json'), providers: read('.routenest-providers.json'),
+    accounts: read('.routenest-accounts.json'), zen: read('.routenest-zen.json'),
+    offerings: bodies[0].data.offerings, credentials: bodies[1].data.credentials,
+  };
+}
+
+function checkCancelledRemoval(before, after, label) {
+  equal(after.config, before.config, label + ': cancellation preserves gateway configuration');
+  equal(after.providers, before.providers, label + ': cancellation preserves provider declarations and credentials');
+  equal(after.accounts, before.accounts, label + ': cancellation preserves all stored models and gateway keys');
+  equal(after.zen, before.zen, label + ': cancellation preserves OpenCode settings and credential');
+  equal(after.offerings, before.offerings, label + ': cancellation preserves all provider offerings');
+  equal(after.credentials, before.credentials, label + ': cancellation preserves provider credential projections');
+}
+
+function checkScopedRemoval(before, after, refs, label) {
+  const provider = refs[0].providerId;
+  const ids = new Set(refs.map(ref => ref.id));
+  const offeringKey = offering => offering.providerId + '\0' + offering.modelId;
+  const afterOfferings = new Map(after.offerings.map(offering => [offeringKey(offering), offering]));
+  for (const offering of before.offerings) {
+    if (offering.providerId === provider && ids.has(offering.modelId)) {
+      check(!afterOfferings.has(offeringKey(offering)), label + ': removed offering disappears only from its target provider');
+    } else if (ids.has(offering.modelId)) {
+      equal(afterOfferings.get(offeringKey(offering)), offering, label + ': same-ID offering from ' + offering.providerId + ' survives unchanged');
+    }
+  }
+  for (const prior of before.providers) {
+    const current = after.providers.find(item => item.id === prior.id);
+    check(!!current, label + ': provider instance remains configured');
+    if (prior.id !== provider) equal(current, prior, label + ': non-target provider declaration and credential are unchanged');
+    else {
+      const settings = ({ modelIds, updatedAt, ...rest }) => rest;
+      equal(settings(current), settings(prior), label + ': target provider keeps credentials and non-model settings');
+      equal(current.modelIds, prior.modelIds.filter(id => !ids.has(id)), label + ': only requested raw IDs leave the target provider declaration');
+    }
+  }
+  equal(after.credentials, before.credentials, label + ': all provider credential projections are preserved');
+  equal(after.zen, before.zen, label + ': OpenCode credential and non-model settings are preserved');
+  equal(after.accounts.accounts, before.accounts.accounts, label + ': Cline account credentials are preserved');
+  equal(after.accounts.keys, before.accounts.keys, label + ': gateway API keys are preserved');
+  equal(after.config.providerModelPrefixes, before.config.providerModelPrefixes, label + ': provider namespaces are preserved');
+  for (const field of ['strategy', 'dispatchMode', 'onlyFree']) equal(after.config[field], before.config[field], label + ': unrelated gateway ' + field + ' is preserved');
+  const affected = entry => ids.has(entry.model) &&
+    (provider === 'cline' ? entry.source === 'remote' : provider === 'opencode' ? entry.source === 'zen' : entry.source === 'provider' && entry.provider === provider);
+  for (const beforeCombo of before.config.combos) {
+    const afterCombo = after.config.combos.find(combo => combo.id === beforeCombo.id);
+    check(!!afterCombo, label + ': saved combo remains configured');
+    equal(identities(afterCombo.entries), identities(beforeCombo.entries.filter(entry => !affected(entry))), label + ': cleanup preserves combo pins to sibling providers');
+  }
+}
+
+async function checkProviderModelManagement(theme, width) {
+  const suffix = theme + '-' + width;
+  const fixture = await startRemovalFixture(suffix);
+  let context, viewerContext, page;
+  let administratorPhase = 'active-management', viewerPhase = 'active-viewer';
+  let permittedRemoval = null;
+  const providerAction = (key, action) => page.locator('#modelsList .model-group-head[data-key="' + key + '"] [data-model-provider-action="' + action + '"]');
+  const choices = () => page.locator('#modelProviderActionList .model-provider-removal-choice input[data-model-id]');
+  const choiceIDs = () => choices().evaluateAll(inputs => inputs.map(input => input.dataset.modelId).sort());
+  const checkedIDs = () => choices().evaluateAll(inputs => inputs.filter(input => input.checked).map(input => input.dataset.modelId).sort());
+  const returnToCatalog = async () => {
+    if (await page.locator('#tab-models').isHidden()) {
+      const navigation = page.locator('.nav-item[data-tab="models"]');
+      const mobileNavigation = page.locator('#mobileNavBtn');
+      if (await mobileNavigation.isVisible() && await mobileNavigation.getAttribute('aria-expanded') !== 'true') await mobileNavigation.click();
+      await navigation.click();
+    }
+    await page.waitForLoadState('networkidle');
+    await acknowledgeFixtureNotices(page, 'return-models-' + suffix);
+    await page.locator('#modelCatalogTab').click();
+  };
+  const closeAction = async () => {
+    await page.locator('#modelProviderActionCancel').click();
+    await page.locator('#modelProviderActionModal').waitFor({ state: 'hidden' });
+  };
+  const openRemoval = async (key, id) => {
+    await providerAction(key, 'remove').click();
+    await page.locator('#modelProviderActionModal').waitFor({ state: 'visible' });
+    equal(await page.locator('#modelProviderActionProvider').inputValue(), id, suffix + ': removal dialog binds its sole stable provider ID');
+  };
+  const approveRemoval = async (button, refs, label) => {
+    const before = await removalSnapshot(page, fixture);
+    for (const ref of refs.filter(ref => ref.source === 'provider')) {
+      const offering = before.offerings.find(offering => offering.providerId === ref.providerId && offering.modelId === ref.id);
+      check(!!offering && !offering.delisted && !offering.disabled && offering.status === 'active', label + ': custom provider target is active before explicit removal');
+    }
+    const priorWrites = result.removalPayloads.length;
+    await button.click();
+    await page.locator('#confirmModal').waitFor({ state: 'visible' });
+    check(result.removalPayloads.length === priorWrites, label + ': opening confirmation performs no mutation');
+    const current = await removalSnapshot(page, fixture);
+    checkCancelledRemoval(before, current, label + ' before confirmation');
+    check((await page.locator('#confirmMsg').innerText()).includes('(' + refs.length + ')'), label + ': confirmation states the requested removal count');
+    permittedRemoval = removalRefs(refs);
+    const responsePromise = page.waitForResponse(response => response.url() === fixture.apiURL('models/remove') && response.request().method() === 'POST');
+    await page.locator('#confirmModal [onclick="resolveConfirm(true)"]').click();
+    const response = await responsePromise;
+    const body = await response.json();
+    result.removalResults.push({ suffix, label, status: response.status(), body });
+    check(response.status() === 200 && body.success === true, label + ': real provider-scoped removal succeeds');
+    equal(removalRefs(body.data.removed), removalRefs(refs), label + ': real API reports exactly the removed stable-provider refs');
+    equal(body.data.skipped, [], label + ': active fixture targets are not silently skipped');
+    equal(body.data.errors, [], label + ': removal has no hidden partial errors');
+    await page.waitForLoadState('networkidle');
+    await page.waitForFunction(() => !_modelProviderAction || !_modelProviderAction.busy);
+    check(await page.locator('#modelProviderActionError').isHidden(), label + ': dialog has no removal error');
+    check(result.removalPayloads.length === priorWrites + 1, label + ': one confirmation sends one scoped mutation');
+    check(permittedRemoval === null, label + ': mutation consumed the one-time fixture authorization');
+    const after = await removalSnapshot(page, fixture);
+    checkScopedRemoval(before, after, refs, label);
+    return after;
+  };
+  try {
+    context = await browser.newContext({ viewport: { width, height: 900 }, storageState: fixture.administratorState });
+    await context.addInitScript(theme => {
+      localStorage.setItem('cline_admin_theme', theme);
+      localStorage.setItem('cline_admin_lang', 'en');
+      localStorage.setItem('cline_admin_quickstart_seen', '1');
+    }, theme);
+    await context.route('**/admin/api/**', async route => {
+      const request = route.request();
+      const path = new URL(request.url()).pathname.replace('/admin/api/', '');
+      if (request.method() === 'GET' && path === 'models') {
+        const response = await route.fetch();
+        const body = await response.json();
+        body.data.lastSync = {};
+        await route.fulfill({ response, json: body });
+        return;
+      }
+      if (['GET', 'HEAD', 'OPTIONS'].includes(request.method())) { await route.continue(); return; }
+      const body = request.postDataJSON();
+      if (request.method() === 'POST' && path === 'models/remove' && permittedRemoval &&
+        JSON.stringify(removalRefs(body.models || [])) === JSON.stringify(permittedRemoval)) {
+        result.removalPayloads.push({ suffix, ...body });
+        permittedRemoval = null;
+        await route.continue();
+        return;
+      }
+      result.forbiddenWrites.push('removal-' + suffix + ': ' + request.method() + ' ' + path);
+      await route.fulfill({ status: 400, json: { success: false, error: 'Unexpected isolated removal verification write' } });
+    });
+    page = await context.newPage();
+    captureBrowserEvidence(page, 'administrator', suffix, () => administratorPhase);
+    await page.goto(fixture.base + '#models', { waitUntil: 'networkidle' });
+    await acknowledgeFixtureNotices(page, 'management-' + suffix);
+    await page.locator('#modelCatalogTab').click();
+    await providerAction('src:prov:AntSeed', 'remove').waitFor({ state: 'visible' });
+    if (verificationSlice !== 'viewer') {
+      const untouched = await removalSnapshot(page, fixture);
+      for (const key of ['src:cline', 'src:zen', 'src:prov:AntSeed', 'src:prov:Twin Provider']) {
+        const header = page.locator('#modelsList .model-group-head[data-key="' + key + '"]');
+        const labels = (await header.locator('.model-group-actions button').allTextContents()).map(label => label.trim());
+        for (const label of ['Enable all', 'Disable all', 'Edit Provider', 'Remove models']) check(labels.includes(label), suffix + ': provider header includes ' + label);
+      }
+      for (const [key, node] of [['src:cline', '#providerNativeCline'], ['src:zen', '#providerNativeOpenCode']]) {
+        await providerAction(key, 'edit').click();
+        await page.locator('#providerSetup.open ' + node).waitFor({ state: 'visible' });
+        check(await page.locator('#providerSetup.open ' + node).count() === 1, suffix + ': builtin provider edit opens its actual native configuration');
+        await page.locator('#providerSetup .drawer-close').click();
+        await page.locator('#providerSetup.open').waitFor({ state: 'hidden' });
+        await returnToCatalog();
+        result.cases++;
+      }
+      await providerAction('src:prov:AntSeed', 'edit').click();
+      await page.locator('#providerEditor.open').waitFor({ state: 'visible' });
+      equal(await page.evaluate(() => _editingProviderId), providerID, suffix + ': AntSeed edit binds the stable provider ID');
+      equal(await page.locator('#provName').inputValue(), 'AntSeed', suffix + ': AntSeed edit displays the matching provider name');
+      check((await page.locator('#provBaseURL').inputValue()).includes('/' + providerID + '/v1'), suffix + ': AntSeed edit displays the matching upstream');
+      await page.locator('#providerEditor .drawer-close').click();
+      await page.locator('#providerEditor.open').waitFor({ state: 'hidden' });
+      await returnToCatalog();
+      result.cases++;
+
+      await providerAction('src:prov:Twin Provider', 'edit').click();
+      await page.locator('#modelProviderActionModal').waitFor({ state: 'visible' });
+      equal(await page.locator('#modelProviderActionProvider').inputValue(), '', suffix + ': same-name edit requires an explicit provider choice');
+      equal(await page.locator('#modelProviderActionProvider').evaluate(select => Array.from(select.options).map(option => option.value).filter(Boolean).sort()), twinProviderIDs, suffix + ': same-name chooser exposes both stable IDs');
+      check(await page.locator('#modelProviderActionSubmit').isDisabled(), suffix + ': ambiguous edit cannot proceed without a choice');
+      check(await page.locator('#providerEditor.open').count() === 0, suffix + ': ambiguous edit never opens an arbitrary provider');
+      await shot(page, 'provider-edit-chooser-' + suffix, '#modelProviderActionModal .modal-card');
+      await page.locator('#modelProviderActionProvider').selectOption(twinProviderIDs[1]);
+      await page.locator('#modelProviderActionSubmit').click();
+      await page.locator('#providerEditor.open').waitFor({ state: 'visible' });
+      equal(await page.evaluate(() => _editingProviderId), twinProviderIDs[1], suffix + ': explicit same-name choice opens the selected stable provider');
+      check((await page.locator('#provBaseURL').inputValue()).includes('/' + twinProviderIDs[1] + '/v1'), suffix + ': same-name choice opens the selected upstream');
+      await page.locator('#providerEditor .drawer-close').click();
+      await page.locator('#providerEditor.open').waitFor({ state: 'hidden' });
+      await returnToCatalog();
+      checkCancelledRemoval(untouched, await removalSnapshot(page, fixture), suffix + ' provider edits');
+      result.cases++;
+
+      await openRemoval('src:prov:AntSeed', providerID);
+      equal(await choiceIDs(), fixture.primaryIDs.slice().sort(), suffix + ': removal lists only the chosen provider raw model IDs');
+      await page.locator('#modelProviderActionSearch').fill('removal-bulk');
+      equal(await choiceIDs(), removalBulkIDs, suffix + ': provider removal list is searchable');
+      await page.locator('#modelProviderActionSelectAll').click();
+      equal(await checkedIDs(), removalBulkIDs, suffix + ': select all shown selects only matching provider models');
+      check((await page.locator('#modelProviderActionCount').innerText()).includes('2 /'), suffix + ': removal selection count matches the visible selection');
+      await page.locator('#modelProviderActionClear').click();
+      equal(await checkedIDs(), [], suffix + ': clear resets the selected models');
+      check(await page.locator('#modelProviderActionSubmit').isDisabled(), suffix + ': empty removal selection cannot submit');
+      await page.locator('#modelProviderActionCancel').focus();
+      await page.keyboard.press('Tab');
+      check(await page.locator('#modelProviderActionSearch').evaluate(element => element === document.activeElement), suffix + ': removal dialog traps keyboard focus');
+      await shot(page, 'provider-removal-filter-' + suffix, '#modelProviderActionModal .modal-card');
+      await page.locator('#modelProviderActionSearch').fill('as/' + removalSharedID);
+      equal(await choiceIDs(), [removalSharedID], suffix + ': removal searches the qualified literal @ ID');
+      await choices().check();
+      const cancelled = await removalSnapshot(page, fixture);
+      const cancelledWriteCount = result.removalPayloads.length;
+      await closeAction();
+      await page.waitForLoadState('networkidle');
+      check(result.removalPayloads.length === cancelledWriteCount, suffix + ': dialog cancellation sends no mutation');
+      checkCancelledRemoval(cancelled, await removalSnapshot(page, fixture), suffix + ' dialog cancellation');
+      result.cases++;
+
+      await openRemoval('src:prov:AntSeed', providerID);
+      await page.locator('#modelProviderActionSearch').fill(removalSharedID);
+      await choices().check();
+      await page.keyboard.press('Escape');
+      await page.locator('#modelProviderActionModal').waitFor({ state: 'hidden' });
+      check(result.removalPayloads.length === cancelledWriteCount, suffix + ': Escape cancellation sends no mutation');
+      checkCancelledRemoval(cancelled, await removalSnapshot(page, fixture), suffix + ' keyboard dialog cancellation');
+      result.cases++;
+
+      await openRemoval('src:prov:AntSeed', providerID);
+      await page.locator('#modelProviderActionSearch').fill(removalSharedID);
+      const inlineRemove = page.locator('#modelProviderActionList button[data-model-id="' + removalSharedID + '"]');
+      await inlineRemove.click();
+      await page.locator('#confirmModal').waitFor({ state: 'visible' });
+      check(result.removalPayloads.length === cancelledWriteCount, suffix + ': individual removal waits for confirmation');
+      check((await page.locator('#confirmMsg').innerText()).includes('AntSeed'), suffix + ': confirmation identifies the target provider');
+      await shot(page, 'provider-removal-confirmation-' + suffix, '#confirmModal .modal-card');
+      await page.locator('#confirmModal [onclick="resolveConfirm(true)"]').focus();
+      await page.keyboard.press('Tab');
+      check(await page.locator('#confirmModal [onclick="resolveConfirm(false)"]').evaluate(element => element === document.activeElement), suffix + ': confirmation traps keyboard focus');
+      await page.keyboard.press('Escape');
+      await page.locator('#confirmModal').waitFor({ state: 'hidden' });
+      await page.waitForFunction(() => !_modelProviderAction || !_modelProviderAction.busy);
+      check(await page.locator('#modelProviderActionModal').isVisible(), suffix + ': cancelling confirmation keeps the parent removal dialog open');
+      checkCancelledRemoval(cancelled, await removalSnapshot(page, fixture), suffix + ' confirmation cancellation');
+      result.cases++;
+
+      await approveRemoval(inlineRemove, [{ id: removalSharedID, source: 'provider', providerId: providerID }], suffix + ' custom-active individual @ removal');
+      check(await choiceIDs().then(ids => !ids.includes(removalSharedID)), suffix + ': successful single removal leaves no stale picker row');
+      result.cases++;
+      await page.locator('#modelProviderActionSearch').fill('removal-bulk');
+      await page.locator('#modelProviderActionSelectAll').click();
+      await approveRemoval(page.locator('#modelProviderActionSubmit'), removalBulkIDs.map(id => ({ id, source: 'provider', providerId: providerID })), suffix + ' AntSeed bulk removal');
+      await closeAction();
+      result.cases++;
+
+      for (const [key, source, id] of [['src:zen', 'zen', 'opencode'], ['src:cline', 'remote', 'cline']]) {
+        await openRemoval(key, id);
+        await page.locator('#modelProviderActionSearch').fill((id === 'cline' ? 'cl/' : 'op/') + removalSharedID);
+        equal(await choiceIDs(), [removalSharedID], suffix + ': builtin removal searches its provider-qualified @ model');
+        await approveRemoval(page.locator('#modelProviderActionList button[data-model-id="' + removalSharedID + '"]'),
+          [{ id: removalSharedID, source, providerId: id }], suffix + ' ' + id + ' individual @ removal');
+        await closeAction();
+        result.cases++;
+      }
+
+      await providerAction('src:prov:Twin Provider', 'remove').click();
+      await page.locator('#modelProviderActionModal').waitFor({ state: 'visible' });
+      equal(await page.locator('#modelProviderActionProvider').inputValue(), '', suffix + ': same-name removal requires an explicit provider choice');
+      equal(await choiceIDs(), [], suffix + ': ambiguous removal exposes no arbitrary provider models');
+      check(await page.locator('#modelProviderActionSubmit').isDisabled(), suffix + ': ambiguous removal cannot submit');
+      await page.locator('#modelProviderActionProvider').selectOption(twinProviderIDs[1]);
+      equal(await choiceIDs(), [removalTwinKeepID, removalTwinID].sort(), suffix + ': explicit same-name choice lists only selected provider models');
+      await page.locator('#modelProviderActionSearch').fill('tb/' + removalTwinID);
+      equal(await choiceIDs(), [removalTwinID], suffix + ': selected duplicate provider is searched by its own namespace');
+      await shot(page, 'provider-removal-duplicate-choice-' + suffix, '#modelProviderActionModal .modal-card');
+      await approveRemoval(page.locator('#modelProviderActionList button[data-model-id="' + removalTwinID + '"]'),
+        [{ id: removalTwinID, source: 'provider', providerId: twinProviderIDs[1] }], suffix + ' duplicate-name stable-provider removal');
+      await closeAction();
+      result.cases++;
+      await pageShot(page, 'provider-management-after-removal-' + suffix, '#modelCatalogView');
+    }
+
+    viewerContext = await browser.newContext({ viewport: { width, height: 900 }, storageState: fixture.viewerState });
+    await viewerContext.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: fixture.origin });
+    await viewerContext.addInitScript(theme => {
+      localStorage.setItem('cline_admin_theme', theme);
+      localStorage.setItem('cline_admin_lang', 'en');
+      localStorage.setItem('cline_admin_quickstart_seen', '1');
+    }, theme);
+    await viewerContext.route('**/admin/api/**', async route => {
+      const request = route.request();
+      if (['GET', 'HEAD', 'OPTIONS'].includes(request.method())) { await route.continue(); return; }
+      result.forbiddenWrites.push('viewer-' + suffix + ': ' + request.method() + ' ' + new URL(request.url()).pathname);
+      await route.fulfill({ status: 400, json: { success: false, error: 'Unexpected isolated viewer browser mutation' } });
+    });
+    const viewerPage = await viewerContext.newPage();
+    captureBrowserEvidence(viewerPage, 'viewer', suffix, () => viewerPhase);
+    await viewerPage.goto(fixture.base + '#models', { waitUntil: 'networkidle' });
+    await acknowledgeFixtureNotices(viewerPage, 'viewer-' + suffix);
+    await viewerPage.locator('#modelCatalogTab').click();
+    await viewerPage.locator('#modelsList .model-group-head').first().waitFor({ state: 'visible' });
+    const publicResponse = await viewerPage.request.get(fixture.apiURL('model-offerings'));
+    check(publicResponse.status() === 200, suffix + ': viewer can read public provider model offerings');
+    const publicOfferings = (await publicResponse.json()).data.offerings;
+    const publicOffering = publicOfferings.find(offering => offering.providerId === providerID && offering.modelId === longID);
+    check(!!publicOffering && publicOffering.qualifiedId === 'as/' + longID, suffix + ': viewer projection retains the qualified provider model name');
+    await viewerPage.locator('#modelSearch').fill(publicOffering.qualifiedId);
+    const publicRow = viewerPage.locator('#modelsList .model-row').filter({ has: viewerPage.getByText(longID, { exact: true }) });
+    check(await publicRow.count() === 1, suffix + ': viewer can search and see the logical model by its provider alias');
+    equal((await publicRow.locator('.model-provider-name code').allTextContents()).sort(),
+      publicOfferings.filter(offering => offering.modelId === longID).map(offering => offering.qualifiedId).sort(),
+      suffix + ': viewer Catalog renders the public provider alias data');
+    const publicNames = publicOfferings.filter(offering => offering.modelId === longID).map(offering => offering.qualifiedId).sort();
+    check(publicNames.length >= 3, suffix + ': viewer fixture exercises at least three provider aliases');
+    const publicNamesGroup = publicRow.locator('.model-provider-names');
+    const scrollLayout = await publicNamesGroup.evaluate(element => ({
+      overflow: getComputedStyle(element).overflowX, scrollWidth: element.scrollWidth, width: element.clientWidth,
+    }));
+    if (scrollLayout.scrollWidth > scrollLayout.width + 1) check(['auto', 'scroll'].includes(scrollLayout.overflow), suffix + ': multiple provider aliases allow horizontal scrolling inside the group');
+    for (const name of publicNames) {
+      const button = providerNameButton(viewerPage, publicRow, name);
+      await button.scrollIntoViewIfNeeded();
+      await checkClipboard(viewerPage, button, name, 'viewer-catalog-' + suffix + '-' + name);
+      const reachable = await button.evaluate(element => {
+        const rect = element.getBoundingClientRect(), parent = element.closest('.model-provider-names').getBoundingClientRect();
+        return rect.x >= parent.x - 1 && rect.right <= parent.right + 1;
+      });
+      check(reachable, suffix + ': scrolled provider alias is completely reachable by mouse');
+    }
+    if (scrollLayout.scrollWidth > scrollLayout.width + 1) check(await publicNamesGroup.evaluate(element => element.scrollLeft > 0), suffix + ': copying the last alias scrolls the compact group');
+    await pageShot(viewerPage, 'provider-management-viewer-catalog-' + suffix, '#modelCatalogView');
+    check(await viewerPage.locator('#modelsList [data-model-provider-action]:visible').count() === 0, suffix + ': viewer cannot see provider edit or removal actions');
+    await viewerPage.evaluate(() => openModelProviderAction({ closest: () => document.querySelector('#modelsList .model-group-head') }, 'remove'));
+    check(await viewerPage.locator('#modelProviderActionModal').isHidden(), suffix + ': direct browser invocation respects removal permission');
+    const deniedBefore = await removalSnapshot(page, fixture);
+    const denied = await viewerPage.request.post(fixture.apiURL('models/remove'), {
+      headers: { Origin: fixture.origin, 'X-RouteNest-CSRF': fixture.viewerCSRF },
+      data: { models: [{ id: longID, source: 'provider', providerId: providerID }] },
+    });
+    const deniedBody = await denied.json();
+    result.permissionProbes.push({ suffix, status: denied.status(), body: deniedBody });
+    check(denied.status() === 403 && deniedBody.error === 'permission_denied', suffix + ': real backend denies viewer model removal');
+    checkCancelledRemoval(deniedBefore, await removalSnapshot(page, fixture), suffix + ' denied viewer mutation');
+    await viewerPage.locator('#modelOfferingsTab').click();
+    await viewerPage.locator('#globalOfferingSearch').fill(publicOffering.qualifiedId);
+    equal(await viewerPage.locator('#globalOfferings td:first-child code').allTextContents(), [publicOffering.qualifiedId], suffix + ': viewer Offerings renders and searches the public provider alias');
+    await pageShot(viewerPage, 'provider-management-viewer-offerings-' + suffix, '#modelOfferingsView');
+    await viewerPage.locator('#modelCatalogTab').click();
+    await pageShot(viewerPage, 'provider-management-viewer-' + suffix, '#modelCatalogView');
+    result.cases++;
+  } catch (error) {
+    if (page) await page.screenshot({ path: join(artifactDir, 'failure-management-' + suffix + '.png'), animations: 'disabled' }).catch(() => {});
+    throw error;
+  } finally {
+    viewerPhase = 'cleanup-viewer-context';
+    if (viewerContext) await viewerContext.close();
+    administratorPhase = 'cleanup-administrator-context';
+    if (context) await context.close();
+    await fixture.close();
+  }
 }
 
 async function selectedLabels(page) {
@@ -343,7 +974,7 @@ try {
     storageState = await setup.storageState();
   } finally { await setup.close(); }
 
-  for (const theme of ['light', 'dark']) for (const width of [390, 1440]) {
+  if (verificationSlice === 'all') for (const theme of ['light', 'dark']) for (const width of [390, 1440]) {
     const suffix = theme + '-' + width, comboID = 'verify-isolation-' + suffix;
     const context = await browser.newContext({ viewport: { width, height: 900 }, storageState });
     await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: new URL(base).origin });
@@ -375,10 +1006,11 @@ try {
       await route.fulfill({ status: 400, json: { success: false, error: 'Unexpected isolated verification write' } });
     });
     const page = await context.newPage();
-    page.on('pageerror', error => result.browserErrors.push(error.message));
-    page.on('console', message => { if (message.type() === 'error') result.browserErrors.push(message.text()); });
+    let phase = 'active-models';
+    captureBrowserEvidence(page, 'administrator', suffix, () => phase);
     try {
       await checkModelNames(page, suffix);
+      phase = 'active-combos';
       await page.goto(base + '#combos', { waitUntil: 'networkidle' });
       await page.locator('#tab-combos').waitFor({ state: 'visible' });
       await page.evaluate(() => loadCombos());
@@ -490,11 +1122,19 @@ try {
     } catch (error) {
       await page.screenshot({ path: join(artifactDir, 'failure-' + suffix + '.png'), animations: 'disabled' }).catch(() => {});
       throw error;
-    } finally { await context.close(); }
+    } finally { phase = 'cleanup-combo-context'; await context.close(); }
   }
-  check(result.upstreamRequests.some(request => request.path.startsWith('/antseed/') && request.model === rawAtID), 'AntSeed receives the literal raw @ ID');
-  check(result.upstreamRequests.some(request => request.path.startsWith('/opencode/') && request.model === rawAtID), 'OpenCode receives the same literal raw @ ID');
+  await stopFixtureServer(server);
+  if (verificationSlice === 'viewer') await checkProviderModelManagement('light', 390);
+  else for (const theme of ['light', 'dark']) for (const width of [390, 1440]) await checkProviderModelManagement(theme, width);
+  check(result.removalFixtures.length === (verificationSlice === 'viewer' ? 1 : 4) && result.removalFixtures.every(fixture => fixture.cleaned), 'every isolated removal fixture is stopped and cleaned');
+  if (verificationSlice === 'all') {
+    check(result.upstreamRequests.some(request => request.path.startsWith('/antseed/') && request.model === rawAtID), 'AntSeed receives the literal raw @ ID');
+    check(result.upstreamRequests.some(request => request.path.startsWith('/opencode/') && request.model === rawAtID), 'OpenCode receives the same literal raw @ ID');
+  }
   check(result.forbiddenWrites.length === 0, 'no unintended writes or upstream fixture requests');
+  check(result.browserHTTPFailures.length === 0, 'no unexpected browser HTTP failures');
+  check(result.requestFailures.filter(request => request.phase.startsWith('active') && request.error !== 'net::ERR_ABORTED').length === 0, 'no live browser transport failures');
   check(result.browserErrors.length === 0, 'no browser errors');
   console.log(report());
 } catch (error) {
@@ -503,13 +1143,7 @@ try {
   process.exitCode = 1;
 } finally {
   if (browser) await browser.close();
-  if (server.pid && server.exitCode === null) {
-    const stopped = new Promise(resolve => server.once('exit', resolve));
-    server.kill('SIGTERM');
-    const force = setTimeout(() => server.kill('SIGKILL'), 5000);
-    await stopped;
-    clearTimeout(force);
-  }
+  await stopFixtureServer(server);
   upstream.closeAllConnections();
   await new Promise(resolve => upstream.close(resolve));
   writeFileSync(join(artifactDir, 'result.json'), JSON.stringify(result, null, 2) + '\n');

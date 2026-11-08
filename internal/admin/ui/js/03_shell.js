@@ -404,7 +404,7 @@ async function closeDrawer(name) {
 }
 // ESC closes the topmost drawer, but only when no modal layer is open on top
 // of it (modal Esc handling lives in 13_models and runs on the same event).
-const _ESC_MODAL_IDS = ['confirmModal','diffModal','modelMetaEditor','provPickerModal','comboModelPicker','presetPickerModal','importPreviewModal','connLoginModal','connImportModal','comboTestModal','modelSyncOverlay','logDetailModal'];
+const _ESC_MODAL_IDS = ['confirmModal','diffModal','modelProviderActionModal','modelMetaEditor','provPickerModal','comboModelPicker','presetPickerModal','importPreviewModal','connLoginModal','connImportModal','comboTestModal','modelSyncOverlay','logDetailModal'];
 function _modalLayerOpen() {
   return _ESC_MODAL_IDS.some(id => { const el = _(id); return el && el.style.display === 'flex'; });
 }

@@ -1,5 +1,6 @@
 // ========== API 密钥管理 ==========
 async function loadKeys() {
+  if (typeof adminHasPermission === 'function' && !adminHasPermission('credential.write')) return;
   try {
     const d = await api('GET', '/keys');
     const keys = d.data.keys;

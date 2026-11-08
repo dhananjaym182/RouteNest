@@ -76,11 +76,18 @@ func IsSource(m Model) bool {
 // CurrentModels 返回当前生效的 zen 模型（pool 中 zen 来源条目；
 // 从未同步成功时回退到种子表）。
 func CurrentModels() []Model {
-	zenOwned := models.Where(IsSource)
-	if len(zenOwned) > 0 || RemoteActive() {
-		return zenOwned
-	}
-	return BuiltinModels()
+	var result []Model
+	models.View(func(pool *domain.AccountPool) {
+		for _, model := range models.FilterRemovedModelRecords(pool, pool.Models) {
+			if IsSource(model) {
+				result = append(result, model)
+			}
+		}
+		if len(result) == 0 && !RemoteActive() && !models.CatalogInitialized(pool) {
+			result = models.FilterRemovedModelRecords(pool, BuiltinModels())
+		}
+	})
+	return result
 }
 
 // ResolveInfo 解析模型名到当前生效的 zen 模型。支持别名与 "opencode/" 前缀。

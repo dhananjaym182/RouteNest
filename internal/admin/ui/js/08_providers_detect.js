@@ -342,7 +342,9 @@ async function saveProvider(btn) {
 }
 
 function editProvider(id) {
-  api('GET', '/providers').then(d => {
+  const navigation = typeof _tabNavigationGeneration === 'undefined' ? 0 : _tabNavigationGeneration;
+  return api('GET', '/providers').then(d => {
+    if (navigation !== (typeof _tabNavigationGeneration === 'undefined' ? 0 : _tabNavigationGeneration)) return;
     const p = (d.data.providers || []).find(x => x.id === id);
     if (p) showProviderEditor(p);
   });

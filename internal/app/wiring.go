@@ -124,6 +124,7 @@ func configure() {
 	providers.TransportProvider = func() http.RoundTripper { return egress.Client.Transport }
 	zen.BodyOptionsProvider = bodyOptionsProvider
 	providers.ConfigProvider = config.Live
+	providers.ModelRemovalOfferingsProvider = routing.ModelOfferings
 	freeIDs := make([]string, 0, len(zen.SeedModels)*2)
 	for _, seed := range zen.SeedModels {
 		freeIDs = append(freeIDs, strings.ToLower(seed.ID))

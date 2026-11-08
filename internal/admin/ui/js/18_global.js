@@ -673,7 +673,8 @@ async function loadGlobal(showSkeleton) {
   try {
     const [instances, credentials, offerings, state, egress] = await Promise.all([
       api('GET', '/provider-instances'),
-      api('GET', '/credentials'),
+      typeof adminHasPermission !== 'function' || adminHasPermission('credential.write') ?
+        api('GET', '/credentials') : Promise.resolve({ data: { credentials: [] } }),
       api('GET', '/model-offerings'),
       api('GET', '/provider-state'),
       api('GET', '/egress-profiles'),

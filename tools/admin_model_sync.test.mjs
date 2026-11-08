@@ -10,7 +10,7 @@ const assets = [
   '13_models.js', '13_model_sync.js', '13_model_cleanup.js', '18_global.js',
 ];
 
-function createUI({ models = [], providers = [], sync = {}, lastSync = {}, recheck = {}, zenSync = {}, offerings = [], combos = [], modelRead, storage = new Map(), remove, canRemove = true, preview, batchRead, config } = {}) {
+function createUI({ models = [], providers = [], instances = providers, sync = {}, lastSync = {}, recheck = {}, zenSync = {}, offerings = [], combos = [], modelRead, storage = new Map(), remove, canRemove = true, canReadCredentials = true, preview, batchRead, config } = {}) {
   const elements = new Map();
   const field = (value = '') => ({
     value, textContent: '', style: { display: 'none' }, dataset: {}, rows: [],
@@ -57,9 +57,10 @@ function createUI({ models = [], providers = [], sync = {}, lastSync = {}, reche
     friendlyTestError: error => error.message,
     renderTestResultHTML: (_ok, value) => value,
     toast: () => {},
-    adminHasPermission: permission => permission !== 'provider.write' || canRemove,
+    adminHasPermission: permission => permission === 'provider.write' ? canRemove : permission === 'credential.write' ? canReadCredentials : true,
     api: async (method, path, body) => {
       calls.push({ method, path, body });
+      if ((path === '/providers' || path === '/config') && !canRemove || (path === '/credentials' || path === '/keys') && !canReadCredentials) throw new Error('permission_denied');
       if (path === '/models') return modelRead ? modelRead() : { data: { models, lastSync } };
       if (path === '/providers') return { data: { providers } };
       if (path === '/providers/sync-status') return { data: { providers: sync } };
@@ -72,7 +73,8 @@ function createUI({ models = [], providers = [], sync = {}, lastSync = {}, reche
       if (path === '/config') return { data: config };
       if (path === '/model-offerings') return { data: { offerings } };
       if (path === '/combos') return { data: { combos, modelCatalog: models, reservedAliases: [] } };
-      if (['/provider-instances', '/credentials', '/provider-state', '/egress-profiles'].includes(path)) return { data: {} };
+      if (path === '/provider-instances') return { data: { instances } };
+      if (['/credentials', '/provider-state', '/egress-profiles'].includes(path)) return { data: {} };
       throw new Error('Unexpected API request: ' + method + ' ' + path);
     },
   });
@@ -330,6 +332,55 @@ test('viewers receive notices without model-removal controls', async () => {
   assert.doesNotMatch(ui.popup(), /data-model-remove|removeDelistedModels/);
   await ui.run('removeDelistedModels()');
   assert.equal(ui.calls.some(call => call.method === 'POST'), false);
+});
+
+test('viewer model reads use public provider identities and preserve scoped notice acknowledgements', async () => {
+  const storage = new Map();
+  const sync = { p1: { delistedModels: ['retired-model'] } };
+  const instances = [{ id: 'cline', name: 'Cline' }, { id: 'p1', name: provider.name }];
+  const ui = createUI({ models: [removedModel], instances, sync, storage, canRemove: false, canReadCredentials: false });
+  await ui.run('loadModels()');
+  assert.equal(ui.calls.some(call => call.path === '/providers'), false, 'viewer must not request protected provider declarations');
+  assert.equal(ui.calls.some(call => call.path === '/provider-instances'), true);
+  assert.equal(ui.popupOpen(), true);
+  assert.match(ui.popup(), /Example Provider/);
+  await ui.run('closeModelSyncModal(); checkModelDelistings()');
+  assert.equal(ui.popupOpen(), false);
+
+  const refreshed = createUI({
+    models: [{ ...removedModel, provider: 'Renamed Provider' }],
+    instances: [{ id: 'p1', name: 'Renamed Provider' }], sync, storage,
+    canRemove: false, canReadCredentials: false,
+  });
+  await refreshed.run('loadModels()');
+  assert.equal(refreshed.popupOpen(), false, 'renaming must retain the stable instance acknowledgement');
+  assert.equal(refreshed.calls.some(call => call.path === '/providers'), false);
+});
+
+test('viewer global catalog retains qualified offerings without requesting credential inventory', async () => {
+  const offerings = [{ modelId: 'shared-model', providerId: 'p1', qualifiedId: 'as/shared-model', providerName: provider.name }];
+  const instances = [{ id: 'p1', name: provider.name }];
+  const ui = createUI({ offerings, instances, canRemove: false, canReadCredentials: false });
+  await ui.run('loadGlobal(false)');
+  assert.equal(ui.calls.some(call => call.path === '/credentials'), false, 'viewer must not request protected credential inventory');
+  assert.deepEqual(JSON.parse(ui.evaluate('JSON.stringify(_globalData.offerings)')), offerings);
+  assert.deepEqual(JSON.parse(ui.evaluate('JSON.stringify(_globalData.instances)')), instances);
+  assert.deepEqual(JSON.parse(ui.evaluate('JSON.stringify(_globalData.credentials)')), []);
+});
+
+test('viewer config loading leaves drafts intact without requesting protected routing settings', async () => {
+  const ui = createUI({ config: { modelChain: ['stored-model'] }, canRemove: false, canReadCredentials: false });
+  const chain = ui.addField('settingModelChain', 'unsaved-model');
+  await ui.run('loadConfig()');
+  assert.equal(ui.calls.some(call => call.path === '/config'), false, 'viewer must not request protected routing settings');
+  assert.equal(chain.value, 'unsaved-model');
+});
+
+test('viewer startup key loading does not request protected API keys', async () => {
+  const ui = createUI({ canRemove: false, canReadCredentials: false });
+  ui.addField('keysList');
+  await ui.run('loadKeys()');
+  assert.equal(ui.calls.some(call => call.path === '/keys'), false, 'viewer must not request protected API keys');
 });
 
 test('repeated bulk errors are summarized once while failed model rows remain available for retry', async () => {

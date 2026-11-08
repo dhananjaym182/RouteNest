@@ -16,6 +16,7 @@ function primaryNavTab(name) {
 }
 
 let _activeTabName = '';
+let _tabNavigationGeneration = 0;
 
 function updateShellContext(name) {
   name = normalizeTabName(name || 'dashboard');
@@ -70,6 +71,7 @@ async function showAccountLogin(subtab) {
 }
 
 function applyTab(name){
+	_tabNavigationGeneration++;
   const fromImport = (name === 'import');
   const fromAccounts = (name === 'accounts');
   name = normalizeTabName(name);

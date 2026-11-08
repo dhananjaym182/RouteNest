@@ -47,6 +47,11 @@ models[].status
 models[].thinkingLevels
 models[].tierDecidedAt
 models[].tierSignal
+removedModelOfferings
+removedModelOfferings[].id
+removedModelOfferings[].provider
+removedModelOfferings[].providerId
+removedModelOfferings[].source
 == .routenest-config.json
 combos
 combos[].category

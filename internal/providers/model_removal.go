@@ -18,14 +18,31 @@ import (
 // independent of this administration lock.
 var modelLifecycleMu sync.Mutex
 
+// The composition root includes offline builtin offerings in this read-only
+// catalogue. The local projection keeps this package independently testable.
+var ModelRemovalOfferingsProvider = SnapshotModelOfferings
+
 // RemoveDelistedModel removes one verified delisted offering and its stale
 // references. Each store write is strict. A failure may leave earlier cleanup
 // stages committed, so an absent target remains eligible for idempotent cleanup
 // of its remaining references on retry; it is never reported as removed on error.
 func RemoveDelistedModel(input domain.ModelRemovalRef) (bool, error) {
+	return removeModel(input, false)
+}
+
+// RemoveModel explicitly removes one offering selected by stable provider ID,
+// including active and administrator-added models. Other providers remain intact.
+func RemoveModel(input domain.ModelRemovalRef) (bool, error) {
+	return removeModel(input, true)
+}
+
+func removeModel(input domain.ModelRemovalRef, explicit bool) (bool, error) {
 	ref, err := input.Normalize()
 	if err != nil {
 		return false, err
+	}
+	if explicit && ref.ProviderID == "" {
+		return false, fmt.Errorf("explicit model removal requires a stable providerId")
 	}
 	modelLifecycleMu.Lock()
 	defer modelLifecycleMu.Unlock()
@@ -35,6 +52,25 @@ func RemoveDelistedModel(input domain.ModelRemovalRef) (bool, error) {
 	provRecheckMu.Unlock()
 	if err != nil {
 		return false, fmt.Errorf("provider state unavailable: %w", err)
+	}
+	var beforeOfferings []domain.ModelOffering
+	if explicit {
+		beforeOfferings, err = ModelRemovalOfferingsProvider()
+		if err != nil {
+			return false, fmt.Errorf("model offerings unavailable: %w", err)
+		}
+		if ref.Source != models.SourceProvider {
+			known := false
+			for _, offering := range beforeOfferings {
+				known = known || string(offering.ProviderID) == ref.ProviderID && offering.ModelID == ref.ID
+			}
+			models.View(func(pool *domain.AccountPool) {
+				known = known || models.OfferingRemovalReserved(pool, ref.ProviderID, ref.ID)
+			})
+			if !known {
+				return false, nil
+			}
+		}
 	}
 	removed := false
 	providerDelisted := false
@@ -50,11 +86,11 @@ func RemoveDelistedModel(input domain.ModelRemovalRef) (bool, error) {
 		ref.ProviderID, ref.Provider = target.ID, target.Name
 		state := currentProviderOffering(*target, ref.ID)
 		providerDelisted = state.Delisted != nil && *state.Delisted
-		if state.Custom != nil && *state.Custom {
+		if !explicit && state.Custom != nil && *state.Custom {
 			return false, nil
 		}
 		if containsModel(target.ModelIDs, ref.ID) {
-			if !providerDelisted {
+			if !explicit && !providerDelisted {
 				return false, nil
 			}
 			if err := removeProviderDeclarationStrict(target.ID, ref.ID); err != nil {
@@ -64,7 +100,35 @@ func RemoveDelistedModel(input domain.ModelRemovalRef) (bool, error) {
 		}
 	}
 	claims, aggregate := removalClaims(ref.ID)
-	modelRemoved, protected, err := models.ReconcileRemoval(ref, claims, aggregate, providerDelisted)
+	configRef := ref
+	if ref.Source == models.SourceRemote {
+		configRef.Provider = "Cline"
+	}
+	if ref.Source == models.SourceZen {
+		configRef.Provider = "OpenCode Zen"
+	}
+	var modelRemoved, protected bool
+	if explicit {
+		claims, aggregate = removalClaimsWithPolicy(ref.ID, true)
+		keepDefault := false
+		liveProviderNames := make(map[string]string)
+		for _, provider := range List() {
+			liveProviderNames[provider.ID] = provider.Name
+		}
+		modelRef := configRef
+		for _, offering := range beforeOfferings {
+			providerID := string(offering.ProviderID)
+			if offering.ModelID == ref.ID && providerID != ref.ProviderID {
+				keepDefault = true
+				if name := liveProviderNames[providerID]; name != "" && strings.EqualFold(name, configRef.Provider) {
+					modelRef.Provider = ""
+				}
+			}
+		}
+		modelRemoved, err = models.ReconcileExplicitRemoval(modelRef, claims, aggregate, keepDefault)
+	} else {
+		modelRemoved, protected, err = models.ReconcileRemoval(ref, claims, aggregate, providerDelisted)
+	}
 	if err != nil {
 		return false, fmt.Errorf("persist model catalogue: %w", err)
 	}
@@ -84,14 +148,13 @@ func RemoveDelistedModel(input domain.ModelRemovalRef) (bool, error) {
 	}
 	// Use current unmerged state after cleanup, including provider offerings that
 	// are not represented by their own pool row because another source shares ID.
-	configRef := ref
-	if ref.Source == models.SourceRemote {
-		configRef.Provider = "Cline"
-	}
-	if ref.Source == models.SourceZen {
-		configRef.Provider = "OpenCode Zen"
-	}
 	globalLive, sourceLive, nameLive := remainingRemovalOfferings(configRef)
+	if explicit {
+		globalLive, sourceLive, nameLive, err = remainingExplicitRemovalOfferings(configRef)
+		if err != nil {
+			return false, fmt.Errorf("model offerings unavailable after removal: %w", err)
+		}
+	}
 	if err := config.PruneModelReferences(configRef, !globalLive, !sourceLive, !nameLive && (target != nil || ref.Source != models.SourceProvider)); err != nil {
 		return false, fmt.Errorf("persist routing references: %w", err)
 	}
@@ -153,11 +216,15 @@ func removeProviderDeclarationStrict(providerID, modelID string) error {
 }
 
 func removalClaims(modelID string) ([]models.ProviderClaim, map[string]bool) {
+	return removalClaimsWithPolicy(modelID, false)
+}
+
+func removalClaimsWithPolicy(modelID string, includeDisabled bool) ([]models.ProviderClaim, map[string]bool) {
 	records := models.Snapshot()
 	var claims []models.ProviderClaim
 	aggregate := map[string]bool{}
 	for _, provider := range List() {
-		if !provider.Enabled || !containsModel(provider.ModelIDs, modelID) {
+		if !includeDisabled && !provider.Enabled || !containsModel(provider.ModelIDs, modelID) {
 			continue
 		}
 		state := providerOfferingStates(provider, records)[modelID]
@@ -171,6 +238,27 @@ func removalClaims(modelID string) ([]models.ProviderClaim, map[string]bool) {
 		}
 	}
 	return claims, aggregate
+}
+
+func remainingExplicitRemovalOfferings(ref domain.ModelRemovalRef) (global, source, name bool, err error) {
+	offerings, err := ModelRemovalOfferingsProvider()
+	if err != nil {
+		return false, false, false, err
+	}
+	names := make(map[string]string)
+	for _, provider := range List() {
+		names[provider.ID] = provider.Name
+	}
+	for _, offering := range offerings {
+		if offering.ModelID != ref.ID {
+			continue
+		}
+		global = true
+		providerID := string(offering.ProviderID)
+		source = source || providerID == ref.ProviderID
+		name = name || ref.Provider != "" && strings.EqualFold(strings.TrimSpace(names[providerID]), ref.Provider)
+	}
+	return
 }
 
 func removeProviderOfferingStrict(providerID, modelID string) (bool, error) {

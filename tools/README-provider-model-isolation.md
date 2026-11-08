@@ -39,7 +39,8 @@ Bare names retain automatic routing for compatibility.
 
 To inspect a registered name in the administrator console, open **Models →
 Model Catalog**, expand a model group or search for `as/`, and inspect the
-**Provider model names** below a model's raw ID. Click a name to copy it. In
+qualified names immediately after a model's raw ID on the same compact row.
+Click a qualified name to copy it; hover a shortened name to see its full ID. In
 **Models → Provider Model Offerings**, the **Client model name** column shows
 the qualified name; the **Upstream model** column keeps the original ID.
 
@@ -87,13 +88,25 @@ were backed up privately before the atomic repair. Restart persisted `as`, `op`
 and `cl` bindings and returned HTTP 200 from the administrator page; unrelated
 settings and combos were verified unchanged.
 
-Verification passed the full Go suite, a fresh final administrator package run,
-targeted routing and probe race checks, `go vet`, all 85 JavaScript tests, and
-translation/syntax checks. The final isolated browser run passed 40 cases and
-914 checks across light/dark themes and 390/1440px viewports, including actual
-save/test APIs, stable disk pins, raw `@` IDs, cleanup, reload and summaries.
-Catalog/offerings display and alias search were verified against real API
-projections; 48 browser clipboard readbacks preserved the exact qualified name.
+Verification passed the full Go suite, fresh administrator package checks,
+targeted routing and probe race checks, `go vet`, all 110 JavaScript tests, and
+translation/syntax checks. The expanded browser matrix completed 92 functional
+cases and 2,727 checks across light/dark themes and 390/1440px viewports,
+including actual save/test/removal APIs, stable disk pins, raw `@` IDs, cleanup,
+reload and summaries. It verified 52 actual clipboard readbacks and 20 scoped
+removals. The final focused viewer run passed 58 checks with zero console, HTTP
+or transport errors and verified every copy button in a four-alias scrolling
+row. See the catalog management verification notes for the comprehensive run's
+single intermittent connection reset and the focused rerun evidence.
+
+The catalog now keeps names and badges inline and adds **Edit Provider** and
+**Remove models** next to each provider group's bulk controls. Removal supports
+search, individual actions and selecting all visible results. Requests carry the
+stable provider ID, so another provider's same-name model remains available.
+Duplicate provider display names require an explicit instance choice. Built-in
+manual removals persist across refresh and restart. See
+[Model catalog management](README-model-catalog-management.md) for the file map
+and request contract.
 
 Run the focused regressions and browser check:
 

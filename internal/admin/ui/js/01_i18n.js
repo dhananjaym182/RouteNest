@@ -1,6 +1,14 @@
 
 // ===== i18n =====
 const I18N = {
+  '移除模型': 'Remove models',
+  '移除所选模型': 'Remove selected',
+  '选择 Provider 实例': 'Choose provider instance',
+  '选择要编辑的 Provider 实例。': 'Choose the provider instance to edit.',
+  '仅移除此 Provider 的模型；相关组合和路由引用也会清理。': 'Remove models from this provider and clean up references to these offerings in combos and routing.',
+  '移除所选模型及其路由引用？': 'Remove the selected models and their routing references?',
+  '全选当前结果': 'Select all shown',
+  '模型已移除，无需重复清理': 'Models already removed; no further cleanup needed',
   '凭据详情': 'Credential details',
   'Provider 详情': 'Provider details',
   '模型路由检查': 'Model Route Inspector',

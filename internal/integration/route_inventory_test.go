@@ -113,6 +113,7 @@ var routeMethods = map[string]string{
 	"/admin/api/models/cost":               "POST",
 	"/admin/api/models/delete":             "POST",
 	"/admin/api/models/delisted/remove":    "POST",
+	"/admin/api/models/remove":             "POST",
 	"/admin/api/models/import/apply":       "POST",
 	"/admin/api/models/import/batch":       "GET",
 	"/admin/api/models/import/discard":     "POST",
