@@ -47,6 +47,68 @@ func TestWriteFileAtomicDurablePreReplacementFailurePreservesTarget(t *testing.T
 	assertNoAtomicTemps(t, dir, path)
 }
 
+func TestWriteFileAtomicDurablePreReplacementStagesPreserveTarget(t *testing.T) {
+	stages := []AtomicWriteStage{
+		AtomicWritePermission,
+		AtomicWriteData,
+		AtomicWriteFileSync,
+		AtomicWriteRename,
+	}
+	for _, failedStage := range stages {
+		t.Run(string(failedStage), func(t *testing.T) {
+			dir := t.TempDir()
+			path := filepath.Join(dir, "state.json")
+			if err := os.WriteFile(path, []byte("old"), 0600); err != nil {
+				t.Fatal(err)
+			}
+			err := WriteFileAtomicDurableWithOptions(path, []byte("new"), 0600, AtomicWriteOptions{Fault: func(stage AtomicWriteStage) error {
+				if stage == failedStage {
+					return errors.New("injected")
+				}
+				return nil
+			}})
+			if err == nil || AtomicWriteMayHaveReplaced(err) {
+				t.Fatalf("error = %v, want pre-replacement failure", err)
+			}
+			var writeErr *AtomicWriteError
+			if !errors.As(err, &writeErr) || writeErr.Stage != failedStage {
+				t.Fatalf("error = %v, want stage %s", err, failedStage)
+			}
+			data, readErr := os.ReadFile(path)
+			if readErr != nil || string(data) != "old" {
+				t.Fatalf("persisted = %q, err = %v", data, readErr)
+			}
+			assertNoAtomicTemps(t, dir, path)
+		})
+	}
+}
+
+func TestWriteFileAtomicDurablePostReplacementFailureReportsUncertainty(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "state.json")
+	if err := os.WriteFile(path, []byte("old"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	err := WriteFileAtomicDurableWithOptions(path, []byte("new"), 0600, AtomicWriteOptions{Fault: func(stage AtomicWriteStage) error {
+		if stage == AtomicWriteDirectorySync {
+			return errors.New("injected")
+		}
+		return nil
+	}})
+	if err == nil || !AtomicWriteMayHaveReplaced(err) {
+		t.Fatalf("error = %v, want post-replacement uncertainty", err)
+	}
+	var writeErr *AtomicWriteError
+	if !errors.As(err, &writeErr) || writeErr.Stage != AtomicWriteDirectorySync {
+		t.Fatalf("error = %v, want directory-sync stage", err)
+	}
+	data, readErr := os.ReadFile(path)
+	if readErr != nil || string(data) != "new" {
+		t.Fatalf("persisted = %q, err = %v", data, readErr)
+	}
+	assertNoAtomicTemps(t, dir, path)
+}
+
 func TestWriteFileAtomicDurableConcurrentWritesStayWhole(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "state.json")

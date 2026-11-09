@@ -2,15 +2,20 @@ package admin
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
+	"routenest/internal/accounts"
 	"routenest/internal/adminapi"
 	"routenest/internal/adminauth"
+	"routenest/internal/domain"
+	poolstore "routenest/internal/store/accounts"
 	storeadminauth "routenest/internal/store/adminauth"
 )
 
@@ -37,6 +42,86 @@ func TestListenerChangeUsesDurableAdminAudit(t *testing.T) {
 		}
 	}
 	t.Fatalf("durable listener audit event missing: %+v", events)
+}
+
+func TestClientKeyMutationsRequireFinalConfirmationAndWriteRedactedAudit(t *testing.T) {
+	accounts.PoolMu.Lock()
+	oldPool, oldPath := accounts.Pool, accounts.PoolPath
+	path := filepath.Join(t.TempDir(), poolstore.FileName)
+	seed := &domain.AccountPool{Accounts: []*domain.Account{}, Keys: []string{}, Models: []domain.Model{}}
+	accounts.Pool, accounts.PoolPath = seed, path
+	accounts.PoolMu.Unlock()
+	t.Cleanup(func() {
+		accounts.PoolMu.Lock()
+		accounts.Pool, accounts.PoolPath = oldPool, oldPath
+		accounts.PoolMu.Unlock()
+	})
+	if err := poolstore.SaveDurable(path, seed); err != nil {
+		t.Fatal(err)
+	}
+
+	mux, runtime := newAdminAuthTestMux(t)
+	credentials, err := runtime.service.CompleteBootstrap(t.Context(), "one time bootstrap secret", "permanent admin password")
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := func(path, body string) *http.Request {
+		req := adminTestRequest(http.MethodPost, path, body)
+		req.AddCookie(&http.Cookie{Name: adminapi.SessionCookieName, Value: credentials.Token})
+		req.Header.Set("X-RouteNest-CSRF", credentials.CSRFToken)
+		return req
+	}
+
+	recorder := httptest.NewRecorder()
+	mux.ServeHTTP(recorder, request("/admin/api/keys/generate", `{}`))
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("generate status=%d body=%s", recorder.Code, recorder.Body.String())
+	}
+	var generated struct {
+		Success bool `json:"success"`
+		Data    struct {
+			Key string `json:"key"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(recorder.Body.Bytes(), &generated); err != nil || generated.Data.Key == "" {
+		t.Fatalf("generate response=%s err=%v", recorder.Body.String(), err)
+	}
+
+	recorder = httptest.NewRecorder()
+	mux.ServeHTTP(recorder, request("/admin/api/keys/delete", `{"key":"`+generated.Data.Key+`"}`))
+	if recorder.Code != http.StatusConflict || !strings.Contains(recorder.Body.String(), "final_key_confirmation_required") {
+		t.Fatalf("unconfirmed final delete status=%d body=%s", recorder.Code, recorder.Body.String())
+	}
+
+	recorder = httptest.NewRecorder()
+	mux.ServeHTTP(recorder, request("/admin/api/keys/delete", `{"key":"`+generated.Data.Key+`","confirmation":"disable-client-authentication"}`))
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("confirmed final delete status=%d body=%s", recorder.Code, recorder.Body.String())
+	}
+
+	events, err := runtime.store.AuditEvents(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[adminauth.AuditKind]string{
+		adminauth.AuditClientKeyCreate:      "success",
+		adminauth.AuditClientKeyDeleteFinal: "success",
+	}
+	foundFailedFinal := false
+	for _, event := range events {
+		if strings.Contains(event.TargetID, generated.Data.Key) || strings.Contains(event.ActorID, generated.Data.Key) {
+			t.Fatalf("raw key entered audit event: %+v", event)
+		}
+		if event.Kind == adminauth.AuditClientKeyDeleteFinal && event.Outcome == "failed" {
+			foundFailedFinal = true
+		}
+		if outcome, ok := want[event.Kind]; ok && event.Outcome == outcome {
+			delete(want, event.Kind)
+		}
+	}
+	if len(want) != 0 || !foundFailedFinal {
+		t.Fatalf("missing key audit events: remaining=%v events=%+v", want, events)
+	}
 }
 
 func newAdminAuthTestMux(t *testing.T) (*http.ServeMux, *adminSecurityRuntime) {

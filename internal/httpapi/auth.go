@@ -100,3 +100,24 @@ func (h Health) Handler(w http.ResponseWriter, r *http.Request) {
 		"runtimeState":   runtimeState,
 	})
 }
+
+// Readiness reports whether security-sensitive storage is available for
+// request processing. It deliberately exposes only a stable status code, never
+// a storage path, key, or underlying error.
+type Readiness struct {
+	AuthenticationStorage func() error
+}
+
+func (h Readiness) Handler(w http.ResponseWriter, r *http.Request) {
+	if h.AuthenticationStorage == nil || h.AuthenticationStorage() != nil {
+		httpx.WriteJSON(w, http.StatusServiceUnavailable, map[string]string{
+			"status":                "not_ready",
+			"authenticationStorage": "unavailable",
+		})
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, map[string]string{
+		"status":                "ready",
+		"authenticationStorage": "ready",
+	})
+}

@@ -19,6 +19,7 @@ var (
 	ErrRateLimited        = errors.New("administrator authentication rate limited")
 	ErrReplay             = errors.New("authentication flow missing, expired, or consumed")
 	ErrConflict           = errors.New("administrator security state changed concurrently")
+	ErrMutationPrepared   = errors.New("administrator mutation is durably prepared and requires restart")
 )
 
 const BreakGlassID = "break-glass"
@@ -73,14 +74,15 @@ type ProviderState struct {
 	Configuration json.RawMessage `json:"configuration,omitempty"`
 }
 type State struct {
-	Version      int                      `json:"version"`
-	Revision     uint64                   `json:"revision"`
-	Initialized  bool                     `json:"initialized"`
-	RecoveryPHC  string                   `json:"recoveryPHC,omitempty"`
-	BootstrapPHC string                   `json:"bootstrapPHC,omitempty"`
-	Users        map[string]User          `json:"users"`
-	Sessions     map[string]Session       `json:"sessions"`
-	Providers    map[string]ProviderState `json:"providers,omitempty"`
+	Version         int                      `json:"version"`
+	Revision        uint64                   `json:"revision"`
+	Initialized     bool                     `json:"initialized"`
+	RecoveryPHC     string                   `json:"recoveryPHC,omitempty"`
+	RecoveryCodePHC string                   `json:"recoveryCodePHC,omitempty"`
+	BootstrapPHC    string                   `json:"bootstrapPHC,omitempty"`
+	Users           map[string]User          `json:"users"`
+	Sessions        map[string]Session       `json:"sessions"`
+	Providers       map[string]ProviderState `json:"providers,omitempty"`
 }
 
 func EmptyState() State {

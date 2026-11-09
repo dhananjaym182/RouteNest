@@ -217,7 +217,7 @@ func TestModelDuplicateIDsToggleAppliesToEveryRecord(t *testing.T) {
 	}
 }
 
-func TestModelDeleteRemovesFirstMatchAndRejectsBuiltin(t *testing.T) {
+func TestModelDeleteRejectsAmbiguousIDAndProtectsBuiltin(t *testing.T) {
 	installPool(t, []Model{
 		{ID: "dup/d", Provider: "dup", Cost: "pass", Status: "active", Custom: true},
 		{ID: "dup/d", Provider: "dup", Cost: "free", Status: "active", Source: "remote"},
@@ -225,16 +225,35 @@ func TestModelDeleteRemovesFirstMatchAndRejectsBuiltin(t *testing.T) {
 	baseURL := protocolTestServer(t)
 	admin := newAuthenticatedAdmin(t, baseURL)
 
-	if status, _ := admin.post(t, "/admin/api/models/delete", `{"id":"dup/d"}`); status != http.StatusOK {
-		t.Fatalf("delete custom duplicate status = %d", status)
+	if status, body := admin.post(t, "/admin/api/models/delete", `{"id":"dup/d"}`); status != http.StatusConflict || strings.TrimSpace(body["error"].(string)) == "" {
+		t.Fatalf("ambiguous delete status = %d body=%v", status, body)
 	}
 	left := findModels(poolModels(t), "dup/d")
-	if len(left) != 1 || left[0].Source != "remote" {
-		t.Fatalf("after first delete = %+v, want the remote record only", left)
+	if len(left) != 2 {
+		t.Fatalf("ambiguous delete changed records: %+v", left)
 	}
-	// The remaining record is a non-delisted synchronized model: built-in, not deletable.
+
+	installPool(t, []Model{{ID: "dup/d", Provider: "dup", Cost: "free", Status: "active", Source: "remote"}})
 	if status, _ := admin.post(t, "/admin/api/models/delete", `{"id":"dup/d"}`); status != http.StatusBadRequest {
 		t.Errorf("delete non-delisted remote status = %d, want 400 (cannot_delete_builtin)", status)
+	}
+}
+
+func TestModelDeleteRejectsMultipleProviderOfferingsIncludingDisabled(t *testing.T) {
+	installPool(t, []Model{{ID: "shared/delete", Source: "provider", Provider: "Alpha", Custom: true}})
+	installProviders(t,
+		&CustomProvider{ID: "delete_alpha", Name: "Alpha", Enabled: true, ModelIDs: []string{"shared/delete"}},
+		&CustomProvider{ID: "delete_beta", Name: "Beta", Enabled: false, ModelIDs: []string{"shared/delete"}},
+	)
+	baseURL := protocolTestServer(t)
+	admin := newAuthenticatedAdmin(t, baseURL)
+
+	status, body := admin.post(t, "/admin/api/models/delete", `{"id":"shared/delete"}`)
+	if status != http.StatusConflict || strings.TrimSpace(body["error"].(string)) == "" {
+		t.Fatalf("provider-offering ambiguity status = %d body=%v", status, body)
+	}
+	if got := findModels(poolModels(t), "shared/delete"); len(got) != 1 || got[0].Provider != "Alpha" {
+		t.Fatalf("ambiguous provider deletion changed the catalog: %+v", got)
 	}
 }
 

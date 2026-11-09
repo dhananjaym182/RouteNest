@@ -227,8 +227,12 @@ func (s *Store) Apply(ctx context.Context, event auth.AuditEvent, fn func(*auth.
 			return fmt.Errorf("duplicate audit event")
 		}
 	}
+	preparedDurable := false
 	defer func() {
 		if err != nil {
+			if preparedDurable {
+				err = errors.Join(auth.ErrMutationPrepared, err)
+			}
 			s.poisoned = true
 		}
 	}()
@@ -249,6 +253,7 @@ func (s *Store) Apply(ctx context.Context, event auth.AuditEvent, fn func(*auth.
 	if e = s.journal.Sync(); e != nil {
 		return e
 	}
+	preparedDurable = true
 	if e = s.hit(AfterPrepareSync); e != nil {
 		return e
 	}
@@ -438,7 +443,9 @@ func (s *Store) writeSnapshot(state auth.State, faults bool) error {
 	return nil
 }
 func validateEvent(e auth.AuditEvent) error {
-	if len(e.ID) != 43 || !auth.ValidAuditKind(e.Kind) || e.At.IsZero() || (e.Outcome != "success" && e.Outcome != "denied") || len(e.ActorID) > 256 || len(e.TargetID) > 256 || len(e.Source) > 64 {
+	failedCredentialEvent := e.Outcome == "failed" && (e.Kind == auth.AuditClientKeyCreate || e.Kind == auth.AuditClientKeyDelete || e.Kind == auth.AuditClientKeyDeleteFinal)
+	validOutcome := e.Outcome == "success" || e.Outcome == "denied" || failedCredentialEvent
+	if len(e.ID) != 43 || !auth.ValidAuditKind(e.Kind) || e.At.IsZero() || !validOutcome || len(e.ActorID) > 256 || len(e.TargetID) > 256 || len(e.Source) > 64 {
 		return fmt.Errorf("invalid redacted audit event")
 	}
 	return nil

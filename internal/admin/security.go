@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"routenest/internal/accounts"
 	"routenest/internal/adminauth"
 	"routenest/internal/adminsso"
 	"routenest/internal/platform"
@@ -35,13 +36,14 @@ type SecurityOptions struct {
 }
 
 type adminSecurityRuntime struct {
-	service        *adminauth.Service
-	sso            *adminsso.Manager
-	store          *storeadminauth.Store
-	requestOptions adminauth.RequestSecurityOptions
-	enableHSTS     bool
-	cancel         context.CancelFunc
-	done           chan struct{}
+	service         *adminauth.Service
+	sso             *adminsso.Manager
+	store           *storeadminauth.Store
+	requestOptions  adminauth.RequestSecurityOptions
+	enableHSTS      bool
+	cancel          context.CancelFunc
+	done            chan struct{}
+	desktopHandoffs *desktopHandoffStore
 }
 
 var adminSecurityState struct {
@@ -80,6 +82,13 @@ func openAdminSecurity(opts SecurityOptions) (*adminSecurityRuntime, error) {
 	dataDir := opts.DataDir
 	if dataDir == "" {
 		dataDir = platform.CurrentDataDir()
+	}
+	// Validate the client-authentication authority before creating any
+	// administrator files. Otherwise an accidental unapproved first launch
+	// creates independent installation evidence and prevents the operator from
+	// retrying the explicitly authorized fresh initialization.
+	if err := accounts.PoolStorageError(); err != nil {
+		return nil, fmt.Errorf("client authentication storage unavailable: %w", err)
 	}
 	authDir := filepath.Join(dataDir, "admin-auth")
 	if err := platform.EnsurePrivateDir(authDir); err != nil {
@@ -122,11 +131,12 @@ func openAdminSecurity(opts SecurityOptions) (*adminSecurityRuntime, error) {
 		return nil, fmt.Errorf("initialize administrator SSO: %w", err)
 	}
 	runtime := &adminSecurityRuntime{
-		service:        service,
-		sso:            sso,
-		store:          repo,
-		requestOptions: requestOptions,
-		enableHSTS:     opts.EnableHSTS,
+		service:         service,
+		sso:             sso,
+		store:           repo,
+		requestOptions:  requestOptions,
+		enableHSTS:      opts.EnableHSTS,
+		desktopHandoffs: newDesktopHandoffStore(),
 	}
 	runtime.startDenialFlusher()
 	if err := runtime.sso.StartRefresh(context.Background(), 5*time.Minute, 30*time.Second); err != nil {
@@ -215,16 +225,21 @@ func GenerateBootstrapSecret() (string, error) {
 	return base64.RawURLEncoding.EncodeToString(buffer), nil
 }
 
-func SecurityBootstrapRequired() (bool, error) {
+type SecuritySetupStatus struct {
+	BootstrapRequired bool
+	RecoveryRequired  bool
+}
+
+func SecuritySetupState() (SecuritySetupStatus, error) {
 	runtime, err := configuredAdminSecurity()
 	if err != nil {
-		return false, err
+		return SecuritySetupStatus{}, err
 	}
 	state, err := runtime.service.State(context.Background())
 	if err != nil {
-		return false, err
+		return SecuritySetupStatus{}, err
 	}
-	return !state.Initialized || state.RecoveryPHC != "", nil
+	return SecuritySetupStatus{BootstrapRequired: !state.Initialized, RecoveryRequired: state.RecoveryPHC != ""}, nil
 }
 
 func configuredAdminSecurity() (*adminSecurityRuntime, error) {

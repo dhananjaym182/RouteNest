@@ -52,7 +52,7 @@ func TestSnapshotIsDeepCopy(t *testing.T) {
 }
 
 // Duplicate ids: metadata edits touch only the first record, disabling touches
-// every record, and delete removes only the first record.
+// every record, and legacy deletion fails closed as ambiguous.
 func TestDuplicateIDSemantics(t *testing.T) {
 	withPool(t, &domain.AccountPool{Models: []domain.Model{
 		{ID: "dup", Custom: true},
@@ -74,12 +74,12 @@ func TestDuplicateIDSemantics(t *testing.T) {
 		}
 	}
 
-	if out := Delete("dup"); out != DeleteDeleted {
-		t.Fatalf("delete = %v, want deleted", out)
+	before := Snapshot()
+	if out, err := Delete("dup"); out != DeleteAmbiguous || err != nil {
+		t.Fatalf("delete = %v, %v, want ambiguous", out, err)
 	}
-	left := livePool().Models
-	if len(left) != 1 || left[0].Source != SourceRemote {
-		t.Fatalf("delete must remove only the first record: %+v", left)
+	if !reflect.DeepEqual(Snapshot(), before) {
+		t.Fatalf("ambiguous delete changed records: %+v", Snapshot())
 	}
 }
 
@@ -88,14 +88,37 @@ func TestDeleteProtectsSyncedRecordButAllowsDelisted(t *testing.T) {
 		{ID: "live", Source: SourceRemote},
 		{ID: "gone", Source: SourceRemote, Delisted: true},
 	}})
-	if out := Delete("live"); out != DeleteProtected {
+	if out, err := Delete("live"); out != DeleteProtected || err != nil {
 		t.Fatalf("live synced record: %v, want protected", out)
 	}
-	if out := Delete("gone"); out != DeleteDeleted {
+	if out, err := Delete("gone"); out != DeleteDeleted || err != nil {
 		t.Fatalf("delisted record: %v, want deleted", out)
 	}
-	if out := Delete("missing"); out != DeleteNotFound {
+	if out, err := Delete("missing"); out != DeleteNotFound || err != nil {
 		t.Fatalf("missing record: %v, want not found", out)
+	}
+}
+
+func TestDeletePersistenceFailureRollsBack(t *testing.T) {
+	path := withPool(t, &domain.AccountPool{DefaultModel: "local", Models: []domain.Model{{ID: "local", Custom: true}}})
+	accounts.PoolPath = t.TempDir()
+	before := Snapshot()
+	if _, err := Delete("local"); err == nil {
+		t.Fatal("expected persistence failure")
+	}
+	if !reflect.DeepEqual(Snapshot(), before) || livePool().DefaultModel != "local" {
+		t.Fatalf("failed delete changed live state: %+v", livePool())
+	}
+	accounts.PoolPath = path
+	if outcome, err := Delete("local"); outcome != DeleteDeleted || err != nil {
+		t.Fatalf("retry delete = %v, %v", outcome, err)
+	}
+	reloaded, err := poolstore.Load(path)
+	if err != nil {
+		t.Fatalf("reload successful deletion: %v", err)
+	}
+	if len(reloaded.Models) != 0 || reloaded.DefaultModel != "" {
+		t.Fatalf("deleted model returned after restart: %+v", reloaded)
 	}
 }
 
@@ -111,7 +134,9 @@ func TestDefaultModelCleanup(t *testing.T) {
 	}
 
 	withPool(t, &domain.AccountPool{DefaultModel: "z", Models: []domain.Model{{ID: "z", Custom: true}}})
-	Delete("z")
+	if _, err := Delete("z"); err != nil {
+		t.Fatal(err)
+	}
 	if livePool().DefaultModel != "" {
 		t.Fatal("deleting the default must clear it")
 	}

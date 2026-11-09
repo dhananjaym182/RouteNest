@@ -104,6 +104,44 @@ func LoadPoolFromDisk(path string) (*AccountPool, PoolStorageState, error) {
 	return loadPoolFromDisk(path)
 }
 
+// FreshPoolInitializationAllowed performs the read-only portion of first-run
+// detection. It returns true only when the pool, witness, corrupt backups, and
+// independent installation evidence are all absent. It never creates storage.
+func FreshPoolInitializationAllowed(path string) (bool, error) {
+	if strings.TrimSpace(path) == "" {
+		return false, fmt.Errorf("%w: account storage path is empty", ErrPoolStorageUnavailable)
+	}
+	markerExists, err := loadPoolMarker(path)
+	if err != nil {
+		return false, fmt.Errorf("%w: inspect initialization marker for %s: %v", ErrPoolStorageUnavailable, path, err)
+	}
+	_, statErr := os.Stat(path)
+	if statErr == nil {
+		return false, nil
+	}
+	if !errors.Is(statErr, os.ErrNotExist) {
+		return false, fmt.Errorf("%w: read %s: %v", ErrPoolStorageUnavailable, path, statErr)
+	}
+	if markerExists {
+		return false, fmt.Errorf("%w: initialized account storage %s is missing; restore it from backup", ErrPoolStorageUnavailable, path)
+	}
+	backup, err := corruptPoolBackupExists(path)
+	if err != nil {
+		return false, fmt.Errorf("%w: inspect backups for %s: %v", ErrPoolStorageUnavailable, path, err)
+	}
+	if backup {
+		return false, fmt.Errorf("%w: %s is missing after a corrupt-file backup; restore or repair it", ErrPoolStorageUnavailable, path)
+	}
+	established, err := platform.EstablishedDataEvidence(path)
+	if err != nil {
+		return false, fmt.Errorf("%w: inspect installation evidence for %s: %v", ErrPoolStorageUnavailable, path, err)
+	}
+	if established {
+		return false, fmt.Errorf("%w: account storage and its initialization witness are missing from an established data directory; restore a valid account-pool file and restart RouteNest", ErrPoolStorageUnavailable)
+	}
+	return true, nil
+}
+
 func loadPoolFromDisk(path string) (*AccountPool, PoolStorageState, error) {
 	if strings.TrimSpace(path) == "" {
 		return nil, PoolStorageUnreadable, fmt.Errorf("%w: account storage path is empty", ErrPoolStorageUnavailable)
@@ -244,6 +282,43 @@ func SavePoolStrictLocked() error {
 		return poolLoadErr
 	}
 	return poolstore.Save(PoolPath, Pool)
+}
+
+// SavePoolCandidateStrictLocked durably persists a detached pool candidate and
+// publishes it only after persistence succeeds. If replacement succeeded but a
+// later durability step failed, it reloads the winning on-disk state so memory
+// and disk remain consistent while the caller still receives the error.
+func SavePoolCandidateStrictLocked(next *AccountPool) error {
+	return savePoolCandidateStrictLocked(next, poolstore.SaveDurable)
+}
+
+func savePoolCandidateStrictLocked(next *AccountPool, save func(string, *AccountPool) error) error {
+	ensurePoolPath()
+	if poolLoadErr != nil && poolLoadErrPath == PoolPath {
+		return poolLoadErr
+	}
+	if next == nil || save == nil {
+		return errors.New("persist account pool candidate: storage unavailable")
+	}
+	if err := save(PoolPath, next); err != nil {
+		if platform.AtomicWriteMayHaveReplaced(err) {
+			persisted, reloadErr := poolstore.Load(PoolPath)
+			if reloadErr != nil {
+				poolLoadErr = errors.Join(err, reloadErr)
+				poolLoadErrPath = PoolPath
+				Pool = poolstore.Empty()
+				return poolLoadErr
+			}
+			publishPoolLocked(persisted)
+			poolLoadErr = nil
+			poolLoadErrPath = ""
+		}
+		return err
+	}
+	publishPoolLocked(next)
+	poolLoadErr = nil
+	poolLoadErrPath = ""
+	return nil
 }
 
 func DeleteAllAccountsStrict() error {

@@ -51,12 +51,12 @@ function provDetailSectionsHTML(p) {
   // §2 模型：全量芯片 + 待审计数；已下架模型就地标记并提供一键移除
   const totalModes = (p.modelIds || []).length;
   const delistedSet = {};
-  ((_provDelisted && _provDelisted[p.name || '']) || []).forEach(r => { delistedSet[r.id] = true; });
+  ((_provDelisted && _provDelisted[p.id]) || []).forEach(r => { delistedSet[r.id] = true; });
   const models = '<div class="model-chips model-chips-all">' +
       (p.modelIds || []).map(m => delistedSet[m]
         ? '<span class="model-tag chip-clip delisted-chip" title="' + escAttr(t('已从上游官方列表移除，实测可能仍可用；同步只标记不删除，上游报模型不存在时自动清理')) + '">' +
             esc(m) + ' <span class="delisted-badge">' + t('已下架') + '</span>' +
-            '<a href="javascript:void(0)" class="delist-inline-x" onclick="removeProvDelistedModel(\'' + escAttrJS(m) + '\')" title="' + escAttr(t('移除')) + '" aria-label="' + escAttr(t('移除') + ' ' + m) + '">' + uiIcon('close') + '</a>' +
+            '<a href="javascript:void(0)" class="delist-inline-x" onclick="removeProvDelistedModel(\'' + escAttrJS(p.id) + '\',\'' + escAttrJS(m) + '\')" title="' + escAttr(t('移除')) + '" aria-label="' + escAttr(t('移除') + ' ' + m) + '">' + uiIcon('close') + '</a>' +
           '</span>'
         : '<span class="model-tag chip-clip" title="' + escAttr(m) + '">' + esc(m) + '</span>').join('') +
     '</div>' +
@@ -148,19 +148,21 @@ function renderProvDetail(p) {
 // escAttrJS: id 用于 JS 字符串字面量拼进 onclick —— 复用 escAttr 的转义即可（id 无引号风险）
 function escAttrJS(s) { return escAttr(s); }
 
-// ========== §已下架模型清理（详情抽屉）：数据取模型池（GET /models），按 provider 名过滤 =====
-// 后端只允许删除 custom 或 delisted 条目（13_models deleteModel 语义），这里仅复用同一端点：
-// POST /models/delete {id}，不改 13_models.js。
-let _provDelisted = null; // providerName -> [{id, cost}]（每次打开详情时刷新一次）
+// ========== §已下架模型清理（详情抽屉）：按稳定 provider ID 读取同步状态 =====
+let _provDelisted = null; // providerId -> [{id, cost}]（每次打开详情时刷新一次）
 
 async function ensureProvDelisted() {
   try {
-    const d = await api('GET', '/models');
-    const list = (d.data.models || []).filter(m => m.source === 'provider' && m.delisted);
+    const d = await api('GET', '/providers/sync-status');
+    _provSync = (d.data && d.data.providers) || {};
     _provDelisted = {};
-    list.forEach(m => {
-      const k = m.provider || '';
-      (_provDelisted[k] = _provDelisted[k] || []).push({ id: m.id, cost: m.cost || '' });
+    Object.keys(_provSync).forEach(providerId => {
+      const state = _provSync[providerId] || {};
+      if (!Array.isArray(state.delistedModels)) return;
+      _provDelisted[providerId] = state.delistedModels.map(id => ({
+        id: id,
+        cost: state.offerings && state.offerings[id] && state.offerings[id].cost || '',
+      }));
     });
   } catch (e) {
     _provDelisted = null;
@@ -172,7 +174,7 @@ async function ensureProvDelisted() {
 // 子行 + 移除全部入口（仅当该 provider 有已下架条目时渲染）
 function provDelistedHTML(p) {
   if (!_provDelisted) return '';
-  const rows = _provDelisted[p.name || ''] || [];
+  const rows = _provDelisted[p.id] || [];
   if (!rows.length) return '';
   const list =
     '<div class="delist-rows">' +
@@ -181,7 +183,7 @@ function provDelistedHTML(p) {
         '<span class="mono detail-clip">' + esc(m.id) + '</span>' +
         '<span class="delisted-badge" title="' + escAttr(t('已从上游官方列表移除，实测可能仍可用；同步只标记不删除，上游报模型不存在时自动清理')) + '">' + t('已下架') + '</span>' +
         (m.cost === 'free' ? '<span class="model-tag free">' + t('免费') + '</span>' : '') +
-        '<button type="button" class="btn btn-sm btn-xs btn-danger delist-remove" onclick="removeProvDelistedModel(\'' + escAttrJS(m.id) + '\')" title="' + t('移除') + '" aria-label="' + t('移除') + ' ' + escAttr(m.id) + '">' + t('移除') + '</button>' +
+        '<button type="button" class="btn btn-sm btn-xs btn-danger delist-remove" onclick="removeProvDelistedModel(\'' + escAttrJS(p.id) + '\',\'' + escAttrJS(m.id) + '\')" title="' + t('移除') + '" aria-label="' + t('移除') + ' ' + escAttr(m.id) + '">' + t('移除') + '</button>' +
       '</div>').join('') +
     '</div>' +
     '<div class="form-actions mt-6"><button type="button" class="btn btn-sm" onclick="removeAllProvDelisted(this)">' + t('移除全部已下架') + '</button></div>';
@@ -189,40 +191,57 @@ function provDelistedHTML(p) {
     '<span class="hint-xs ml-8">' + t('已从上游官方列表移除，可在此手动清理') + '</span></div>' + list + '</div>';
 }
 
-// 单个移除：与模型页 deleteModel 同端点同文案（仅复用，不改 13_models.js）
-async function removeProvDelistedModel(id) {
-  if (!(await showConfirm(t('确认删除模型 ') + id + ' ?'))) return;
-  try {
-    await api('POST', '/models/delete', { id });
-    toast(t('模型已删除: ') + id, 'success');
-  } catch (e) {
-    toast(t('删除失败: ') + e.message, 'error');
+async function requestProviderDelistedRemoval(providerId, rows) {
+  const result = { removed: [], skipped: [], errors: [] };
+  const targets = rows.map(row => ({ id: row.id, source: 'provider', providerId: providerId }));
+  for (const batch of modelRemovalBatches(targets)) {
+    try {
+      const response = await api('POST', '/models/delisted/remove', { models: batch });
+      const data = response.data || {};
+      if (!Array.isArray(data.removed) || !Array.isArray(data.skipped) || !Array.isArray(data.errors)) throw new Error(t('移除结果无效，请刷新后重试'));
+      result.removed.push(...data.removed); result.skipped.push(...data.skipped); result.errors.push(...data.errors);
+    } catch (e) {
+      result.errors.push({ error: e.message });
+      break;
+    }
   }
-  _provDelisted = null;
-  loadProviders();              // 列表卡片（pending/delisted pill）
-  ensureProvDelisted();         // 拉新的已下架清单 → 完成后经 refreshProvDetailIfOpen 重绘详情
+  return result;
 }
 
-// 一键移除该 provider 全部已下架模型（逐个走同一删除端点，服务端逐条校验 custom/delisted）
+async function refreshProviderDelistedRemoval(result) {
+  const completed = result.removed.concat(result.skipped);
+  await Promise.allSettled([loadModels(), loadProviders(), loadGlobal(false), loadCombos()]);
+  await loadConfig({ preserveEdits: true });
+  if (typeof reconcileRemovedModelDrafts === 'function') reconcileRemovedModelDrafts(completed, result.removed);
+  _provDelisted = null;
+  await ensureProvDelisted();
+}
+
+// 单个移除始终携带稳定 providerId；显示名重名或重命名不改变目标。
+async function removeProvDelistedModel(providerId, id) {
+  if (!(await showConfirm(t('确认删除模型 ') + id + ' ?'))) return;
+  const result = await requestProviderDelistedRemoval(providerId, [{ id: id }]);
+  if (result.removed.length) toast(t('模型已删除: ') + id, 'success');
+  else if (result.skipped.length) toast(t('模型已恢复或已移除，无需清理'), 'info');
+  if (result.errors.length) toast(t('删除失败: ') + result.errors.map(item => item.error).filter(Boolean).join('; '), 'error');
+  await refreshProviderDelistedRemoval(result);
+}
+
+// 一键移除该 provider 全部已下架模型；批次仍限定为同一个稳定 provider ID。
 async function removeAllProvDelisted(btn) {
   const id = _provDetailOpenId;
   const p = id ? _provCache[id] : null;
-  const rows = (p && _provDelisted && _provDelisted[p.name || '']) || [];
+  const rows = (p && _provDelisted && _provDelisted[p.id]) || [];
   if (!rows.length) { toast(t('没有已下架模型'), 'info'); return; }
   if (!(await showConfirm(t('确定移除 ') + rows.length + t(' 个已下架模型？')))) return;
   const orig = btn ? btn.innerHTML : '';
   if (btn) { btn.disabled = true; btn.innerHTML = '<span class="loading"></span>'; }
-  let okN = 0, errMsg = '';
-  for (const m of rows) {
-    try { await api('POST', '/models/delete', { id: m.id }); okN++; }
-    catch (e) { errMsg = e.message; }
-  }
+  const result = await requestProviderDelistedRemoval(p.id, rows);
+  const okN = result.removed.length + result.skipped.length;
   if (okN) toast(t('已移除 ') + okN + t(' 个已下架模型'), 'success');
-  else if (errMsg) toast(t('删除失败: ') + errMsg, 'error');
+  if (result.errors.length) toast(t('删除失败: ') + result.errors.map(item => item.error).filter(Boolean).join('; '), 'error');
   if (btn) { btn.disabled = false; btn.innerHTML = orig; }
-  _provDelisted = null;
-  loadProviders();
-  ensureProvDelisted();
+  await refreshProviderDelistedRemoval(result);
 }
 
 // 详情内「测试连通性」：定位 #provDetailTestOut，结果同样入 _provRowResults 跨刷新保留

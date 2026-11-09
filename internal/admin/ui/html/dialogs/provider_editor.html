@@ -8,11 +8,11 @@
     <div class="drawer-group">
       <div class="form-group-label">基本信息</div>
       <div class="form-row">
-        <div class="field"><label>名称 *</label><input type="text" id="provName" placeholder="OpenRouter"></div>
-        <div class="field f-16"><label>Base URL *</label><input type="text" id="provBaseURL" placeholder="https://openrouter.ai/api/v1" class="mono-plain"></div>
+        <div class="field"><label for="provName">名称 *</label><input type="text" id="provName" placeholder="OpenRouter"></div>
+        <div class="field f-16"><label for="provBaseURL">Base URL *</label><input type="text" id="provBaseURL" placeholder="https://openrouter.ai/api/v1" class="mono-plain"></div>
       </div>
       <div class="form-row">
-        <div class="field f-14"><label>API Key</label><input type="password" id="provKey" placeholder="sk-...（本地服务器可留空）"></div>
+        <div class="field f-14"><label for="provKey">API Key</label><input type="password" id="provKey" placeholder="sk-...（本地服务器可留空）"></div>
       </div>
     </div>
     <div class="drawer-group" id="provModelsGroup">
@@ -29,27 +29,27 @@
         </div>
       </div>
       <div class="form-row">
-        <div class="field f1"><label>自定义请求头（每行 Key: Value，如 HTTP-Referer: https://mysite.com）</label><textarea id="provHeaders" rows="3"></textarea></div>
+        <div class="field f1"><label for="provHeaders">自定义请求头（每行 Key: Value，如 HTTP-Referer: https://mysite.com）</label><textarea id="provHeaders" rows="3"></textarea></div>
       </div>
     </div>
     <details class="provider-editor-advanced"><summary>高级设置</summary>
     <div class="drawer-group">
       <div class="form-group-label">调度与限额</div>
       <div class="form-row">
-        <div class="field"><label>优先级（小=优先）</label><input type="number" id="provPriority" value="10" min="0" max="1000"></div>
-        <div class="field"><label>超时(秒)</label><input type="number" id="provTimeout" value="300" min="5" max="600"></div>
+        <div class="field"><label for="provPriority">优先级（小=优先）</label><input type="number" id="provPriority" value="10" min="0" max="1000"></div>
+        <div class="field"><label for="provTimeout">超时(秒)</label><input type="number" id="provTimeout" value="300" min="5" max="600"></div>
       </div>
       <div class="form-row">
-        <div class="field"><label>分钟请求上限（0=不限）</label><input type="number" id="provRpmLimit" value="0" min="0" max="100000"></div>
-        <div class="field"><label>每日请求上限（0=不限）</label><input type="number" id="provDailyLimit" value="0" min="0" max="1000000"></div>
+        <div class="field"><label for="provRpmLimit">分钟请求上限（0=不限）</label><input type="number" id="provRpmLimit" value="0" min="0" max="100000"></div>
+        <div class="field"><label for="provDailyLimit">每日请求上限（0=不限）</label><input type="number" id="provDailyLimit" value="0" min="0" max="1000000"></div>
       </div>
       <div class="form-row quota-win-row">
         <div class="field"><label id="provTokenLimitLabel" for="provTokenLimit" title="月度 Token 上限（如 10000000 = 10M），0=不限">Token 配额/月</label><input type="number" id="provTokenLimit" value="0" min="0" max="1000000000000" placeholder="0"></div>
         <div class="field field-win"><label for="provTokenWindow">重置周期</label><select id="provTokenWindow" onchange="syncProvTokenWindowUI()"><option value="monthly" selected>月度</option><option value="daily">每日</option></select></div>
       </div>
       <div class="form-row proxy-row">
-        <div class="field field-proxy"><label>出口代理（空=继承全局；- 表示直连）</label><input type="text" id="provProxyUrl" placeholder="http://127.0.0.1:7890 或 -" class="mono-plain"></div>
-        <div class="field"><label>权重（加权轮询；0=按1，-1=排除）</label><input type="number" id="provWeight" value="0" min="-1" max="1000000"></div>
+        <div class="field field-proxy"><label for="provProxyUrl">出口代理（空=继承全局；- 表示直连）</label><input type="text" id="provProxyUrl" placeholder="http://127.0.0.1:7890 或 -" class="mono-plain"></div>
+        <div class="field"><label for="provWeight">权重（加权轮询；0=按1，-1=排除）</label><input type="number" id="provWeight" value="0" min="-1" max="1000000"></div>
       </div>
       <div class="field-hint">配额提示：<span id="provQuotaWinHint">Token 配额按月度重置（每月 1 日 UTC），0=不限。</span>填入免费层限额后，路由会在派发前自动避开打满额度的上游，改用组内其他 provider，不再拿 429 试错</div>
     </div>
@@ -59,11 +59,11 @@
       <div class="form-group-label">行为与连接</div>
       <div class="form-row">
         <div class="field">
-          <label>启用</label>
+          <label for="provEnabled">启用</label>
           <select id="provEnabled"><option value="true">启用</option><option value="false">停用</option></select>
         </div>
         <div class="field">
-          <label>免费来源（供统计）</label>
+          <label for="provFree">免费来源（供统计）</label>
           <select id="provFree"><option value="true">免费</option><option value="false">付费</option></select>
         </div>
       </div>

@@ -49,6 +49,7 @@ func handleProviderSave(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteAPI(w, http.StatusBadRequest, httpx.Response{Error: err.Error()})
 		return
 	}
+	clearOnboardingProviderVerification(saved.ID)
 	httpx.WriteAPI(w, http.StatusOK, httpx.Response{Success: true, Data: map[string]any{"provider": saved}})
 }
 
@@ -73,6 +74,7 @@ func handleProviderDelete(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteAPI(w, http.StatusInternalServerError, httpx.Response{Error: err.Error()})
 		return
 	}
+	clearOnboardingProviderVerification(req.ID)
 	httpx.WriteAPI(w, http.StatusOK, httpx.Response{Success: true})
 }
 
@@ -111,6 +113,9 @@ func handleProviderTest(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		httpx.WriteAPI(w, http.StatusNotFound, httpx.Response{Error: "provider not found"})
 		return
+	}
+	if ok, _ := result["ok"].(bool); ok {
+		markOnboardingProviderVerified(req.ID)
 	}
 	httpx.WriteAPI(w, http.StatusOK, httpx.Response{Success: true, Data: result})
 }

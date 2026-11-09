@@ -107,7 +107,7 @@ func ValidateState(s State) error {
 			return fmt.Errorf("%w: break-glass invariant", ErrInvalidState)
 		}
 	} else {
-		if s.RecoveryPHC != "" {
+		if s.RecoveryPHC != "" || s.RecoveryCodePHC != "" {
 			return ErrInvalidState
 		}
 		if len(s.Sessions) > 0 {
@@ -124,6 +124,14 @@ func ValidateState(s State) error {
 			return ErrInvalidState
 		}
 		if _, e := ParsePHC(s.RecoveryPHC); e != nil {
+			return ErrInvalidState
+		}
+	}
+	if s.RecoveryCodePHC != "" {
+		if !s.Initialized || s.RecoveryPHC != "" {
+			return ErrInvalidState
+		}
+		if _, e := ParsePHC(s.RecoveryCodePHC); e != nil {
 			return ErrInvalidState
 		}
 	}

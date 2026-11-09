@@ -33,7 +33,7 @@ var requiredAdminIDs = []string{
 
 	"toastStack", "loginOverlay", "loginPassword", "loginError",
 	"langZh", "langEn", "themeSwitch", "refreshAllBtn", "saveDiscardBar",
-	"navEdgeToggle",
+	"navEdgeToggle", "adminContent",
 }
 
 var (
@@ -286,11 +286,79 @@ func TestAdminUICanonicalNavigationLabels(t *testing.T) {
 	}
 }
 
+func TestAdminUIAccessibilityPrimitives(t *testing.T) {
+	shell := adminUIAsset(t, "ui/html/shell.html")
+	about := adminUIAsset(t, "ui/html/pages/about.html")
+	script := adminUIAsset(t, "ui/js/03_shell.js")
+	css := adminUIAsset(t, "ui/css/99_access_settings.css")
+	for _, contract := range []string{
+		`class="skip-link" href="#adminContent"`,
+		`<main class="main" id="adminContent" tabindex="-1">`,
+	} {
+		if !strings.Contains(shell, contract) {
+			t.Errorf("admin shell missing accessibility contract %q", contract)
+		}
+	}
+	if !strings.Contains(about, "</main>") {
+		t.Error("admin main landmark is not explicitly closed")
+	}
+	for _, contract := range []string{
+		"function visibleFocusable(root)",
+		"_drawerReturnFocus",
+		"const _modalObserver = new MutationObserver",
+		"sidebar.setAttribute('inert', '')",
+	} {
+		if !strings.Contains(script, contract) {
+			t.Errorf("admin shell script missing focus contract %q", contract)
+		}
+	}
+	for _, contract := range []string{
+		".gateway-status .gateway-url{min-width:40px;min-height:40px",
+		".btn-sm,.subtab,.dash-ranges .range,#modelsList .model-group-actions .btn{min-height:40px}",
+		"select,textarea{min-height:44px}",
+	} {
+		if !strings.Contains(css, contract) {
+			t.Errorf("mobile touch target contract missing %q", contract)
+		}
+	}
+}
+
+func TestAdminUIStaticFormLabelsTargetControls(t *testing.T) {
+	tests := map[string][]string{
+		"ui/html/dialogs/combo_editor.html": {
+			`<label for="comboId">`, `<label for="comboName">`, `<label for="comboEnabled">`,
+		},
+		"ui/html/dialogs/provider_editor.html": {
+			`<label for="provName">`, `<label for="provBaseURL">`, `<label for="provKey">`, `<label for="provEnabled">`,
+		},
+		"ui/html/pages/providers.html": {
+			`<label for="tokenInput">`, `<label for="ocEnabled">`, `<label for="ocProxyStrategy">`, `<label for="zenHeadersBulk">`,
+		},
+		"ui/html/pages/routing.html": {
+			`<label for="settingDefModel">`, `<label for="settingStrategy">`, `<label for="tunRetryRounds">`, `<label for="tunExcluded">`,
+		},
+		"ui/html/pages/upstreams.html": {
+			`<label for="clineProxyStrategy">`, `<label for="clineProxies">`,
+		},
+	}
+	for asset, labels := range tests {
+		src := adminUIAsset(t, asset)
+		for _, label := range labels {
+			if !strings.Contains(src, label) {
+				t.Errorf("%s missing associated label %q", asset, label)
+			}
+		}
+	}
+}
+
 func TestAdminSecurityUIReflectsRBACPermissions(t *testing.T) {
 	markup := adminUIAsset(t, "ui/html/pages/security.html")
+	accounts := adminUIAsset(t, "ui/html/pages/accounts.html")
 	script := adminUIAsset(t, "ui/js/03_shell.js")
+	if !strings.Contains(accounts, `data-admin-permission="credential.write"`) {
+		t.Error("client-key owner missing credential.write permission gate")
+	}
 	for _, permission := range []string{
-		`data-admin-permission="credential.write"`,
 		`data-admin-permission="security.write"`,
 		`data-admin-permission="credential.write dangerous.execute"`,
 	} {
@@ -314,6 +382,44 @@ func TestAdminSecurityUIReflectsRBACPermissions(t *testing.T) {
 		if !strings.Contains(script, contract) {
 			t.Errorf("security script missing RBAC contract %q", contract)
 		}
+	}
+}
+
+func TestAdminUISeparatesAdministratorSecurityFromClientKeys(t *testing.T) {
+	shell := adminUIAsset(t, "ui/html/shell.html")
+	security := adminUIAsset(t, "ui/html/pages/security.html")
+	accounts := adminUIAsset(t, "ui/html/pages/accounts.html")
+	nav := adminUIAsset(t, "ui/js/02_nav.js")
+	if !strings.Contains(shell, `data-tab="security"`) || !strings.Contains(shell, `class="nav-label">管理员安全</span>`) {
+		t.Error("administrator security is not a direct sidebar destination")
+	}
+	if strings.Contains(security, `data-page="security"`) || strings.Contains(security, `id="keysList"`) {
+		t.Error("administrator security still nests page tabs or client API-key management")
+	}
+	for _, contract := range []string{
+		`class="large-title">管理员安全</div>`,
+		`id="localAdminPasswordForm"`,
+		`id="recoveryCodeManagement"`,
+		`id="adminSessionsList"`,
+		`id="adminUsersList"`,
+		`id="ssoProvidersList"`,
+	} {
+		if !strings.Contains(security, contract) {
+			t.Errorf("administrator security missing direct control %q", contract)
+		}
+	}
+	for _, contract := range []string{
+		`data-sub="client-keys"`,
+		`data-subpage="client-keys"`,
+		`id="keysList"`,
+		`id="keyGenResult"`,
+	} {
+		if !strings.Contains(accounts, contract) {
+			t.Errorf("accounts and credentials missing client-key ownership %q", contract)
+		}
+	}
+	if !strings.Contains(nav, `page === 'security' && sub === 'keys'`) || !strings.Contains(nav, `switchPageSubTab('credentials', 'client-keys')`) {
+		t.Error("legacy API-key links are not redirected to the client-key owner")
 	}
 }
 
@@ -358,11 +464,14 @@ func TestAdminUIDirectSubtabLinks(t *testing.T) {
 		t.Error("proxy settings do not link directly to routing policy")
 	}
 	quickstart := adminUIAsset(t, "ui/html/pages/quickstart.html")
-	if !strings.Contains(quickstart, `showPageSubTab('credentials', 'pool')`) {
-		t.Error("quick start does not link directly to Cline accounts")
+	if !strings.Contains(quickstart, `onclick="openProviderSetup()"`) {
+		t.Error("quick start does not use the shared provider setup workflow")
 	}
 	if !strings.Contains(quickstart, `showPageSubTab('upstreams', 'zen')`) {
 		t.Error("quick start does not link directly to OpenCode Zen")
+	}
+	if !strings.Contains(quickstart, `showPageSubTab('credentials','client-keys')`) {
+		t.Error("quick start does not link directly to client API keys")
 	}
 	comboEditor := adminUIAsset(t, "ui/html/dialogs/combo_editor.html")
 	if !strings.Contains(comboEditor, `showPageSubTab('routing', 'config')`) {
@@ -526,5 +635,34 @@ func TestAdminUIProviderDetailLinksFilteredGlobalViews(t *testing.T) {
 	if !strings.Contains(global, "function openGlobalProviderView(tab, providerID)") ||
 		!strings.Contains(global, "_globalFilter = String(providerID") {
 		t.Error("provider detail destinations do not retain a provider filter")
+	}
+}
+
+func TestAdminUIModelDeletionUsesProviderScopedIdentity(t *testing.T) {
+	detail := adminUIAsset(t, "ui/js/07_providers_detail.js")
+	for _, want := range []string{
+		"_provDelisted[p.id]",
+		"api('POST', '/models/delisted/remove'",
+		"source: 'provider'",
+		"providerId: providerId",
+	} {
+		if !strings.Contains(detail, want) {
+			t.Errorf("provider detail deletion missing %q", want)
+		}
+	}
+	if strings.Contains(detail, "api('POST', '/models/delete'") {
+		t.Error("provider detail still uses the legacy ID-only deletion endpoint")
+	}
+
+	models := adminUIAsset(t, "ui/js/13_models.js")
+	for _, want := range []string{
+		"api('GET', '/model-offerings')",
+		"records.length > 1 || offerings.length > 1",
+		"api('POST', '/models/remove'",
+		"{ id: id, source: source, providerId: providerId }",
+	} {
+		if !strings.Contains(models, want) {
+			t.Errorf("generic model deletion missing %q", want)
+		}
 	}
 }

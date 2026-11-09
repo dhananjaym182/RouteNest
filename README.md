@@ -43,10 +43,10 @@ Provider availability, authentication requirements, free allowances and supporte
 
 - **Bootstrap:** the CLI prints a generated one-time secret only to its controlling terminal. A first start without a controlling terminal must provide `ROUTENEST_ADMIN_BOOTSTRAP_PASSWORD`; the retained initialized authority ignores it. The desktop app uses a one-shot native dialog.
 - **Passwords:** permanent administrator passwords require at least 8 characters, with a maximum of 1024 UTF-8 bytes. Password changes revoke all sessions for that administrator.
-- **Separate controls:** Client API keys protect model and inference routes, including the key-wrapped `/v1/*` routes, once at least one key is loaded; `/health` and `/v1/health` are always public. An empty key list leaves the key-wrapped routes open for compatibility. Durable administrator sessions and server-side RBAC protect administrative operations; the listed bootstrap/login/SSO entry routes remain public and separately validated. Admin sessions store only hashed tokens, survive restart, can be revoked, and require session-bound CSRF tokens for authenticated mutations.
+- **Separate controls:** Client API keys protect model and inference routes, including the key-wrapped `/v1/*` routes, once at least one key is loaded; `/health` and `/v1/health` are public liveness probes. `/ready` and `/v1/ready` are public readiness probes that return HTTP 503 when client-authentication storage is unavailable. An empty key list leaves the key-wrapped routes open for compatibility only after valid storage has loaded. Durable administrator sessions and server-side RBAC protect administrative operations; the listed bootstrap/login/SSO entry routes remain public and separately validated. Admin sessions store only hashed tokens, survive restart, can be revoked, and require session-bound CSRF tokens for authenticated mutations.
 - **Account-only deletion:** **Delete All Accounts** removes Cline accounts and their account-owned state only. Client API keys, models, the default model, listener settings, removal reservations and legacy migration sentinels are preserved. The operation reports success only after durable persistence.
 - **Hosted administration:** the binary and desktop app bind to `127.0.0.1` by default. A production non-loopback listener is rejected unless an exact public URL, trusted-proxy mode and trusted proxy CIDRs are configured. RouteNest accepts an HTTP canonical origin when HSTS is off, so HTTPS termination at the trusted proxy remains a required deployment practice rather than a universal server invariant.
-- **Client-key limitation:** corrupt, unreadable, partially restored, or uncertain missing account-pool state fails closed on key-wrapped routes with an authentication-storage error. A confirmed fresh installation must set `ROUTENEST_INITIALIZE_EMPTY_ACCOUNT_STORE=true` for one startup; remove it after initialization. A verified intentionally empty key list remains anonymously accessible for compatibility. Console-generated client keys are still clock-derived, and ordinary key writes still use best-effort persistence. Do not treat them as an internet-grade security boundary without additional hardening; verify keys after restart and keep the gateway behind trusted network controls.
+- **Client-key safety:** corrupt, unreadable, partially restored, or uncertain missing account-pool state fails closed on key-wrapped routes with an authentication-storage error. A confirmed fresh installation must set `ROUTENEST_INITIALIZE_EMPTY_ACCOUNT_STORE=true` for one startup; remove it after initialization. Generated keys use 256 bits of cryptographic randomness, and key mutations publish only after durable persistence. Deleting a key requires `credential.write` plus `dangerous.execute`; deleting the final key also requires explicit confirmation that client API authentication will be disabled. A verified intentionally empty key list remains anonymously accessible for compatibility.
 - **Sensitive data:** account refresh tokens, Provider Credentials and generated client API keys are stored in plaintext in the data directory. Protect that directory, and never commit or share it.
 - **Docker:** the sample compose file binds the backend port to host loopback and requires explicit bootstrap/public-URL/proxy settings. Do not expose the backend port directly to the internet.
 
@@ -57,6 +57,11 @@ See [Administrator security and SSO](docs/admin-security.md) for RBAC, OIDC, SAM
 ### Desktop app (prebuilt)
 
 Download the desktop build for your platform from [Releases](https://github.com/dhananjaym182/RouteNest/releases) and run it.
+
+For a confirmed fresh installation, launch the desktop executable once from a terminal
+with `-initialize-empty-account-store`. After that successful startup, close it and use
+the normal launcher. The flag authorizes only the guarded one-time initialization; it
+cannot reset an established or uncertain data directory.
 
 | Platform | What you need to run a release |
 | --- | --- |
@@ -91,15 +96,25 @@ The container listens on `0.0.0.0:3457`, while the sample compose file publishes
 
 ### First run
 
-1. For a confirmed new data directory, set `ROUTENEST_INITIALIZE_EMPTY_ACCOUNT_STORE=true` for the first startup only, then remove it. Never use this variable to repair or reset an established installation.
-2. Read the one-time bootstrap secret from the local terminal/native dialog, open `/admin/`, and set a permanent password.
-3. Add a Cline account, enable native OpenCode Zen, or configure a provider API key.
-4. Generate a client API key. Until at least one key exists, key-wrapped model and inference routes accept anonymous requests.
-5. Pick a default model. If left unset, RouteNest prefers an active Cline model classified as free; after catalog initialization, it can fall back to the first active enabled model of any cost.
+1. **Desktop:** open RouteNest normally. The trusted native setup window verifies a fresh
+   data directory, creates the administrator password, and displays a one-time recovery
+   code without terminal commands or copied bootstrap secrets.
+2. **CLI/headless/Docker:** for a confirmed new data directory, set
+   `ROUTENEST_INITIALIZE_EMPTY_ACCOUNT_STORE=true` for the first startup only, then remove
+   it. The CLI may instead use `-initialize-empty-account-store`. Neither control repairs
+   or resets an established installation; deliver the one-time administrator bootstrap
+   secret through the documented trusted local path.
+3. Follow the Overview checklist to connect a Cline account, native OpenCode Zen, or a
+   provider API key; verify models and client access; then send the first gateway request.
+4. Generate a client API key when authenticated client access is required. Until at least
+   one key exists, key-wrapped model and inference routes accept anonymous requests under
+   the documented compatibility policy.
+5. Save the administrator recovery code. **Forgot Password?** consumes it, rotates the
+   code, revokes administrator sessions, and preserves provider, model and routing data.
 
 ## Client setup
 
-Both protocol families run on the same port (default `3457`). Once at least one client API key is loaded, keys are accepted from `Authorization: Bearer <key>` or `x-api-key: <key>`. With an empty key list, model and inference endpoints remain open for compatibility; `/health` and `/v1/health` are always public.
+Both protocol families run on the same port (default `3457`). Once at least one client API key is loaded, keys are accepted from `Authorization: Bearer <key>` or `x-api-key: <key>`. With a verified empty key list, model and inference endpoints remain open for compatibility. `/health` and `/v1/health` report liveness; `/ready` and `/v1/ready` report whether client-authentication storage is operational.
 
 ```bash
 export ROUTENEST_KEY="<key generated in the console>"
@@ -155,6 +170,7 @@ RouteNest provides OpenAI- and Anthropic-compatible endpoints for supported requ
 | `POST /v1/messages/count_tokens` | Anthropic token count | Local estimate, not an upstream tokenizer |
 | `GET /v1/models` | OpenAI model list | Enabled models and enabled combos |
 | `GET /v1/health` | Health probe | Version and active account count |
+| `GET /v1/ready` | Readiness probe | HTTP 200 only when client-authentication storage is available |
 
 Supported and verified behavior includes SSE streaming for text, tool calls and reasoning content; conversion of tool definitions and tool results between OpenAI and Anthropic shapes; usage metadata when the upstream returns it; Responses API event sequences; and failure recording when a stream is truncated or the client disconnects.
 
@@ -301,9 +317,9 @@ cannot establish safe permissions; it no longer falls back to writing secrets
 beside the executable.
 
 The Windows durable writer uses `MoveFileEx` write-through replacement followed by
-a writable directory-handle flush. The correction is cross-compiled in CI/local
-verification, but real Windows runtime execution is still required before claiming
-full cross-platform C1 approval.
+a writable directory-handle flush. The test workflow is configured to execute focused
+persistence tests on a Windows runner, but a successful workflow run is still required
+before claiming full cross-platform C1 approval.
 
 > The data files contain plaintext refresh tokens, Provider Credentials and generated client API keys. Back them up securely and never publish them or commit them to Git.
 

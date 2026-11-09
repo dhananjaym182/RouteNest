@@ -31,7 +31,12 @@ func MarkModelGone(model string) {
 	if model == "" {
 		return
 	}
-	if models.RemoveDelisted(model) {
+	removed, err := models.RemoveDelistedSource(model, models.SourceZen)
+	if err != nil {
+		log.Printf("model %q cleanup failed after upstream reported it missing: %v", model, err)
+		return
+	}
+	if removed {
 		log.Printf("model %q removed: upstream reports it no longer exists (was delisted)", model)
 	}
 }

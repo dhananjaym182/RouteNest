@@ -1,5 +1,5 @@
 GET /admin/ -> 200 ct=text/html; charset=utf-8 shape=non-json
-GET /admin/api/auth/status -> 200 ct=application/json shape={data,success} data{bootstrapRequired,initialized,legacyRotationRequired,readiness,recoveryRequired}
+GET /admin/api/auth/status -> 200 ct=application/json shape={data,success} data{bootstrapRequired,initialized,legacyRotationRequired,readiness,recoveryCodeAvailable,recoveryRequired}
 GET /admin/api/auth/session -> 401 ct=application/json shape={error,success}
 GET /admin/api/auth/sessions -> 401 ct=application/json shape={error,success}
 GET /admin/api/auth/users -> 401 ct=application/json shape={error,success}

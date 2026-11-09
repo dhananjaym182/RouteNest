@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"time"
 
 	"routenest/internal/accounts"
 	"routenest/internal/budget"
@@ -31,6 +32,7 @@ import (
 	"routenest/internal/proxycore"
 	"routenest/internal/requestlog"
 	"routenest/internal/routing"
+	onboardingstore "routenest/internal/store/onboarding"
 	requestlogstore "routenest/internal/store/requestlog"
 	"routenest/internal/upstream/openaicompat"
 	"routenest/internal/zen"
@@ -106,6 +108,9 @@ func configure() {
 
 	egress.ConfigProvider = config.Live
 	requestlog.Path = platform.ResolveDataPath(requestlogstore.FileName, nil)
+	requestlog.RecordSuccessfulGatewayRequest = func(at time.Time) error {
+		return onboardingstore.RecordSuccessfulGatewayRequest(platform.ResolveDataPath(onboardingstore.FileName, nil), at)
+	}
 	routing.ConfigProvider = config.Live
 	routing.ModelsProvider = routing.AllModels
 	routing.SetComboCatalog(combos.RoutingCombos{})

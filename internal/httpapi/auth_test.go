@@ -204,3 +204,32 @@ func TestHealthRuntimeStateRedactedDTO(t *testing.T) {
 		t.Fatal("local backend claimed multi-replica support")
 	}
 }
+
+func TestReadinessHandler(t *testing.T) {
+	t.Run("ready", func(t *testing.T) {
+		rec := httptest.NewRecorder()
+		Readiness{AuthenticationStorage: func() error { return nil }}.Handler(rec, httptest.NewRequest(http.MethodGet, "/ready", nil))
+		if rec.Code != http.StatusOK || rec.Body.String() != "{\"authenticationStorage\":\"ready\",\"status\":\"ready\"}\n" {
+			t.Fatalf("response = %d %s", rec.Code, rec.Body.String())
+		}
+	})
+
+	t.Run("storage unavailable is redacted", func(t *testing.T) {
+		rec := httptest.NewRecorder()
+		Readiness{AuthenticationStorage: func() error { return errors.New("secret path and detail") }}.Handler(rec, httptest.NewRequest(http.MethodGet, "/ready", nil))
+		if rec.Code != http.StatusServiceUnavailable {
+			t.Fatalf("status = %d, want 503", rec.Code)
+		}
+		if body := rec.Body.String(); !strings.Contains(body, `"authenticationStorage":"unavailable"`) || strings.Contains(body, "secret path") {
+			t.Fatalf("body = %s", body)
+		}
+	})
+
+	t.Run("missing provider fails closed", func(t *testing.T) {
+		rec := httptest.NewRecorder()
+		Readiness{}.Handler(rec, httptest.NewRequest(http.MethodGet, "/ready", nil))
+		if rec.Code != http.StatusServiceUnavailable {
+			t.Fatalf("status = %d, want 503", rec.Code)
+		}
+	})
+}

@@ -250,10 +250,21 @@ func IsModelGoneError(status int, body string) bool {
 	return zen.IsModelGoneError(status, body)
 }
 
-// MarkModelGone removes a delisted model that upstream reports as gone. See
-// zen.MarkModelGone.
+// MarkModelGone removes only the delisted Cline offering that Cline reports as
+// gone. Same-ID Zen and custom-provider offerings remain intact.
 func MarkModelGone(model string) {
-	zen.MarkModelGone(model)
+	model = strings.TrimSpace(model)
+	if model == "" {
+		return
+	}
+	removed, err := models.RemoveDelistedSource(model, models.SourceRemote)
+	if err != nil {
+		log.Printf("model %q cleanup failed after Cline reported it missing: %v", model, err)
+		return
+	}
+	if removed {
+		log.Printf("model %q removed: Cline reports it no longer exists (was delisted)", model)
+	}
 }
 
 // GetModelSyncResult 返回最近一次同步结果（供管理后台展示）。

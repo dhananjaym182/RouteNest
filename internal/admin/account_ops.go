@@ -42,8 +42,14 @@ var adminAccountOps = &adminapi.AccountOps{
 	DoRefreshAll: refreshAllAccounts,
 	Refresh:      accounts.RefreshAccountToken,
 	ClearAll:     clearAccountPool,
-	Probe:        func(acc *domain.Account) any { return routing.TestAccount(acc) },
-	OpenBrowser:  accounts.OpenBrowser,
-	Now:          time.Now,
-	Translate:    i18n.TAPI,
+	Probe: func(acc *domain.Account) any {
+		result := routing.TestAccount(acc)
+		if result.OK {
+			markOnboardingProviderVerified(onboardingClineVerificationKey(acc.AccountID))
+		}
+		return result
+	},
+	OpenBrowser: accounts.OpenBrowser,
+	Now:         time.Now,
+	Translate:   i18n.TAPI,
 }

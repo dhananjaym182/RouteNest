@@ -1,5 +1,6 @@
 </head>
 <body>
+<a class="skip-link" href="#adminContent">跳到主要内容</a>
 <div class="layout">
 <button type="button" class="sidebar-scrim" id="sidebarScrim" onclick="closeMobileNav()" aria-label="关闭导航"></button>
 <aside class="sidebar" id="appSidebar" aria-label="RouteNest 导航">
@@ -70,7 +71,7 @@
       <div class="nav-section-label">系统</div>
       <button type="button" class="nav-item" data-tab="security">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-        <span class="nav-label">API 密钥与安全</span>
+        <span class="nav-label">管理员安全</span>
       </button>
       <button type="button" class="nav-item" data-tab="about">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
@@ -103,7 +104,7 @@
 </aside>
 <button type="button" class="nav-edge-toggle" id="navEdgeToggle" onclick="toggleNav()" title="收起侧栏" aria-label="收起侧栏"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg></button>
 
-<div class="main">
+<main class="main" id="adminContent" tabindex="-1">
 <div class="top-tools">
   <div class="topbar-context">
     <button type="button" class="mobile-nav-btn" id="mobileNavBtn" onclick="toggleMobileNav()" aria-label="打开导航" aria-controls="appSidebar" aria-expanded="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>

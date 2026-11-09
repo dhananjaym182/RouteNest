@@ -98,8 +98,11 @@ function applyTab(name){
   if (typeof closeMobileNav === 'function') closeMobileNav();
   if (name !== 'dashboard' && typeof stopDashPolling === 'function') stopDashPolling();
   if (name !== 'logs' && typeof stopLogPolling === 'function') stopLogPolling();
-  if (name === 'dashboard') { applyLang(); loadStats(); loadAccounts(); loadDashboardOverview(); if (typeof loadDashboardActivity === 'function') loadDashboardActivity(); startDashPolling(); }
-  else if (name === 'credentials') { loadGlobal(); loadAccounts(); loadConnections(); loadStats(); }
+  if (name === 'dashboard') { applyLang(); if (typeof refreshOnboardingStatus === 'function') refreshOnboardingStatus(); loadStats(); loadAccounts(); loadDashboardOverview(); if (typeof loadDashboardActivity === 'function') loadDashboardActivity(); startDashPolling(); }
+  else if (name === 'credentials') {
+    loadGlobal(); loadAccounts(); loadConnections(); loadStats();
+    if (typeof adminHasPermission === 'function' && adminHasPermission('credential.write')) loadKeys();
+  }
   if (fromImport || fromAccounts) switchPageSubTab('credentials', 'conns', true);
   if (fromImport) openProviderSetup('cline', '', true);
   else if (name === 'logs') { loadRequestLogs(true); startLogPolling(); }
@@ -110,7 +113,6 @@ function applyTab(name){
   else if (name === 'providers') { loadGlobal(); loadProviders(); loadConnections(); }
   else if (name === 'health') { loadGlobal(); }
   else if (name === 'security') {
-    if (typeof adminHasPermission === 'function' && adminHasPermission('credential.write')) loadKeys();
     loadConfig();
     if (typeof adminHasPermission === 'function' && adminHasPermission('security.write')) {
       loadAdminSessions();
@@ -118,6 +120,9 @@ function applyTab(name){
       if (typeof loadSSOProviders === 'function') loadSSOProviders();
     }
     renderAdminPrincipal(_adminPrincipal);
+  }
+  else if (name === 'quickstart') {
+    if (typeof loadQuickStart === 'function') loadQuickStart();
   }
   else if (name === 'quota') { loadQuota(true); }
   else if (name === 'about') { if (typeof checkForUpdate === 'function' && !_verCheckDone) checkForUpdate(false); }
@@ -130,6 +135,14 @@ function switchTab(name) { applyTab(name); }
 // subtab happened to be active on the user's last visit.
 function showPageSubTab(page, sub) {
   if (page === 'accounts') page = 'credentials'; // legacy alias
+  if (page === 'security' && sub === 'keys') { applyTab('credentials'); switchPageSubTab('credentials', 'client-keys'); return; }
+  if (page === 'security' && sub === 'access') { applyTab('security'); return; }
+  if (page === 'security' && sub === 'danger') {
+    applyTab('security');
+    const danger = document.querySelector('#tab-security .access-danger-details');
+    if (danger) { danger.open = true; danger.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+    return;
+  }
   if (page === 'routing' && sub === 'models') { applyTab('models'); return; }
   if ((page === 'upstreams' || page === 'network') && sub === 'zen') { openProviderSetup('opencode'); return; }
   if ((page === 'upstreams' || page === 'network') && sub === 'headers') { openProviderSetup('cline-config'); return; }
@@ -252,6 +265,7 @@ function switchPageSubTab(page, sub, skipSave) {
 // 子页显示时的按需加载钩子（用户点击切换时触发；首次进入由 applyTab 处理）
 function onPageSubTabShown(page, sub) {
   if (page === 'providers' && sub === 'oauth') loadConnections();
+  if (page === 'credentials' && sub === 'client-keys') loadKeys();
 }
 document.querySelectorAll('.page-subtabs').forEach(nav => {
   nav.setAttribute('role', 'tablist');

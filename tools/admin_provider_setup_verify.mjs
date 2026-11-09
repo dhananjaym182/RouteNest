@@ -10,6 +10,12 @@ for (const name of process.env.PLAYWRIGHT_MODULE ? [process.env.PLAYWRIGHT_MODUL
 if (!chromium) throw new Error('Set PLAYWRIGHT_MODULE to an installed Playwright module.');
 const base = new URL(process.env.BASE_URL || 'http://127.0.0.1:3467/admin/');
 base.hash = '';
+const bootstrapSecret = process.env.ADMIN_TEST_BOOTSTRAP_SECRET || '';
+const testPassword = process.env.ADMIN_TEST_PASSWORD || '';
+const widths = (process.env.VERIFY_WIDTHS || '1440,1280,1024,768,390,360').split(',').map(Number).filter(Number.isFinite);
+const themes = (process.env.VERIFY_THEMES || 'light,dark').split(',').map(value => value.trim()).filter(Boolean);
+const operationTimeout = Number(process.env.VERIFY_TIMEOUT_MS || 15000);
+if (!Number.isFinite(operationTimeout) || operationTimeout <= 0) throw new Error('VERIFY_TIMEOUT_MS must be a positive number.');
 const apiURL = path => new URL('/admin/api' + path, base).href;
 const result = { cases: [], checks: 0, failures: [], diagnostics: { consoleErrors: 0, pageErrors: 0, requestFailures: 0 } };
 let step = 'launch';
@@ -19,7 +25,7 @@ async function fixtureDeadline(pending) {
   let timer;
   try {
     return await Promise.race([pending, new Promise((_, reject) => {
-      timer = setTimeout(() => reject(new Error('Verification fixture request timed out.')), 10000);
+      timer = setTimeout(() => reject(new Error('Verification fixture request timed out.')), operationTimeout);
     })]);
   } finally { clearTimeout(timer); }
 }
@@ -65,13 +71,35 @@ async function interTypography(page, selector) {
   const fonts = await page.locator(selector).evaluateAll(nodes => nodes.filter(node => node.getClientRects().length).map(node => getComputedStyle(node).fontFamily));
   check(fonts.length > 0 && fonts.every(font => /^['"]?Inter['"]?(,|$)/.test(font) && !font.includes('IBM Plex Mono')), 'visible UI typography uses Inter: ' + selector);
 }
-let browser;
+let browser, storageState, csrfToken;
 try {
   if (screenshots) mkdirSync(artifactDirectory, { recursive: true });
   browser = await chromium.launch({ headless: true, executablePath: process.env.CHROMIUM_PATH || (existsSync('/usr/bin/chromium') ? '/usr/bin/chromium' : undefined), args: ['--no-sandbox', '--disable-dev-shm-usage'] });
-  for (const theme of ['light', 'dark']) for (const width of [1440, 1280, 1024, 768, 390, 360]) {
+  if (!bootstrapSecret || !testPassword) throw new Error('Authenticated verification requires ADMIN_TEST_BOOTSTRAP_SECRET and ADMIN_TEST_PASSWORD.');
+  const setup = await browser.newContext();
+  try {
+    const bootstrap = await setup.request.post(new URL('api/auth/bootstrap', base).href, {
+      headers: { Origin: base.origin }, data: { secret: bootstrapSecret, password: testPassword },
+    });
+    if (bootstrap.status() !== 200 && bootstrap.status() !== 409) throw new Error('Temporary administrator bootstrap failed.');
+    if (bootstrap.status() === 409) {
+      const login = await setup.request.post(new URL('api/login', base).href, {
+        headers: { Origin: base.origin }, data: { username: 'admin', password: testPassword },
+      });
+      if (login.status() !== 200) throw new Error('Temporary administrator login failed.');
+    }
+    storageState = await setup.storageState();
+    csrfToken = storageState.cookies.find(cookie => cookie.name === 'routenest_admin_csrf')?.value || '';
+    if (!csrfToken) throw new Error('Temporary administrator CSRF cookie is unavailable.');
+  } finally {
+    await setup.close();
+  }
+  for (const theme of themes) for (const width of widths) {
     const label = theme + '-' + width;
-    const context = await browser.newContext({ viewport: { width, height: 1000 } });
+    const context = await browser.newContext({
+      viewport: { width, height: 1000 }, storageState,
+      extraHTTPHeaders: { 'X-RouteNest-CSRF': csrfToken },
+    });
     let originalZen;
     let zenChanged = false;
     let releaseCatalogue;
@@ -165,7 +193,7 @@ try {
       // unchanged submitted contract here; Go tests cover backend persistence.
       await context.route('**/admin/api/providers/save', route => route.fulfill({ json: envelope({ provider: { id: 'verification-provider' } }) }));
       const page = await context.newPage();
-      page.setDefaultTimeout(10000);
+      page.setDefaultTimeout(operationTimeout);
       page.on('request', request => {
         const url = new URL(request.url());
         if (url.pathname.startsWith('/admin/api/') && !['GET', 'HEAD'].includes(request.method())) {
@@ -214,13 +242,16 @@ try {
       check(await page.evaluate(() => window.__verifyZenNode.closest('.tab-panel').id === 'tab-providers' && window.__verifyZenParent.hidden), 'original OpenCode settings belong to hidden Providers native forms');
       check(await page.locator('#tab-network #ocKey, #tab-network #ocProxies, #tab-network #zenHeadersBulk, #tab-network #headersTableBody').count() === 0, 'Network contains no provider-specific credentials, proxies, or headers');
       check(await page.locator('#tab-network #clineProxies, #tab-network #clineProxyStrategy').count() === 2, 'Network retains existing default egress settings');
-      await page.evaluate(() => showPageSubTab('accounts', 'conns'));
+      step = label + ': open connected accounts';
+      await page.evaluate(() => showPageSubTab('credentials', 'conns'));
       check(await page.locator('#tab-credentials > [data-subpage="conns"]').isVisible() && !await page.locator('#tab-credentials > [data-subpage="inventory"]').isVisible(), 'Credentials OAuth accounts and API inventory have distinct subviews');
+      step = label + ': connected accounts to Providers OAuth';
       await page.locator('#tab-credentials button[onclick="showPageSubTab(\'providers\',\'oauth\')"]').click();
       check(await page.evaluate(() => location.hash === '#providers'), 'account management link opens Providers route');
       check(await page.locator('#tab-providers > [data-subpage="oauth"]').isVisible() && await page.locator('#tab-providers .subtab[data-sub="oauth"]').getAttribute('aria-selected') === 'true', 'account management link selects Providers OAuth settings');
       check(await page.evaluate(() => document.getElementById('loginImportSection') === window.__verifyClineNode && window.__verifyClineNode.parentNode === window.__verifyClineParent), 'OAuth navigation preserves original Cline form identity');
       await screenshot(page, label + '-providers-oauth', width);
+      step = label + ': open Cline connection settings';
       await page.locator('#tab-providers button[onclick="openProviderSetup(\'cline-config\')"]').click();
       await page.locator('#providerSetupContent #headersTableBody').waitFor({ state: 'attached' });
       await page.evaluate(() => window.__verifySelectionPending);
@@ -228,17 +259,22 @@ try {
       check(await page.locator('#providerSetupContent button[onclick="saveHeaders(this)"]').isVisible(), 'Cline native header save remains available');
       await screenshot(page, label + '-cline-settings', width);
       await duplicateIDs(page);
+      step = label + ': Cline settings to Network';
       await page.locator('#providerSetupContent button[onclick="applyTab(\'network\')"]').click();
       await page.waitForFunction(() => !document.getElementById('providerSetup').classList.contains('open'));
       check(await page.evaluate(() => location.hash === '#network') && await page.locator('#clineProxies').isVisible(), 'Cline network link closes setup and opens default proxy settings');
       check(await page.evaluate(() => window.__verifyClineConfigNode.parentNode === window.__verifyClineConfigParent && window.__verifyClineConfigNode.closest('.tab-panel').id === 'tab-providers'), 'Cline network navigation restores original provider settings');
+      step = label + ': Network to provider settings';
       await page.locator('#tab-network .network-provider-settings-link button').click();
       check(await page.evaluate(() => location.hash === '#providers'), 'Network service settings link opens Providers');
       await page.locator('#tab-providers .subtab[data-sub="oauth"]').click();
-      await page.locator('#tab-providers button[onclick="showPageSubTab(\'accounts\',\'conns\')"]').click();
+      step = label + ': Providers OAuth to connected accounts';
+      await page.locator('#tab-providers button[onclick="showPageSubTab(\'credentials\',\'conns\')"]').click();
       check(await page.evaluate(() => location.hash === '#credentials') && await page.locator('#connectionsList').isVisible(), 'Providers OAuth link returns to connected account management');
+      step = label + ': open API credential inventory';
       await page.locator('#tab-credentials .subtab[data-sub="inventory"]').click();
       check(await page.locator('#globalCredentials').isVisible() && !await page.locator('#connectionsList').isVisible(), 'API credential tab shows its inventory separately');
+      step = label + ': open API provider editor';
       await page.locator('#tab-credentials button[onclick="openProviderSetup(\'api\')"]').click();
       await page.locator('#providerEditor.open').waitFor();
       check(await page.evaluate(() => location.hash === '#providers') && await page.locator('#provKey').getAttribute('type') === 'password', 'API credential link opens the existing masked provider editor');

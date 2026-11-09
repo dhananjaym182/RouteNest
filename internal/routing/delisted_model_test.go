@@ -73,6 +73,29 @@ func TestMarkModelGoneRemovesOnlyDelisted(t *testing.T) {
 	}
 }
 
+func TestMarkModelGoneIsClineSourceScoped(t *testing.T) {
+	oldPool, oldPath := accounts.Pool, accounts.PoolPath
+	t.Cleanup(func() { accounts.Pool, accounts.PoolPath = oldPool, oldPath })
+	accounts.PoolPath = filepath.Join(t.TempDir(), ".cline-accounts.json")
+	accounts.Pool = &AccountPool{
+		DefaultModel: "org/model@revision",
+		Models: []Model{
+			{ID: "org/model@revision", Source: "remote", Delisted: true},
+			{ID: "org/model@revision", Source: "zen", Delisted: true},
+			{ID: "org/model@revision", Source: "provider", Provider: "Sibling", Delisted: true},
+		},
+	}
+
+	MarkModelGone("org/model@revision")
+	got := accounts.LoadPool()
+	if len(got.Models) != 2 || got.Models[0].Source != "zen" || got.Models[1].Source != "provider" {
+		t.Fatalf("Cline cleanup removed a sibling offering: %+v", got.Models)
+	}
+	if got.DefaultModel != "org/model@revision" {
+		t.Fatalf("sibling-backed literal default was cleared: %q", got.DefaultModel)
+	}
+}
+
 // syncClineModels：官方列表里消失的模型不删除，改打 Delisted 标记保留；
 // 重新出现时标记清除。res.Removed 只记录新下架的。
 func TestSyncClineModelsMarksDelisted(t *testing.T) {

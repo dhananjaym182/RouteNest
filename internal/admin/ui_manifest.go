@@ -9,6 +9,7 @@ var adminUIJSAssets = []string{
 	"ui/js/01_core.js",
 	"ui/js/02_nav.js",
 	"ui/js/03_shell.js",
+	"ui/js/03_recovery.js",
 	"ui/js/04_accounts.js",
 	"ui/js/05_settings.js",
 	"ui/js/06_security_users.js",
@@ -26,6 +27,8 @@ var adminUIJSAssets = []string{
 	"ui/js/13_model_cleanup.js",
 	"ui/js/13_model_provider_actions.js",
 	"ui/js/14_logs.js",
+	"ui/js/15_onboarding.js",
+	"ui/js/15_quickstart.js",
 	"ui/js/15_dashboard.js",
 	"ui/js/17_quota.js",
 	"ui/js/18_global.js",
@@ -41,6 +44,7 @@ var adminUIJSAssets = []string{
 var adminUIBodyParts = []string{
 	"ui/html/shell.html",
 	"ui/html/pages/dashboard.html",
+	"ui/html/pages/dashboard_welcome.html",
 	"ui/html/pages/accounts.html",
 	"ui/html/pages/logs.html",
 	"ui/html/pages/security.html",
@@ -62,6 +66,7 @@ var adminUIBodyParts = []string{
 	"ui/html/pages/about.html",
 	"ui/html/dialogs/toast.html",
 	"ui/html/dialogs/login.html",
+	"ui/html/dialogs/password_recovery.html",
 	"ui/html/dialogs/model_sync.html",
 }
 
@@ -72,6 +77,7 @@ var adminUICSSLayers = []string{
 	"ui/css/00_base.css",
 	"ui/css/01_fonts.css",
 	"ui/css/10_pages_dashboard.css",
+	"ui/css/11_pages_onboarding.css",
 	"ui/css/20_layout.css",
 	"ui/css/30_components.css",
 	"ui/css/40_pages_models.css",

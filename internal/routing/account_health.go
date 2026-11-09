@@ -15,7 +15,7 @@ import (
 	"routenest/internal/providerstate"
 )
 
-type accountTestResult struct {
+type AccountTestResult struct {
 	AccountID    string `json:"accountId"`
 	Email        string `json:"email"`
 	OK           bool   `json:"ok"`
@@ -82,8 +82,8 @@ func StartCooldownRecovery() {
 // TestAccount sends a minimal "hi" request through a specific account to verify
 // it can complete an upstream call. It does not update aggregate token counters
 // or request logs; it is a diagnostic-only probe.
-func TestAccount(acc *domain.Account) accountTestResult {
-	result := accountTestResult{AccountID: acc.AccountID, Email: acc.Email}
+func TestAccount(acc *domain.Account) AccountTestResult {
+	result := AccountTestResult{AccountID: acc.AccountID, Email: acc.Email}
 	started := time.Now()
 
 	params := map[string]any{

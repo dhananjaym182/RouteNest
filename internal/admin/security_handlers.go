@@ -18,6 +18,7 @@ type adminAuthStatusData struct {
 	BootstrapRequired      bool                     `json:"bootstrapRequired"`
 	RecoveryRequired       bool                     `json:"recoveryRequired"`
 	LegacyRotationRequired bool                     `json:"legacyRotationRequired"`
+	RecoveryCodeAvailable  bool                     `json:"recoveryCodeAvailable"`
 	Readiness              adminauth.Readiness      `json:"readiness"`
 	SSOProviders           []adminsso.LoginProvider `json:"ssoProviders,omitempty"`
 }
@@ -38,6 +39,11 @@ func handleAdminAuthStatus(w http.ResponseWriter, r *http.Request) {
 		legacyRotation = user.Legacy != nil
 	}
 	readiness := runtime.service.Readiness()
+	recoveryCodeAvailable, err := runtime.service.RecoveryCodeStatus(r.Context())
+	if err != nil {
+		writeAdminAuthOperationError(w, err)
+		return
+	}
 	var ssoProviders []adminsso.LoginProvider
 	if runtime.sso != nil {
 		if providers, providerErr := runtime.sso.LoginProviders(r.Context()); providerErr == nil {
@@ -57,6 +63,7 @@ func handleAdminAuthStatus(w http.ResponseWriter, r *http.Request) {
 		BootstrapRequired:      !state.Initialized,
 		RecoveryRequired:       state.RecoveryPHC != "",
 		LegacyRotationRequired: legacyRotation,
+		RecoveryCodeAvailable:  recoveryCodeAvailable,
 		Readiness:              readiness,
 		SSOProviders:           ssoProviders,
 	}})
@@ -443,6 +450,8 @@ func writeAdminAuthOperationError(w http.ResponseWriter, err error) {
 		code = "security_state_invalid"
 	case errors.Is(err, adminauth.ErrConflict):
 		code = "security_state_conflict"
+	case errors.Is(err, adminauth.ErrMutationPrepared):
+		code = "security_restart_required"
 	}
 	httpx.WriteAPI(w, status, httpx.Response{Error: code})
 }

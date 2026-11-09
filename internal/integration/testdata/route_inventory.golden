@@ -10,10 +10,13 @@
 /admin/api/accounts/test	POST	routes.go	wrap=security[credential.write,csrf=session]	handler=registry
 /admin/api/auth/audit	GET	routes.go	wrap=security[security.write,csrf=safe]	handler=registry
 /admin/api/auth/bootstrap	POST	routes.go	wrap=security[public,csrf=local_entry]	handler=registry
+/admin/api/auth/desktop-handoff	POST	routes.go	wrap=security[public,csrf=local_entry]	handler=registry
 /admin/api/auth/legacy/rotate	POST	routes.go	wrap=security[public,csrf=local_entry]	handler=registry
 /admin/api/auth/oidc/callback	GET	routes.go	wrap=security[public,csrf=oidc_callback]	handler=registry
 /admin/api/auth/oidc/start	POST	routes.go	wrap=security[public,csrf=sso_start]	handler=registry
 /admin/api/auth/password	POST	routes.go	wrap=security[admin.view,csrf=session]	handler=registry
+/admin/api/auth/recovery	POST	routes.go	wrap=security[public,csrf=local_entry]	handler=registry
+/admin/api/auth/recovery-code	POST	routes.go	wrap=security[security.write,csrf=session]	handler=registry
 /admin/api/auth/saml/acs	POST	routes.go	wrap=security[public,csrf=saml_acs]	handler=registry
 /admin/api/auth/saml/metadata	GET	routes.go	wrap=security[public,csrf=safe]	handler=registry
 /admin/api/auth/saml/start	POST	routes.go	wrap=security[public,csrf=sso_start]	handler=registry
@@ -52,7 +55,7 @@
 /admin/api/dashboard/overview	GET	routes.go	wrap=security[admin.view,csrf=safe]	handler=registry
 /admin/api/egress-profiles	GET	routes.go	wrap=security[admin.view,csrf=safe]	handler=registry
 /admin/api/keys	GET	routes.go	wrap=security[credential.write,csrf=safe]	handler=registry
-/admin/api/keys/delete	POST	routes.go	wrap=security[credential.write,csrf=session]	handler=registry
+/admin/api/keys/delete	POST	routes.go	wrap=security[credential.write+dangerous.execute,csrf=session]	handler=registry
 /admin/api/keys/generate	POST	routes.go	wrap=security[credential.write,csrf=session]	handler=registry
 /admin/api/listener-operation	GET	routes.go	wrap=security[security.write,csrf=safe]	handler=registry
 /admin/api/login	POST	routes.go	wrap=security[public,csrf=local_entry]	handler=registry
@@ -76,6 +79,7 @@
 /admin/api/models/toggle	POST	routes.go	wrap=security[provider.write,csrf=session]	handler=registry
 /admin/api/oauth/start	POST	routes.go	wrap=security[credential.write,csrf=session]	handler=registry
 /admin/api/oauth/status	GET	routes.go	wrap=security[credential.write,csrf=safe]	handler=registry
+/admin/api/onboarding/status	GET	routes.go	wrap=security[admin.view,csrf=safe]	handler=registry
 /admin/api/open-external	POST	routes.go	wrap=security[admin.view,csrf=session]	handler=registry
 /admin/api/opencode/config	GET	routes.go	wrap=security[provider.write,csrf=safe]	handler=registry
 /admin/api/opencode/config/update	POST	routes.go	wrap=security[provider.write,csrf=session]	handler=registry
@@ -101,10 +105,12 @@
 /messages	POST	server.go	wrap=withBodyLimit	handler=anthropicHandler
 /messages/count_tokens	POST	server.go	wrap=withBodyLimit	handler=countTokensHandler
 /models	GET	server.go	wrap=none	handler=modelsHandler
+/ready	GET	server.go	wrap=httpx.CORS	handler=readiness.Handler
 /responses	POST	server.go	wrap=withBodyLimit	handler=responsesHandler
 /v1/chat/completions	POST	server.go	wrap=withBodyLimit	handler=chatHandler
 /v1/health	GET	server.go	wrap=httpx.CORS	handler=health.Handler
 /v1/messages	POST	server.go	wrap=withBodyLimit	handler=anthropicHandler
 /v1/messages/count_tokens	POST	server.go	wrap=withBodyLimit	handler=countTokensHandler
 /v1/models	GET	server.go	wrap=none	handler=modelsHandler
+/v1/ready	GET	server.go	wrap=httpx.CORS	handler=readiness.Handler
 /v1/responses	POST	server.go	wrap=withBodyLimit	handler=responsesHandler

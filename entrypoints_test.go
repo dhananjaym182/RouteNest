@@ -6,11 +6,11 @@ import (
 	"testing"
 )
 
-// Both entry points must call app.Configure explicitly. The composition is no
-// longer applied by importing the package, so a blank import would silently
-// leave the hooks unset.
+// Both startup paths must call app.Configure explicitly. Desktop setup defers
+// composition until trusted first-run authorization has created the account
+// store, so its call lives in the focused desktop runtime module.
 func TestEntryPointsCallConfigureExplicitly(t *testing.T) {
-	for _, file := range []string{"main.go", "desktop_main.go"} {
+	for _, file := range []string{"main.go", "desktop_runtime.go"} {
 		src, err := os.ReadFile(file)
 		if err != nil {
 			t.Fatal(err)

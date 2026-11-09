@@ -3,6 +3,7 @@ package models
 import (
 	"errors"
 
+	"routenest/internal/accounts"
 	"routenest/internal/domain"
 )
 
@@ -104,27 +105,48 @@ func ReplaceSource(source string, build func(current []domain.Model) []domain.Mo
 	return update, err
 }
 
-// RemoveDelisted removes the first record with id that is delisted and not
-// custom. Custom and live records are never removed here. Removing the default
-// model clears the default. It reports whether a record was removed.
-func RemoveDelisted(id string) bool {
+// RemoveDelistedSource removes only delisted, non-custom records owned by the
+// requested built-in source. Zen includes legacy seed rows. Sibling offerings
+// with the same literal ID are preserved, as is a sibling-backed default.
+func RemoveDelistedSource(id, source string) (bool, error) {
+	if source != SourceRemote && source != SourceZen {
+		return false, errors.New("source-aware cleanup requires remote or zen")
+	}
+	accounts.LoadPool()
+	accounts.PoolMu.Lock()
+	defer accounts.PoolMu.Unlock()
+
+	current := accounts.Pool
+	nextValue := *current
+	kept := make([]domain.Model, 0, len(current.Models))
 	removed := false
-	Edit(func(p *domain.AccountPool) bool {
-		for i, m := range p.Models {
-			if m.ID != id || !m.Delisted || m.Custom {
-				continue
-			}
-			p.Models = append(p.Models[:i], p.Models[i+1:]...)
-			if m.Source == SourceRemote || m.Source == SourceZen || m.Source == SourceSeed {
-				p.ModelCatalogInitialized = true
-			}
-			if p.DefaultModel == id {
-				p.DefaultModel = ""
-			}
+	for _, model := range current.Models {
+		matchesSource := model.Source == source || source == SourceZen && model.Source == SourceSeed
+		if model.ID == id && matchesSource && model.Delisted && !model.Custom {
 			removed = true
-			return true
+			continue
 		}
-		return false
-	})
-	return removed
+		kept = append(kept, model)
+	}
+	if !removed {
+		return false, nil
+	}
+	nextValue.Models = kept
+	nextValue.ModelCatalogInitialized = true
+	if nextValue.DefaultModel == id {
+		for _, model := range kept {
+			if model.ID == id {
+				return persistDelistedSourceRemoval(&nextValue, true)
+			}
+		}
+		nextValue.DefaultModel = ""
+	}
+	return persistDelistedSourceRemoval(&nextValue, true)
+}
+
+func persistDelistedSourceRemoval(next *domain.AccountPool, removed bool) (bool, error) {
+	if err := accounts.SavePoolCandidateStrictLocked(next); err != nil {
+		return false, err
+	}
+	return removed, nil
 }

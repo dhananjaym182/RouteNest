@@ -128,16 +128,7 @@ async function openAccess(context, theme = 'light') {
   await page.goto(base.href + '#security', { waitUntil: 'networkidle' });
   await page.waitForFunction(() => typeof _adminPrincipal !== 'undefined' && _adminPrincipal && document.getElementById('loginOverlay').style.display !== 'flex');
   await page.evaluate(() => { if (typeof closeModelSyncModal === 'function') closeModelSyncModal(); });
-  try { await page.locator('#tab-security .subtab[data-sub="access"]').click(); }
-  catch {
-    const state = await page.evaluate(() => ({
-      activeTab: typeof _activeTabName === 'undefined' ? null : _activeTabName,
-      login: document.getElementById('loginOverlay').style.display,
-      sync: document.getElementById('modelSyncOverlay').style.display,
-      security: document.getElementById('tab-security').style.display,
-    }));
-    throw new VerificationFailure(currentStep + ': cannot open Access Settings ' + JSON.stringify(state));
-  }
+  await page.locator('#localAdminPasswordForm').waitFor({ state: 'visible' });
   await page.waitForLoadState('networkidle');
   return page;
 }
@@ -150,6 +141,7 @@ async function layout(page, label) {
     return {
       overflow: Math.max(document.documentElement.scrollWidth, document.body.scrollWidth) > innerWidth + 1,
       cardCount: [...access.querySelectorAll('.access-card')].filter(visible).length,
+      dangerVisible: visible(access.querySelector('.access-danger-details')),
       contained: controls.every(control => {
         const bounds = control.getBoundingClientRect(), card = control.closest('.access-card').getBoundingClientRect();
         return bounds.left >= card.left - 1 && bounds.right <= card.right + 1;
@@ -160,7 +152,8 @@ async function layout(page, label) {
     };
   });
   check(state.overflow, false, label + ': no page overflow', 'layoutChecks');
-  check(state.cardCount, 5, label + ': five distinct access sections', 'layoutChecks');
+  check(state.cardCount >= 5, true, label + ': administrator security sections remain visible', 'layoutChecks');
+  check(state.dangerVisible, true, label + ': dangerous operations remain discoverable', 'layoutChecks');
   check(state.contained, true, label + ': controls fit their cards', 'layoutChecks');
   check(state.labelled, true, label + ': labelled inputs', 'layoutChecks');
   check(state.namedButtons, true, label + ': named buttons', 'layoutChecks');

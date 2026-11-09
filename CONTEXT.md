@@ -37,6 +37,17 @@ configuration.
 An inbound credential accepted from a RouteNest client when calling `/v1/*`. It is not
 a Provider Credential and never grants administrator access.
 
+**Administrator Recovery Code**:
+A single-use, 256-bit credential that proves possession for resetting the reserved local
+administrator password. RouteNest stores only an Argon2id verifier, rotates the code
+after use, and revokes administrator sessions. It is distinct from a client API key,
+Provider Credential, bootstrap capability and offline recovery secret.
+
+**Desktop Setup Capability**:
+An in-memory first-run capability bound to the trusted Wails setup origin. It authorizes
+creation of the administrator only after fresh-install evidence is rechecked. It is not
+an HTTP credential and becomes unusable after setup completes or requires restart.
+
 **Logical Model**:
 The client-facing model identity requested from RouteNest. A Logical Model may be
 available through more than one Model Offering.

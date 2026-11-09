@@ -18,6 +18,9 @@ var adminSync = &adminapi.Sync{
 	ZenModelSync: func() (any, string) {
 		res := zen.SyncModels()
 		zen.SetLastModelSync(res)
+		if res.Error == "" {
+			markOnboardingProviderVerified(onboardingZenVerificationKey)
+		}
 		return res, res.Error
 	},
 	RecheckAll: func() any { return providers.RunAllRechecks() },

@@ -22,6 +22,9 @@ const (
 	// ModelBuiltin means the model is upstream-owned and not delisted, so the
 	// administrator must not remove it.
 	ModelBuiltin
+	// ModelAmbiguous means more than one provider offering or compatibility row
+	// has the requested ID, so the legacy ID-only request cannot select safely.
+	ModelAmbiguous
 )
 
 // ModelCapabilities describes what a model accepts and produces. Empty slices
@@ -37,7 +40,7 @@ type ModelCapabilities struct {
 type ModelStore interface {
 	List() []domain.Model
 	Add(domain.Model)
-	Delete(id string) DeleteModelResult
+	Delete(id string) (DeleteModelResult, error)
 	UpdateContext(id string, context, output int) bool
 	UpdateCapabilities(id string, caps ModelCapabilities) bool
 	SetDisabled(ids []string, disabled bool) int
@@ -177,11 +180,19 @@ func (m *Models) Delete(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteAPI(w, http.StatusInternalServerError, httpx.Response{Error: "model store unavailable"})
 		return
 	}
-	switch m.Store.Delete(req.ID) {
+	result, err := m.Store.Delete(req.ID)
+	if err != nil {
+		m.logf("model deletion failed for %q: %v", req.ID, err)
+		httpx.WriteAPI(w, http.StatusInternalServerError, httpx.Response{Error: m.msg(r, "model_delete_failed")})
+		return
+	}
+	switch result {
 	case ModelDeleted:
 		httpx.WriteAPI(w, http.StatusOK, httpx.Response{Success: true, Message: m.msg(r, "model_deleted")})
 	case ModelBuiltin:
 		httpx.WriteAPI(w, http.StatusBadRequest, httpx.Response{Error: m.msg(r, "cannot_delete_builtin")})
+	case ModelAmbiguous:
+		httpx.WriteAPI(w, http.StatusConflict, httpx.Response{Error: m.msg(r, "model_delete_ambiguous")})
 	default:
 		httpx.WriteAPI(w, http.StatusNotFound, httpx.Response{Error: m.msg(r, "model_not_found")})
 	}

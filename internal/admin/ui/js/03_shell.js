@@ -106,6 +106,8 @@ function setAdminAuthMode(mode) {
   if (_('loginConfirmPassword')) _('loginConfirmPassword').disabled = !bootstrap && !legacy;
   if (_('loginPasswordLabel')) _('loginPasswordLabel').textContent = t(legacy ? '当前密码' : '密码');
   if (_('loginLocalHelp')) _('loginLocalHelp').style.display = bootstrap ? 'none' : '';
+  const forgot = _('forgotPasswordButton');
+  if (forgot) forgot.hidden = _adminAuthMode !== 'login' || !(_adminAuthStatus && _adminAuthStatus.recoveryCodeAvailable);
   const title = _('loginTitle'), help = _('loginHelp'), button = _('loginSubmit');
   if (_adminAuthMode === 'bootstrap') {
     if (title) title.textContent = t('初始化管理员');
@@ -246,6 +248,10 @@ function renderAdminPrincipal(principal) {
   if (_('localAdminPasswordForm')) _('localAdminPasswordForm').hidden = !principal || principal.method !== 'local';
   if (_('ssoAdminPasswordNotice')) _('ssoAdminPasswordNotice').hidden = !principal || principal.method === 'local';
   applyAdminPermissionVisibility();
+  const recoveryCodeManagement = _('recoveryCodeManagement');
+  if (recoveryCodeManagement) {
+    recoveryCodeManagement.hidden = !principal || principal.userID !== 'break-glass' || principal.method !== 'local' || !adminHasPermission('security.write');
+  }
 }
 
 const ADMIN_ROLE_PERMISSIONS = Object.freeze({
@@ -266,18 +272,22 @@ function applyAdminPermissionVisibility() {
     const required = String(element.dataset.adminPermission || '').split(/\s+/).filter(Boolean);
     element.hidden = !required.every(adminHasPermission);
   });
-  const activeSecuritySubtab = document.querySelector('.subtabs[data-page="security"] .subtab.active');
-  if (activeSecuritySubtab && activeSecuritySubtab.hidden && typeof switchPageSubTab === 'function') {
-    switchPageSubTab('security', 'access', true);
-  }
+  document.querySelectorAll('.page-subtabs').forEach(nav => {
+    const active = nav.querySelector('.subtab.active');
+    if (!active || !active.hidden || typeof switchPageSubTab !== 'function') return;
+    const fallback = Array.from(nav.querySelectorAll('.subtab')).find(tab => !tab.hidden);
+    if (fallback) switchPageSubTab(nav.dataset.page, fallback.dataset.sub, true);
+  });
 }
 
 async function initializeAdminAuth() {
   try {
+    if (typeof consumeDesktopSessionHandoff === 'function') await consumeDesktopSessionHandoff();
     const statusResponse = await fetch(API + '/auth/status', { credentials: 'same-origin' });
     const statusEnvelope = await statusResponse.json();
     if (!statusResponse.ok || !statusEnvelope.success) throw new Error(statusEnvelope.error || 'security_unavailable');
     _adminAuthStatus = statusEnvelope.data || {};
+    if (typeof renderRecoveryCodeStatus === 'function') renderRecoveryCodeStatus();
     renderSSOLoginProviders();
     if (_adminAuthStatus.bootstrapRequired) { showLogin('bootstrap'); return false; }
     if (_adminAuthStatus.recoveryRequired) { showLogin('recovery'); return false; }
@@ -345,9 +355,14 @@ function toggleMobileNav(force) {
     btn.setAttribute('aria-label', t(open ? '关闭导航' : '打开导航'));
   }
   const main = document.querySelector('.main');
+  const sidebar = _('appSidebar');
   if (main) {
     if (open) main.setAttribute('inert', '');
     else main.removeAttribute('inert');
+  }
+  if (sidebar) {
+    if (window.innerWidth <= 900 && !open) sidebar.setAttribute('inert', '');
+    else sidebar.removeAttribute('inert');
   }
   if (open) {
     requestAnimationFrame(() => {
@@ -360,10 +375,21 @@ function toggleMobileNav(force) {
   }
 }
 function closeMobileNav() { toggleMobileNav(false); }
-window.addEventListener('resize', () => { if (window.innerWidth > 900) closeMobileNav(); });
+function syncMobileNavState() {
+  if (window.innerWidth > 900) closeMobileNav();
+  else toggleMobileNav(document.documentElement.dataset.mobileNav === 'open');
+}
+window.addEventListener('resize', syncMobileNavState);
+syncMobileNavState();
 
 // ========== 抽屉（右侧滑出编辑器） ==========
 const _openDrawers = [];
+const _drawerReturnFocus = {};
+const _focusableSelector = 'a[href],button:not(:disabled),input:not(:disabled):not([type="hidden"]),select:not(:disabled),textarea:not(:disabled),[tabindex]:not([tabindex="-1"])';
+function visibleFocusable(root) {
+  if (!root) return [];
+  return Array.from(root.querySelectorAll(_focusableSelector)).filter(el => !el.closest('[inert]') && el.getClientRects().length > 0);
+}
 // A closed drawer is only translated off-screen by CSS, so it stays visible to
 // assistive tech and keeps its buttons in the tab order. inert removes both.
 function setDrawerInert(dr, inert) {
@@ -379,9 +405,12 @@ function setDrawerInert(dr, inert) {
 function openDrawer(name) {
   const ov = _(name + 'Overlay'), dr = _(name);
   if (!dr) return;
+  if (!dr.classList.contains('open')) _drawerReturnFocus[name] = document.activeElement;
   if (ov) ov.classList.add('open');
   dr.classList.add('open');
   setDrawerInert(dr, false);
+  if (!dr.hasAttribute('tabindex')) dr.tabIndex = -1;
+  if (!dr.contains(document.activeElement)) dr.focus({ preventScroll: true });
   if (!_openDrawers.includes(name)) _openDrawers.push(name);
   refreshSaveBar();
 }
@@ -401,6 +430,11 @@ async function closeDrawer(name) {
   const i = _openDrawers.indexOf(name);
   if (i >= 0) _openDrawers.splice(i, 1);
   refreshSaveBar();
+  const returnFocus = _drawerReturnFocus[name];
+  delete _drawerReturnFocus[name];
+  if (returnFocus && returnFocus.isConnected && typeof returnFocus.focus === 'function') {
+    setTimeout(() => returnFocus.focus(), 0);
+  }
 }
 // ESC closes the topmost drawer, but only when no modal layer is open on top
 // of it (modal Esc handling lives in 13_models and runs on the same event).
@@ -409,11 +443,82 @@ function _modalLayerOpen() {
   return _ESC_MODAL_IDS.some(id => { const el = _(id); return el && el.style.display === 'flex'; });
 }
 document.addEventListener('keydown', e => {
+  if (e.key === 'Tab' && _openDrawers.length && !_modalLayerOpen()) {
+    const dr = _(_openDrawers[_openDrawers.length - 1]);
+    const items = visibleFocusable(dr);
+    if (!items.length) { e.preventDefault(); if (dr) dr.focus(); return; }
+    const first = items[0], last = items[items.length - 1];
+    if (!dr.contains(document.activeElement) || (e.shiftKey && document.activeElement === first) || (!e.shiftKey && document.activeElement === last)) {
+      e.preventDefault();
+      (e.shiftKey ? last : first).focus();
+      return;
+    }
+  }
   if (e.key === 'Escape' && document.documentElement.dataset.mobileNav === 'open') { closeMobileNav(); return; }
   if (e.key === 'Escape' && _openDrawers.length && !_modalLayerOpen()) closeDrawer(_openDrawers[_openDrawers.length - 1]);
 });
 // Drawers ship closed in the markup, so seed inert before the first open.
 document.querySelectorAll('.drawer').forEach(dr => setDrawerInert(dr, !dr.classList.contains('open')));
+
+// Modal overlays use several feature-specific open/close functions. Observe the
+// common visibility boundary so every modal gets the same focus trap and return.
+const _modalStack = [];
+const _modalReturnFocus = new WeakMap();
+const _modalVisible = el => !!el && !el.hidden && getComputedStyle(el).display !== 'none';
+function modalFocusScope(overlay) {
+  return overlay && (overlay.querySelector('[role="alertdialog"],[role="dialog"],.modal-card,.login-card,#modelSyncModal') || overlay);
+}
+function syncModalFocusState(overlay) {
+  const visible = _modalVisible(overlay);
+  const index = _modalStack.indexOf(overlay);
+  if (visible && index < 0) {
+    _modalReturnFocus.set(overlay, overlay.contains(document.activeElement) ? null : document.activeElement);
+    _modalStack.push(overlay);
+    requestAnimationFrame(() => {
+      if (!_modalVisible(overlay) || overlay.contains(document.activeElement)) return;
+      const scope = modalFocusScope(overlay);
+      const target = visibleFocusable(scope)[0] || scope;
+      if (target && !target.hasAttribute('tabindex') && target === scope) target.tabIndex = -1;
+      if (target) target.focus({ preventScroll: true });
+    });
+  } else if (!visible && index >= 0) {
+    _modalStack.splice(index, 1);
+    const beneath = _modalStack[_modalStack.length - 1];
+    const returnFocus = _modalReturnFocus.get(overlay);
+    _modalReturnFocus.delete(overlay);
+    setTimeout(() => {
+      if (returnFocus && returnFocus.isConnected && (!beneath || beneath.contains(returnFocus))) {
+        returnFocus.focus();
+      } else if (beneath && _modalVisible(beneath)) {
+        const scope = modalFocusScope(beneath);
+        const target = visibleFocusable(scope)[0] || scope;
+        if (target) target.focus({ preventScroll: true });
+      } else if (returnFocus && returnFocus.isConnected && typeof returnFocus.focus === 'function') {
+        returnFocus.focus();
+      }
+    }, 0);
+  }
+}
+const _modalOverlays = Array.from(document.querySelectorAll('.overlay-modal,#modelSyncOverlay,#loginOverlay'));
+const _modalObserver = new MutationObserver(records => records.forEach(record => syncModalFocusState(record.target)));
+_modalOverlays.forEach(overlay => {
+  _modalObserver.observe(overlay, { attributes: true, attributeFilter: ['style', 'class', 'hidden'] });
+  syncModalFocusState(overlay);
+});
+document.addEventListener('keydown', event => {
+  if (event.key !== 'Tab') return;
+  const overlay = [..._modalStack].reverse().find(_modalVisible);
+  if (!overlay) return;
+  const scope = modalFocusScope(overlay);
+  const items = visibleFocusable(scope);
+  if (!items.length) { event.preventDefault(); scope.focus(); event.stopImmediatePropagation(); return; }
+  const first = items[0], last = items[items.length - 1];
+  if (!scope.contains(document.activeElement) || (event.shiftKey && document.activeElement === first) || (!event.shiftKey && document.activeElement === last)) {
+    event.preventDefault();
+    (event.shiftKey ? last : first).focus();
+    event.stopImmediatePropagation();
+  }
+}, true);
 
 // ========== 未保存更改：悬浮保存条 + 变更预览弹窗 ==========
 var _verCheckDone = false; // 「关于」页更新检查只自动跑一次（checkForUpdate 在 05_settings 定义）

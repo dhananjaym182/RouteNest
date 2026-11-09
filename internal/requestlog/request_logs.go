@@ -29,6 +29,10 @@ var (
 	Logs []requestLog
 	Mu   sync.Mutex
 	Path string
+	// RecordSuccessfulGatewayRequest is installed by the application composition
+	// root. Keeping persistence behind this hook avoids coupling request logging
+	// to the onboarding store and keeps package tests free of filesystem effects.
+	RecordSuccessfulGatewayRequest func(time.Time) error
 )
 
 // pathMu guards first-use resolution of Path. Tests that assign Path keep it.
@@ -211,6 +215,12 @@ func Finalize(entry *requestLog, usage openaichat.Usage, firstOutputAt time.Time
 		}
 		if err := providers.RecordTokenUsage(entry.ProviderID, entry.BudgetAttemptID, eventID, entry.TotalTokens); err != nil {
 			log.Printf("provider %s token accounting failed: %v", entry.ProviderID, err)
+		}
+	}
+
+	if completed && errMsg == "" && RecordSuccessfulGatewayRequest != nil {
+		if err := RecordSuccessfulGatewayRequest(entry.FinishedAt); err != nil {
+			log.Printf("onboarding gateway request completion could not be persisted: %v", err)
 		}
 	}
 

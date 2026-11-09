@@ -24,7 +24,7 @@ type denialBuffer struct {
 func newDenialBuffer() *denialBuffer { return &denialBuffer{entries: map[string]DenialSummary{}} }
 func (s *Service) RecordDenial(kind AuditKind, source string) {
 	switch kind {
-	case AuditLoginDenied, AuditAccessDenied, AuditCSRFDenied:
+	case AuditLoginDenied, AuditRecoveryCodeDenied, AuditAccessDenied, AuditCSRFDenied:
 	default:
 		return
 	}

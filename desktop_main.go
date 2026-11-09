@@ -10,12 +10,10 @@ import (
 	"net/http"
 	"os"
 	"routenest/internal/accounts"
-	"routenest/internal/admin"
-	"routenest/internal/app"
 	"strconv"
+	"strings"
+	"sync"
 	"time"
-
-	"routenest/internal/proxycore"
 
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
@@ -33,62 +31,31 @@ func main() {
 		}
 		return
 	}
-	app.Configure()
-	selfCheck := flag.Bool("selfcheck", false, "Start embedded proxy, wait for /health, and exit")
+	selfCheck := flag.Bool("selfcheck", false, "Start embedded proxy, wait for /ready, and exit")
 	port := flag.Int("port", configuredDesktopPort(), "Proxy server port")
-	host := flag.String("host", configuredDesktopHost(), "Proxy server listen host (0.0.0.0 = all interfaces)")
+	host := flag.String("host", "", "Proxy server listen host (0.0.0.0 = all interfaces)")
+	initializeEmptyStore := flag.Bool("initialize-empty-account-store", false, "Authorize creation of an empty client-authentication store in a confirmed fresh data directory for this startup")
 	flag.Parse()
-
-	securityOptions, err := admin.SecurityOptionsFromEnvironment(admin.SecurityOptions{ListenHost: *host, ListenPort: *port})
+	runtime, err := prepareDesktopRuntime(*host, *port, *initializeEmptyStore, *selfCheck)
 	if err != nil {
-		log.Fatalf("Administrator security configuration failed: %v", err)
-	}
-	var nativeBootstrapSecret string
-	if !*selfCheck {
-		secret, err := admin.GenerateBootstrapSecret()
-		if err != nil {
-			log.Fatal(err)
-		}
-		securityOptions.BootstrapPassword = secret
-		nativeBootstrapSecret = secret
-	}
-	if err := admin.ConfigureSecurity(securityOptions); err != nil {
-		log.Fatalf("Administrator security failed: %v", err)
+		log.Fatalf("Desktop startup failed: %v", err)
 	}
 	defer func() {
-		if err := admin.CloseSecurity(); err != nil {
+		if err := runtime.close(); err != nil {
 			log.Printf("Administrator security shutdown failed: %v", err)
 		}
 	}()
-	if nativeBootstrapSecret != "" {
-		required, err := admin.SecurityBootstrapRequired()
-		if err != nil {
-			log.Fatal(err)
-		}
-		if !required {
-			nativeBootstrapSecret = ""
-		}
-	}
-
-	proxyErr := make(chan error, 1)
-	go func() {
-		proxyErr <- proxycore.Start(*host, *port, admin.RegisterRoutes)
-	}()
-
-	if err := waitForEmbeddedProxy(*port, 15*time.Second, proxyErr); err != nil {
-		log.Fatal(err)
-	}
 
 	if *selfCheck {
-		fmt.Printf("selfcheck ok: embedded proxy serving http://127.0.0.1:%d/health\n", *port)
+		fmt.Println(runtime.selfCheckMessage())
 		return
 	}
 
-	if !proxycore.IsLoopbackHost(*host) {
-		log.Printf("警告: 监听 %s 非本机回环地址，桌面窗口可能无法自动连接，建议使用 127.0.0.1 或 0.0.0.0", *host)
+	if runtime.host != "127.0.0.1" && runtime.host != "localhost" && runtime.host != "::1" {
+		log.Printf("警告: 监听 %s 非本机回环地址，桌面窗口仍只连接 127.0.0.1", runtime.host)
 	}
 
-	if err := runDesktopWindow(*port, nativeBootstrapSecret); err != nil {
+	if err := runDesktopWindow(runtime); err != nil {
 		log.Fatal(err)
 	}
 }
@@ -110,10 +77,10 @@ func configuredDesktopHost() string {
 	return "127.0.0.1"
 }
 
-func waitForEmbeddedProxy(port int, timeout time.Duration, proxyErr <-chan error) error {
+func waitForEmbeddedProxy(adminURL, path string, timeout time.Duration, proxyErr <-chan error) error {
 	client := &http.Client{Timeout: 500 * time.Millisecond}
 	deadline := time.Now().Add(timeout)
-	url := fmt.Sprintf("http://127.0.0.1:%d/health", port)
+	url := strings.TrimSuffix(adminURL, "/admin/") + path
 	var lastErr error
 	for time.Now().Before(deadline) {
 		select {
@@ -128,7 +95,7 @@ func waitForEmbeddedProxy(port int, timeout time.Duration, proxyErr <-chan error
 			if resp.StatusCode == http.StatusOK {
 				return nil
 			}
-			lastErr = fmt.Errorf("health returned status %d", resp.StatusCode)
+			lastErr = fmt.Errorf("probe %s returned status %d", path, resp.StatusCode)
 		} else {
 			lastErr = err
 		}
@@ -137,7 +104,9 @@ func waitForEmbeddedProxy(port int, timeout time.Duration, proxyErr <-chan error
 	return fmt.Errorf("代理启动超时（%s）：%v", url, lastErr)
 }
 
-func runDesktopWindow(port int, bootstrapSecret string) error {
+func runDesktopWindow(runtime *desktopRuntime) error {
+	var contextMu sync.RWMutex
+	var windowContext context.Context
 	return wails.Run(&options.App{
 		Title:     "RouteNest",
 		Width:     1280,
@@ -145,53 +114,31 @@ func runDesktopWindow(port int, bootstrapSecret string) error {
 		MinWidth:  960,
 		MinHeight: 620,
 		AssetServer: &assetserver.Options{
-			Handler: desktopRedirectHandler(port),
+			Assets: desktopSetupAssets(),
 		},
+		Bind:             []interface{}{runtime.bridge},
 		BackgroundColour: &options.RGBA{R: 248, G: 250, B: 252, A: 255},
 		OnStartup: func(ctx context.Context) {
-			if bootstrapSecret == "" {
-				return
-			}
-			go func() {
-				_, _ = wailsruntime.MessageDialog(ctx, wailsruntime.MessageDialogOptions{
-					Type:    wailsruntime.InfoDialog,
-					Title:   "RouteNest administrator bootstrap",
-					Message: "One-time bootstrap secret:\n\n" + bootstrapSecret + "\n\nUse it in the local RouteNest login window and immediately set a permanent password. This secret will not be shown again.",
-				})
-			}()
+			contextMu.Lock()
+			windowContext = ctx
+			contextMu.Unlock()
+		},
+		SingleInstanceLock: &options.SingleInstanceLock{
+			UniqueId: "com.routenest.desktop",
+			OnSecondInstanceLaunch: func(options.SecondInstanceData) {
+				contextMu.RLock()
+				ctx := windowContext
+				contextMu.RUnlock()
+				if ctx != nil {
+					wailsruntime.WindowUnminimise(ctx)
+					wailsruntime.WindowShow(ctx)
+				}
+			},
 		},
 		Windows: &windows.Options{
 			WebviewIsTransparent: false,
 			WindowIsTranslucent:  false,
 			DisableWindowIcon:    false,
 		},
-	})
-}
-
-func desktopRedirectHandler(port int) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		fmt.Fprintf(w, `<!doctype html>
-<html lang="zh-CN">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>RouteNest</title>
-  <style>
-    :root { color-scheme: light; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
-    body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: #f8fafc; color: #334155; }
-    main { width: min(420px, calc(100vw - 48px)); text-align: center; }
-    h1 { margin: 0 0 12px; font-size: 22px; color: #0f172a; }
-    p { margin: 0; line-height: 1.6; font-size: 14px; }
-  </style>
-</head>
-<body>
-  <main>
-    <h1>RouteNest</h1>
-    <p>正在打开管理后台...</p>
-  </main>
-  <script>location.replace(%q);</script>
-</body>
-</html>`, fmt.Sprintf("http://127.0.0.1:%d/admin/", port))
 	})
 }

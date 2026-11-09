@@ -1,10 +1,10 @@
 # RouteNest Contract Reconciliation
 
-Status: **Phase 1 contract baseline with Phase 2 C1 implementation evidence**
+Status: **Phase 1 contract baseline with Phase 2-4 implementation evidence**
 Reviewed: **2026-11-09**
-Scope: Phase 1 documentation reconciliation plus the isolated Phase 2 C1 account-
-deletion and corrupt-authentication-storage safety fix. C2 remains proposed and is not
-implemented by this phase.
+Scope: Phase 1 documentation reconciliation plus the isolated C1 account/authentication
+storage corrections, Phase 3 client-key hardening, and Phase 4 deterministic C2 model
+deletion corrections. Broader model-storage consolidation remains outside this scope.
 
 ## Evidence baseline
 
@@ -91,15 +91,47 @@ owners until a separately approved migration. This Phase 1 instruction also pres
 all 13 canonical routes and four aliases, forbids a broader reset without separate
 approval, and forbids implementing C1 or C2 in this documentation phase.
 
+## Desktop first-run and administrator recovery contract
+
+- A confirmed fresh Wails installation may authorize account-store initialization and
+  administrator creation only through the embedded native setup origin and its bound
+  setup bridge. The localhost HTTP administration surface does not gain an anonymous
+  administrator-creation capability.
+- Freshness requires absence of independent RouteNest, legacy, migration,
+  administrator-authority, corrupt-backup, account-pool and initialization-witness
+  evidence. Missing, corrupt, unreadable, partially restored or otherwise uncertain
+  established state fails closed and requires explicit recovery.
+- First-run setup uses the existing administrator authority, password hashing, audit
+  journal and session service. It issues a 256-bit recovery credential once, stores only
+  an Argon2id verifier, and makes the native setup bridge inert after durable completion.
+- A two-minute, single-use, loopback-only handoff may transfer the already-created
+  administrator session from the trusted native setup page to the existing `/admin/`
+  console. The handoff cannot create or reset an identity.
+- Online password recovery requires the current recovery credential, is rate limited,
+  rejects replay/concurrent use, rotates the verifier, revokes all administrator
+  sessions and pending SSO flows, and never records raw credentials in audit events.
+- Authenticated recovery-code issuance requires the reserved local break-glass identity,
+  `security.write`, session CSRF and current-password reauthentication. Existing
+  installations are not forced to reset their password during upgrade.
+- A mutation durably prepared before a later persistence error returns the exact
+  prepared recovery credential once with a restart-required outcome. The process does
+  not retry by generating another credential or report ordinary success.
+- The existing offline owner-terminal recovery command remains the emergency fallback.
+  Localhost access, browser state, localStorage or possession of an application window
+  is not administrator ownership proof.
+- The canonical `#dashboard` route owns both the state-aware Welcome checklist and the
+  existing metrics dashboard. Backend stores and successful request records determine
+  progress; browser storage may only retain temporary presentation preferences.
+
 ## Unresolved decisions requiring explicit product approval
 
 1. **C1 account deletion (implemented in Phase 2):** `/admin/api/accounts/delete-all`
    now has the account-only meaning and strict persistence boundary recorded below. A
    separately named broader reset remains unapproved and would require its own decision.
-2. **C2 provider-scoped removal:** approval is required for deterministic provider-
-   scoped identity, whether the legacy ID-only endpoint remains for unambiguous custom/
-   logical-model records after callers migrate, and the item 11 classification/survivor
-   policy for enable/disable, metadata, test, tier, default, alias and combo behavior.
+2. **C2 provider-scoped removal (core deletion path implemented in Phase 4):** provider-
+   scoped UI removal now uses stable provider identity, and ambiguous legacy ID-only
+   deletion fails closed. Broader item 11 classification/survivor policy for ID-wide
+   enable/disable, metadata, test and tier operations remains an unresolved decision.
 3. **Role composition:** whether provider setup that reads/replaces provider secrets,
    binds or uses existing credentials, or directs them to an administrator-selected
    endpoint requires both `provider.write` and `credential.write`, or is split into
@@ -153,20 +185,21 @@ approval, and forbids implementing C1 or C2 in this documentation phase.
    provider identity. Approve whether disabled or delisted declarations count as valid
    survivors for defaults and bare routing references; backend and current draft cleanup
    use inconsistent criteria.
-12. **Remaining client-key authority hardening:** Phase 2B makes account-pool read,
+12. **Client-key authority hardening (resolved in Phase 3):** Phase 2B makes account-pool read,
    corruption, partial-restoration and missing-file uncertainty fail closed while
    preserving verified empty-key compatibility. Authentication reads now use copied
-   keys-and-error snapshots under the pool lock. Replacing clock-derived generated keys with
-   cryptographically random values and requiring strict ordinary key-write durability
-   remain unresolved migration decisions.
+   keys-and-error snapshots under the pool lock. Phase 3 replaces clock-derived keys
+   with 256-bit `crypto/rand` values and makes ordinary key mutations detached,
+   durable, serialized, and publish-after-persistence.
 13. **Provider-secret role boundary:** whether `provider.write` continues to expose and
    replace raw provider keys/headers/proxy URLs and bind/use existing connections toward
    administrator-selected destinations, or new redacted reads and `credential.write`
    checks split secret access from provider configuration. Current secret-bearing legacy
    endpoints remain unchanged meanwhile.
-14. **Destructive key policy:** whether deleting a key, especially the last key, gains
-   an independently server-enforced `dangerous.execute` requirement. The current UI
-   gates bulk deletion, but `/keys/delete` itself requires only `credential.write`.
+14. **Destructive key policy (resolved in Phase 3):** `/keys/delete` requires both
+   `credential.write` and `dangerous.execute`. Deleting the final effective key also
+   requires the exact `disable-client-authentication` confirmation token; this preserves
+   intentional empty-key compatibility without allowing an ambiguous transition.
 15. **Hosted-admin enforcement:** whether non-loopback administration must require HTTPS
    as a server invariant, reject repeated physical `Forwarded` fields, and apply the same
    HSTS validation through embedding interfaces. Current HTTPS guidance is an operator
@@ -209,6 +242,14 @@ model membership does not authorize deleting that runtime evidence. `AccountPool
 remains a compatibility logical-model/catalog projection and must not be used to infer
 an ambiguous custom-provider mutation target. No storage consolidation or endpoint
 removal is approved in Phase 1.
+
+Client API-key generation uses 32 bytes from Go's `crypto/rand` and retains the existing
+`cline_` prefix without invalidating previously issued keys. Creation and deletion load
+the authoritative account pool under its owner lock, mutate a detached copy, durably
+persist it, and publish only afterward. Pre-replacement errors publish nothing;
+post-replacement uncertainty returns an error and reconciles memory to the winning file.
+Successful and failed create/delete operations write redacted administrator audit events
+that name only the client-key resource class, never the key value.
 
 ## Critical contract C1: Delete All Accounts
 
@@ -261,12 +302,13 @@ The isolated fix adds or updates coverage for:
    an inference endpoint after deletion.
 3. Prove unauthenticated and incorrect-key requests remain HTTP 401 on key-wrapped
    model/inference routes when surviving keys exist; `/health` and `/v1/health` remain
-   public.
+   public liveness probes, while `/ready` and `/v1/ready` remain public and fail readiness
+   when client-authentication storage is unavailable.
 4. Separately characterize the existing rule that an empty loaded key list leaves key-
    wrapped model/inference routes open; `/health` and `/v1/health` remain public
-   regardless. Cover both intentional empty configuration and missing/unreadable/
-   corrupt account-pool state. Account deletion must not transition a protected gateway
-   to the empty-key state.
+   regardless, while readiness fails for unavailable authentication storage. Cover both
+   intentional empty configuration and missing/unreadable/corrupt account-pool state.
+   Account deletion must not transition a protected gateway to the empty-key state.
 5. Prove models, default model, manual metadata, catalog marker, and removal
    reservations survive restart.
 6. Prove listen host and legacy migration sentinels survive restart.
@@ -349,23 +391,27 @@ identity.
   sibling cases, but display-name/stable-ID collisions, literal-`@` reference cleanup,
   sparse sibling metadata, normalized runtime blockers, and direct invocation after
   built-in reservation are confirmed implementation gaps.
-- The legacy `/models/delete` path accepts only a raw ID and deletes or protects the
-  first matching catalog record. It cannot deterministically identify a provider
-  offering when IDs collide.
+- The legacy `/models/delete` path still accepts only a raw ID for compatibility, but
+  now rejects duplicate compatibility rows or multiple provider offerings with HTTP 409
+  before mutation. Unique custom rows remain deletable; synchronized live rows remain
+  protected. Persistence errors return HTTP 500 without a success envelope.
 - Legacy context and capability edits also update the first matching catalog row;
   enable/disable is deliberately raw-ID-wide across every compatibility row.
 - Manual tier editing can already accept `providerId` and fails ambiguous custom-
   provider matches, but the merged Models row currently submits only a raw ID.
-- Provider-detail delisted cleanup still groups by display name and calls the legacy
-  raw-ID endpoint, while the Models provider-action workflow uses structured stable
-  identity.
-- Automatic Cline/Zen model-gone cleanup also passes only a raw logical ID and removes
-  the first matching delisted non-custom catalog row. It can therefore mutate the wrong
-  source when same-ID delisted rows collide.
+- Provider-detail delisted cleanup reads sync state by stable provider ID and calls the
+  structured removal endpoint with `source=provider`, `providerId`, and the literal raw
+  model ID. The generic Models deletion flow also reads provider offerings, blocks
+  ambiguous candidates, and uses structured removal for authoritative offerings.
+- Automatic Cline and Zen model-gone cleanup is source-aware. Cline removes only a
+  delisted `remote` row; Zen removes only delisted `zen`/legacy `seed` rows. Same-ID
+  sibling offerings and sibling-backed defaults survive.
 - Explicit provider-scoped removal is a sequence of strict writes, not one cross-store
   transaction. Earlier stages can commit before a later failure, retry is the supported
   completion mechanism, and the batch HTTP envelope can still be HTTP 200 with per-item
-  entries in `data.errors`.
+  entries in `data.errors`. Account-catalog writes now persist detached candidates and
+  reconcile memory from disk when replacement succeeded but a post-replacement
+  durability step reports an uncertain outcome.
 - Custom-provider cleanup removes the legacy `providerId:modelId` cooldown entry. It
   preserves the colocated runtime accounting partition and does not currently perform a
   complete exact-scope cleanup of durable availability observations. Built-in Cline
@@ -413,16 +459,16 @@ identity.
   model scope, including credential-scoped Cline model cooldowns. Recovery preserves
   runtime accounting, anti-replay receipts, and tombstone history; credential-wide and
   egress-proxy cooldowns remain because they do not belong solely to that offering.
-- Phase 1 changes no endpoint or persistence shape. The later isolated C2 fix should
-  reuse `/models/remove` for provider-scoped callers and harden `/models/delete`
-  ambiguity handling unless a separately approved compatibility decision requires a
-  new interface.
+- Phase 4 retains endpoint and persistence-shape compatibility: provider-scoped callers
+  reuse `/models/remove` or `/models/delisted/remove`, while `/models/delete` remains only
+  for unambiguous legacy compatibility rows and fails closed on ambiguity.
 
 ### Existing and required C2 regression tests
 
 Existing namespace, provider-offering, removal-controller and routing tests cover many
-collision, chooser, literal-`@`, retry and sibling-preservation cases. They do not make
-the legacy ID-only mutation surface deterministic. The isolated fix requires:
+collision, chooser, literal-`@`, retry and sibling-preservation cases. Phase 4 adds
+deterministic legacy-deletion, source-aware cleanup, persistence-failure and UI contract
+coverage. The broader release verification matrix remains:
 
 1. Same raw ID across Cline, Zen, and multiple custom providers removes only the
    selected offering; one batch cannot mix provider IDs.
@@ -490,7 +536,7 @@ loads, including composite failures, not the proposed partial-rendering behavior
 | Request Logs | `#logs` | `tab-logs`, `pages/logs.html` | `14_logs.js` | `/request-logs`; clear endpoint | Read: `admin.view`; clear: `security.write` + `dangerous.execute` | Request-log store only when clearing |
 | Usage & Quotas | `#quota` | `tab-quota`, `pages/quota.html` | `17_quota.js` | `/providers`, `/stats`, cooldown reset | Current page load requires `provider.write` because `/providers` is fetched first; `/stats` alone uses `admin.view`; reset uses `provider.write` | Read-only provider budget/usage summaries plus provider cooldown reset; budget editing remains in the Providers editor |
 | Provider Health | `#health` | `tab-health`, `pages/health.html` | `18_global.js` | `/provider-instances`, `/model-offerings`, `/provider-state`, `/egress-profiles`; credential projection when permitted | Base health: `admin.view`; `loadGlobal` omits credential projection without `credential.write` | None; read-only projections |
-| API Keys & Security | `#security` | `tab-security`, `pages/security.html` | `03_shell.js`, `04_accounts.js`, `05_settings.js`, `06_security_users.js`; config hydration in `13_models.js` | Client keys, current password, users, sessions, SSO, listener, dangerous account/key actions; current listener/config read depends on `/config` | Current password/logout: `admin.view`; keys/accounts: `credential.write`; users/sessions/SSO and listener mutation: `security.write`; current config read also requires `provider.write`; Delete All Accounts also needs `dangerous.execute`; key deletion does not | Client API keys and administrator security resources; account deletion is the Phase 2 account-only operation |
+| API Keys & Security | `#security` | `tab-security`, `pages/security.html` | `03_shell.js`, `04_accounts.js`, `05_settings.js`, `06_security_users.js`; config hydration in `13_models.js` | Client keys, current password, users, sessions, SSO, listener, dangerous account/key actions; current listener/config read depends on `/config` | Current password/logout: `admin.view`; keys/accounts: `credential.write`; users/sessions/SSO and listener mutation: `security.write`; current config read also requires `provider.write`; Delete All Accounts and key deletion also need `dangerous.execute` | Client API keys and administrator security resources; account deletion is the Phase 2 account-only operation |
 | Settings & Runtime | `#about` | `tab-about`, `pages/about.html` | `15_dashboard.js`, `05_settings.js`, `02_nav.js` | `/version-check`; `/stats` polling populates runtime values; `/config` may populate additional values only for `provider.write` | Version/runtime overview and stats: `admin.view`; config-derived values: `provider.write`; linked owners retain their own permissions | None; navigation and process information hub |
 | Quick Start | `#quickstart` | `tab-quickstart`, `pages/quickstart.html` | `02_nav.js` | Static content and links | `admin.view` | None |
 
@@ -525,8 +571,8 @@ do not authorize new product capabilities.
   client-key controls require `credential.write`; the account-export route requires
   `credential.export`; users, sessions, SSO, and listener controls require
   `security.write`; destructive controls also require `dangerous.execute` only where
-  route policy says so. Delete All Accounts requires it, key deletion does not, and
-  clearing request logs therefore requires both
+  route policy says so. Delete All Accounts and key deletion require it, and clearing
+  request logs therefore requires both
   `security.write` and `dangerous.execute`; `security_admin` alone is insufficient.
   Changing the current administrator's own local password and logging out remain
   `admin.view` self-service operations.

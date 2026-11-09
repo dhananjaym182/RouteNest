@@ -272,6 +272,9 @@ func StartWithContext(ctx context.Context, host string, port int, registerAdmin 
 	}
 	mux.HandleFunc("/v1/health", httpx.CORS(health.Handler))
 	mux.HandleFunc("/health", httpx.CORS(health.Handler))
+	readiness := httpapi.Readiness{AuthenticationStorage: accounts.PoolStorageError}
+	mux.HandleFunc("/v1/ready", httpx.CORS(readiness.Handler))
+	mux.HandleFunc("/ready", httpx.CORS(readiness.Handler))
 
 	// Admin API (frontend + REST)
 	if registerAdmin != nil {

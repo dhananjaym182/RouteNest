@@ -413,6 +413,7 @@ async function bulkToggleFiltered(disabled) {
   try {
     await api('POST', '/models/toggle', { ids: ids, disabled: disabled });
     toast((disabled ? t('已停用') : t('已启用')) + ' ' + ids.length + ' ' + t('个模型'), 'success');
+    await loadGlobal(false);
   } catch (e) {
     toast(t('保存失败: ') + e.message, 'error');
   }
@@ -439,6 +440,7 @@ async function toggleModel(id, disabled) {
   try {
     await api('POST', '/models/toggle', { ids: [id], disabled: disabled });
     toast((disabled ? t('已停用') : t('已启用')) + ': ' + id, 'success');
+    await loadGlobal(false);
   } catch (e) {
     toast(t('保存失败: ') + e.message, 'error');
   }
@@ -472,6 +474,7 @@ async function toggleModelsBatch(groupKey, disabled) {
   try {
     await api('POST', '/models/toggle', { ids: ids, disabled: disabled });
     toast((disabled ? t('已停用') : t('已启用')) + ' ' + ids.length + ' ' + t('个模型'), 'success');
+    await loadGlobal(false);
   } catch (e) {
     toast(t('保存失败: ') + e.message, 'error');
   }
@@ -503,6 +506,7 @@ async function bulkModelToggle(mode) {
   try {
     await api('POST', '/models/toggle', { ids: ids, disabled: disabled });
     toast((disabled ? t('已停用') : t('已启用')) + ' ' + ids.length + ' ' + t('个模型'), 'success');
+    await loadGlobal(false);
   } catch (e) {
     toast(t('保存失败: ') + e.message, 'error');
   }
@@ -603,10 +607,35 @@ function editModelMeta(id, ctx, out, cost, tierSignal) {
 async function deleteModel(id) {
   if (!(await showConfirm(t('确认删除模型 ') + id + ' ?'))) return;
   try {
-    await api('POST', '/models/delete', { id });
+    const [catalog, offeringResponse] = await Promise.all([
+      readModelCatalog(),
+      api('GET', '/model-offerings'),
+    ]);
+    const records = (catalog.models || []).filter(model => model.id === id);
+    const offerings = ((offeringResponse.data && offeringResponse.data.offerings) || []).filter(offering => offering.modelId === id);
+    if (records.length > 1 || offerings.length > 1) {
+      toast(t('同一模型由多个 Provider 提供，请在 Provider 分组中选择具体实例后移除'), 'error');
+      return;
+    }
+
+    // A single administrator-added compatibility row has no provider-scoped
+    // owner to infer. Keep the legacy endpoint only for this unambiguous case.
+    const local = records.length === 1 && records[0].custom && !records[0].source;
+    if (local || offerings.length === 0) {
+      await api('POST', '/models/delete', { id });
+    } else {
+      const offering = offerings[0];
+      const providerId = String(offering.providerId || '');
+      const source = providerId === 'cline' ? 'remote' : providerId === 'opencode' ? 'zen' : 'provider';
+      const response = await api('POST', '/models/remove', { models: [{ id: id, source: source, providerId: providerId }] });
+      const result = response.data || {};
+      if (!Array.isArray(result.removed) || !Array.isArray(result.skipped) || !Array.isArray(result.errors)) throw new Error(t('移除结果无效，请刷新后重试'));
+      if (result.errors.length) throw new Error(result.errors.map(item => item.error).filter(Boolean).join('; '));
+      if (typeof reconcileRemovedModelDrafts === 'function') reconcileRemovedModelDrafts(result.removed.concat(result.skipped), result.removed);
+    }
     toast(t('模型已删除: ') + id, 'success');
-    await loadModels();
-    await loadConfig();
+    await Promise.allSettled([loadModels(), loadProviders(), loadGlobal(false), loadCombos()]);
+    await loadConfig({ preserveEdits: true });
   } catch (e) { toast(t('删除失败: ') + e.message, 'error'); }
 }
 
@@ -650,6 +679,7 @@ async function loadConfig(options = {}) {
           '</optgroup>';
       });
       sel.innerHTML = opts || '<option value="">' + t('（无可用模型）') + '</option>';
+      sel.dataset.configLoaded = '1';
     }
     // 本机 IP 展示（监听 0.0.0.0 时局域网访问地址）
     const ips = c.localIPs || [];

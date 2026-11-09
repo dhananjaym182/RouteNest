@@ -27,15 +27,22 @@ func main() {
 		}
 		return
 	}
-	app.Configure()
 	loginMode := flag.Bool("login", false, "Run OAuth device login flow and add account to pool")
 	captureMode := flag.Bool("capture", false, "Run interactive OAuth capture (records ALL traffic)")
 	port := flag.Int("port", 3457, "Proxy server port")
-	host := flag.String("host", configuredHost(), "Proxy server listen host (0.0.0.0 = all interfaces)")
+	host := flag.String("host", "", "Proxy server listen host (0.0.0.0 = all interfaces)")
+	initializeEmptyStore := flag.Bool("initialize-empty-account-store", false, "Authorize creation of an empty client-authentication store in a confirmed fresh data directory for this startup")
 	addAccountMode := flag.Bool("add-account", false, "Add a new account via OAuth to the pool")
 	showList := flag.Bool("list", false, "List all accounts in the pool")
 	startMode := flag.Bool("start", false, "Build, start proxy, and open admin panel in browser")
 	flag.Parse()
+	if err := prepareClientAuthenticationStorage(*initializeEmptyStore); err != nil {
+		log.Fatalf("Client authentication storage failed: %v", err)
+	}
+	app.Configure()
+	if *host == "" {
+		*host = configuredHost()
+	}
 
 	if *startMode {
 		buildAndStart(*host, *port)

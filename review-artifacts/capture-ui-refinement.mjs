@@ -16,15 +16,56 @@ if (!chromium) throw new Error('Playwright is unavailable.');
 
 const baseURL = process.env.BASE_URL || 'http://127.0.0.1:3457/admin/';
 const outputDir = resolve(process.env.OUTPUT_DIR || 'review-artifacts/ui-refinement');
+const bootstrapSecret = process.env.ADMIN_TEST_BOOTSTRAP_SECRET || '';
+const testPassword = process.env.ADMIN_TEST_PASSWORD || '';
 mkdirSync(outputDir, { recursive: true });
 
-const pages = ['dashboard', 'providers', 'credentials', 'models', 'routing', 'logs', 'about'];
-const widths = [1440, 390, 360];
+const list = (name, fallback) => process.env[name]
+  ? process.env[name].split(',').map(value => value.trim()).filter(Boolean)
+  : fallback;
+const pages = list('CAPTURE_PAGES', ['dashboard', 'providers', 'credentials', 'models', 'routing', 'logs', 'about']);
+const widths = list('CAPTURE_WIDTHS', ['1440', '390', '360']).map(Number);
+const languages = list('CAPTURE_LANGS', ['en', 'zh']);
+const themes = list('CAPTURE_THEMES', ['light', 'dark']);
 const evidence = [];
 const runtimeErrors = [];
+let storageState;
 
-for (const lang of ['en', 'zh']) {
-  for (const theme of ['light', 'dark']) {
+if (bootstrapSecret || testPassword) {
+  if (!bootstrapSecret || !testPassword) throw new Error('Both ADMIN_TEST_BOOTSTRAP_SECRET and ADMIN_TEST_PASSWORD are required.');
+  const setupBrowser = await chromium.launch({
+    headless: true,
+    executablePath: existsSync('/usr/bin/chromium') ? '/usr/bin/chromium' : undefined,
+    args: ['--no-sandbox', '--disable-dev-shm-usage'],
+  });
+  try {
+    const setup = await setupBrowser.newContext();
+    try {
+      const response = await setup.request.post(new URL('api/auth/bootstrap', baseURL).href, {
+        headers: { Origin: new URL(baseURL).origin },
+        data: { secret: bootstrapSecret, password: testPassword },
+      });
+      if (response.status() !== 200 && response.status() !== 409) {
+        throw new Error('Temporary administrator bootstrap failed with status ' + response.status());
+      }
+      if (response.status() === 409) {
+        const login = await setup.request.post(new URL('api/login', baseURL).href, {
+          headers: { Origin: new URL(baseURL).origin },
+          data: { username: 'admin', password: testPassword },
+        });
+        if (login.status() !== 200) throw new Error('Temporary administrator login failed with status ' + login.status());
+      }
+      storageState = await setup.storageState();
+    } finally {
+      await setup.close();
+    }
+  } finally {
+    await setupBrowser.close();
+  }
+}
+
+for (const lang of languages) {
+  for (const theme of themes) {
     for (const width of widths) {
       const browser = await chromium.launch({
         headless: true,
@@ -33,7 +74,7 @@ for (const lang of ['en', 'zh']) {
       });
       try {
         const height = width === 1440 ? 1000 : (width === 390 ? 844 : 800);
-        const context = await browser.newContext({ viewport: { width, height } });
+        const context = await browser.newContext({ viewport: { width, height }, storageState });
         await context.addInitScript(({ selectedTheme, selectedLang }) => {
           localStorage.setItem('cline_admin_theme', selectedTheme);
           localStorage.setItem('cline_admin_lang', selectedLang);
@@ -78,12 +119,36 @@ for (const lang of ['en', 'zh']) {
             const style = node => node ? getComputedStyle(node) : null;
             const titleStyle = style(title);
             const technicalStyle = style(technical);
+            const documentHeight = Math.max(document.documentElement.scrollHeight, document.body.scrollHeight);
+            const visibleElements = [...document.body.querySelectorAll('*')].filter(node => node.getClientRects().length > 0);
+            const interactive = visibleElements.filter(node => !node.closest('[inert]') && node.matches('button,a[href],input,select,textarea,[role="button"],[tabindex]:not([tabindex="-1"])'));
+            const accessibleName = node => {
+              const labelledBy = node.getAttribute('aria-labelledby');
+              const labelledText = labelledBy ? labelledBy.split(/\s+/).map(id => document.getElementById(id)?.textContent || '').join(' ').trim() : '';
+              const labels = node.labels ? [...node.labels].map(label => label.textContent || '').join(' ').trim() : '';
+              return (node.getAttribute('aria-label') || labelledText || labels || node.textContent || node.getAttribute('title') || '').trim();
+            };
+            const selectorFor = node => node.id ? '#' + node.id : node.tagName.toLowerCase() + (node.classList.length ? '.' + [...node.classList].slice(0, 3).join('.') : '');
+            const tallest = visibleElements.reduce((current, node) => {
+              const bottom = node.getBoundingClientRect().bottom + scrollY;
+              return bottom > current.bottom ? {
+                bottom,
+                selector: selectorFor(node),
+              } : current;
+            }, { bottom: 0, selector: '' });
             return {
               destination,
               width,
               lang,
               theme,
               documentWidth: Math.max(document.documentElement.scrollWidth, document.body.scrollWidth),
+              documentHeight,
+              tallest,
+              unnamedInteractive: interactive.filter(node => !accessibleName(node)).map(selectorFor).slice(0, 20),
+              smallTouchTargets: width <= 390 ? interactive.filter(node => {
+                const rect = node.getBoundingClientRect();
+                return rect.width > 0 && rect.height > 0 && (rect.width < 40 || rect.height < 40);
+              }).map(node => ({ selector: selectorFor(node), width: Math.round(node.getBoundingClientRect().width), height: Math.round(node.getBoundingClientRect().height) })).slice(0, 40) : [],
               overflow: Math.max(document.documentElement.scrollWidth, document.body.scrollWidth) > innerWidth,
               title: title?.textContent.trim() || '',
               titleFontSize: titleStyle?.fontSize || null,
@@ -101,9 +166,9 @@ for (const lang of ['en', 'zh']) {
             };
           }, { destination, width, lang, theme });
           evidence.push(metrics);
-          const fullPage = width === 1440 && await page.evaluate(() =>
+          const fullPage = await page.evaluate(() =>
             Math.max(document.documentElement.scrollHeight, document.body.scrollHeight) < 24000);
-          console.log(`capture ${lang}/${theme}/${width}/${destination}${fullPage ? '' : ' (viewport: page exceeds 24000px)'}`);
+          console.log(`capture ${lang}/${theme}/${width}/${destination}${fullPage ? '' : ' (viewport only: page exceeds 24000px)'}`);
           await page.screenshot({
             path: resolve(outputDir, `${lang}-${theme}-${width}-${destination}.png`),
             fullPage,

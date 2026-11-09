@@ -176,6 +176,14 @@ var apiMessages = map[string]map[locale]string{
 		localeZH: "不能删除内置模型",
 		localeEN: "cannot delete builtin model",
 	},
+	"model_delete_ambiguous": {
+		localeZH: "多个 Provider 提供同一模型，请选择具体 Provider 后移除",
+		localeEN: "multiple providers offer this model; select a provider-specific offering",
+	},
+	"model_delete_failed": {
+		localeZH: "模型删除未能持久化，请重试",
+		localeEN: "model deletion could not be persisted; retry",
+	},
 	"model_not_found": {
 		localeZH: "模型不存在",
 		localeEN: "model not found",

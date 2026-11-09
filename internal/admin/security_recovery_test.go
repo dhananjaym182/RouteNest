@@ -100,6 +100,41 @@ func TestOfflineRecoveryCallerRequiresDowntimeAndPreservesAudit(t *testing.T) {
 	}
 }
 
+func TestSecuritySetupStateSeparatesBootstrapAndOfflineRecovery(t *testing.T) {
+	_, repo, service := newRecoveryAuthority(t)
+	adminSecurityState.Lock()
+	previous := adminSecurityState.runtime
+	adminSecurityState.runtime = &adminSecurityRuntime{service: service, store: repo}
+	adminSecurityState.Unlock()
+	t.Cleanup(func() {
+		adminSecurityState.Lock()
+		adminSecurityState.runtime = previous
+		adminSecurityState.Unlock()
+	})
+
+	status, err := SecuritySetupState()
+	if err != nil || !status.BootstrapRequired || status.RecoveryRequired {
+		t.Fatalf("fresh setup state = %+v, %v", status, err)
+	}
+	if _, err := service.CompleteBootstrap(context.Background(), "bootstrap recovery fixture", "permanent recovery fixture"); err != nil {
+		t.Fatal(err)
+	}
+	status, err = SecuritySetupState()
+	if err != nil || status.BootstrapRequired || status.RecoveryRequired {
+		t.Fatalf("initialized setup state = %+v, %v", status, err)
+	}
+	if err := adminauth.RecoverOffline(context.Background(), repo, adminauth.Options{
+		PasswordParams:   adminauth.PasswordParams{Memory: 19 * 1024, Iterations: 2, Parallelism: 1, SaltLength: 16, KeyLength: 32},
+		DeliverBootstrap: func(string) error { return nil },
+	}); err != nil {
+		t.Fatal(err)
+	}
+	status, err = SecuritySetupState()
+	if err != nil || status.BootstrapRequired || !status.RecoveryRequired {
+		t.Fatalf("offline recovery setup state = %+v, %v", status, err)
+	}
+}
+
 func TestOfflineRecoveryCallerRefusesFreshBootstrapAndMissingDelivery(t *testing.T) {
 	dir, repo, _ := newRecoveryAuthority(t)
 	if err := repo.Close(); err != nil {

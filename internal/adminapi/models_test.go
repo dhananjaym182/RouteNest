@@ -1,6 +1,7 @@
 package adminapi
 
 import (
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -14,6 +15,7 @@ type fakeModelStore struct {
 	added     []domain.Model
 	deleted   []string
 	deleteRes DeleteModelResult
+	deleteErr error
 	ctxCalls  []string
 	ctxFound  bool
 	capsCalls []string
@@ -27,9 +29,9 @@ func (f *fakeModelStore) List() []domain.Model { return f.models }
 
 func (f *fakeModelStore) Add(m domain.Model) { f.added = append(f.added, m) }
 
-func (f *fakeModelStore) Delete(id string) DeleteModelResult {
+func (f *fakeModelStore) Delete(id string) (DeleteModelResult, error) {
 	f.deleted = append(f.deleted, id)
-	return f.deleteRes
+	return f.deleteRes, f.deleteErr
 }
 
 func (f *fakeModelStore) UpdateContext(id string, context, output int) bool {
@@ -123,6 +125,7 @@ func TestModelsDeleteResults(t *testing.T) {
 	}{
 		{ModelDeleted, http.StatusOK, "model_deleted"},
 		{ModelBuiltin, http.StatusBadRequest, "cannot_delete_builtin"},
+		{ModelAmbiguous, http.StatusConflict, "model_delete_ambiguous"},
 		{ModelNotFound, http.StatusNotFound, "model_not_found"},
 	}
 	for _, tc := range cases {
@@ -141,8 +144,16 @@ func TestModelsDeleteResults(t *testing.T) {
 		}
 	}
 
-	m := newModels(&fakeModelStore{})
+	store := &fakeModelStore{deleteErr: errors.New("disk full")}
+	m := newModels(store)
 	rec := httptest.NewRecorder()
+	m.Delete(rec, postJSON("/admin/api/models/delete", `{"id":"m"}`))
+	if rec.Code != http.StatusInternalServerError || !strings.Contains(rec.Body.String(), "model_delete_failed") {
+		t.Fatalf("persistence failure status=%d body=%s", rec.Code, rec.Body.String())
+	}
+
+	m = newModels(&fakeModelStore{})
+	rec = httptest.NewRecorder()
 	m.Delete(rec, postJSON("/admin/api/models/delete", `{"id":""}`))
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("empty id status = %d", rec.Code)

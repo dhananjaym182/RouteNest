@@ -1,0 +1,34 @@
+<template id="onboardingWelcomeTemplate">
+  <section id="onboardingWelcome" class="onboarding-welcome" aria-labelledby="onboardingTitle">
+    <div class="onboarding-intro">
+      <div>
+        <div class="page-kicker">开始使用</div>
+        <h1 id="onboardingTitle">欢迎使用 RouteNest</h1>
+        <p>连接 AI Provider、确认模型，然后从一个网关开始路由请求。</p>
+      </div>
+      <div class="onboarding-progress" role="status" aria-live="polite"><span id="onboardingProgressValue">1/5</span><small>设置进度</small></div>
+    </div>
+    <div id="onboardingNotice" class="onboarding-notice" hidden role="alert"></div>
+    <ol class="onboarding-checklist">
+      <li id="onboardingSecurityStep" class="onboarding-step is-complete">
+        <span class="onboarding-step-index" aria-hidden="true">✓</span><div><h2>管理员安全</h2><p>管理员密码和恢复方式已启用。</p></div><span class="onboarding-status">已完成</span>
+      </li>
+      <li id="onboardingProviderStep" class="onboarding-step">
+        <span class="onboarding-step-index" aria-hidden="true">2</span><div><h2>连接第一个 Provider</h2><p>复用现有 Provider 设置流程添加账号、Token 或 API Provider。</p></div><button type="button" class="btn btn-primary" onclick="openProviderSetup()">连接 Provider</button>
+      </li>
+      <li id="onboardingModelsStep" class="onboarding-step">
+        <span class="onboarding-step-index" aria-hidden="true">3</span><div><h2>确认可用模型</h2><p>查看逻辑模型与 Provider Offering，确保至少一个模型可路由。</p></div><button type="button" class="btn" onclick="switchTab('models')">查看模型</button>
+      </li>
+      <li id="onboardingKeysStep" class="onboarding-step">
+        <span class="onboarding-step-index" aria-hidden="true">4</span><div><h2>配置客户端 API 访问</h2><p>生成客户端密钥；有意保持空密钥时，现有兼容策略不变。</p></div><button type="button" class="btn" onclick="showPageSubTab('credentials','client-keys')">管理 API 密钥</button>
+      </li>
+      <li id="onboardingRequestStep" class="onboarding-step">
+        <span class="onboarding-step-index" aria-hidden="true">5</span><div><h2>发送测试请求</h2><p>使用 Quick Start 中的真实客户端配置发送第一条网关请求。</p></div><button type="button" class="btn" onclick="switchTab('quickstart')">打开 Quick Start</button>
+      </li>
+    </ol>
+    <div class="onboarding-actions">
+      <button id="onboardingVerifyButton" type="button" class="btn" onclick="testOnboardingProvider()" hidden>测试连接</button>
+      <button type="button" class="btn" onclick="showMetricsDashboard()">打开指标面板</button>
+    </div>
+  </section>
+</template>

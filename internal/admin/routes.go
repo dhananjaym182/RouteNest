@@ -241,7 +241,7 @@ func validateCSRFPolicy(def adminRouteDefinition) error {
 			return fmt.Errorf("%s %s public mutation cannot use session CSRF", def.Method, def.Path)
 		}
 	case csrfLocalEntry:
-		if !def.Public || def.Method != http.MethodPost || (def.Path != "/admin/api/login" && def.Path != "/admin/api/auth/bootstrap" && def.Path != "/admin/api/auth/legacy/rotate") {
+		if !def.Public || def.Method != http.MethodPost || (def.Path != "/admin/api/login" && def.Path != "/admin/api/auth/bootstrap" && def.Path != "/admin/api/auth/legacy/rotate" && def.Path != "/admin/api/auth/recovery" && def.Path != "/admin/api/auth/desktop-handoff") {
 			return fmt.Errorf("%s %s invalid local-entry exemption", def.Method, def.Path)
 		}
 	case csrfSSOStart:

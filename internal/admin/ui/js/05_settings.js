@@ -1,4 +1,16 @@
 // ========== API 密钥管理 ==========
+function keyErrorMessage(code) {
+  const messages = {
+    key_required: '必须提供 API 密钥',
+    key_not_found: '该 API 密钥已不存在',
+    key_generation_failed: '安全 API 密钥生成失败',
+    key_persistence_failed: 'API 密钥变更无法持久化',
+    key_store_unavailable: 'API 密钥存储不可用',
+    permission_denied: '权限不足'
+  };
+  return t(messages[code] || code);
+}
+
 async function loadKeys() {
   if (typeof adminHasPermission === 'function' && !adminHasPermission('credential.write')) return;
   try {
@@ -43,7 +55,7 @@ async function generateKey(btn) {
     loadKeys();
     toast(t('密钥已生成'), 'success');
     setTimeout(() => _('keyGenResult').innerHTML = '', 8000);
-  } catch (e) { toast(t('生成失败: ') + e.message, 'error'); }
+  } catch (e) { toast(t('生成失败: ') + keyErrorMessage(e.message), 'error'); }
   finally { if (btn) { btn.disabled = false; btn.innerHTML = orig; } }
 }
 
@@ -52,22 +64,32 @@ async function deleteKey(key, btn) {
   const orig = btn ? btn.innerHTML : '';
   if (btn) { btn.disabled = true; btn.innerHTML = '<span class="loading"></span> ' + t('删除中...'); }
   try {
-    await api('POST', '/keys/delete', { key });
+    try {
+      await api('POST', '/keys/delete', { key });
+    } catch (e) {
+      if (!e || e.message !== 'final_key_confirmation_required') throw e;
+      if (!(await showConfirm(t('这是最后一个客户端 API 密钥。删除后，公共 API 将按兼容策略允许匿名访问。确认禁用客户端 API 认证？')))) return;
+      await api('POST', '/keys/delete', { key, confirmation: 'disable-client-authentication' });
+    }
     toast(t('密钥已删除'), 'success');
     loadKeys();
-  } catch (e) { toast(t('删除失败: ') + e.message, 'error'); }
+  } catch (e) { toast(t('删除失败: ') + keyErrorMessage(e.message), 'error'); }
   finally { if (btn) { btn.disabled = false; btn.innerHTML = orig; } }
 }
 
 async function deleteAllKeys() {
-  if (!(await showConfirm(t('确定删除所有 API 密钥？')))) return;
+  if (!(await showConfirm(t('删除全部密钥会禁用客户端 API 认证，并按兼容策略允许匿名访问。确认继续？')))) return;
   try {
     const d = await api('GET', '/keys');
     const keys = d.data.keys || [];
-    for (const k of keys) await api('POST', '/keys/delete', { key: k });
+    for (let i = 0; i < keys.length; i++) {
+      const body = { key: keys[i] };
+      if (i === keys.length - 1) body.confirmation = 'disable-client-authentication';
+      await api('POST', '/keys/delete', body);
+    }
     toast(t('全部密钥已删除'), 'success');
     loadKeys();
-  } catch (e) { toast(t('删除失败: ') + e.message, 'error'); }
+  } catch (e) { toast(t('删除失败: ') + keyErrorMessage(e.message), 'error'); }
 }
 
 function copyText(textValue) {
@@ -90,6 +112,10 @@ async function updateConfig() {
   try {
     await api('POST', '/config/update', { strategy, defaultModel, modelChain, onlyFree });
     delete chainField.dataset.dirty;
+    await Promise.all([
+      loadConfig({ preserveEdits: true }),
+      typeof loadRouteInspector === 'function' ? loadRouteInspector(true) : Promise.resolve(),
+    ]);
     toast(t('配置已更新'), 'success');
   } catch (e) { toast(t('更新失败: ') + e.message, 'error'); }
 }

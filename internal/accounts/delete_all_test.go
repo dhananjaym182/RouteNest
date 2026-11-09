@@ -67,6 +67,44 @@ func TestDeleteAllAccountsStrictPreservesIndependentPoolStateAcrossRestart(t *te
 	assertAccountOnlyDeletion(t, Pool, seed)
 }
 
+func TestSavePoolCandidateStrictLockedReconcilesUncertainReplacement(t *testing.T) {
+	oldPool, oldPath, oldErr, oldErrPath := Pool, PoolPath, poolLoadErr, poolLoadErrPath
+	t.Cleanup(func() { Pool, PoolPath, poolLoadErr, poolLoadErrPath = oldPool, oldPath, oldErr, oldErrPath })
+
+	PoolPath = filepath.Join(t.TempDir(), poolstore.FileName)
+	Pool = &domain.AccountPool{Keys: []string{"client-key"}, DefaultModel: "old"}
+	poolLoadErr, poolLoadErrPath = nil, ""
+	if err := poolstore.SaveDurable(PoolPath, Pool); err != nil {
+		t.Fatal(err)
+	}
+	next := clonePool(Pool)
+	next.DefaultModel = "new"
+
+	PoolMu.Lock()
+	err := savePoolCandidateStrictLocked(next, func(path string, candidate *AccountPool) error {
+		return poolstore.SaveDurableWithOptions(path, candidate, platform.AtomicWriteOptions{Fault: func(stage platform.AtomicWriteStage) error {
+			if stage == platform.AtomicWriteDirectorySync {
+				return errors.New("directory sync failed")
+			}
+			return nil
+		}})
+	})
+	PoolMu.Unlock()
+	if err == nil || !platform.AtomicWriteMayHaveReplaced(err) {
+		t.Fatalf("error = %v, want uncertain replacement", err)
+	}
+	if Pool.DefaultModel != "new" {
+		t.Fatalf("memory was not reconciled to the replaced file: %+v", Pool)
+	}
+	persisted, loadErr := poolstore.Load(PoolPath)
+	if loadErr != nil {
+		t.Fatal(loadErr)
+	}
+	if persisted.DefaultModel != "new" || !reflect.DeepEqual(persisted.Keys, []string{"client-key"}) {
+		t.Fatalf("unexpected persisted candidate: %+v", persisted)
+	}
+}
+
 func TestDeleteAllAccountsStrictPreservesClientAuthentication(t *testing.T) {
 	oldPool, oldPath, oldErr, oldErrPath := Pool, PoolPath, poolLoadErr, poolLoadErrPath
 	t.Cleanup(func() { Pool, PoolPath, poolLoadErr, poolLoadErrPath = oldPool, oldPath, oldErr, oldErrPath })

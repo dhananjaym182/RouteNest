@@ -61,6 +61,7 @@ func RecoverOffline(ctx context.Context, repo Repository, opts Options) error {
 		u.Roles = []Role{RoleBreakGlass, RoleSecurityAdmin}
 		next.Users[BreakGlassID] = u
 		next.RecoveryPHC = phc
+		next.RecoveryCodePHC = ""
 		next.Sessions = map[string]Session{}
 		return ValidateState(*next)
 	})

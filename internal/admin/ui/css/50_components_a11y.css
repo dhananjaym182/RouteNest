@@ -5,6 +5,10 @@
 .model-subtable{width:100%}
 td.stats-embed{padding:0}
 
+/* Keyboard users can bypass the persistent navigation and land on the current page. */
+.skip-link{position:fixed;top:8px;left:12px;z-index:calc(var(--z-toast) + 1);padding:9px 13px;border:1px solid var(--accent);border-radius:var(--radius-sm);background:var(--surface);color:var(--text);font-weight:600;box-shadow:var(--shadow-md);transform:translateY(-160%);transition:transform .16s var(--ease)}
+.skip-link:focus{transform:translateY(0)}
+
 /* ===== Toggle 开关 ===== */
 .switch{position:relative;display:inline-block;width:34px;height:20px;flex-shrink:0}
 .switch input{opacity:0;width:0;height:0;position:absolute}

@@ -13,17 +13,17 @@
         <div class="step-item">
           <div class="step-dot">1</div>
           <div>
-            <div class="txt-strong">添加 Cline 账号</div>
-            <div class="page-sub-title">在「凭据 → Cline 账号」中展开「登录与导入」，通过 OAuth、refreshToken 或批量文件添加账号。</div>
-            <button class="btn btn-sm mt-6" onclick="showPageSubTab('credentials', 'pool')">前往 Cline 账号</button>
+            <div class="txt-strong">连接第一个 Provider</div>
+            <div class="page-sub-title">复用现有 Provider 设置流程添加账号、Token 或 API Provider。</div>
+            <button class="btn btn-sm mt-6" onclick="openProviderSetup()">连接 Provider</button>
           </div>
         </div>
         <div class="step-item">
           <div class="step-dot">2</div>
           <div>
             <div class="txt-strong">生成 API Key</div>
-            <div class="page-sub-title">前往「密钥与安全」页面生成密钥。如不配置任何密钥，代理允许匿名访问。</div>
-            <button class="btn btn-sm mt-6" onclick="switchTab('security')">前往密钥与安全</button>
+            <div class="page-sub-title">前往「账号与凭据 → 客户端 API 密钥」生成密钥。如有意不配置任何密钥，现有兼容策略保持不变。</div>
+            <button class="btn btn-sm mt-6" onclick="showPageSubTab('credentials','client-keys')">管理客户端 API 密钥</button>
           </div>
         </div>
         <div class="step-item">
@@ -44,26 +44,26 @@
       <div class="quickstart-grid">
         <div class="quickstart-card">
           <div class="quickstart-card-title">Claude Code（Anthropic 协议）</div>
-          <pre class="quickstart-code">export ANTHROPIC_BASE_URL="http://127.0.0.1:3457"
+          <pre class="quickstart-code" id="quickstartClaudeCode">export ANTHROPIC_BASE_URL="http://127.0.0.1:3457"
 export ANTHROPIC_API_KEY="&lt;your-api-key&gt;"
 claude --model cline-free/glm-5.2</pre>
         </div>
         <div class="quickstart-card">
           <div class="quickstart-card-title">Cline / Roo Code（VS Code 插件）</div>
-          <pre class="quickstart-code">API Provider: Anthropic
+          <pre class="quickstart-code" id="quickstartClineCode">API Provider: Anthropic
 Base URL:  http://127.0.0.1:3457
 API Key:   &lt;your-api-key&gt;
 Model:     cline-free/glm-5.2</pre>
         </div>
         <div class="quickstart-card">
           <div class="quickstart-card-title">通用 OpenAI 兼容客户端</div>
-          <pre class="quickstart-code">Base URL: http://127.0.0.1:3457/v1
+          <pre class="quickstart-code" id="quickstartOpenAICode">Base URL: http://127.0.0.1:3457/v1
 API Key:  &lt;your-api-key&gt;
 Model:    cline-free/glm-5.2</pre>
         </div>
         <div class="quickstart-card">
           <div class="quickstart-card-title">curl 冒烟测试</div>
-          <pre class="quickstart-code">curl -s http://127.0.0.1:3457/v1/chat/completions \
+          <pre class="quickstart-code" id="quickstartCurlCode">curl -s http://127.0.0.1:3457/v1/chat/completions \
   -H "x-api-key: &lt;your-api-key&gt;" -H "Content-Type: application/json" \
   -d '{"model":"cline-free/glm-5.2","messages":[{"role":"user","content":"hi"}]}'</pre>
         </div>

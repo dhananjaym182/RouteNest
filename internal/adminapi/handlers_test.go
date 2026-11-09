@@ -2,12 +2,15 @@ package adminapi
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
 
+	"routenest/internal/accounts"
 	"routenest/internal/domain"
 	"routenest/internal/httpx"
 )
@@ -22,7 +25,7 @@ func decodeResponse(t *testing.T, rec *httptest.ResponseRecorder) httpx.Response
 }
 
 func TestKeyManagerGet(t *testing.T) {
-	m := &KeyManager{ListKeys: func() []string { return []string{"k1", "k2"} }}
+	m := &KeyManager{ListKeys: func() ([]string, error) { return []string{"k1", "k2"}, nil }}
 	rec := httptest.NewRecorder()
 	m.Get(rec, httptest.NewRequest(http.MethodGet, "/admin/api/keys", nil))
 	resp := decodeResponse(t, rec)
@@ -33,21 +36,42 @@ func TestKeyManagerGet(t *testing.T) {
 }
 
 func TestKeyManagerGenerateStoresKey(t *testing.T) {
-	var added []string
-	fixed := time.Unix(1700000000, 123000000)
+	var audits []KeyAuditEvent
 	m := &KeyManager{
-		AddKey: func(k string) { added = append(added, k) },
-		Now:    func() time.Time { return fixed },
+		GenerateKey: func() (string, error) { return "cline_secure", nil },
+		Audit: func(_ *http.Request, event KeyAuditEvent) error {
+			audits = append(audits, event)
+			return nil
+		},
 	}
 	rec := httptest.NewRecorder()
 	m.Generate(rec, httptest.NewRequest(http.MethodPost, "/admin/api/keys/generate", nil))
 	resp := decodeResponse(t, rec)
-	if !resp.Success || len(added) != 1 {
-		t.Fatalf("response = %+v added = %v", resp, added)
+	if !resp.Success {
+		t.Fatalf("response = %+v", resp)
 	}
 	key, _ := resp.Data.(map[string]any)["key"].(string)
-	if key != added[0] || !strings.HasPrefix(key, "cline_") {
-		t.Fatalf("key = %q added = %v", key, added)
+	if key != "cline_secure" || len(audits) != 1 || audits[0] != (KeyAuditEvent{Kind: KeyAuditCreate, Outcome: "success"}) {
+		t.Fatalf("key = %q audits = %+v", key, audits)
+	}
+}
+
+func TestKeyManagerGenerateFailureIsExplicitAndAudited(t *testing.T) {
+	var audits []KeyAuditEvent
+	m := &KeyManager{
+		GenerateKey: func() (string, error) { return "", errors.New("injected persistence failure") },
+		Audit: func(_ *http.Request, event KeyAuditEvent) error {
+			audits = append(audits, event)
+			return nil
+		},
+	}
+	rec := httptest.NewRecorder()
+	m.Generate(rec, httptest.NewRequest(http.MethodPost, "/admin/api/keys/generate", nil))
+	if rec.Code != http.StatusInternalServerError || decodeResponse(t, rec).Error != "key_persistence_failed" {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if !reflect.DeepEqual(audits, []KeyAuditEvent{{Kind: KeyAuditCreate, Outcome: "failed"}}) {
+		t.Fatalf("audits = %+v", audits)
 	}
 }
 
@@ -65,20 +89,78 @@ func TestKeyManagerMethodsRejected(t *testing.T) {
 
 func TestKeyManagerDelete(t *testing.T) {
 	var deleted []string
-	m := &KeyManager{DeleteKey: func(k string) { deleted = append(deleted, k) }}
+	var audits []KeyAuditEvent
+	m := &KeyManager{
+		DeleteKey: func(k string, confirmed, elevated bool) (accounts.ClientKeyDeleteResult, error) {
+			deleted = append(deleted, k)
+			if confirmed || elevated {
+				t.Fatalf("ordinary delete confirmation=%v elevated=%v", confirmed, elevated)
+			}
+			return accounts.ClientKeyDeleteResult{}, nil
+		},
+		Audit: func(_ *http.Request, event KeyAuditEvent) error {
+			audits = append(audits, event)
+			return nil
+		},
+	}
 	rec := httptest.NewRecorder()
 	m.Delete(rec, httptest.NewRequest(http.MethodPost, "/admin/api/keys/delete", strings.NewReader(`{"key":"k1"}`)))
 	if resp := decodeResponse(t, rec); !resp.Success || resp.Message != "key_deleted" {
 		t.Fatalf("response = %+v", resp)
 	}
-	if len(deleted) != 1 || deleted[0] != "k1" {
-		t.Fatalf("deleted = %v", deleted)
+	if len(deleted) != 1 || deleted[0] != "k1" || len(audits) != 1 || audits[0] != (KeyAuditEvent{Kind: KeyAuditDelete, Outcome: "success"}) {
+		t.Fatalf("deleted = %v audits = %+v", deleted, audits)
 	}
 
 	rec = httptest.NewRecorder()
 	m.Delete(rec, httptest.NewRequest(http.MethodPost, "/admin/api/keys/delete", strings.NewReader(`{`)))
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("invalid body status = %d", rec.Code)
+	}
+}
+
+func TestKeyManagerFinalDeleteRequiresConfirmationAndElevation(t *testing.T) {
+	var audits []KeyAuditEvent
+	elevated := false
+	m := &KeyManager{
+		DeleteKey: func(_ string, confirmed, allowed bool) (accounts.ClientKeyDeleteResult, error) {
+			if !confirmed {
+				return accounts.ClientKeyDeleteResult{}, accounts.ErrFinalClientKeyConfirmationRequired
+			}
+			if !allowed {
+				return accounts.ClientKeyDeleteResult{}, accounts.ErrFinalClientKeyAuthorizationRequired
+			}
+			return accounts.ClientKeyDeleteResult{DeletedFinalKey: true}, nil
+		},
+		CanDeleteFinal: func(*http.Request) bool { return elevated },
+		Audit: func(_ *http.Request, event KeyAuditEvent) error {
+			audits = append(audits, event)
+			return nil
+		},
+	}
+
+	request := func(body string) *httptest.ResponseRecorder {
+		rec := httptest.NewRecorder()
+		m.Delete(rec, httptest.NewRequest(http.MethodPost, "/admin/api/keys/delete", strings.NewReader(body)))
+		return rec
+	}
+	if rec := request(`{"key":"last"}`); rec.Code != http.StatusConflict || decodeResponse(t, rec).Error != "final_key_confirmation_required" {
+		t.Fatalf("unconfirmed status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if rec := request(`{"key":"last","confirmation":"disable-client-authentication"}`); rec.Code != http.StatusForbidden || decodeResponse(t, rec).Error != "permission_denied" {
+		t.Fatalf("unelevated status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	elevated = true
+	if rec := request(`{"key":"last","confirmation":"disable-client-authentication"}`); rec.Code != http.StatusOK {
+		t.Fatalf("confirmed status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	want := []KeyAuditEvent{
+		{Kind: KeyAuditDeleteFinal, Outcome: "failed"},
+		{Kind: KeyAuditDeleteFinal, Outcome: "failed"},
+		{Kind: KeyAuditDeleteFinal, Outcome: "success"},
+	}
+	if !reflect.DeepEqual(audits, want) {
+		t.Fatalf("audits = %+v, want %+v", audits, want)
 	}
 }
 

@@ -11,7 +11,9 @@ func syncDirectoryDurable(path string) error {
 	}
 	// FlushFileBuffers requires GENERIC_WRITE. FILE_FLAG_BACKUP_SEMANTICS is
 	// required to obtain a directory handle; sharing keeps ordinary readers and
-	// replacers from being blocked while the metadata flush is performed.
+	// replacers from being blocked while the metadata flush is performed. This
+	// is an explicit metadata-flush attempt after replacement, not a guarantee
+	// against storage hardware that ignores flush commands.
 	handle, err := windows.CreateFile(utf16Path, windows.GENERIC_READ|windows.GENERIC_WRITE, windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE|windows.FILE_SHARE_DELETE, nil, windows.OPEN_EXISTING, windows.FILE_FLAG_BACKUP_SEMANTICS, 0)
 	if err != nil {
 		return err
@@ -29,5 +31,7 @@ func replaceFileAtomic(oldPath, newPath string) error {
 	if err != nil {
 		return err
 	}
+	// MOVEFILE_WRITE_THROUGH waits for the move to complete on disk. The temp
+	// file itself has already been flushed by file.Sync before this call.
 	return windows.MoveFileEx(oldUTF16, newUTF16, windows.MOVEFILE_REPLACE_EXISTING|windows.MOVEFILE_WRITE_THROUGH)
 }

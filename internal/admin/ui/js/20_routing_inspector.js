@@ -63,9 +63,13 @@ async function loadRouteInspector(force) {
   const generation = ++_routeInspectorLoadGen;
   if (!_routeInspectorData || force) routeInspectorSetLoading();
   try {
+    const canReadCredentials = typeof adminHasPermission !== 'function' || adminHasPermission('credential.write');
     const [instances, credentials, offerings, state, config, combos, logs] = await Promise.all([
       api('GET', '/provider-instances'),
-      api('GET', '/credentials'),
+      canReadCredentials ? api('GET', '/credentials').catch(e => {
+        if (e && e.message === 'permission_denied') return null;
+        throw e;
+      }) : Promise.resolve(null),
       api('GET', '/model-offerings'),
       api('GET', '/provider-state'),
       api('GET', '/config'),
@@ -75,7 +79,8 @@ async function loadRouteInspector(force) {
     if (generation !== _routeInspectorLoadGen) return;
     _routeInspectorData = {
       instances: (instances.data && instances.data.instances) || [],
-      credentials: (credentials.data && credentials.data.credentials) || [],
+      credentials: (credentials && credentials.data && credentials.data.credentials) || [],
+      credentialsAvailable: credentials !== null,
       offerings: (offerings.data && offerings.data.offerings) || [],
       observations: (state.data && state.data.observations) || [],
       config: (config.data) || {},
@@ -144,7 +149,7 @@ function renderRouteInspector() {
   const candidates = routeInspectorCandidates(data, model);
 
   const summary = _('routeInspectorSummary');
-  if (summary) summary.innerHTML = routeInspectorSummaryHTML(model, candidates);
+  if (summary) summary.innerHTML = routeInspectorSummaryHTML(model, candidates, data.credentialsAvailable);
   const cEl = _('routeInspectorCandidates');
   if (cEl) cEl.innerHTML = routeInspectorCandidatesHTML(model, candidates);
   const fEl = _('routeInspectorFallback');
@@ -166,11 +171,12 @@ function routeInspectorCandidates(data, model) {
       const scopedModel = String(scope.modelId || '');
       return !scopedModel || scopedModel === model;
     });
-    return { offering: o, providerId: providerId, instance: instance, credentials: credentials, observations: observations };
+    return { offering: o, providerId: providerId, instance: instance, credentials: credentials,
+      credentialsAvailable: data.credentialsAvailable, observations: observations };
   });
 }
 
-function routeInspectorSummaryHTML(model, candidates) {
+function routeInspectorSummaryHTML(model, candidates, credentialsAvailable) {
   const providers = {};
   const credentials = {};
   let providerCount = 0;
@@ -187,7 +193,8 @@ function routeInspectorSummaryHTML(model, candidates) {
   return '<div class="ri-fact-grid">' +
     routeInspectorFact('逻辑模型', model ? routeInspectorMono(model) : '<span class="ri-unknown">' + esc(t('没有可用模型')) + '</span>') +
     routeInspectorFact('候选 Provider 数', formatNumber(providerCount)) +
-    routeInspectorFact('关联凭据数', formatNumber(credentialCount)) +
+    routeInspectorFact('关联凭据数', credentialsAvailable === false
+      ? '<span class="ri-unknown">' + esc(t('未知')) + '</span>' : formatNumber(credentialCount)) +
     routeInspectorFact('已知观察数', formatNumber(observationCount)) +
     '</div>';
 }
@@ -202,6 +209,7 @@ function routeInspectorProviderCell(c) {
 }
 
 function routeInspectorCredentialsCell(c, model) {
+  if (c.credentialsAvailable === false) return '<span class="ri-unknown">' + esc(t('未知')) + '</span>';
   if (!c.credentials.length) return '<span class="ri-unknown">' + esc(t('没有凭据投影')) + '</span>';
   return '<ul class="ri-cred-list">' + c.credentials.map(cred => {
     const bits = [];

@@ -571,3 +571,35 @@ func TestUserLifecycleIsRevisionCheckedAndRevokesSessions(t *testing.T) {
 		t.Fatalf("deleted user logged in: %v", err)
 	}
 }
+
+func TestRecordCredentialEventIsRedactedAndDurable(t *testing.T) {
+	service, repo := testService(t)
+	admin := bootstrap(t, service)
+	for _, tc := range []struct {
+		kind    AuditKind
+		outcome string
+	}{
+		{AuditClientKeyCreate, "success"},
+		{AuditClientKeyDelete, "failed"},
+		{AuditClientKeyDeleteFinal, "success"},
+	} {
+		if err := service.RecordCredentialEvent(context.Background(), admin.Principal, tc.kind, tc.outcome, "192.0.2.55"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if len(repo.events) < 4 {
+		t.Fatalf("events = %+v", repo.events)
+	}
+	got := repo.events[len(repo.events)-3:]
+	for i, event := range got {
+		if event.Kind != []AuditKind{AuditClientKeyCreate, AuditClientKeyDelete, AuditClientKeyDeleteFinal}[i] || event.ActorID != admin.Principal.UserID || event.Source != "192.0.2.55" {
+			t.Fatalf("event[%d] = %+v", i, event)
+		}
+		if strings.Contains(event.TargetID, "secret") || strings.Contains(event.TargetID, "cline_") {
+			t.Fatalf("event contains key material: %+v", event)
+		}
+	}
+	if got[1].Outcome != "failed" {
+		t.Fatalf("failed outcome = %+v", got[1])
+	}
+}

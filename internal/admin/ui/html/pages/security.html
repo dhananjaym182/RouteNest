@@ -2,37 +2,15 @@
   <div class="page-header">
     <div>
       <div class="page-kicker">系统</div>
-      <div class="large-title">API 密钥与安全</div>
-      <div class="large-subtitle">管理客户端密钥、后台访问控制和危险操作。</div>
+      <div class="large-title">管理员安全</div>
+      <div class="large-subtitle">管理管理员密码、恢复码、登录会话、团队权限与单点登录。</div>
     </div>
   </div>
 
-  <div class="subtabs page-subtabs" data-page="security">
-    <div class="subtab active" data-sub="keys" data-admin-permission="credential.write">API 密钥</div>
-    <div class="subtab" data-sub="access">访问设置</div>
-    <div class="subtab" data-sub="danger" data-admin-permission="credential.write dangerous.execute">危险操作</div>
-  </div>
-
-  <div class="page-subpage" data-subpage="keys" data-admin-permission="credential.write">
-  <div class="section">
-    <div class="section-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg><span>API 密钥管理</span>
-      <span class="title-tools">
-        <button class="btn btn-sm btn-primary" onclick="generateKey(this)">生成新密钥</button>
-      </span>
-    </div>
-    <div class="section-desc">生成的密钥可用于客户端访问代理 API（作为 x-api-key 或 Authorization 头）。</div>
-    <div class="section-body">
-      <div class="security-note mb-12">已保存密钥默认脱敏。新密钥只在生成后短暂完整显示；当前后端未提供别名、创建时间或最后使用时间。</div>
-      <div id="keysList"></div>
-      <div id="keyGenResult" class="mt-8" aria-live="polite"></div>
-    </div>
-  </div>
-  </div>
-
-  <div class="page-subpage access-settings" data-subpage="access" style="display:none">
+  <div class="access-settings">
     <div class="access-intro">
-      <h2>访问设置</h2>
-      <p>管理管理员登录、团队权限和网关访问。</p>
+      <h2>身份与访问</h2>
+      <p>管理员身份、恢复方式和活动会话集中在此管理。客户端 API 密钥位于「账号与凭据」。</p>
     </div>
 
     <div class="access-overview">
@@ -60,6 +38,23 @@
             <p class="access-footnote">密码更新会撤销该管理员的全部会话。管理员认证不能在线关闭。</p>
           </form>
           <p id="ssoAdminPasswordNotice" class="access-footnote" hidden>此账号通过单点登录验证，请在身份提供方修改密码。</p>
+        </div>
+
+        <div id="recoveryCodeManagement" class="access-password-area" data-admin-permission="security.write">
+          <div class="access-heading-row"><h4>恢复码</h4><span id="recoveryCodeStatus" class="access-badge">检查中…</span></div>
+          <p class="access-footnote">忘记密码时使用。生成新恢复码会立即替换旧恢复码，明文只显示一次。</p>
+          <form id="recoveryCodeIssueForm" onsubmit="event.preventDefault();issueRecoveryCode()">
+            <div class="field"><label for="recoveryCodeCurrentPassword">当前管理员密码</label><input id="recoveryCodeCurrentPassword" type="password" autocomplete="current-password" required aria-describedby="recoveryCodeIssueError"></div>
+            <div id="recoveryCodeIssueError" class="login-err access-form-error" role="alert"></div>
+            <div class="access-form-footer"><button id="issueRecoveryCodeButton" type="submit" class="btn">生成新的恢复码</button></div>
+          </form>
+          <div id="issuedRecoveryCodePanel" class="recovery-issued-panel" hidden>
+            <div class="recovery-code-box"><code id="issuedRecoveryCode" tabindex="0"></code><button type="button" class="btn btn-sm" onclick="copyRecoveryValue('issuedRecoveryCode', this)">复制</button></div>
+            <p class="access-footnote">请立即保存。离开此页面后无法再次显示。</p>
+            <p id="issuedRecoveryCodeRestartNotice" class="security-note" hidden>恢复码已持久化，但安全存储需要重启后完成更新。请先保存恢复码。</p>
+            <label class="recovery-confirm"><input id="issuedRecoveryCodeSaved" type="checkbox" onchange="updateIssuedRecoveryCodeFinish()"> <span>我已安全保存恢复码。</span></label>
+            <button id="issuedRecoveryCodeFinish" type="button" class="btn" onclick="finishIssuedRecoveryCode()" disabled>完成</button>
+          </div>
         </div>
       </section>
 
@@ -182,18 +177,16 @@
         <div class="access-form-footer"><button type="submit" id="saveSSOProviderButton" class="btn btn-primary">保存提供方</button><button type="button" class="btn" onclick="closeSSOProviderEditor()">取消</button></div>
       </form>
     </section>
-  </div>
 
-  <div class="page-subpage" data-subpage="danger" style="display:none" data-admin-permission="credential.write dangerous.execute">
-  <div class="section danger-zone">
-    <div class="section-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>危险操作</div>
-    <div class="section-desc">以下操作不可恢复；删除账号仅移除 Cline 账号及账号内状态，客户端 API 密钥、模型、默认模型和监听设置会保留。删除全部密钥会让当前兼容模式下的客户端 API 无需密钥即可访问。</div>
-    <div class="section-body">
-      <div class="action-row">
-        <button class="btn btn-danger" onclick="deleteAllAccounts(this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>删除全部账号</button>
-        <button class="btn btn-danger" onclick="deleteAllKeys()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>删除全部密钥</button>
+    <details class="section access-card access-details access-danger-details" data-admin-permission="credential.write dangerous.execute">
+      <summary>危险操作</summary>
+      <div class="access-details-body danger-zone">
+        <p class="section-desc">以下操作不可恢复。删除账号只移除 Cline 账号及其状态；客户端 API 密钥、模型、默认模型和监听设置会保留。删除全部密钥会按当前兼容策略禁用客户端 API 认证。</p>
+        <div class="action-row">
+          <button class="btn btn-danger" onclick="deleteAllAccounts(this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>删除全部账号</button>
+          <button class="btn btn-danger" onclick="deleteAllKeys()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>删除全部密钥</button>
+        </div>
       </div>
-    </div>
-  </div>
+    </details>
   </div>
 </div>

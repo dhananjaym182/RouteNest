@@ -12,14 +12,24 @@ Use a separate temporary-data server, as described in [README-admin-navigation.m
 
 ```sh
 go build -o /tmp/routenest-admin-verification .
-ROUTENEST_DATA_DIR=/tmp/routenest-admin-verification-data /tmp/routenest-admin-verification --host 127.0.0.1 --port 3467
+ROUTENEST_DATA_DIR=/tmp/routenest-admin-verification-data \
+ROUTENEST_ADMIN_BOOTSTRAP_PASSWORD="$ADMIN_TEST_BOOTSTRAP_SECRET" \
+ROUTENEST_INITIALIZE_EMPTY_ACCOUNT_STORE=true \
+/tmp/routenest-admin-verification --host 127.0.0.1 --port 3467
 ```
 
 In another terminal:
 
 ```sh
-BASE_URL=http://127.0.0.1:3467/admin/ node tools/admin_provider_setup_verify.mjs
-SCREENSHOTS=1 ARTIFACT_DIR=/tmp/routenest-unified-final-verification node tools/admin_navigation_verify.mjs
+BASE_URL=http://127.0.0.1:3467/admin/ \
+ADMIN_TEST_BOOTSTRAP_SECRET="$ADMIN_TEST_BOOTSTRAP_SECRET" \
+ADMIN_TEST_PASSWORD="$ADMIN_TEST_PASSWORD" \
+node tools/admin_provider_setup_verify.mjs
+SCREENSHOTS=1 \
+ARTIFACT_DIR=/tmp/routenest-unified-final-verification \
+ADMIN_TEST_BOOTSTRAP_SECRET="$ADMIN_TEST_BOOTSTRAP_SECRET" \
+ADMIN_TEST_PASSWORD="$ADMIN_TEST_PASSWORD" \
+node tools/admin_navigation_verify.mjs
 node tools/i18n_check.js
 go test ./internal/admin ./internal/adminapi
 go test ./...
@@ -28,7 +38,7 @@ go vet ./...
 git diff --check
 ```
 
-Both browser suites use an existing Playwright installation and Chromium; no runtime frontend dependency is added. Set `PLAYWRIGHT_MODULE` and `CHROMIUM_PATH` when needed.
+Both browser suites use an existing Playwright installation and Chromium; no runtime frontend dependency is added. Set `PLAYWRIGHT_MODULE` and `CHROMIUM_PATH` when needed. `VERIFY_WIDTHS` and `VERIFY_THEMES` may restrict a focused CI run; the defaults retain the complete six-width, two-theme matrix. `VERIFY_TIMEOUT_MS` overrides the provider suite's 15-second operation timeout for unusually slow runners.
 
 The setup suite covers both themes at 1440, 1280, 1024, 768, 390 and 360 pixels. It checks directory loading/search/retry, original form identity and restoration, page ownership, OAuth/API account links, explicit auth and save contracts, credential masking, stale async responses, fresh connection reads, model subviews, typography and overflow.
 

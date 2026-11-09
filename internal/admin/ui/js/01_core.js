@@ -82,13 +82,13 @@ function setLang(l){
   document.documentElement.lang = (l==='en')?'en':'zh-CN';
   // 即时切换：静态文本 + title 属性翻译 + 重新渲染动态数据，不整页刷新
   applyLang();
-  loadStats();
-  loadAccounts();
-  loadRequestLogs(true);
-  if (_('modelsList')) loadModels();
-  if (_('settingDefModel')) loadConfig();
-  if (typeof renderGlobal === 'function' && typeof _globalData !== 'undefined' && _globalData) renderGlobal();
   if (typeof _adminPrincipal !== 'undefined' && _adminPrincipal) {
+    loadStats();
+    loadAccounts();
+    loadRequestLogs(true);
+    if (_('modelsList')) loadModels();
+    if (_('settingDefModel')) loadConfig();
+    if (typeof renderGlobal === 'function' && typeof _globalData !== 'undefined' && _globalData) renderGlobal();
     renderAdminPrincipal(_adminPrincipal);
     if (typeof _activeTabName !== 'undefined' && _activeTabName === 'security' && adminHasPermission('security.write')) {
       loadAdminSessions(); loadAdminUsers(); loadSSOProviders();

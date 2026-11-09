@@ -17,15 +17,18 @@ for (const name of modules) {
 if (!chromium) throw new Error('Set PLAYWRIGHT_MODULE to an existing Playwright installation.');
 
 const base = new URL(process.env.BASE_URL || 'http://127.0.0.1:3467/admin/');
+const bootstrapSecret = process.env.ADMIN_TEST_BOOTSTRAP_SECRET || '';
+const testPassword = process.env.ADMIN_TEST_PASSWORD || '';
 const tabs = ['dashboard', 'providers', 'credentials', 'network', 'models', 'routing', 'combos', 'logs', 'quota', 'health', 'security', 'about', 'quickstart'];
 const aliases = { global: 'providers', accounts: 'credentials', import: 'credentials', upstreams: 'network' };
-const widths = [1440, 1280, 1024, 768, 390, 360];
+const widths = (process.env.VERIFY_WIDTHS || '1440,1280,1024,768,390,360').split(',').map(Number).filter(Number.isFinite);
+const themes = (process.env.VERIFY_THEMES || 'light,dark').split(',').map(value => value.trim()).filter(Boolean);
 const screenshotDir = process.env.SCREENSHOTS === '1'
   ? resolve(process.env.ARTIFACT_DIR || '/tmp/routenest-navigation-verification') : null;
 if (screenshotDir) mkdirSync(screenshotDir, { recursive: true });
 const result = {
   navigationChecks: 0, aliasChecks: 0, historyChecks: 0, localizationChecks: 0,
-  fontChecks: 0, screenshots: 0, failures: [],
+  fontChecks: 0, focusChecks: 0, screenshots: 0, failures: [],
   diagnostics: { consoleErrors: 0, pageErrors: 0, requestFailures: 0 },
 };
 
@@ -123,15 +126,81 @@ async function fontChecks(page, label) {
   }
 }
 
-let browser;
+async function focusChecks(page, label) {
+  currentStep = label + ': keyboard focus behavior';
+  const skip = page.locator('.skip-link');
+  await skip.focus();
+  await page.waitForFunction(() => document.querySelector('.skip-link')?.getBoundingClientRect().top >= 0);
+  check(true, true, label + ': skip link becomes visible on focus');
+  await page.keyboard.press('Enter');
+  check(await page.evaluate(() => document.activeElement?.id), 'adminContent', label + ': skip link lands on main content');
+  result.focusChecks += 2;
+
+  const modalTrigger = page.locator('#refreshAllBtn');
+  await modalTrigger.focus();
+  await page.evaluate(() => { void showConfirm('Focus verification'); });
+  await page.locator('#confirmModal').waitFor({ state: 'visible' });
+  await page.waitForFunction(() => document.getElementById('confirmModal').contains(document.activeElement));
+  check(await page.evaluate(() => document.getElementById('confirmModal').contains(document.activeElement)), true, label + ': modal receives focus');
+  await page.locator('#confirmModal .btn-danger').focus();
+  await page.keyboard.press('Tab');
+  check(await page.evaluate(() => document.activeElement === document.querySelector('#confirmModal button')), true, label + ': modal wraps Tab focus');
+  await page.keyboard.press('Escape');
+  await page.locator('#confirmModal').waitFor({ state: 'hidden' });
+  await page.waitForFunction(() => document.activeElement?.id === 'refreshAllBtn');
+  check(await page.evaluate(() => document.activeElement?.id), 'refreshAllBtn', label + ': modal restores trigger focus');
+  result.focusChecks += 3;
+}
+
+async function drawerFocusChecks(page, label) {
+  const trigger = page.locator('#connectProviderBtn');
+  await trigger.focus();
+  await trigger.click();
+  await page.locator('#providerSetup.open').waitFor();
+  check(await page.evaluate(() => document.getElementById('providerSetup').contains(document.activeElement)), true, label + ': drawer receives focus');
+  await page.evaluate(() => {
+    const drawer = document.getElementById('providerSetup');
+    const items = visibleFocusable(drawer);
+    items[items.length - 1]?.focus();
+  });
+  await page.keyboard.press('Tab');
+  check(await page.evaluate(() => {
+    const items = visibleFocusable(document.getElementById('providerSetup'));
+    return document.activeElement === items[0];
+  }), true, label + ': drawer wraps Tab focus');
+  await page.keyboard.press('Escape');
+  await page.locator('#providerSetup.open').waitFor({ state: 'hidden' });
+  await page.waitForFunction(() => document.activeElement?.id === 'connectProviderBtn');
+  check(await page.evaluate(() => document.activeElement?.id), 'connectProviderBtn', label + ': drawer restores trigger focus');
+  result.focusChecks += 3;
+}
+
+let browser, storageState;
 try {
   const executablePath = process.env.CHROMIUM_PATH || (existsSync('/usr/bin/chromium') ? '/usr/bin/chromium' : undefined);
   browser = await chromium.launch({ headless: true, executablePath, args: ['--no-sandbox', '--disable-dev-shm-usage'] });
-  for (const theme of ['light', 'dark']) {
+  if (!bootstrapSecret || !testPassword) throw new Error('Authenticated verification requires ADMIN_TEST_BOOTSTRAP_SECRET and ADMIN_TEST_PASSWORD.');
+  const setup = await browser.newContext();
+  try {
+    const bootstrap = await setup.request.post(new URL('api/auth/bootstrap', base).href, {
+      headers: { Origin: base.origin }, data: { secret: bootstrapSecret, password: testPassword },
+    });
+    if (bootstrap.status() !== 200 && bootstrap.status() !== 409) throw new Error('Temporary administrator bootstrap failed.');
+    if (bootstrap.status() === 409) {
+      const login = await setup.request.post(new URL('api/login', base).href, {
+        headers: { Origin: base.origin }, data: { username: 'admin', password: testPassword },
+      });
+      if (login.status() !== 200) throw new Error('Temporary administrator login failed.');
+    }
+    storageState = await setup.storageState();
+  } finally {
+    await setup.close();
+  }
+  for (const theme of themes) {
     for (const width of widths) {
       const label = theme + '-' + width;
       currentStep = label + ': create browser context';
-      const context = await browser.newContext({ viewport: { width, height: width <= 768 ? 1024 : 900 } });
+      const context = await browser.newContext({ viewport: { width, height: width <= 768 ? 1024 : 900 }, storageState });
       try {
         await context.addInitScript(({ theme }) => {
           localStorage.setItem('cline_admin_theme', theme);
@@ -148,6 +217,7 @@ try {
         await selectedPage(page, 'dashboard', label + ': initial route');
         await dismissSyncNotice(page);
         await page.evaluate(() => setLang('en'));
+        await focusChecks(page, label);
         currentStep = label + ': theme controls';
         await dismissSyncNotice(page);
         check(await page.evaluate(() => document.documentElement.dataset.theme), theme, label + ': persisted theme');
@@ -173,13 +243,27 @@ try {
           if (tab === 'dashboard') {
             check(await page.locator('#tab-dashboard .large-subtitle').innerText(), 'Gateway traffic, provider health and routing performance.', label + ': gateway positioning');
           }
+          if (tab === 'providers') await drawerFocusChecks(page, label);
           if (tab === 'health') {
             check(await page.locator('#tab-health .large-title').innerText(), 'Provider Health & Diagnostics', label + ': health page purpose');
             check(await page.locator('#tab-health .health-links').count(), 0, label + ': redundant health shortcuts removed');
             check(await page.locator('#tab-health #globalState').count(), 1, label + ': existing health state retained');
             check(await page.locator('#tab-health #globalHealthSummary').count(), 1, label + ': existing health summary retained');
           }
-          if (screenshotDir && ['dashboard', 'providers', 'credentials', 'network', 'models', 'health'].includes(tab)) {
+          if (tab === 'security') {
+            check(await page.locator('#localAdminPasswordForm').isVisible(), true, label + ': administrator password is directly visible');
+            check(await page.locator('#tab-security .page-subtabs').count(), 0, label + ': administrator security is not nested under page tabs');
+          }
+          if (tab === 'credentials') {
+            await page.locator('#tab-credentials .subtab[data-sub="client-keys"]').click();
+            check(await page.locator('#tab-credentials [data-subpage="client-keys"]').isVisible(), true, label + ': client keys are owned by Accounts & Credentials');
+          }
+          if (tab === 'quickstart') {
+            const openAIExample = await page.locator('#quickstartOpenAICode').innerText();
+            check(openAIExample.includes(base.origin + '/v1'), true, label + ': Quick Start uses current gateway address');
+            check(openAIExample.includes('cline-free/glm-5.2'), false, label + ': Quick Start does not force a fictional Cline model');
+          }
+          if (screenshotDir && ['dashboard', 'providers', 'credentials', 'network', 'models', 'health', 'security', 'quickstart'].includes(tab)) {
             await page.screenshot({ path: resolve(screenshotDir, label + '-' + tab + '.png'), fullPage: true, animations: 'disabled' });
             result.screenshots++;
           }

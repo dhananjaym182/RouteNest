@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>RouteNest setup</title>
+  <link rel="stylesheet" href="/setup.css">
+</head>
+<body>
+  <main class="setup-shell">
+    <header class="brand-row" aria-label="RouteNest">
+      <div class="brand-mark" aria-hidden="true">RN</div>
+      <div><strong>RouteNest</strong><span id="platformLabel">Desktop setup</span></div>
+      <button id="languageButton" class="quiet-button" type="button" aria-label="Switch language">中文</button>
+    </header>
+
+    <section id="loadingView" class="setup-card" aria-live="polite">
+      <div class="spinner" aria-hidden="true"></div>
+      <h1 data-copy="checkingTitle">Checking this installation</h1>
+      <p data-copy="checkingBody">RouteNest is verifying local security storage before opening.</p>
+    </section>
+
+    <section id="welcomeView" class="setup-card" hidden aria-labelledby="welcomeTitle">
+      <div class="step-label" data-copy="stepOne">Step 1 of 3</div>
+      <h1 id="welcomeTitle" data-copy="welcomeTitle">Welcome to RouteNest</h1>
+      <p class="lead" data-copy="welcomeBody">Create the local administrator that protects provider credentials, routing, and gateway access.</p>
+      <ul class="trust-list">
+        <li data-copy="trustLocal">Your password is hashed and stored only on this device.</li>
+        <li data-copy="trustRecovery">A recovery code will be shown once after setup.</li>
+        <li data-copy="trustNoTerminal">No terminal commands or bootstrap secrets are required.</li>
+      </ul>
+      <button id="beginButton" class="primary-button" type="button" data-copy="begin">Create administrator</button>
+    </section>
+
+    <section id="passwordView" class="setup-card" hidden aria-labelledby="passwordTitle">
+      <div class="step-label" data-copy="stepTwo">Step 2 of 3</div>
+      <h1 id="passwordTitle" data-copy="passwordTitle">Create administrator password</h1>
+      <p class="lead" data-copy="passwordBody">Use at least 8 characters. A password manager is recommended.</p>
+      <form id="passwordForm" novalidate>
+        <label for="passwordInput" data-copy="passwordLabel">Password</label>
+        <div class="password-control"><input id="passwordInput" type="password" minlength="8" maxlength="1024" autocomplete="new-password" required aria-describedby="setupError"><button class="visibility-button" type="button" data-target="passwordInput" aria-label="Show password">Show</button></div>
+        <label for="confirmInput" data-copy="confirmLabel">Confirm password</label>
+        <div class="password-control"><input id="confirmInput" type="password" minlength="8" maxlength="1024" autocomplete="new-password" required aria-describedby="setupError"><button class="visibility-button" type="button" data-target="confirmInput" aria-label="Show password">Show</button></div>
+        <div id="setupError" class="error-message" role="alert" aria-live="assertive"></div>
+        <div class="button-row"><button id="backButton" class="secondary-button" type="button" data-copy="back">Back</button><button id="createButton" class="primary-button" type="submit" data-copy="create">Create administrator</button></div>
+      </form>
+    </section>
+
+    <section id="recoveryView" class="setup-card" hidden aria-labelledby="recoveryTitle">
+      <div class="step-label" data-copy="stepThree">Step 3 of 3</div>
+      <h1 id="recoveryTitle" data-copy="recoveryTitle">Save your recovery code</h1>
+      <p class="lead" data-copy="recoveryBody">This single-use code is the normal way to reset a forgotten administrator password. RouteNest cannot display it again.</p>
+      <p id="restartNotice" class="security-note" hidden data-copy="restartNotice">Setup was durably prepared, but RouteNest must restart before opening the dashboard. Save this recovery code, then close and reopen RouteNest.</p>
+      <div class="recovery-code-wrap"><code id="recoveryCode" tabindex="0"></code><button id="copyButton" class="secondary-button" type="button" data-copy="copy">Copy</button></div>
+      <p class="security-note" data-copy="recoveryWarning">Store it in a password manager or another secure location. Do not save it beside provider credentials.</p>
+      <label class="confirmation"><input id="savedCheck" type="checkbox"><span data-copy="savedConfirm">I saved the recovery code securely.</span></label>
+      <div id="recoveryError" class="error-message" role="alert" aria-live="assertive"></div>
+      <button id="finishButton" class="primary-button" type="button" disabled data-copy="finish">Open RouteNest</button>
+    </section>
+
+    <section id="errorView" class="setup-card error-card" hidden aria-labelledby="errorTitle">
+      <div class="error-icon" aria-hidden="true">!</div>
+      <h1 id="errorTitle" data-copy="errorTitle">Security storage needs attention</h1>
+      <p data-copy="errorBody">RouteNest stopped before changing credentials or configuration.</p>
+      <pre id="errorDetails"></pre>
+      <p class="security-note" data-copy="errorHelp">Restore the existing data directory from backup, or use the documented offline recovery command when administrator authority is intact.</p>
+    </section>
+  </main>
+  <script src="/setup.js"></script>
+</body>
+</html>

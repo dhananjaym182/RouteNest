@@ -69,9 +69,9 @@
     <div class="section-desc">设置默认模型、Cline 账号选择、全局回退链与客户端模型列表策略。</div>
     <div class="section-body">
       <div class="form-row">
-        <div class="field"><label>默认模型</label><select id="settingDefModel" onchange="updateConfig()"><option value="">加载中...</option></select></div>
+        <div class="field"><label for="settingDefModel">默认模型</label><select id="settingDefModel" onchange="updateConfig()"><option value="">加载中...</option></select></div>
         <div class="field">
-          <label>轮询策略</label>
+          <label for="settingStrategy">轮询策略</label>
           <select id="settingStrategy" onchange="updateConfig()">
             <option value="round_robin">轮询 (round_robin)</option>
             <option value="weighted_round_robin">加权轮询 (weighted_round_robin)</option>
@@ -83,7 +83,7 @@
       </div>
       <div class="form-row">
         <div class="field">
-          <label>回退模型链</label>
+          <label for="settingModelChain">回退模型链</label>
           <input type="text" id="settingModelChain" placeholder="z-ai/glm-5.3-flash, deepseek/deepseek-v4-flash, cline-free/longcat-2.0, free" oninput="this.dataset.dirty='1'" onchange="updateConfig()">
           <div class="hint-sm mt-4">逗号分隔模型 ID，可用 free 表示内置免费回退链；留空则自动回退到内置免费链。允许填写不在上方列表里的模型 ID（列表外的模型实测仍可用时可直接填入，同步列表只是参考）；失效条目由冷却与故障转移自动跳过</div>
           <div class="field-hint mt-2"><a href="#" onclick="switchTab('combos');return false" class="lnk-a">组合的回退顺序与紧急回退在「模型组合」页管理 →</a></div>
@@ -91,7 +91,7 @@
       </div>
       <div class="form-row">
         <div class="field">
-          <label>只显示免费模型</label>
+          <label for="settingOnlyFree">只显示免费模型</label>
           <select id="settingOnlyFree" onchange="updateConfig()">
             <option value="false">关闭（返回全部模型）</option>
             <option value="true">开启（/models 仅返回免费模型）</option>
@@ -100,8 +100,8 @@
         </div>
       </div>
       <div class="form-row">
-        <div class="field"><label>引擎版本</label><input type="text" id="settingVersion" disabled></div>
-        <div class="field"><label>账号文件</label><input type="text" id="settingPoolPath" disabled></div>
+        <div class="field"><label for="settingVersion">引擎版本</label><input type="text" id="settingVersion" disabled></div>
+        <div class="field"><label for="settingPoolPath">账号文件</label><input type="text" id="settingPoolPath" disabled></div>
       </div>
       <div class="form-group-label">策略与回退一览</div>
       <div class="field-hint">本页「轮询策略」= 从 Cline 账号池取号的方式（quality 同时参与自定义 Provider 评分排序）；全局「回退模型链」是组合失败的最终兜底。其余两处策略选择器在别的页面：</div>
@@ -118,32 +118,32 @@
     <div class="section-body">
       <div class="form-group-label">回退与冷却</div>
       <div class="form-row">
-        <div class="field"><label>最大回退轮次（0=单轮）</label><input type="number" id="tunRetryRounds" min="0" max="100" placeholder="0"></div>
-        <div class="field"><label>每轮账号上限（0=不限）</label><input type="number" id="tunRetryCreds" min="0" max="10000" placeholder="0"></div>
-        <div class="field"><label>轮间隔上限(秒)</label><input type="number" id="tunRetryInterval" min="0" max="600" placeholder="0"></div>
-        <div class="field"><label>瞬时错误冷却(秒，-1=关闭)</label><input type="number" id="tunRetryCooldown" min="-1" max="3600" placeholder="0"></div>
-        <div class="field"><label>故障转移模型上限（0=内置3）</label><input type="number" id="tunRetryFailover" min="0" max="100" placeholder="0"></div>
+        <div class="field"><label for="tunRetryRounds">最大回退轮次（0=单轮）</label><input type="number" id="tunRetryRounds" min="0" max="100" placeholder="0"></div>
+        <div class="field"><label for="tunRetryCreds">每轮账号上限（0=不限）</label><input type="number" id="tunRetryCreds" min="0" max="10000" placeholder="0"></div>
+        <div class="field"><label for="tunRetryInterval">轮间隔上限(秒)</label><input type="number" id="tunRetryInterval" min="0" max="600" placeholder="0"></div>
+        <div class="field"><label for="tunRetryCooldown">瞬时错误冷却(秒，-1=关闭)</label><input type="number" id="tunRetryCooldown" min="-1" max="3600" placeholder="0"></div>
+        <div class="field"><label for="tunRetryFailover">故障转移模型上限（0=内置3）</label><input type="number" id="tunRetryFailover" min="0" max="100" placeholder="0"></div>
       </div>
       <div class="form-group-label">流式与心跳</div>
       <div class="form-row">
-        <div class="field"><label>SSE 心跳间隔(秒，0=15，-1=关闭)</label><input type="number" id="tunKeepalive" min="-1" max="3600" placeholder="0"></div>
-        <div class="field"><label>首包前重试次数（0=1）</label><input type="number" id="tunBootstrapRetries" min="0" max="5" placeholder="0"></div>
-        <div class="field"><label>首内容超时(秒，0=关闭)</label><input type="number" id="tunFirstContentTimeout" min="0" max="600" placeholder="0"></div>
-        <div class="field"><label>非流式占位心跳(秒，0=关闭)</label><input type="number" id="tunNonstreamKeepalive" min="0" max="300" placeholder="0"></div>
+        <div class="field"><label for="tunKeepalive">SSE 心跳间隔(秒，0=15，-1=关闭)</label><input type="number" id="tunKeepalive" min="-1" max="3600" placeholder="0"></div>
+        <div class="field"><label for="tunBootstrapRetries">首包前重试次数（0=1）</label><input type="number" id="tunBootstrapRetries" min="0" max="5" placeholder="0"></div>
+        <div class="field"><label for="tunFirstContentTimeout">首内容超时(秒，0=关闭)</label><input type="number" id="tunFirstContentTimeout" min="0" max="600" placeholder="0"></div>
+        <div class="field"><label for="tunNonstreamKeepalive">非流式占位心跳(秒，0=关闭)</label><input type="number" id="tunNonstreamKeepalive" min="0" max="300" placeholder="0"></div>
       </div>
       <div class="form-row">
-        <div class="field"><label>首 token 前抑制心跳</label>
+        <div class="field"><label for="tunSuppressKeepalive">首 token 前抑制心跳</label>
           <select id="tunSuppressKeepalive"><option value="false">关闭（静默期发心跳）</option><option value="true">开启（严格引导缓冲）</option></select>
         </div>
-        <div class="field"><label>会话亲和（同一对话绑定账号）</label>
+        <div class="field"><label for="tunAffinityEnabled">会话亲和（同一对话绑定账号）</label>
           <select id="tunAffinityEnabled"><option value="false">关闭</option><option value="true">开启</option></select>
         </div>
-        <div class="field"><label>亲和绑定 TTL(秒)</label><input type="number" id="tunAffinityTTL" min="60" max="604800" placeholder="3600"></div>
+        <div class="field"><label for="tunAffinityTTL">亲和绑定 TTL(秒)</label><input type="number" id="tunAffinityTTL" min="60" max="604800" placeholder="3600"></div>
       </div>
       <div class="form-group-label">请求体与响应头</div>
       <div class="form-row">
-        <div class="field"><label>请求体上限(MB，0=不限)</label><input type="number" id="tunMaxBodyMB" min="0" max="4096" placeholder="0"></div>
-        <div class="field"><label>透传上游响应头（安全白名单外剔除）</label>
+        <div class="field"><label for="tunMaxBodyMB">请求体上限(MB，0=不限)</label><input type="number" id="tunMaxBodyMB" min="0" max="4096" placeholder="0"></div>
+        <div class="field"><label for="tunPassthrough">透传上游响应头（安全白名单外剔除）</label>
           <select id="tunPassthrough"><option value="false">关闭</option><option value="true">开启</option></select>
         </div>
       </div>
@@ -159,7 +159,7 @@
         <div class="se-foot"><button type="button" class="btn btn-sm" onclick="addErrorRuleRow()">+ 添加规则</button></div>
       </div>
       <div class="field">
-        <label>排除模型（逗号分隔，支持 * 通配；对全部来源生效）</label>
+        <label for="tunExcluded">排除模型（逗号分隔，支持 * 通配；对全部来源生效）</label>
         <input type="text" id="tunExcluded" placeholder="gpt-4-*, *-preview" class="mono-plain" oninput="updateExcludedMatchCounts()">
         <div class="se-foot">
           <button type="button" class="btn btn-sm" onclick="toggleExcludedPicker()" id="excludedPickerBtn">选择模型</button>

@@ -11,7 +11,8 @@ import (
 
 // ReconcileRemoval deletes only the requested delisted source records and
 // repairs that logical ID's provider projection after declarations change.
-// All writes are strict; failed persistence leaves the live pool unchanged.
+// All writes persist detached candidates. Pre-replacement failures leave the
+// live pool unchanged; uncertain post-replacement failures reconcile from disk.
 // providerDelisted is evidence checked by the provider owner at mutation time.
 func ReconcileRemoval(ref domain.ModelRemovalRef, claims []ProviderClaim, delisted map[string]bool, providerDelisted bool) (removed, protected bool, err error) {
 	return reconcileRemoval(ref, claims, delisted, providerDelisted, false, false, nil)
@@ -29,9 +30,12 @@ func reconcileRemoval(ref domain.ModelRemovalRef, claims []ProviderClaim, delist
 	accounts.LoadPool()
 	accounts.PoolMu.Lock()
 	defer accounts.PoolMu.Unlock()
-	p := accounts.Pool
-	oldModels, oldDefault, oldInitialized := p.Models, p.DefaultModel, p.ModelCatalogInitialized
-	oldRemovals := p.RemovedModelOfferings
+	current := accounts.Pool
+	nextValue := *current
+	nextValue.RemovedModelOfferings = append([]domain.ModelRemovalRef(nil), current.RemovedModelOfferings...)
+	p := &nextValue
+	oldModels, oldDefault, oldInitialized := current.Models, current.DefaultModel, current.ModelCatalogInitialized
+	oldRemovals := current.RemovedModelOfferings
 	wasInitialized := CatalogInitialized(p)
 	var claim *ProviderClaim
 	for i := range claims {
@@ -118,9 +122,7 @@ func reconcileRemoval(ref domain.ModelRemovalRef, claims []ProviderClaim, delist
 		return removed, protected, nil
 	}
 	p.Models, p.DefaultModel, p.ModelCatalogInitialized = kept, nextDefault, initialized
-	if err := accounts.SavePoolStrictLocked(); err != nil {
-		p.Models, p.DefaultModel, p.ModelCatalogInitialized = oldModels, oldDefault, oldInitialized
-		p.RemovedModelOfferings = oldRemovals
+	if err := accounts.SavePoolCandidateStrictLocked(p); err != nil {
 		return false, protected, err
 	}
 	return removed, protected, nil

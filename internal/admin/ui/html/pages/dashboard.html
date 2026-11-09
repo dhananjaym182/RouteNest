@@ -6,6 +6,7 @@
       <div class="large-subtitle">网关流量、Provider 健康与路由表现。</div>
     </div>
     <div class="action-row">
+      <button class="btn btn-sm" onclick="showOnboardingWelcome(true)">设置指南</button>
       <button class="btn btn-sm" onclick="switchTab('logs')">查看请求日志</button>
       <button class="btn btn-sm btn-primary" onclick="openProviderSetup()">连接 Provider</button>
     </div>
@@ -86,7 +87,7 @@
     <div class="section-body action-row">
       <button class="btn btn-primary" onclick="openProviderSetup()">连接 Provider</button>
       <button class="btn" onclick="switchTab('combos')">配置路由组合</button>
-      <button class="btn" onclick="switchTab('security');switchPageSubTab('security','keys')">生成 API 密钥</button>
+      <button class="btn" onclick="showPageSubTab('credentials','client-keys')">生成 API 密钥</button>
     </div>
   </div>
 </div>

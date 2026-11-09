@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -143,6 +144,10 @@ func (s *Service) check() error {
 	return nil
 }
 func (s *Service) apply(ctx context.Context, kind AuditKind, actor, target, source string, mutate func(*State) error) error {
+	return s.applyOutcome(ctx, kind, actor, target, source, "success", mutate)
+}
+
+func (s *Service) applyOutcome(ctx context.Context, kind AuditKind, actor, target, source, outcome string, mutate func(*State) error) error {
 	if e := s.check(); e != nil {
 		return e
 	}
@@ -155,7 +160,7 @@ func (s *Service) apply(ctx context.Context, kind AuditKind, actor, target, sour
 	} else {
 		source = ""
 	}
-	event := AuditEvent{ID: id, Kind: kind, ActorID: actor, TargetID: target, Source: source, Outcome: "success", At: s.now().UTC()}
+	event := AuditEvent{ID: id, Kind: kind, ActorID: actor, TargetID: target, Source: source, Outcome: outcome, At: s.now().UTC()}
 	return s.repo.Apply(ctx, event, func(st *State) error {
 		wasInitialized := st.Initialized
 		if e := mutate(st); e != nil {
@@ -167,24 +172,62 @@ func (s *Service) apply(ctx context.Context, kind AuditKind, actor, target, sour
 		return ValidateState(*st)
 	})
 }
+
+// RecordCredentialEvent durably records a redacted client-key security event.
+// Its target is derived from the event kind so callers cannot supply key material.
+func (s *Service) RecordCredentialEvent(ctx context.Context, p Principal, kind AuditKind, outcome, source string) error {
+	if e := s.validatePrincipal(ctx, p); e != nil {
+		return e
+	}
+	if e := p.Authorize(PermissionCredentialWrite); e != nil {
+		return e
+	}
+	target := "client-api-key"
+	switch kind {
+	case AuditClientKeyCreate, AuditClientKeyDelete:
+	case AuditClientKeyDeleteFinal:
+		target = "client-api-key-final"
+	default:
+		return ErrForbidden
+	}
+	if outcome != "success" && outcome != "failed" {
+		return ErrInvalidState
+	}
+	return s.applyOutcome(ctx, kind, p.UserID, target, source, outcome, func(st *State) error {
+		return validatePrincipalState(*st, p, s.now())
+	})
+}
 func (s *Service) CompleteBootstrap(ctx context.Context, secret, password string, source ...string) (Credentials, error) {
+	credentials, _, err := s.completeBootstrap(ctx, secret, password, false, source...)
+	return credentials, err
+}
+
+// CompleteBootstrapWithRecovery completes first-run administrator setup and
+// durably issues a single-use recovery credential in the same mutation. The
+// plaintext recovery credential is returned only after persistence succeeds or
+// the exact replacement is durably prepared and the process must restart.
+func (s *Service) CompleteBootstrapWithRecovery(ctx context.Context, secret, password string, source ...string) (Credentials, string, error) {
+	return s.completeBootstrap(ctx, secret, password, true, source...)
+}
+
+func (s *Service) completeBootstrap(ctx context.Context, secret, password string, issueRecovery bool, source ...string) (Credentials, string, error) {
 	src := ""
 	if len(source) > 0 {
 		src = source[0]
 	}
 	if ok, retry := s.allow(src, BreakGlassUsername); !ok {
-		return Credentials{}, &RateLimitError{RetryAfter: retry}
+		return Credentials{}, "", &RateLimitError{RetryAfter: retry}
 	}
 	if e := s.check(); e != nil {
-		return Credentials{}, e
+		return Credentials{}, "", e
 	}
 	st, e := s.repo.Load(ctx)
 	if e != nil {
-		return Credentials{}, e
+		return Credentials{}, "", e
 	}
 	recovering := st.Initialized && st.RecoveryPHC != ""
 	if st.Initialized && !recovering {
-		return Credentials{}, ErrAlreadyInitialized
+		return Credentials{}, "", ErrAlreadyInitialized
 	}
 	expected := st.BootstrapPHC
 	if recovering {
@@ -192,11 +235,23 @@ func (s *Service) CompleteBootstrap(ctx context.Context, secret, password string
 	}
 	ok, e := s.hasher.Verify(ctx, expected, secret)
 	if e != nil || !ok {
-		return Credentials{}, ErrUnauthorized
+		return Credentials{}, "", ErrUnauthorized
 	}
 	phc, e := s.hasher.Hash(ctx, password)
 	if e != nil {
-		return Credentials{}, e
+		return Credentials{}, "", e
+	}
+	recoveryCode := ""
+	recoveryCodePHC := ""
+	if issueRecovery {
+		recoveryCode, e = randomToken(s.random)
+		if e != nil {
+			return Credentials{}, "", e
+		}
+		recoveryCodePHC, e = s.hasher.hash(ctx, recoveryCode)
+		if e != nil {
+			return Credentials{}, "", e
+		}
 	}
 	u := User{ID: BreakGlassID, Username: BreakGlassUsername, Roles: []Role{RoleBreakGlass, RoleSecurityAdmin}, Revision: 1, CreatedAt: s.now().UTC()}
 	if recovering {
@@ -207,7 +262,7 @@ func (s *Service) CompleteBootstrap(ctx context.Context, secret, password string
 	u.Legacy = nil
 	c, session, e := s.newSession(u, MethodLocal, "")
 	if e != nil {
-		return Credentials{}, e
+		return Credentials{}, "", e
 	}
 	kind := AuditBootstrapComplete
 	if recovering {
@@ -224,14 +279,20 @@ func (s *Service) CompleteBootstrap(ctx context.Context, secret, password string
 		next.Initialized = true
 		next.BootstrapPHC = ""
 		next.RecoveryPHC = ""
+		if issueRecovery {
+			next.RecoveryCodePHC = recoveryCodePHC
+		}
 		next.Users[BreakGlassID] = u
 		next.Sessions[session.TokenHash] = session
 		return nil
 	})
 	if e != nil {
-		return Credentials{}, e
+		if issueRecovery && errors.Is(e, ErrMutationPrepared) {
+			return Credentials{}, recoveryCode, e
+		}
+		return Credentials{}, "", e
 	}
-	return c, nil
+	return c, recoveryCode, nil
 }
 
 func (s *Service) allow(source, username string) (bool, time.Duration) {
@@ -429,7 +490,7 @@ func (s *Service) Mutate(ctx context.Context, p Principal, kind AuditKind, targe
 		if e := fn(st); e != nil {
 			return e
 		}
-		if st.Initialized != before.Initialized || st.BootstrapPHC != before.BootstrapPHC || st.RecoveryPHC != before.RecoveryPHC {
+		if st.Initialized != before.Initialized || st.BootstrapPHC != before.BootstrapPHC || st.RecoveryPHC != before.RecoveryPHC || st.RecoveryCodePHC != before.RecoveryCodePHC {
 			return ErrForbidden
 		}
 		reserved := st.Users[BreakGlassID]

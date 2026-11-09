@@ -28,12 +28,12 @@
       <div id="modelMetaEditor" class="overlay-modal">
         <div class="modal-card w500">
         <div class="form-row">
-          <div class="field"><label>模型 ID</label><input type="text" id="mmId" disabled class="mono-plain"></div>
-          <div class="field"><label>上下文窗口 (token)</label><input type="number" id="mmCtx" value="200000" min="1000" max="2000000"></div>
-          <div class="field"><label>最大输出 (token)</label><input type="number" id="mmOut" value="32768" min="256" max="200000"></div>
+          <div class="field"><label for="mmId">模型 ID</label><input type="text" id="mmId" disabled class="mono-plain"></div>
+          <div class="field"><label for="mmCtx">上下文窗口 (token)</label><input type="number" id="mmCtx" value="200000" min="1000" max="2000000"></div>
+          <div class="field"><label for="mmOut">最大输出 (token)</label><input type="number" id="mmOut" value="32768" min="256" max="200000"></div>
         </div>
         <div class="form-row">
-          <div class="field"><label>层级（免费/付费）</label><select id="mmTier"><option value="auto">自动</option><option value="free">免费</option><option value="pass">付费</option></select></div>
+          <div class="field"><label for="mmTier">层级（免费/付费）</label><select id="mmTier"><option value="auto">自动</option><option value="free">免费</option><option value="pass">付费</option></select></div>
           <div class="field f-16"><label>&nbsp;</label><div id="mmTierNote" class="hint-sm"></div></div>
         </div>
         <div class="form-actions mt-10">

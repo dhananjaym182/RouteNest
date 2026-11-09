@@ -250,6 +250,8 @@ func adminAuthErrorStatus(err error) int {
 		return http.StatusConflict
 	case errors.Is(err, adminauth.ErrDegraded), errors.Is(err, adminauth.ErrInvalidState):
 		return http.StatusServiceUnavailable
+	case errors.Is(err, adminauth.ErrMutationPrepared):
+		return http.StatusServiceUnavailable
 	case errors.Is(err, adminauth.ErrConflict):
 		return http.StatusConflict
 	default:

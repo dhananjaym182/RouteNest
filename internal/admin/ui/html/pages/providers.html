@@ -82,13 +82,13 @@
         <p class="desc-lead">输入已有的 Cline refreshToken，系统会自动验证并加入池。</p>
         <div class="form-row">
           <div class="field">
-            <label>Refresh Token *</label>
+            <label for="tokenInput">Refresh Token *</label>
             <input type="password" autocomplete="new-password" id="tokenInput" placeholder="粘贴 refreshToken">
           </div>
         </div>
         <div class="form-row">
           <div class="field">
-            <label>邮箱（可选，留空自动生成）</label>
+            <label for="tokenEmail">邮箱（可选，留空自动生成）</label>
             <input type="text" id="tokenEmail" placeholder="user@example.com">
           </div>
         </div>
@@ -102,7 +102,7 @@
         <p class="desc-lead">批量导入多个账号。支持 JSON 数组或每行一个 token。</p>
         <div class="form-row">
           <div class="field">
-            <label>JSON 数组格式：[{"refreshToken":"...","email":"..."}]</label>
+            <label for="batchInput">JSON 数组格式：[{"refreshToken":"...","email":"..."}]</label>
             <textarea id="batchInput" placeholder='[{"refreshToken":"xxx","email":"u1@x.com"},{"refreshToken":"yyy","email":"u2@x.com"}]'></textarea>
           </div>
         </div>
@@ -140,42 +140,42 @@
       <div class="form-group-label">基础连接</div>
       <div class="form-row">
         <div class="field w-220">
-          <label>启用 OpenCode Zen</label>
+          <label for="ocEnabled">启用 OpenCode Zen</label>
           <select id="ocEnabled" onchange="saveOcConfig()">
             <option value="true">启用</option>
             <option value="false">停用</option>
           </select>
         </div>
-        <div class="field f1"><label>API Key</label><input type="password" autocomplete="new-password" id="ocKey" placeholder="public" onchange="saveOcConfig()"></div>
-        <div class="field f-14"><label>Base URL</label><input type="text" id="ocBaseURL" placeholder="https://opencode.ai/zen/v1" class="mono-plain" onchange="saveOcConfig()"></div>
+        <div class="field f1"><label for="ocKey">API Key</label><input type="password" autocomplete="new-password" id="ocKey" placeholder="public" onchange="saveOcConfig()"></div>
+        <div class="field f-14"><label for="ocBaseURL">Base URL</label><input type="text" id="ocBaseURL" placeholder="https://opencode.ai/zen/v1" class="mono-plain" onchange="saveOcConfig()"></div>
       </div>
       <div class="form-group-label">请求调优</div>
       <div class="form-row">
-        <div class="field"><label>最大并发</label><input type="number" id="ocMaxConcurrency" min="1" max="64" onchange="saveOcConfig()"></div>
-        <div class="field"><label>重试次数</label><input type="number" id="ocRetries" min="0" max="10" onchange="saveOcConfig()"></div>
+        <div class="field"><label for="ocMaxConcurrency">最大并发</label><input type="number" id="ocMaxConcurrency" min="1" max="64" onchange="saveOcConfig()"></div>
+        <div class="field"><label for="ocRetries">重试次数</label><input type="number" id="ocRetries" min="0" max="10" onchange="saveOcConfig()"></div>
       </div>
       <div class="form-group-label">故障转移</div>
       <div class="form-row">
-        <div class="field"><label>故障转移</label>
+        <div class="field"><label for="ocFailover">故障转移</label>
           <select id="ocFailover" onchange="saveOcConfig()">
             <option value="true">开启（连续失败后暂走 Cline 池）</option>
             <option value="false">关闭</option>
           </select>
         </div>
-        <div class="field"><label>失败阈值（次）</label><input type="number" id="ocFailoverCount" min="1" max="20" onchange="saveOcConfig()"></div>
-        <div class="field"><label>转移窗口（分钟）</label><input type="number" id="ocFailoverMinutes" min="1" max="120" onchange="saveOcConfig()"></div>
+        <div class="field"><label for="ocFailoverCount">失败阈值（次）</label><input type="number" id="ocFailoverCount" min="1" max="20" onchange="saveOcConfig()"></div>
+        <div class="field"><label for="ocFailoverMinutes">转移窗口（分钟）</label><input type="number" id="ocFailoverMinutes" min="1" max="120" onchange="saveOcConfig()"></div>
       </div>
       <div class="form-group-label">上下文压缩</div>
       <div class="form-row">
-        <div class="field"><label>自动上下文压缩</label>
+        <div class="field"><label for="ocCompactAuto">自动上下文压缩</label>
           <select id="ocCompactAuto" onchange="saveOcConfig()">
             <option value="true">开启（超限自动摘要）</option>
             <option value="false">关闭</option>
           </select>
         </div>
-        <div class="field"><label>压缩缓冲 Token</label><input type="number" id="ocCompactBuffer" min="0" onchange="saveOcConfig()"></div>
-        <div class="field"><label>尾部保留 Token</label><input type="number" id="ocCompactKeepTokens" min="0" onchange="saveOcConfig()"></div>
-        <div class="field"><label>摘要最大 Token</label><input type="number" id="ocCompactMaxSummary" min="0" onchange="saveOcConfig()"></div>
+        <div class="field"><label for="ocCompactBuffer">压缩缓冲 Token</label><input type="number" id="ocCompactBuffer" min="0" onchange="saveOcConfig()"></div>
+        <div class="field"><label for="ocCompactKeepTokens">尾部保留 Token</label><input type="number" id="ocCompactKeepTokens" min="0" onchange="saveOcConfig()"></div>
+        <div class="field"><label for="ocCompactMaxSummary">摘要最大 Token</label><input type="number" id="ocCompactMaxSummary" min="0" onchange="saveOcConfig()"></div>
       </div>
       <div class="form-actions mt-14">
         <button class="btn btn-primary" onclick="saveOcConfig(this)">保存 OpenCode Zen 配置</button>
@@ -192,7 +192,7 @@
     <div class="section-body">
       <div class="form-row">
         <div class="field w-260">
-          <label>代理策略</label>
+          <label for="ocProxyStrategy">代理策略</label>
           <select id="ocProxyStrategy" onchange="saveOcConfig()">
             <option value="round_robin">轮询 (round_robin)</option>
             <option value="random">随机 (random)</option>
@@ -203,7 +203,7 @@
         <div class="field f1"><label>出口冷却状态</label><div id="ocProxyCooldowns" class="hint-sm">-</div></div>
       </div>
       <div class="field mt-10">
-        <label>代理列表</label>
+        <label for="ocProxies">代理列表</label>
         <textarea id="ocProxies" rows="4" placeholder="socks5://127.0.0.1:1080&#10;http://user:pass@proxy.example.com:8080" onchange="saveOcConfig()"></textarea>
       </div>
     </div>
@@ -214,7 +214,7 @@
     <div class="section-desc">附加到发往 OpenCode Zen 的请求。特殊值：$session / $request / $project / $client 会注入每请求的动态身份；留空删除该头。</div>
     <div class="section-body">
       <div class="field">
-        <label>请求头（每行一个，格式 Key: Value）</label>
+        <label for="zenHeadersBulk">请求头（每行一个，格式 Key: Value）</label>
         <textarea id="zenHeadersBulk" rows="6" placeholder="User-Agent: opencode/1.18.31&#10;x-opencode-project: global&#10;x-custom-header: my-value"></textarea>
       </div>
       <div class="form-actions mt-10">

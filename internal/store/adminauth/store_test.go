@@ -59,6 +59,42 @@ func TestStoreRestartAndIsolation(t *testing.T) {
 		t.Fatal("duplicate event accepted")
 	}
 }
+
+func TestStoreAcceptsFailedSecurityAuditOutcome(t *testing.T) {
+	dir := privateDir(t)
+	s, err := Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	e := event(77)
+	e.Kind = auth.AuditClientKeyDelete
+	e.Outcome = "failed"
+	if err := s.Apply(context.Background(), e, func(st *auth.State) error {
+		st.BootstrapPHC = fixturePHC
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	events, err := s.AuditEvents(context.Background())
+	if err != nil || len(events) != 1 || events[0].Outcome != "failed" {
+		t.Fatalf("events = %+v, err = %v", events, err)
+	}
+}
+
+func TestStoreRejectsFailedOutcomeForNonCredentialEvent(t *testing.T) {
+	dir := privateDir(t)
+	s, err := Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	e := event(78)
+	e.Outcome = "failed"
+	if err := s.Apply(context.Background(), e, func(*auth.State) error { return nil }); err == nil {
+		t.Fatal("non-credential failed outcome accepted")
+	}
+}
 func TestExclusiveLock(t *testing.T) {
 	dir := privateDir(t)
 	s, e := Open(dir)

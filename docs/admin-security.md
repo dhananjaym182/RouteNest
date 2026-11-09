@@ -86,9 +86,9 @@ Examples of the resulting ownership:
 - Routes marked `dangerous.execute` require that permission in addition to their domain
   permission. Delete All Accounts requires `credential.write` plus `dangerous.execute`;
   clearing request logs requires `security.write` plus `dangerous.execute`, so
-  `security_admin` alone cannot clear them. Individual client-key deletion, including
-  the requests used by the UI's Delete All Keys loop, currently requires only
-  `credential.write`; its dangerous UI gate is not an additional server check.
+  `security_admin` alone cannot clear them. Client-key deletion requires
+  `credential.write` plus `dangerous.execute`. Deleting the final effective key also
+  requires the exact `disable-client-authentication` request confirmation.
 
 The current UI combines data with different permissions on some pages. A section that
 is unavailable to the signed-in role must not be interpreted as empty or unknown; this
@@ -192,6 +192,31 @@ cannot receive the reserved break-glass role.
 
 ## Offline recovery
 
+### Recovery codes
+
+Normal desktop setup generates a 256-bit recovery credential from `crypto/rand` and
+shows it once. RouteNest stores only an Argon2id verifier. Existing local break-glass
+administrators can issue or rotate a code under **API Keys & Security → Access Settings**
+after current-password reauthentication; a stolen administrator session alone cannot
+mint one.
+
+The public recovery protocol still requires the recovery credential. It is protected by
+the same canonical-host and same-origin request policy as local login and does not trust
+localhost, a browser window, or Wails presence as proof of ownership. A successful reset
+atomically changes the break-glass password, rotates the recovery verifier, revokes all
+administrator sessions and pending SSO flows, and audits the operation without secret
+material. Used or concurrently replayed credentials fail generically. Rate limiting and
+bounded redacted denial auditing apply to failed attempts.
+
+If the administrator journal is durably prepared but a later persistence step reports
+failure, the exact prepared recovery code is returned once with a restart-required
+result. Operators must save it and restart; retrying does not create another credential.
+Older RouteNest binaries that strictly decode administrator state fail closed after a
+recovery verifier has been written, so downgrading requires restoring a compatible
+backup rather than deleting authority fields.
+
+### Emergency owner-terminal recovery
+
 If every online administrator is unavailable, stop all RouteNest processes and
 run as the owner of the existing data directory from a local terminal:
 
@@ -206,19 +231,43 @@ identity state. It preserves the audit journal, revokes all sessions and SSO flo
 rotates the break-glass credential, and prints the one-time recovery secret only to the
 controlling terminal. Restart RouteNest and complete recovery by entering that
 terminal-issued recovery secret in a trusted local browser and setting a permanent
-password. A desktop
-build may currently also display an unrelated newly generated bootstrap secret during
-recovery; that dialog value is not the recovery credential. There is no HTTP endpoint that initiates offline recovery, and the bootstrap environment
+password. There is no HTTP endpoint that initiates offline recovery, and the bootstrap environment
 variable is not a reset path while initialized authority is retained.
+
+## Desktop first run
+
+Normal Wails launches use a dedicated embedded setup origin and a native-only bridge.
+For a data directory with no RouteNest, legacy, migration, administrator-authority,
+corrupt-backup, account-pool, or initialization-witness evidence, the bridge may create
+the verified empty client-authentication store and complete administrator setup. It
+generates the bootstrap capability in memory, rechecks freshness immediately before the
+mutation, uses the existing administrator service and journal, and becomes inert after
+completion. A single-instance lock prevents competing desktop setup windows.
+
+The localhost administrator server does not expose a public administrator-creation
+shortcut for desktop. After setup, a 256-bit, two-minute, single-use handoff capability
+may transfer the already-created session to `/admin/`; it is accepted only when the
+effective client and peer are loopback. Existing installations skip setup. Missing,
+unreadable, corrupt, partially restored, or otherwise uncertain security state produces
+a recovery diagnostic and no storage recreation.
+
+CLI, headless, and Docker deployments retain explicit first-run authorization and
+bootstrap delivery. `ROUTENEST_INITIALIZE_EMPTY_ACCOUNT_STORE` and
+`-initialize-empty-account-store` remain process-local advanced controls, not desktop
+user requirements and never reset established data.
 
 ## Client API keys are separate
 
 Client API keys protect model and inference routes only after at least one key is
 loaded, including the key-wrapped `/v1/*` routes and their compatibility aliases.
 For compatibility, a valid intentionally empty key list leaves those routes open;
-`/health` and `/v1/health` are always public. A confirmed fresh installation must set
-`ROUTENEST_INITIALIZE_EMPTY_ACCOUNT_STORE=true` for one startup, then remove it. The
-variable is ignored as an initialization shortcut when independent RouteNest, legacy,
+`/health` and `/v1/health` remain public liveness endpoints. `/ready` and `/v1/ready`
+remain public but return HTTP 503 when client-authentication storage is unavailable, so
+deployment health checks can distinguish a running process from an operational gateway.
+A confirmed fresh installation must set
+`ROUTENEST_INITIALIZE_EMPTY_ACCOUNT_STORE=true` for one startup, then remove it. CLI and
+desktop binaries may instead use `-initialize-empty-account-store` for that one startup.
+The variable is ignored as an initialization shortcut when independent RouteNest, legacy,
 administrator-authority, migration, or corrupt-backup evidence shows that the directory
 is established. Corrupt, unreadable, invalid-marker, partially restored, or uncertain
 missing account storage remains unavailable, and key-wrapped routes return a redacted
@@ -229,10 +278,19 @@ restored pool without a witness is validated before a new witness is written. A 
 without its pool, or loss of both files in an established directory, requires restoring
 or deliberately creating a valid pool document and restarting RouteNest; the server
 does not silently recreate security-sensitive storage after detecting that state.
-Console-generated keys are still clock-derived rather than cryptographically random,
-and ordinary key writes still use best-effort persistence. These remaining limitations
-require hardening before treating generated client keys as an internet-grade security
-boundary. None of these rules grants administrator authority.
+The command-line flag is process-local and delegates to the same guarded initialization
+policy; it is not retained and is not an authentication bypass. Console-generated keys
+use 256 bits from Go's `crypto/rand`; previously issued keys remain valid. Key creation
+and deletion durably persist a detached account-pool copy before publishing it in memory.
+Pre-replacement failures make no visible change, while uncertain post-replacement errors
+are returned and memory is reconciled to the file that won. Create, delete, final-key
+delete, and failed mutation audit events contain no raw key material. None of these rules
+grants administrator authority.
+
+Intentional final-key deletion remains supported. The administrator API requires both
+`credential.write` and `dangerous.execute`, plus an explicit confirmation that client API
+authentication will be disabled. After successful deletion, the verified empty-key
+compatibility policy applies and the public model/inference API accepts anonymous calls.
 
 Provider API keys, OAuth tokens and Cline refresh tokens are Provider Credentials;
 they do not authenticate RouteNest clients or administrators.
@@ -286,4 +344,5 @@ implementation. Identity-provider logout or later group changes do not continuou
 issued RouteNest session; use the administrator session/user controls when immediate
 local revocation is required. Rotating only a referenced SSO secret file or environment
 value does not itself perform the provider-configuration lifecycle mutation that revokes
-sessions. Both `/health` and `/v1/health` remain unauthenticated.
+sessions. `/health`, `/v1/health`, `/ready`, and `/v1/ready` remain unauthenticated;
+readiness exposes only a redacted availability state.

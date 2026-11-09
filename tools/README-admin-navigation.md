@@ -4,16 +4,21 @@
 
 Use an existing Playwright or Playwright Core installation and Chromium. The script resolves local `playwright`, local `playwright-core`, or the previous audit installation at `/tmp/routenest-playwright/node_modules/playwright-core`. Override this with `PLAYWRIGHT_MODULE` and `CHROMIUM_PATH` when needed.
 
-Build and run a separate instance with an empty temporary data directory; do not use production credentials for screenshots:
+Build and run a separate instance with an empty temporary data directory; do not use production credentials for screenshots. The server and verifier must receive the same disposable bootstrap secret, and the verifier also needs a disposable permanent test password:
 
 ```sh
 go build -o /tmp/routenest-admin-verification .
-ROUTENEST_DATA_DIR=/tmp/routenest-admin-verification-data /tmp/routenest-admin-verification --host 127.0.0.1 --port 3467
+ROUTENEST_DATA_DIR=/tmp/routenest-admin-verification-data \
+ROUTENEST_ADMIN_BOOTSTRAP_PASSWORD="$ADMIN_TEST_BOOTSTRAP_SECRET" \
+ROUTENEST_INITIALIZE_EMPTY_ACCOUNT_STORE=true \
+/tmp/routenest-admin-verification --host 127.0.0.1 --port 3467
 ```
 
 In another terminal, run the suite from the repository:
 
 ```sh
+ADMIN_TEST_BOOTSTRAP_SECRET="$ADMIN_TEST_BOOTSTRAP_SECRET" \
+ADMIN_TEST_PASSWORD="$ADMIN_TEST_PASSWORD" \
 node tools/admin_navigation_verify.mjs
 ```
 
@@ -21,6 +26,8 @@ Optional configuration:
 
 ```sh
 BASE_URL=http://127.0.0.1:3467/admin/ \
+ADMIN_TEST_BOOTSTRAP_SECRET="$ADMIN_TEST_BOOTSTRAP_SECRET" \
+ADMIN_TEST_PASSWORD="$ADMIN_TEST_PASSWORD" \
 PLAYWRIGHT_MODULE=/path/to/node_modules/playwright-core \
 CHROMIUM_PATH=/usr/bin/chromium \
 SCREENSHOTS=1 \

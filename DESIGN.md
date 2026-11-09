@@ -20,6 +20,13 @@ Self-hosted gateway operators connect services, add accounts, choose models and 
 
 Keep all 13 canonical sidebar routes and all four compatibility aliases recorded in `CONTRACTS.md`. Providers owns shared setup and connected inventory. Accounts & Credentials owns OAuth Connected Accounts, Cline accounts and the redacted API Credentials inventory; provider secrets remain edited through their provider owner. Providers has inventory and OAuth setup tabs; native service configuration, proxies and headers live with each provider. Network owns the shared default egress pool plus the current read-only named global/Zen egress projection; custom-provider override editing remains under Providers because no generic binding projection exists. Models has Catalog and Provider availability subviews. Compatibility aliases remain supported but are not duplicate sidebar destinations.
 
+Overview is state-aware. A configured returning installation keeps the metrics dashboard;
+an authenticated installation without a completed first request shows the backend-owned
+setup checklist inside the same canonical `#dashboard` route. It reuses Provider, Models,
+API Keys and Quick Start owners rather than duplicating their forms. Security state and
+provider verification come from backend stores; browser storage may only remember a
+temporary presentation preference to view metrics.
+
 ## Design principles
 
 One primary action; progressive disclosure; reuse working forms and handlers. Enabled means configured, not tested healthy. Do not invent model access, auth flows or status.
@@ -51,6 +58,11 @@ Short user actions: Connect provider, Sign in, API key, Models, Advanced setting
 ## Implementation constraints
 
 Go-embedded vanilla HTML/CSS/JS and existing manifests. UI refinement under this design adds no dependencies, new endpoints, storage migrations or backend/adapter rewrite. AuthFlow comes from backend metadata, never preset key inference. Generic provider OAuth creates a connection selected before explicit provider save; Cline OAuth creates a Cline Account directly. OpenCode has no supported OAuth/session import admin endpoint. Preserve existing dirty edits. C1 account deletion is implemented as the isolated Phase 2 safety fix recorded in `CONTRACTS.md`; C2 provider-scoped model removal remains a separate proposed backend fix, not a UI change authorized by this document.
+
+Desktop first-run administrator creation belongs to the embedded Wails setup origin and
+its native binding. The localhost admin UI owns login, credential-backed password
+recovery and the state-aware Welcome page, but it does not gain an anonymous setup
+authority. Recovery codes are shown once and only verifiers are durable.
 
 ## Open questions
 

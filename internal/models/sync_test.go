@@ -134,19 +134,22 @@ func TestRemoveDelistedRules(t *testing.T) {
 		pool        []domain.Model
 		default_    string
 		id          string
+		source      string
 		wantRemoved bool
 		wantDefault string
 	}{
-		{name: "delisted synced record is removed", pool: []domain.Model{{ID: "g", Source: SourceRemote, Delisted: true}}, id: "g", wantRemoved: true},
-		{name: "live synced record is protected", pool: []domain.Model{{ID: "l", Source: SourceRemote}}, id: "l"},
-		{name: "delisted custom record is protected", pool: []domain.Model{{ID: "c", Custom: true, Delisted: true}}, id: "c"},
-		{name: "removing the default clears it", pool: []domain.Model{{ID: "g", Source: SourceRemote, Delisted: true}}, default_: "g", id: "g", wantRemoved: true},
+		{name: "delisted synced record is removed", pool: []domain.Model{{ID: "g", Source: SourceRemote, Delisted: true}}, id: "g", source: SourceRemote, wantRemoved: true},
+		{name: "live synced record is protected", pool: []domain.Model{{ID: "l", Source: SourceRemote}}, id: "l", source: SourceRemote},
+		{name: "delisted custom record is protected", pool: []domain.Model{{ID: "c", Source: SourceRemote, Custom: true, Delisted: true}}, id: "c", source: SourceRemote},
+		{name: "removing the final default clears it", pool: []domain.Model{{ID: "g", Source: SourceRemote, Delisted: true}}, default_: "g", id: "g", source: SourceRemote, wantRemoved: true},
+		{name: "sibling source preserves default", pool: []domain.Model{{ID: "shared", Source: SourceRemote, Delisted: true}, {ID: "shared", Source: SourceZen}}, default_: "shared", id: "shared", source: SourceRemote, wantRemoved: true, wantDefault: "shared"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			withPool(t, &domain.AccountPool{Models: tc.pool, DefaultModel: tc.default_})
-			if got := RemoveDelisted(tc.id); got != tc.wantRemoved {
-				t.Fatalf("removed = %v, want %v", got, tc.wantRemoved)
+			got, err := RemoveDelistedSource(tc.id, tc.source)
+			if err != nil || got != tc.wantRemoved {
+				t.Fatalf("removed = %v, %v, want %v", got, err, tc.wantRemoved)
 			}
 			if tc.wantRemoved && livePool().DefaultModel != tc.wantDefault {
 				t.Fatalf("default = %q, want %q", livePool().DefaultModel, tc.wantDefault)

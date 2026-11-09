@@ -31,9 +31,35 @@ func writeAPI(w http.ResponseWriter, status int, resp apiResponse) {
 // adminKeys/adminMonitoring connect the root composition to adminapi handlers
 // without moving pool locking or persistence into the package.
 var adminKeys = &adminapi.KeyManager{
-	ListKeys:  accounts.ClientKeySnapshot,
-	AddKey:    accounts.AddClientKey,
-	DeleteKey: accounts.DeleteClientKey,
+	ListKeys:    accounts.ClientKeySnapshot,
+	GenerateKey: accounts.GenerateClientKey,
+	DeleteKey:   accounts.DeleteClientKey,
+	CanDeleteFinal: func(r *http.Request) bool {
+		principal, ok := adminPrincipal(r)
+		return ok && principal.HasPermission(adminauth.PermissionDangerousExecute)
+	},
+	Audit: func(r *http.Request, event adminapi.KeyAuditEvent) error {
+		runtime, ok := adminSecurityRuntimeFromRequest(r)
+		if !ok {
+			return fmt.Errorf("administrator security runtime unavailable")
+		}
+		principal, ok := adminPrincipal(r)
+		if !ok {
+			return adminauth.ErrUnauthorized
+		}
+		security, ok := adminRequestSecurity(r)
+		if !ok {
+			return fmt.Errorf("administrator request security unavailable")
+		}
+		kind := adminauth.AuditClientKeyDelete
+		switch event.Kind {
+		case adminapi.KeyAuditCreate:
+			kind = adminauth.AuditClientKeyCreate
+		case adminapi.KeyAuditDeleteFinal:
+			kind = adminauth.AuditClientKeyDeleteFinal
+		}
+		return runtime.service.RecordCredentialEvent(r.Context(), principal, kind, event.Outcome, security.ClientIP.String())
+	},
 	Translate: func(r *http.Request, key string) string { return i18n.TAPI(r, key) },
 }
 
@@ -113,6 +139,9 @@ func RegisterRoutesWithService(mux *http.ServeMux, service *adminauth.Service, o
 }
 
 func registerRoutesWithSecurity(mux *http.ServeMux, runtime *adminSecurityRuntime) {
+	if runtime.desktopHandoffs == nil {
+		runtime.desktopHandoffs = newDesktopHandoffStore()
+	}
 	registry := newAdminRouteRegistry()
 	registerSessionRoutes(registry)
 	registerAccountsRoutes(registry)
@@ -141,11 +170,14 @@ func registerProtectedRoute(registry *adminRouteRegistry, method, path string, c
 func registerSessionRoutes(registry *adminRouteRegistry) {
 	registerPublicRoute(registry, http.MethodGet, "/admin/api/auth/status", csrfSafe, handleAdminAuthStatus)
 	registerPublicRoute(registry, http.MethodPost, "/admin/api/auth/bootstrap", csrfLocalEntry, handleAdminBootstrap)
+	registerPublicRoute(registry, http.MethodPost, "/admin/api/auth/recovery", csrfLocalEntry, handleAdminRecoveryCodeUse)
+	registerPublicRoute(registry, http.MethodPost, "/admin/api/auth/desktop-handoff", csrfLocalEntry, handleDesktopSessionHandoff)
 	registerPublicRoute(registry, http.MethodPost, "/admin/api/login", csrfLocalEntry, handleAdminLoginSecure)
 	registerPublicRoute(registry, http.MethodPost, "/admin/api/auth/legacy/rotate", csrfLocalEntry, handleAdminLegacyRotation)
 	registerProtectedRoute(registry, http.MethodGet, "/admin/api/auth/session", csrfSafe, handleAdminCurrentSession, adminauth.PermissionView)
 	registerProtectedRoute(registry, http.MethodPost, "/admin/api/logout", csrfSession, handleAdminLogoutSecure, adminauth.PermissionView)
 	registerProtectedRoute(registry, http.MethodPost, "/admin/api/auth/password", csrfSession, handleAdminPasswordRotation, adminauth.PermissionView)
+	registerProtectedRoute(registry, http.MethodPost, "/admin/api/auth/recovery-code", csrfSession, handleAdminRecoveryCodeIssue, adminauth.PermissionSecurityWrite)
 	registerProtectedRoute(registry, http.MethodGet, "/admin/api/auth/sessions", csrfSafe, handleAdminSessions, adminauth.PermissionSecurityWrite)
 	registerProtectedRoute(registry, http.MethodPost, "/admin/api/auth/sessions/revoke", csrfSession, handleAdminSessionRevoke, adminauth.PermissionSecurityWrite)
 	registerProtectedRoute(registry, http.MethodGet, "/admin/api/auth/users", csrfSafe, handleAdminUsers, adminauth.PermissionSecurityWrite)
@@ -182,7 +214,7 @@ func registerAccountsRoutes(registry *adminRouteRegistry) {
 func registerKeysRoutes(registry *adminRouteRegistry) {
 	registerProtectedRoute(registry, http.MethodGet, "/admin/api/keys", csrfSafe, handleAdminGetKeys, adminauth.PermissionCredentialWrite)
 	registerProtectedRoute(registry, http.MethodPost, "/admin/api/keys/generate", csrfSession, handleAdminGenerateKey, adminauth.PermissionCredentialWrite)
-	registerProtectedRoute(registry, http.MethodPost, "/admin/api/keys/delete", csrfSession, handleAdminDeleteKey, adminauth.PermissionCredentialWrite)
+	registerProtectedRoute(registry, http.MethodPost, "/admin/api/keys/delete", csrfSession, handleAdminDeleteKey, adminauth.PermissionCredentialWrite, adminauth.PermissionDangerousExecute)
 }
 
 func registerModelsRoutes(registry *adminRouteRegistry) {
@@ -262,6 +294,7 @@ func registerCombosRoutes(registry *adminRouteRegistry) {
 func registerObservabilityRoutes(registry *adminRouteRegistry) {
 	registerProtectedRoute(registry, http.MethodGet, "/admin/api/stats", csrfSafe, handleAdminStats, adminauth.PermissionView)
 	registerProtectedRoute(registry, http.MethodGet, "/admin/api/dashboard/overview", csrfSafe, handleDashboardOverview, adminauth.PermissionView)
+	registerProtectedRoute(registry, http.MethodGet, "/admin/api/onboarding/status", csrfSafe, handleOnboardingStatus, adminauth.PermissionView)
 	registerProtectedRoute(registry, http.MethodGet, "/admin/api/request-logs", csrfSafe, handleAdminRequestLogs, adminauth.PermissionView)
 	registerProtectedRoute(registry, http.MethodPost, "/admin/api/request-logs/clear", csrfSession, handleRequestLogsClear, adminauth.PermissionSecurityWrite, adminauth.PermissionDangerousExecute)
 	registerProtectedRoute(registry, http.MethodGet, "/admin/api/version-check", csrfSafe, handleAdminVersionCheck, adminauth.PermissionView)

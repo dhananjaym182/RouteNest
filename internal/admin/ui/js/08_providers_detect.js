@@ -354,6 +354,10 @@ async function deleteProvider(id) {
   if (!(await showConfirm(t('确定删除该 Provider？')))) return;
   try {
     await api('POST', '/providers/delete', { id });
+    // Ignore list reads started before deletion, even when the refresh fails.
+    _provLoadGeneration++;
+    delete _provCache[id];
+    refreshProvDetailIfOpen();
     delete _provRowResults['test:' + id];
     delete _provRowResults['recheck:' + id];
     invalidateImportPreviewCache('id:' + id);

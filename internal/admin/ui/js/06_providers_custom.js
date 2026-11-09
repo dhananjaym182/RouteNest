@@ -6,6 +6,7 @@ let _previewAfterSave = false;
 
 // 首次加载占位：列表尚未渲染过且请求在途时显示骨架，避免空白闪动
 let _provFirstLoad = true;
+let _provLoadGeneration = 0;
 // 行内测试/检测结果跨 re-render 保留（loadProviders 重绘后回填到结果位）
 const _provRowResults = {};
 function provRowResultHTML(kind, id) {
@@ -16,6 +17,7 @@ function provRowResultHTML(kind, id) {
 async function loadProviders() {
   const box0 = _('providersList');
   if (!box0) return;
+  const generation = ++_provLoadGeneration;
   if (_provFirstLoad) {
     // 骨架与卡片同构：占多个卡位而非一条，避免加载完成后从「一条」跳到「网格」的布局闪动
     const skCard = '<div class="prov-card sk-card"><div class="sk-stack"><span class="skeleton"></span><span class="skeleton w70"></span><span class="skeleton w45"></span><span class="skeleton w70"></span><span class="skeleton w45"></span></div></div>';
@@ -26,20 +28,24 @@ async function loadProviders() {
       api('GET', '/providers'),
       api('GET', '/providers/sync-status').catch(() => ({ data: {} })),
     ]);
+    if (generation !== _provLoadGeneration) return;
     _provSync = (sd && sd.data && sd.data.providers) || {};
     _provHealth = (d.data && d.data.health) || {};
     const list = d.data.providers || [];
     _provFirstLoad = false;
+    const ids = new Set(list.map(p => p.id));
+    Object.keys(_provCache).forEach(id => { if (!ids.has(id)) delete _provCache[id]; });
     list.forEach(p => { _provCache[p.id] = p; });
     const box = _('providersList');
     renderProviderSyncBanner(list);
+    refreshProvDetailIfOpen();
     if (!list.length) { box.innerHTML = listEmptyState(ICON_PROVIDERS, t('暂无自定义 Provider')); return; }
     box.innerHTML = renderProvCooldownBar(list) +
       '<div class="prov-cards">' + list.map(provCardHTML).join('') + '</div>';
-    refreshProvDetailIfOpen();
     observeProviderSyncDelistings(list, _provSync);
     if (list.some(p => (_provSync[p.id] || {}).delistedMarked)) await checkModelDelistings();
   } catch (e) {
+    if (generation !== _provLoadGeneration) return;
     _provFirstLoad = false;
     const box = _('providersList');
     if (box) box.innerHTML = '<div class="empty">' + t('加载失败') + ': ' + esc(e.message) +

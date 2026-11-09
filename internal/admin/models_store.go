@@ -1,6 +1,7 @@
 package admin
 
 import (
+	"fmt"
 	"net/http"
 	"routenest/internal/routing"
 	"routenest/internal/zen"
@@ -9,6 +10,7 @@ import (
 	"routenest/internal/domain"
 	"routenest/internal/i18n"
 	"routenest/internal/models"
+	"routenest/internal/providers"
 )
 
 // rootModelStore adapts the live model catalogue (package models) to
@@ -23,14 +25,46 @@ func (rootModelStore) Add(m domain.Model) {
 	models.Add(m)
 }
 
-func (rootModelStore) Delete(id string) adminapi.DeleteModelResult {
-	switch models.Delete(id) {
+func (rootModelStore) Delete(id string) (adminapi.DeleteModelResult, error) {
+	offerings, err := providers.SnapshotModelOfferings()
+	if err != nil {
+		return adminapi.ModelNotFound, fmt.Errorf("read model offerings: %w", err)
+	}
+	offeringMatches := 0
+	for _, offering := range offerings {
+		if offering.ModelID == id {
+			offeringMatches++
+		}
+	}
+	if offeringMatches > 1 {
+		return adminapi.ModelAmbiguous, nil
+	}
+	effectiveMatches := 0
+	for _, model := range routing.AllModels() {
+		if model.ID == id {
+			effectiveMatches++
+		}
+	}
+	if offeringMatches == 0 && effectiveMatches > 1 {
+		return adminapi.ModelAmbiguous, nil
+	}
+
+	outcome, err := models.Delete(id)
+	if err != nil {
+		return adminapi.ModelNotFound, err
+	}
+	switch outcome {
 	case models.DeleteDeleted:
-		return adminapi.ModelDeleted
+		return adminapi.ModelDeleted, nil
 	case models.DeleteProtected:
-		return adminapi.ModelBuiltin
+		return adminapi.ModelBuiltin, nil
+	case models.DeleteAmbiguous:
+		return adminapi.ModelAmbiguous, nil
 	default:
-		return adminapi.ModelNotFound
+		if offeringMatches == 1 || effectiveMatches == 1 {
+			return adminapi.ModelBuiltin, nil
+		}
+		return adminapi.ModelNotFound, nil
 	}
 }
 

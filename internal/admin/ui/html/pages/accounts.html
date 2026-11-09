@@ -4,7 +4,7 @@
     <div>
       <div class="page-kicker">连接管理</div>
       <div class="large-title">账号与凭据</div>
-      <div class="large-subtitle">统一管理已连接的 OAuth 账号与 API 凭据。</div>
+      <div class="large-subtitle">统一管理已连接账号、Provider 凭据与客户端 API 密钥。</div>
     </div>
     <div class="action-row">
       <button type="button" class="btn btn-sm" onclick="loadGlobal(true);loadAccounts();loadConnections();loadStats()">刷新</button>
@@ -15,6 +15,7 @@
   <div class="subtabs page-subtabs credential-view-tabs" data-page="credentials">
     <button type="button" class="subtab active" data-sub="conns">OAuth 已连接账号</button>
     <button type="button" class="subtab" data-sub="inventory">API 凭据</button>
+    <button type="button" class="subtab" data-sub="client-keys" data-admin-permission="credential.write">客户端 API 密钥</button>
   </div>
 
   <div class="page-subpage" data-subpage="conns">
@@ -125,6 +126,20 @@
         </div>
       </div>
       <div id="globalCredentials" class="section-body system-inventory" aria-live="polite"></div>
+    </div>
+  </div>
+
+  <div class="page-subpage" data-subpage="client-keys" style="display:none" data-admin-permission="credential.write">
+    <div class="section credential-client-keys">
+      <div class="section-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg><span>客户端 API 密钥</span>
+        <span class="title-tools"><button class="btn btn-sm btn-primary" onclick="generateKey(this)">生成新密钥</button></span>
+      </div>
+      <div class="section-desc">用于客户端访问 RouteNest 的 OpenAI 与 Anthropic 兼容 API。可通过 <code>x-api-key</code> 或 <code>Authorization</code> 请求头发送。</div>
+      <div class="section-body">
+        <div class="security-note mb-12">已保存密钥默认脱敏。新密钥只在生成后短暂完整显示；当前后端未提供别名、创建时间或最后使用时间。</div>
+        <div id="keysList"></div>
+        <div id="keyGenResult" class="mt-8" aria-live="polite"></div>
+      </div>
     </div>
   </div>
 </div>

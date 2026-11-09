@@ -74,6 +74,10 @@
 .access-details[open] summary{border-bottom:1px solid var(--border2);color:var(--text)}
 .access-details-body{padding:var(--sp-4)}
 .access-details-body .access-form-group{margin-top:var(--sp-5)}
+.access-danger-details{margin-top:var(--sp-6)}
+.access-danger-details[open]{border-color:color-mix(in srgb,var(--red) 45%,var(--border))}
+.access-danger-details[open] summary{color:var(--red)}
+.access-danger-details .danger-zone{border:0;border-radius:0;background:transparent}
 .access-settings .access-secret-note{margin-top:var(--sp-5);background:var(--surface)}
 .access-settings .access-form-error{margin:0 0 var(--sp-4);padding:var(--sp-3);border:1px solid var(--red);border-radius:var(--radius-xs);background:var(--red-soft);color:var(--text);text-align:left;line-height:1.6}
 .access-settings .access-form-error:empty{display:none}
@@ -94,4 +98,19 @@
   .access-list-row{flex-wrap:wrap;gap:var(--sp-3);padding:var(--sp-3)}
   .access-row-actions{width:100%}
   .access-editor{padding:var(--sp-4)}
+}
+
+/* Mobile controls keep comfortable touch targets even in viewport-only browser
+   tests where the emulated pointer is not reported as coarse. */
+@media (max-width:760px){
+  .mobile-nav-btn,#refreshAllBtn{width:40px;height:40px;min-width:40px;min-height:40px}
+  .gateway-status{min-height:40px;padding:3px 6px}
+  .gateway-status .gateway-url{min-width:40px;min-height:40px;justify-content:center}
+  .btn{min-height:44px}
+  .btn-sm,.subtab,.dash-ranges .range,#modelsList .model-group-actions .btn{min-height:40px}
+  .dash-ranges .range{min-width:40px}
+  input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]),select,textarea{min-height:44px}
+  #tab-logs .log-actions .btn,#tab-logs .log-chip,#tab-logs select{min-height:40px}
+  #toolbarMoreBtn,#syncModelsBtn,#syncOcModelsBtn{min-height:40px}
+  a.lnk-a,.about-links a{display:inline-flex;align-items:center;min-height:40px}
 }
