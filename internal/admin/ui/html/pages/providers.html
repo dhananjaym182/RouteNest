@@ -1,12 +1,13 @@
 <div id="tab-providers" class="tab-panel system-page" style="display:none">
   <div class="page-header">
     <div>
+      <div class="page-kicker">连接管理</div>
       <div class="large-title">Provider 管理</div>
       <div class="large-subtitle">在这里连接服务、管理账号并选择可用模型。</div>
     </div>
     <div class="action-row">
       <button type="button" class="btn btn-sm" onclick="loadGlobal(true);loadProviders()">刷新</button>
-      <button type="button" class="btn btn-primary" id="connectProviderBtn" onclick="openProviderSetup()">＋ 连接 Provider</button>
+      <button type="button" class="btn btn-primary" id="connectProviderBtn" onclick="openProviderSetup()">连接 Provider</button>
     </div>
   </div>
   <div class="subtabs page-subtabs" data-page="providers"><button type="button" class="subtab active" data-sub="inventory">已配置的服务</button><button type="button" class="subtab" data-sub="oauth">OAuth 设置</button></div>
@@ -218,7 +219,7 @@
         <textarea id="zenHeadersBulk" rows="6" placeholder="User-Agent: opencode/1.18.31&#10;x-opencode-project: global&#10;x-custom-header: my-value"></textarea>
       </div>
       <div class="form-actions mt-10">
-        <button class="btn btn-sm btn-primary" onclick="saveZenHeaders(this)">保存 OpenCode Zen 请求头</button>
+        <button class="btn btn-primary" onclick="saveZenHeaders(this)">保存 OpenCode Zen 请求头</button>
       </div>
       <div id="zenHeaderSaveResult" class="mt-8" aria-live="polite"></div>
     </div>

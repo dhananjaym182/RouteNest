@@ -1,0 +1,284 @@
+/* ============================================================================
+   RouteNest UI optimization layer (2026-11)
+
+   This is the final cascade layer for the admin console. It does not introduce
+   a parallel design system: every value below is either an existing token from
+   00_base.css or a refinement of one, applied back to the existing component
+   classes. The goals come from docs/ui/reference-design-comparison.md:
+
+     1. one radius scale, one elevation scale, one card padding rhythm;
+     2. one page-header composition for all 13 routes;
+     3. one filter/toolbar row that never wraps into ragged lines;
+     4. table density and numeric alignment that match the reference tables;
+     5. WCAG AA text contrast in both themes (token values only — hues kept);
+     6. notifications that never cover the page header;
+     7. mobile top bar that keeps only the menu button and the page identity.
+
+   Load order matters: this file is last in adminUICSSLayers, so equal-specificity
+   rules here win over every earlier layer. It therefore repeats the selector
+   shapes it overrides instead of escalating specificity.
+   ============================================================================ */
+
+/* ---------- 1. Scale tokens ---------- */
+:root{
+  /* Radius: control (6) < raised surface (8) < container (10) < pill. */
+  --radius-xs:4px;--radius-sm:6px;--radius:10px;--radius-lg:8px;--radius-pill:999px;
+  /* Elevation: hairline, resting card, raised menu, overlay. Neutral only. */
+  --shadow-sm:0 1px 2px rgba(16,24,40,.06);
+  --shadow-md:0 2px 4px -1px rgba(16,24,40,.08),0 4px 10px -2px rgba(16,24,40,.10);
+  --shadow-lg:0 8px 16px -4px rgba(16,24,40,.10),0 20px 32px -8px rgba(16,24,40,.16);
+  /* Surfaces: an explicit page/card split like the reference consoles. */
+  --surface-hover:color-mix(in srgb,var(--text) 5%,transparent);
+  --border-strong:color-mix(in srgb,var(--text) 18%,transparent);
+  --caption:12px;
+  --section-title:16px;
+  --page-title:clamp(24px,2vw,28px);
+  --toast-gap:16px;
+}
+[data-theme="dark"]{
+  --shadow-sm:0 1px 2px rgba(0,0,0,.36);
+  --shadow-md:0 2px 4px -1px rgba(0,0,0,.40),0 6px 16px -2px rgba(0,0,0,.42);
+  --shadow-lg:0 12px 24px -8px rgba(0,0,0,.55),0 24px 48px -12px rgba(0,0,0,.60);
+}
+
+/* ---------- 2. Contrast corrections (WCAG AA, hues preserved) ----------
+   Measured on the shipped 2026-11 baseline (text on --surface / --surface2):
+     light --text2  #5E6A7E   5.47:1 / 5.15:1
+     light --text3  #7C879B   3.62:1 / 3.24:1   FAIL
+     light --green  #168A63   4.33:1 / 3.87:1   FAIL
+     light --red    #C94A55   4.57:1 / 4.08:1   FAIL
+     light --yellow #B7791F   3.64:1 / 3.24:1   FAIL
+     dark  --accent #7968F8   4.26:1 / 3.87:1   FAIL
+   Each replacement keeps the original hue and saturation and moves only the
+   lightness until it clears 4.5:1 against --surface2, the darkest light
+   surface that normal-size text sits on. Ratios after the change are listed
+   per token as surface:surface2. */
+:root{
+  --text2:#5E6A7E;                    /* unchanged: 5.47 : 5.15 */
+  --text3:#636E81;                    /* 5.15 : 4.60 */
+  --green:#147C59;                    /* 5.18 : 4.62 */
+  --red:#C43B47;                      /* 5.17 : 4.62 */
+  --yellow:#956319;                   /* 5.15 : 4.60 */
+}
+[data-theme="dark"]{
+  --accent:#7E6EF8;                   /* 4.53 on --surface, 4.93 on --bg */
+  --accent-hover:#8E7FF9;             /* 5.42 : 5.91 */
+}
+
+/* ---------- 3. Type rhythm ---------- */
+.large-title{font-size:var(--page-title);letter-spacing:-.02em}
+.section-title{font-size:var(--section-title);font-weight:650;letter-spacing:-.01em}
+.metric-heading{font-size:13px;font-weight:600;color:var(--text2)}
+/* Numbers in metrics, tables and counters line up on a shared baseline. */
+.kpi-num,.tile-num,.dash-count b,.dash-kpi,.dtable td,.action-table td,.log-table td,
+.model-subtable td,.usage-group-row td,.status-count,.count,.badge-num,
+[data-numeric]{font-variant-numeric:tabular-nums;font-feature-settings:"tnum" 1}
+
+/* ---------- 4. Page header: one composition for all routes ----------
+   Reference consoles put the section caption, a single 20–28px title, a short
+   description and the page actions on one row. Providers and Quick Start were
+   missing the caption; onboarding used a 36px heading; action buttons were a
+   mix of 30px/38px heights. All of it now comes from the same rules. */
+.page-header{align-items:flex-start;gap:16px 24px;margin-bottom:20px}
+.page-header>.action-row,.page-header .action-row{align-items:center;gap:8px}
+.page-header .large-subtitle{max-width:760px;margin:4px 0 0}
+.page-kicker{font-size:var(--caption);font-weight:600;letter-spacing:.06em;color:var(--text2);text-transform:none}
+.onboarding-intro h1{font-size:var(--page-title);letter-spacing:-.02em}
+
+/* ---------- 5. Cards ---------- */
+.section,.system-section,.metric-section>.dash-hero,.dash-hero,.pool-hero{
+  border:1px solid var(--border-strong);border-radius:var(--radius);box-shadow:none;
+}
+.section{background:var(--surface);margin-bottom:16px}
+.section-title{padding:16px 20px 6px}
+.section-desc{padding:0 20px 12px}
+.section-body{padding:16px 20px}
+.section-title+.section-body:not(.flush),
+.section-desc+.section-body:not(.flush){padding-top:10px}
+
+/* ---------- 6. Controls: one height, one radius ---------- */
+.btn{min-height:34px;padding:6px 14px;border-radius:var(--radius-sm);font-size:14px;font-weight:500;gap:6px}
+.btn-sm{min-height:30px;padding:4px 10px;font-size:13px}
+.btn:where(:not(:disabled)):hover{transform:none}
+.btn-primary{box-shadow:none}
+.btn-primary:where(:not(:disabled)):hover{transform:none}
+.btn:focus-visible{outline:2px solid color-mix(in srgb,var(--accent) 55%,transparent);outline-offset:1px;box-shadow:none;border-color:var(--accent)}
+input,select,textarea{font-size:14px}
+.subtabs{border-radius:var(--radius-sm);background:var(--surface2);padding:3px;margin-bottom:16px;gap:2px}
+.subtab{border-radius:var(--radius-xs);font-size:13px;padding:6px 12px;font-weight:500}
+.subtab.active{background:var(--surface);color:var(--text);box-shadow:var(--shadow-sm)}
+
+/* Toolbar: every filter row becomes a single aligned row — the search field
+   grows, the selects keep a fixed width, and nothing wraps mid-row. */
+.toolbar,.filter-row,.filters,.page-toolbar{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.toolbar .search,.filter-row .search{flex:1 1 260px;min-width:200px}
+.toolbar select,.filter-row select{flex:0 0 auto;min-width:150px;max-width:220px}
+
+/* Dashboard: the reporting window sits in a page toolbar above every card it
+   filters, so it reads as one segmented control instead of loose pills. */
+.dashboard-toolbar{margin:-4px 0 16px;padding-bottom:14px;border-bottom:1px solid var(--border2)}
+.dash-ranges{margin-top:0;gap:2px;padding:3px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);width:max-content;max-width:100%}
+.dash-ranges .range{padding:4px 14px;min-height:28px;border:0;background:transparent;color:var(--text2);font-size:13px;font-weight:500}
+.dash-ranges .range:hover{background:var(--surface2);border-color:transparent;color:var(--text)}
+.dash-ranges .range.active{background:var(--surface2);border-color:transparent;color:var(--text);box-shadow:var(--shadow-sm);font-weight:600}
+
+/* ---------- 7. Tables ---------- */
+th,td{padding:11px 16px}
+th{font-size:var(--caption);font-weight:600;letter-spacing:.02em;text-transform:none;color:var(--text2);background:var(--surface2)}
+thead th{border-bottom:1px solid var(--border-strong)}
+tbody td{border-bottom:1px solid var(--border2)}
+tbody tr:hover td{background:var(--surface-hover)}
+.numeric,.col-num,td.num,th.num{text-align:right}
+html[dir="rtl"] th:last-child,html[dir="rtl"] td:last-child{text-align:left}
+
+/* ---------- 8. Empty and loading states ---------- */
+.empty-state{padding:40px 24px}
+.empty-state .icon{width:44px;height:44px;border-radius:var(--radius);margin-bottom:12px}
+.empty-state .empty-title{font-size:14px;font-weight:600;color:var(--text)}
+.empty-state .empty-hint{margin-top:4px;font-size:13px;color:var(--text2)}
+.empty-state .empty-action{margin-top:14px}
+.skeleton{border-radius:var(--radius-xs)}
+/* Onboarding checklist: one marker treatment for every row. Steps used to
+   render numbers 1/2/4/5 but lose the number on the security step and the
+   current step, which read as a rendering fault rather than progress. */
+.onboarding-step-index{width:28px;height:28px;font-size:13px;font-weight:600;border:1px solid var(--border);background:var(--surface)}
+.onboarding-step-index.is-done{background:color-mix(in srgb,var(--green) 16%,transparent);border-color:transparent;color:var(--green)}
+.onboarding-step-index.is-current{border-color:var(--accent);background:var(--accent-soft);color:var(--accent)}
+.onboarding-welcome{border:1px solid var(--border-strong);border-radius:var(--radius);background:var(--surface);padding:20px}
+.onboarding-step{border:1px solid var(--border);border-radius:var(--radius);background:var(--surface)}
+.onboarding-step.is-complete{border-color:color-mix(in srgb,var(--green) 30%,var(--border))}
+
+/* ---------- 9. Notifications ----------
+   The stack used to sit centered at the top of the viewport, on top of the
+   page header and its actions. Short-lived feedback now docks bottom-right
+   (bottom-center on narrow screens) where it cannot cover a control the user
+   is about to click. Persistent failures live in .sticky-alerts instead. */
+.toast-stack{top:auto;bottom:var(--toast-gap);left:auto;right:var(--toast-gap);transform:none;align-items:flex-end}
+.toast{border-radius:var(--radius);box-shadow:var(--shadow-lg);transform:translateY(8px)}
+.toast.show{transform:translateY(0)}
+.sticky-alerts{position:fixed;right:var(--toast-gap);bottom:var(--toast-gap);z-index:var(--z-toast);display:flex;flex-direction:column;gap:8px;max-width:min(420px,calc(100vw - 32px))}
+.sticky-alerts:has(+ .toast-stack .toast){bottom:calc(var(--toast-gap) + 56px)}
+.sticky-alert{display:flex;align-items:flex-start;gap:8px;padding:12px 10px 12px 14px;border:1px solid color-mix(in srgb,var(--red) 45%,var(--border));border-left-width:3px;border-radius:var(--radius);background:var(--surface);box-shadow:var(--shadow-md);color:var(--text);font-size:13px;line-height:1.45}
+.sticky-alert .sticky-alert-icon{width:16px;height:16px;flex:none;margin-top:1px;color:var(--red)}
+.sticky-alert .sticky-alert-msg{flex:1;min-width:0;overflow-wrap:anywhere}
+.sticky-alert-close{display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;flex:none;border:0;border-radius:var(--radius-xs);background:transparent;color:var(--text2);cursor:pointer}
+.sticky-alert-close:hover{background:var(--surface2);color:var(--text)}
+.sticky-alert-close svg{width:14px;height:14px}
+
+/* ---------- 10. Top bar ---------- */
+.top-tools{min-height:64px;padding:10px clamp(16px,2.2vw,28px);border-bottom-color:var(--border)}
+.topbar-title{font-size:15px;font-weight:600}
+.topbar-breadcrumb{font-size:var(--caption)}
+.content-shell{padding:24px clamp(16px,2.2vw,28px) 56px}
+
+/* ---------- 11. Responsive ----------
+   Below 900px the utility segments duplicated the drawer's theme/language
+   controls and squeezed the page title between them. The drawer stays the
+   single place for those preferences on small screens; the top bar keeps the
+   menu button, the page identity, the gateway status and refresh. */
+@media (max-width:900px){
+  .route-flow{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+  .route-flow>i{display:none}
+  .route-flow-node{height:100%}
+}
+@media (max-width:900px){
+  .top-tools{min-height:56px;padding:8px 12px;gap:8px}
+  .topbar-actions{gap:6px}
+  .top-tools .theme-switch,.top-tools .lang-switch,.top-tools #refreshAllBtn{display:none}
+  .main{height:auto;min-height:100vh}
+  .content-shell{padding:18px 16px 48px}
+  .page-header{flex-direction:column;align-items:stretch;gap:12px;margin-bottom:16px}
+  .page-header>.action-row,.page-header .action-row{width:100%}
+  .page-header .action-row .btn{flex:1 1 auto}
+  .toast-stack{left:16px;right:16px;bottom:12px;align-items:stretch}
+  .toast{max-width:none;justify-content:center}
+  .sticky-alerts{left:16px;right:16px;max-width:none}
+}
+@media (max-width:640px){
+  .toolbar,.filter-row,.filters,.page-toolbar{display:grid;grid-template-columns:1fr;gap:8px}
+  .toolbar .search,.filter-row .search{min-width:0}
+  .toolbar select,.filter-row select{width:100%;max-width:none}
+  .section-title{padding:14px 16px 4px}
+  .section-desc{padding:0 16px 10px}
+  .section-body{padding:14px 16px}
+  th,td{padding:10px 12px}
+  .large-title{font-size:22px}
+}
+@media (prefers-reduced-motion:reduce){
+  .toast,.toast.show{transition:none;transform:none}
+}
+
+/* ---------- 12. Login / recovery dialogs ----------
+   The auth views rendered flat: content hung from the top of the page with
+   no surface separation. Center the form in the space below the header and
+   give the login card and recovery dialog a real surface (border, radius,
+   shadow) with inset inputs, without touching any IDs, ARIA or form flow. */
+.auth-page{display:flex;flex-direction:column}
+.auth-main{
+  flex:1 1 auto;
+  min-height:0;
+  display:flex;
+  flex-direction:column;
+  justify-content:center;
+  justify-content:safe center;
+  padding-block:clamp(24px,5vh,48px);
+}
+.auth-main>.auth-view{width:100%}
+.login-card,.recovery-dialog{
+  background:var(--surface);
+  border:1px solid var(--border2);
+  border-radius:var(--radius);
+  box-shadow:var(--shadow-md);
+  padding:clamp(22px,5vw,32px);
+}
+#loginHelp,.recovery-dialog>div>p{margin:var(--sp-2) 0 var(--sp-5);font-size:var(--fs-sm);line-height:1.6}
+#loginStatus:not(:empty){margin:0 0 var(--sp-3);color:var(--text2);font-size:var(--fs-sm);line-height:1.6}
+#loginLocalHelp{
+  padding:7px 10px;
+  border:1px solid var(--border);
+  border-radius:var(--radius-xs);
+  background:var(--surface2);
+  color:var(--text2);
+  line-height:1.55;
+}
+.login-card input:not([type="checkbox"]),.recovery-dialog input:not([type="checkbox"]){
+  background:var(--bg);
+  border-color:var(--border2);
+}
+.login-card input:hover:not(:focus),.recovery-dialog input:hover:not(:focus){border-color:var(--text3)}
+.login-card #forgotPasswordButton[hidden]{display:none}
+.login-card #forgotPasswordButton{justify-content:center}
+.auth-back-link{margin-top:2px}
+@media (max-width:600px){
+  .auth-main{padding-block:24px}
+  .login-card,.recovery-dialog{padding:20px 16px;box-shadow:var(--shadow-sm)}
+}
+
+/* ---------- 12. Drawers and modals ----------
+   Reference overlays use an 8px modal radius, 16px/20px header padding and a
+   tinted footer. Behavior (focus trap, Escape, scrim) is untouched. */
+.modal-card{border-radius:var(--radius-lg)}
+.drawer-header{padding:16px 20px}
+.drawer-title{font-size:16px;font-weight:600}
+.drawer-footer{padding:12px 20px;background:var(--surface2)}
+@media (max-width:640px){
+  .drawer-header{padding:14px 16px}
+  .drawer-footer{padding:10px 16px}
+}
+
+/* ---------- 13. Sidebar rhythm ----------
+   One item height, one group-label style and one 32px collapse target, matching
+   the reference navigation. Routes, drag ordering and the rail are unchanged. */
+.nav-section-label{font-size:12px;font-weight:600;letter-spacing:.06em;color:var(--text3);padding:0 10px 6px}
+.nav-item{min-height:36px;padding:8px 10px;border-radius:var(--radius-sm);font-size:14px}
+.nav-item svg{width:16px;height:16px}
+.nav-collapse-btn{width:32px;height:32px;border-radius:var(--radius-sm)}
+
+/* ---------- 14. Dashboard KPI band ----------
+   The first row reads as a KPI band: no outer hero card, and each tile shows its
+   caption above the value, with the meter last. Markup and ids are unchanged. */
+.dash-hero{background:transparent;border:0;box-shadow:none;padding:0 0 4px}
+.dash-kpi{display:flex;flex-direction:column}
+.dash-kpi .kpi-label{order:-1;margin-bottom:6px;font-size:12px;color:var(--text2)}
+.dash-kpi .kpi-num{order:0}
+.dash-kpi .kpi-meter{order:1}

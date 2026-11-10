@@ -39,7 +39,7 @@ async function loadProviders() {
     const box = _('providersList');
     renderProviderSyncBanner(list);
     refreshProvDetailIfOpen();
-    if (!list.length) { box.innerHTML = listEmptyState(ICON_PROVIDERS, t('暂无自定义 Provider')); return; }
+    if (!list.length) { box.innerHTML = listEmptyState(ICON_PROVIDERS, t('暂无自定义 Provider'), '<button type="button" class="btn btn-sm btn-primary" onclick="openProviderSetup()">' + t('连接 Provider') + '</button>'); return; }
     box.innerHTML = renderProvCooldownBar(list) +
       '<div class="prov-cards">' + list.map(provCardHTML).join('') + '</div>';
     observeProviderSyncDelistings(list, _provSync);

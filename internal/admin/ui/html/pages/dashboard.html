@@ -6,9 +6,20 @@
       <div class="large-subtitle">网关流量、Provider 健康与路由表现。</div>
     </div>
     <div class="action-row">
-      <button class="btn btn-sm" onclick="showOnboardingWelcome(true)">设置指南</button>
-      <button class="btn btn-sm" onclick="switchTab('logs')">查看请求日志</button>
-      <button class="btn btn-sm btn-primary" onclick="openProviderSetup()">连接 Provider</button>
+      <button class="btn" onclick="showOnboardingWelcome(true)">设置指南</button>
+      <button class="btn" onclick="switchTab('logs')">查看请求日志</button>
+      <button class="btn btn-primary" onclick="openProviderSetup()">连接 Provider</button>
+    </div>
+  </div>
+  <!-- The reporting window is a page-level control (reference dashboards put it
+       next to the page title, above every card it filters), not a control buried
+       inside the first card. Same setDashRange() handler and active state. -->
+  <div class="page-toolbar dashboard-toolbar">
+    <div class="dash-ranges" role="group" aria-label="时间窗口">
+      <button type="button" class="chip range" data-hours="1" onclick="setDashRange(1, this)">1h</button>
+      <button type="button" class="chip range active" data-hours="24" onclick="setDashRange(24, this)">24h</button>
+      <button type="button" class="chip range" data-hours="72" onclick="setDashRange(72, this)">3d</button>
+      <button type="button" class="chip range" data-hours="168" onclick="setDashRange(168, this)">7d</button>
     </div>
   </div>
 
@@ -26,12 +37,6 @@
           <span class="ok-lbl">✓ <b id="dashOkCount">0</b></span>
           <span class="err-lbl">✕ <b id="dashErrCount">0</b></span>
           <span class="rate-lbl" id="dashRateLabel">—</span>
-        </div>
-        <div class="dash-ranges" role="group" aria-label="时间窗口">
-          <button type="button" class="chip range" data-hours="1" onclick="setDashRange(1, this)">1h</button>
-          <button type="button" class="chip range active" data-hours="24" onclick="setDashRange(24, this)">24h</button>
-          <button type="button" class="chip range" data-hours="72" onclick="setDashRange(72, this)">3d</button>
-          <button type="button" class="chip range" data-hours="168" onclick="setDashRange(168, this)">7d</button>
         </div>
       </div>
       <div class="dash-kpis">
@@ -85,9 +90,9 @@
     <div class="section-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>常用操作</div>
     <div class="section-desc">直接进入现有管理工作流，操作语义与后端行为保持一致。</div>
     <div class="section-body action-row">
-      <button class="btn btn-primary" onclick="openProviderSetup()">连接 Provider</button>
-      <button class="btn" onclick="switchTab('combos')">配置路由组合</button>
       <button class="btn" onclick="showPageSubTab('credentials','client-keys')">生成 API 密钥</button>
+      <button class="btn" onclick="switchTab('combos')">配置路由组合</button>
+      <button class="btn" onclick="switchTab('routing')">调整路由策略</button>
     </div>
   </div>
 </div>

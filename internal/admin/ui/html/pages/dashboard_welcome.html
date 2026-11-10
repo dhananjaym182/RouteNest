@@ -11,13 +11,13 @@
     <div id="onboardingNotice" class="onboarding-notice" hidden role="alert"></div>
     <ol class="onboarding-checklist">
       <li id="onboardingSecurityStep" class="onboarding-step is-complete">
-        <span class="onboarding-step-index" aria-hidden="true">✓</span><div><h2>管理员安全</h2><p>管理员密码和恢复方式已启用。</p></div><span class="onboarding-status">已完成</span>
+        <span class="onboarding-step-index is-done" aria-hidden="true">✓</span><div><h2>管理员安全</h2><p>管理员密码和恢复方式已启用。</p></div><span class="onboarding-status">已完成</span>
       </li>
       <li id="onboardingProviderStep" class="onboarding-step">
         <span class="onboarding-step-index" aria-hidden="true">2</span><div><h2>连接第一个 Provider</h2><p>复用现有 Provider 设置流程添加账号、Token 或 API Provider。</p></div><button type="button" class="btn btn-primary" onclick="openProviderSetup()">连接 Provider</button>
       </li>
       <li id="onboardingModelsStep" class="onboarding-step">
-        <span class="onboarding-step-index" aria-hidden="true">3</span><div><h2>确认可用模型</h2><p>查看逻辑模型与 Provider Offering，确保至少一个模型可路由。</p></div><button type="button" class="btn" onclick="switchTab('models')">查看模型</button>
+        <span class="onboarding-step-index is-current" aria-hidden="true">3</span><div><h2>确认可用模型</h2><p>查看逻辑模型与 Provider Offering，确保至少一个模型可路由。</p></div><button type="button" class="btn" onclick="switchTab('models')">查看模型</button>
       </li>
       <li id="onboardingKeysStep" class="onboarding-step">
         <span class="onboarding-step-index" aria-hidden="true">4</span><div><h2>配置客户端 API 访问</h2><p>生成客户端密钥；有意保持空密钥时，现有兼容策略不变。</p></div><button type="button" class="btn" onclick="showPageSubTab('credentials','client-keys')">管理 API 密钥</button>

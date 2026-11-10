@@ -97,4 +97,7 @@ var adminUICSSLayers = []string{
 	"ui/css/97_management_tables.css",
 	"ui/css/98_routing_inspector.css",
 	"ui/css/99_access_settings.css",
+	// Final optimization layer: shared radius/elevation/contrast tokens plus the
+	// page-header, toolbar, table, notification and mobile top-bar corrections.
+	"ui/css/100_ui_optimization.css",
 }

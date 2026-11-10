@@ -39,7 +39,7 @@ function renderCombosList() {
     }
   }
   if (!_comboList.length) {
-    box.innerHTML = listEmptyState(ICON_COMBOS, t('暂无模型组合'));
+    box.innerHTML = listEmptyState(ICON_COMBOS, t('暂无模型组合'), '<button type="button" class="btn btn-sm btn-primary" onclick="showComboEditor()">' + t('新建组合') + '</button>');
     return;
   }
   box.innerHTML = '<div class="combos-list"><table class="action-table"><thead><tr>' +

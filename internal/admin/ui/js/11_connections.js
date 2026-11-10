@@ -130,7 +130,7 @@ function connExpiryHtml(c) {
 function renderConnectionsList() {
   const box = _('connectionsList');
   if (!box) return;
-  if (!_connList.length) { box.innerHTML = listEmptyState(ICON_LOGINS, t('暂无登录连接') + ' · ' + t('用设备码登录或导入已有 Token')); return; }
+  if (!_connList.length) { box.innerHTML = listEmptyState(ICON_LOGINS, t('暂无登录连接') + ' · ' + t('用设备码登录或导入已有 Token'), '<button type="button" class="btn btn-sm btn-primary" onclick="showAccountLogin()">' + t('添加账号') + '</button>'); return; }
   const sorted = _connList.slice().sort((a, b) =>
     String(a.provider).localeCompare(String(b.provider)) || String(a.email || '').localeCompare(String(b.email || '')));
   let lastProv = null;

@@ -16,12 +16,25 @@ const I18N_REV = Object.keys(I18N).reduce((acc, k) => {
   else acc[value] = null;
   return acc;
 }, {});
-const _i18nTextSources = new WeakMap();
-const _i18nAttrSources = new WeakMap();
+// Idempotent text lookup, used by applyLang() for text nodes, titles,
+// placeholders and aria-labels. A DOM string may already be a Chinese source
+// key, an unambiguous English value, or unrestricted rendered content (API
+// data, user input, an English value that several keys share). Only the first
+// two forms map back to a key; everything else passes through untouched.
+// applyLang() used to cache each node's previous text in a WeakMap; a second
+// applyLang() call landing on the same node (tab switches, async renders) could
+// leave that second snapshot in place, which surfaced as stray glyphs inside
+// Chinese headings. A stateless lookup cannot drift that way.
 function i18nSourceKey(value) {
   if (!value) return value;
   if (Object.prototype.hasOwnProperty.call(I18N, value)) return value;
-  return I18N_REV[value] || value;
+  if (Object.prototype.hasOwnProperty.call(I18N_REV, value) && I18N_REV[value]) return I18N_REV[value];
+  return value;
+}
+// renderedText returns what `source` should read as in the current language.
+function renderedText(source) {
+  if (LANG !== 'en') return source;
+  return Object.prototype.hasOwnProperty.call(I18N, source) ? I18N[source] : source;
 }
 function applyLang(){
   if (LANG === 'en') {
@@ -39,31 +52,19 @@ function applyLang(){
     if (!txt) continue;
     const trimmed = txt.trim();
     if (!trimmed) continue;
-    let source = _i18nTextSources.get(n);
-    if (!source || trimmed !== source.rendered) {
-      source = { raw: txt, key: i18nSourceKey(trimmed), rendered: trimmed };
-      _i18nTextSources.set(n, source);
-    }
-    const rendered = LANG === 'en' ? (I18N[source.key] || source.key) : source.key;
-    if (trimmed !== rendered) n.nodeValue = source.raw.replace(source.raw.trim(), rendered);
-    source.rendered = rendered;
+    const rendered = renderedText(i18nSourceKey(trimmed));
+    // Preserve the node's own surrounding whitespace (indentation inside
+    // inline text) and only swap the meaningful span.
+    if (trimmed !== rendered) n.nodeValue = txt.replace(trimmed, rendered);
   }
   // Wave-5: placeholder/aria-label carry user-visible copy too, so they follow
   // the same exact-match dictionary as text nodes and [title].
   document.querySelectorAll('[title],[placeholder],[aria-label]').forEach(el=>{
-    let sources = _i18nAttrSources.get(el);
-    if (!sources) { sources = {}; _i18nAttrSources.set(el, sources); }
     for (const attr of ['title','placeholder','aria-label']) {
       const current = (el.getAttribute(attr) || '').trim();
       if (!current) continue;
-      let source = sources[attr];
-      if (!source || current !== source.rendered) {
-        source = { key: i18nSourceKey(current), rendered: current };
-        sources[attr] = source;
-      }
-      const rendered = LANG === 'en' ? (I18N[source.key] || source.key) : source.key;
+      const rendered = renderedText(i18nSourceKey(current));
       if (current !== rendered) el.setAttribute(attr, rendered);
-      source.rendered = rendered;
     }
   });
   document.querySelectorAll('[data-lang-opt]').forEach(btn => {
@@ -95,7 +96,7 @@ function setLang(l){
       loadAdminSessions(); loadAdminUsers(); if (typeof loadTrustedDevices === 'function') loadTrustedDevices(); loadSSOProviders();
     }
   }
-  if (typeof _adminPrincipal !== 'undefined' && _adminPrincipal) toast(l === 'en' ? 'Language switched to English' : '语言已切换为中文', 'success');
+  // No toast: the pressed segment in the language control already confirms the switch.
 }
 LANG = detectLang();
 document.documentElement.lang = (LANG==='en')?'en':'zh-CN';
@@ -179,6 +180,31 @@ function toast(msg, tone) {
     item.classList.remove('show');
     setTimeout(() => { if (item.parentNode) item.parentNode.removeChild(item); }, 300);
   }, 3500 + (_toastSeq++ % 3) * 400);
+}
+
+// 顶部居中的通知用于短时反馈；错误是用户必须处理的状态，改用常驻在右下角
+// 的提醒里，直到用户关闭（Toast 3 秒后消失，错误信息不应跟着消失）。
+function toastError(msg) {
+  const host = _('toastStack');
+  if (!host) { toast(msg, 'error'); return; }
+  let box = _('stickyAlerts');
+  if (!box) {
+    box = document.createElement('div');
+    box.id = 'stickyAlerts';
+    box.className = 'sticky-alerts';
+    box.setAttribute('role', 'alert');
+    host.parentNode.insertBefore(box, host);
+  }
+  const item = document.createElement('div');
+  item.className = 'sticky-alert';
+  item.innerHTML = uiIcon('bolt', 'sticky-alert-icon') + '<span class="sticky-alert-msg"></span>' +
+    '<button type="button" class="sticky-alert-close" aria-label="' + escAttr(t('关闭')) + '">' + uiIcon('close') + '</button>';
+  item.querySelector('.sticky-alert-msg').textContent = String(msg || '');
+  const close = item.querySelector('.sticky-alert-close');
+  close.title = t('关闭');
+  close.addEventListener('click', () => item.remove());
+  box.appendChild(item);
+  while (box.children.length > 3) box.removeChild(box.firstChild);
 }
 
 // 行内保存反馈统一：「✓ 已保存 / ✗ 失败」，4s 后自动清除

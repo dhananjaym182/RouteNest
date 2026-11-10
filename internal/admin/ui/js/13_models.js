@@ -338,7 +338,7 @@ function renderModelList() {
   renderModelStats(merged);
   buildProviderOptions(merged);
   if (!merged.length) {
-    listEl.innerHTML = listEmptyState(ICON_MODELS, t('暂无模型'));
+    listEl.innerHTML = listEmptyState(ICON_MODELS, t('暂无模型'), '<button type="button" class="btn btn-sm btn-primary" onclick="syncModels()">' + t('从 Cline 同步模型') + '</button>');
     return;
   }
   const filtered = merged.filter(modelMatchesFilters);
