@@ -20,7 +20,7 @@ func (s *Service) newSession(u User, method AuthMethod, provider string) (Creden
 	return Credentials{Token: token, CSRFToken: csrf, Principal: p, ExpiresAt: session.ExpiresAt}, session, nil
 }
 func principalFor(u User, session Session) Principal {
-	return Principal{UserID: u.ID, Username: u.Username, Roles: append([]Role(nil), u.Roles...), Method: session.Method, Provider: session.Provider, SessionHash: session.TokenHash, CSRFHash: session.CSRFHash, ExpiresAt: session.ExpiresAt}
+	return Principal{UserID: u.ID, Username: u.Username, Roles: append([]Role(nil), u.Roles...), Method: session.Method, Provider: session.Provider, DeviceID: session.DeviceID, SessionHash: session.TokenHash, CSRFHash: session.CSRFHash, ExpiresAt: session.ExpiresAt}
 }
 func (s *Service) Authenticate(ctx context.Context, token string) (Principal, error) {
 	if e := s.check(); e != nil {
@@ -40,35 +40,27 @@ func (s *Service) authenticateHash(ctx context.Context, hash string) (Principal,
 		return Principal{}, ErrNotInitialized
 	}
 	session, ok := st.Sessions[hash]
-	if !ok || !session.ExpiresAt.After(s.now()) {
+	if !ok || session.TokenHash != hash {
 		return Principal{}, ErrUnauthorized
 	}
-	u, ok := st.Users[session.UserID]
-	if !ok || u.Disabled || u.Revision != session.UserRevision || (u.ID == BreakGlassID && session.Method != MethodLocal) {
-		return Principal{}, ErrUnauthorized
+	p := principalFor(st.Users[session.UserID], session)
+	if err := validatePrincipalState(st, p, s.now()); err != nil {
+		return Principal{}, err
 	}
-	return principalFor(u, session), nil
+	return p, nil
 }
 func (s *Service) validatePrincipal(ctx context.Context, p Principal) error {
 	if e := s.check(); e != nil {
 		return e
 	}
-	current, e := s.authenticateHash(ctx, p.SessionHash)
+	if e := ctx.Err(); e != nil {
+		return e
+	}
+	st, e := s.repo.Load(ctx)
 	if e != nil {
 		return e
 	}
-	if current.UserID != p.UserID || current.CSRFHash != p.CSRFHash || current.Method != p.Method || current.Provider != p.Provider {
-		return ErrUnauthorized
-	}
-	if len(current.Roles) != len(p.Roles) {
-		return ErrUnauthorized
-	}
-	for i, r := range current.Roles {
-		if p.Roles[i] != r {
-			return ErrUnauthorized
-		}
-	}
-	return nil
+	return validatePrincipalState(st, p, s.now())
 }
 func (s *Service) ValidateCSRF(p Principal, token string) error {
 	if e := s.validatePrincipal(context.Background(), p); e != nil {
@@ -77,19 +69,51 @@ func (s *Service) ValidateCSRF(p Principal, token string) error {
 	return ValidateCSRF(p, token)
 }
 func (s *Service) Logout(ctx context.Context, p Principal) error {
+	return s.logout(ctx, p, false, "")
+}
+
+func (s *Service) LogoutWithDevicePause(ctx context.Context, p Principal) error {
+	return s.LogoutWithTrustedDevicePause(ctx, p, "")
+}
+
+func (s *Service) LogoutWithTrustedDevicePause(ctx context.Context, p Principal, id string) error {
+	return s.logout(ctx, p, true, id)
+}
+
+func (s *Service) logout(ctx context.Context, p Principal, pauseDevice bool, deviceID string) error {
 	if e := s.validatePrincipal(ctx, p); e != nil {
 		return e
 	}
 	e := s.apply(ctx, AuditLogout, p.UserID, p.UserID, "", func(st *State) error {
-		if e := validatePrincipalState(*st, p, s.now()); e != nil {
+		now := s.now()
+		if e := validatePrincipalState(*st, p, now); e != nil {
 			return e
+		}
+		if deviceID != "" {
+			if p.Method != MethodLocal || p.Provider != "" {
+				return ErrForbidden
+			}
+			device, exists := st.TrustedDevices[deviceID]
+			if !exists || !validTrustedDeviceToken(deviceID) || device.UserID != p.UserID {
+				return ErrTrustedDeviceUntrusted
+			}
+			if _, e := trustedDeviceUser(*st, deviceID, device); e != nil || device.ActivatedAt.IsZero() || now.Before(device.CreatedAt) || device.ActivatedAt.After(now) || device.LastUsedAt.After(now) {
+				return ErrTrustedDeviceUntrusted
+			}
+			if !device.ExpiresAt.After(now) {
+				return ErrTrustedDeviceExpired
+			}
+			device.AutomaticSignIn = false
+			st.TrustedDevices[deviceID] = device
+		}
+		if id := st.Sessions[p.SessionHash].DeviceID; pauseDevice && id != "" {
+			device := st.TrustedDevices[id]
+			device.AutomaticSignIn = false
+			st.TrustedDevices[id] = device
 		}
 		delete(st.Sessions, p.SessionHash)
 		return nil
 	})
-	if e != nil {
-		s.lockdown()
-	}
 	return e
 }
 func (s *Service) RevokeSession(ctx context.Context, p Principal, hash string) error {
@@ -106,9 +130,6 @@ func (s *Service) RevokeSession(ctx context.Context, p Principal, hash string) e
 		delete(st.Sessions, hash)
 		return nil
 	})
-	if e != nil {
-		s.lockdown()
-	}
 	return e
 }
 func revokeUserSessions(st *State, id string) {
@@ -193,6 +214,7 @@ func (s *Service) IssueFederatedSession(ctx context.Context, provider string, ex
 	if e != nil {
 		return Credentials{}, e
 	}
+	session.Source = authenticationSource(source)
 	e = s.apply(ctx, AuditSSOLogin, u.ID, u.ID, source, func(next *State) error {
 		currentProvider, ok := next.Providers[provider]
 		if !ok || !currentProvider.Enabled || currentProvider.Type != method || currentProvider.Revision != configured.Revision {
@@ -231,12 +253,15 @@ func equalRoles(a, b []Role) bool {
 }
 
 func validatePrincipalState(st State, p Principal, now time.Time) error {
+	if !st.Initialized || st.RecoveryPHC != "" {
+		return ErrUnauthorized
+	}
 	session, ok := st.Sessions[p.SessionHash]
-	if !ok || session.UserID != p.UserID || session.CSRFHash != p.CSRFHash || session.Method != p.Method || session.Provider != p.Provider || !session.ExpiresAt.After(now) {
+	if !ok || session.TokenHash != p.SessionHash || !validDigest(session.TokenHash) || !validDigest(session.CSRFHash) || session.UserID != p.UserID || session.CSRFHash != p.CSRFHash || session.Method != p.Method || session.Provider != p.Provider || session.DeviceID != p.DeviceID || !session.ExpiresAt.Equal(p.ExpiresAt) || now.Before(session.IssuedAt) || !session.ExpiresAt.After(now) || !validTrustedDeviceSession(st, session, now) {
 		return ErrUnauthorized
 	}
 	u, ok := st.Users[p.UserID]
-	if !ok || u.Disabled || u.Revision != session.UserRevision || !equalRoles(u.Roles, p.Roles) {
+	if !ok || u.ID != p.UserID || u.Username != p.Username || u.Disabled || u.Revision != session.UserRevision || !equalRoles(u.Roles, p.Roles) || !validMethod(session.Method) || session.Provider != u.Provider || (session.Method == MethodLocal) != (u.Provider == "") || (u.ID == BreakGlassID && session.Method != MethodLocal) {
 		return ErrUnauthorized
 	}
 	return nil

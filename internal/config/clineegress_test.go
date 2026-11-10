@@ -58,7 +58,7 @@ func TestLoadClineEgressMissingFile(t *testing.T) {
 }
 
 func TestLoadClineEgressCorruptFile(t *testing.T) {
-	path := filepath.Join(t.TempDir(), ".cline-proxy.json")
+	path := filepath.Join(t.TempDir(), ".routenest.json")
 	if err := os.WriteFile(path, []byte("{not json"), 0600); err != nil {
 		t.Fatal(err)
 	}
@@ -72,7 +72,7 @@ func TestLoadClineEgressCorruptFile(t *testing.T) {
 }
 
 func TestSaveLoadClineEgressRoundTrip(t *testing.T) {
-	path := filepath.Join(t.TempDir(), ".cline-proxy.json")
+	path := filepath.Join(t.TempDir(), ".routenest.json")
 	cfg := ClineEgress{Proxies: []string{" http://a:1 ", " "}, ProxyStrategy: "random"}
 	if err := SaveClineEgress(path, &cfg); err != nil {
 		t.Fatalf("save: %v", err)

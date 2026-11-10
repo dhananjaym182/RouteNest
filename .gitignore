@@ -81,9 +81,13 @@ frontend/wailsjs/
 PLAN-*.md
 *.plan.md
 /docs/*
+!/docs/assets/
+!/docs/assets/*
 !/docs/adr/
 !/docs/adr/*.md
 !/docs/admin-security.md
+!/docs/desktop-trusted-auth-research.md
+!/docs/desktop-authentication-review.md
 .omc/
 .freebuff/
 .qoder/

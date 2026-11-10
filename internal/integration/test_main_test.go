@@ -15,7 +15,7 @@ import (
 func TestMain(m *testing.M) {
 	_ = os.Setenv(accounts.InitializeEmptyAccountStoreEnv, "true")
 	app.Configure()
-	tmp, err := os.MkdirTemp("", "cline-proxy-test-*")
+	tmp, err := os.MkdirTemp("", "routenest-test-*")
 	if err != nil {
 		panic(err)
 	}

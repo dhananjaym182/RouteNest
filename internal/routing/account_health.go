@@ -1,6 +1,7 @@
 package routing
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"log"
@@ -48,35 +49,64 @@ func parseCooldownUntil(body string) time.Time {
 // StartCooldownRecovery 启动后台 goroutine，每 30 秒检查一次 cooldown 账号，
 // 对 CooldownUntil 已过期的账号执行探活，成功则自动激活。
 func StartCooldownRecovery() {
+	StartCooldownRecoveryWithContext(context.Background())
+}
+
+func StartCooldownRecoveryWithContext(ctx context.Context) <-chan struct{} {
+	done := make(chan struct{})
 	go func() {
+		defer close(done)
 		ticker := time.NewTicker(30 * time.Second)
 		defer ticker.Stop()
-		for range ticker.C {
-			p := accounts.LoadPool()
-			accounts.PoolMu.Lock()
-			var toRecover []*domain.Account
-			for _, acc := range p.Accounts {
-				if acc.Status != "cooldown" {
-					continue
-				}
+		runCooldownRecovery(ctx, ticker.C, accounts.LoadPool, TestAccount)
+	}()
+	return done
+}
 
-				if acc.CooldownUntil.IsZero() || time.Now().After(acc.CooldownUntil) {
-					toRecover = append(toRecover, acc)
-				}
-			}
-			accounts.PoolMu.Unlock()
-
-			for _, acc := range toRecover {
-				log.Printf("cooldown recovery: testing %s", acc.Email)
-				result := TestAccount(acc)
-				if result.OK {
-					log.Printf("cooldown recovery: %s reactivated", acc.Email)
-				} else {
-					log.Printf("cooldown recovery: %s still unavailable: %s", acc.Email, result.Error)
-				}
+func runCooldownRecovery(ctx context.Context, ticks <-chan time.Time, loadPool func() *domain.AccountPool, testAccount func(*domain.Account) AccountTestResult) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case _, ok := <-ticks:
+			if !ok {
+				return
 			}
 		}
-	}()
+		if ctx.Err() != nil {
+			return
+		}
+		p := loadPool()
+		accounts.PoolMu.Lock()
+		var toRecover []*domain.Account
+		for _, acc := range p.Accounts {
+			if ctx.Err() != nil {
+				accounts.PoolMu.Unlock()
+				return
+			}
+			if acc.Status != "cooldown" {
+				continue
+			}
+
+			if acc.CooldownUntil.IsZero() || time.Now().After(acc.CooldownUntil) {
+				toRecover = append(toRecover, acc)
+			}
+		}
+		accounts.PoolMu.Unlock()
+
+		for _, acc := range toRecover {
+			if ctx.Err() != nil {
+				return
+			}
+			log.Printf("cooldown recovery: testing %s", acc.Email)
+			result := testAccount(acc)
+			if result.OK {
+				log.Printf("cooldown recovery: %s reactivated", acc.Email)
+			} else {
+				log.Printf("cooldown recovery: %s still unavailable: %s", acc.Email, result.Error)
+			}
+		}
+	}
 }
 
 // TestAccount sends a minimal "hi" request through a specific account to verify

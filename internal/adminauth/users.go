@@ -187,6 +187,7 @@ type SessionView struct {
 	UserID    string     `json:"userID"`
 	Method    AuthMethod `json:"method"`
 	Provider  string     `json:"provider,omitempty"`
+	DeviceID  string     `json:"deviceID,omitempty"`
 	IssuedAt  time.Time  `json:"issuedAt"`
 	ExpiresAt time.Time  `json:"expiresAt"`
 	Current   bool       `json:"current"`
@@ -208,7 +209,7 @@ func (s *Service) ListSessions(ctx context.Context, p Principal) ([]SessionView,
 		if !v.ExpiresAt.After(s.now()) {
 			continue
 		}
-		out = append(out, SessionView{ID: h, UserID: v.UserID, Method: v.Method, Provider: v.Provider, IssuedAt: v.IssuedAt, ExpiresAt: v.ExpiresAt, Current: h == p.SessionHash})
+		out = append(out, SessionView{ID: h, UserID: v.UserID, Method: v.Method, Provider: v.Provider, DeviceID: v.DeviceID, IssuedAt: v.IssuedAt, ExpiresAt: v.ExpiresAt, Current: h == p.SessionHash})
 	}
 	return out, nil
 }

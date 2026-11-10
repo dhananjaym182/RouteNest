@@ -12,7 +12,7 @@ async function bootAdminConsole() {
   setInterval(checkModelDelistings, 60000);
   document.addEventListener('visibilitychange', () => { if (!document.hidden) checkModelDelistings(); });
   // 手动改 hash / 浏览器前进后退时同步切换标签页
-  window.addEventListener('hashchange', () => applyTab(getActiveTab()));
+  window.addEventListener('hashchange', () => { if (_adminPrincipal) applyTab(getActiveTab()); });
 }
 
 bootAdminConsole();

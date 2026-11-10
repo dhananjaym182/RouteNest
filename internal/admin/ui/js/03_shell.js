@@ -8,7 +8,32 @@ function adminCookie(name) {
   return '';
 }
 
+let _nativeAdminCSRF = '';
+let _nativeGatewayURL = '';
+
+async function initializeNativeConsoleTransport() {
+  if (!nativeDesktopAvailable()) return;
+  const status = await nativeDesktopCall('DesktopStatus');
+  if (status && typeof status.gatewayURL === 'string') {
+    const gateway = new URL(status.gatewayURL);
+    if (!['http:', 'https:'].includes(gateway.protocol) || gateway.username || gateway.password || gateway.search || gateway.hash || gateway.pathname !== '/v1') throw new Error('invalid_gateway_url');
+    _nativeGatewayURL = gateway.href;
+  }
+}
+
 async function adminFetch(method, path, body) {
+  if (nativeDesktopAvailable()) {
+    const bridge = nativeDesktopBridge();
+    if (!bridge || typeof bridge.AdminRequest !== 'function') throw new Error('bridge_unavailable');
+    const request = { method, path: API + path };
+    if (body !== undefined && body !== null) request.body = JSON.stringify(body);
+    if (method !== 'GET' && method !== 'HEAD' && method !== 'OPTIONS') request.csrf = _nativeAdminCSRF;
+    const result = await bridge.AdminRequest(request);
+    if (!result || !Number.isInteger(result.status) || typeof result.body !== 'string' || result.status < 100 || result.status > 599) throw new Error('invalid_response');
+    if (typeof result.csrf === 'string') _nativeAdminCSRF = result.csrf;
+    else if (result.status === 401 || result.status >= 200 && result.status < 300) _nativeAdminCSRF = '';
+    return new Response(result.body || null, { status: result.status, headers: { 'Content-Type': result.contentType || 'application/json' } });
+  }
   const opts = { method, headers: {}, credentials: 'same-origin' };
   if (body !== undefined && body !== null) {
     opts.headers['Content-Type'] = 'application/json';
@@ -41,6 +66,7 @@ async function api(method, path, body) {
 
 let _gatewayReachable = null;
 function gatewayV1URL() {
+  if (nativeDesktopAvailable()) return _nativeGatewayURL || '—';
   const { protocol, host } = window.location;
   return protocol + '//' + host + '/v1';
 }
@@ -108,6 +134,10 @@ function setAdminAuthMode(mode) {
   if (_('loginLocalHelp')) _('loginLocalHelp').style.display = bootstrap ? 'none' : '';
   const forgot = _('forgotPasswordButton');
   if (forgot) forgot.hidden = _adminAuthMode !== 'login' || !(_adminAuthStatus && _adminAuthStatus.recoveryCodeAvailable);
+  const desktopTrust = _('desktopTrustLoginRow');
+  if (desktopTrust) desktopTrust.hidden = _adminAuthMode !== 'login' || !nativeDesktopAvailable();
+  const browserNotice = _('browserLoginNotice');
+  if (browserNotice) browserNotice.textContent = t(nativeDesktopAvailable() ? '可选择信任此设备。RouteNest 只保存可撤销的操作系统保护凭据，不保存密码。' : '普通浏览器需要独立登录，不会使用桌面设备凭据。');
   const title = _('loginTitle'), help = _('loginHelp'), button = _('loginSubmit');
   if (_adminAuthMode === 'bootstrap') {
     if (title) title.textContent = t('初始化管理员');
@@ -122,23 +152,26 @@ function setAdminAuthMode(mode) {
     if (help) help.textContent = t('旧密码验证成功后必须升级为至少 8 位的新密码。');
     if (button) button.textContent = t('升级并登录');
   } else {
-    if (title) title.textContent = 'RouteNest ' + t('管理后台');
+    if (title) title.textContent = t('登录');
     if (help) help.textContent = t('请输入管理员用户名和密码。');
     if (button) button.textContent = t('登录');
   }
   renderSSOLoginProviders();
+  if (typeof updateAdminAuthPageTitle === 'function') updateAdminAuthPageTitle();
 }
 
 function showLogin(mode) {
-  if (mode) setAdminAuthMode(mode);
-  const ov = _('loginOverlay');
-  if (ov && ov.style.display !== 'flex') {
-    ov.style.display = 'flex';
-    setTimeout(() => {
-      const target = (_adminAuthMode === 'bootstrap' || _adminAuthMode === 'recovery') ? _('bootstrapSecret') : _('loginPassword');
-      if (target) target.focus();
-    }, 50);
-  }
+  const root = document.documentElement;
+  const opening = !root || root.dataset.adminAuth !== 'signed-out' || !!mode && mode !== _adminAuthMode;
+  renderAdminPrincipal(null);
+  setAdminAuthMode(mode || _adminAuthMode);
+  if (typeof syncAdminAuthRoute === 'function') syncAdminAuthRoute();
+  else if (_('loginOverlay')) _('loginOverlay').style.display = 'flex';
+  if (opening) setTimeout(() => {
+    if (root && root.dataset.adminAuthView && root.dataset.adminAuthView !== 'login') return;
+    const target = (_adminAuthMode === 'bootstrap' || _adminAuthMode === 'recovery') ? _('bootstrapSecret') : _('loginPassword');
+    if (target && !target.closest('[inert]')) target.focus();
+  }, 50);
 }
 
 function renderSSOLoginProviders() {
@@ -166,10 +199,9 @@ async function startSSOLogin(provider) {
   buttons.forEach(button => { button.disabled = true; });
   _('loginError').textContent = '';
   try {
-    const response = await fetch(API + '/auth/' + provider.type + '/start', {
-      method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ provider: provider.id, returnLocation: location.pathname + location.search + location.hash })
-    });
+    if (typeof rememberAdminAuthDestination === 'function') rememberAdminAuthDestination();
+    const returnLocation = location.pathname + '#' + (typeof _adminAuthReturnTab === 'string' ? _adminAuthReturnTab : 'dashboard');
+    const response = await adminFetch('POST', '/auth/' + provider.type + '/start', { provider: provider.id, returnLocation });
     const envelope = await response.json().catch(() => ({}));
     const result = envelope.data || envelope;
     if (!response.ok || envelope.success === false || !result.redirectURL) throw new Error(envelope.error || t('单点登录暂不可用'));
@@ -205,10 +237,15 @@ async function submitLogin() {
     } else if (_adminAuthMode === 'legacy') {
       path = '/auth/legacy/rotate'; body = { username: username, oldPassword: pwd, newPassword: newPassword };
     }
-    const res = await fetch(API + path, {
-      method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body)
-    });
+    if (_adminAuthMode === 'login' && nativeDesktopAvailable()) {
+      const trustDevice = !!(_('desktopTrustLoginCheck') && _('desktopTrustLoginCheck').checked);
+      const result = await nativeDesktopCall('SignIn', { username, password: pwd, trustDevice });
+      if (!result || typeof result.handoffToken !== 'string' || !result.handoffToken || result.adminURL !== '/admin/') throw new Error(t('登录失败'));
+      if (_('loginPassword')) _('loginPassword').value = '';
+      location.replace(result.adminURL + '#desktop-handoff=' + encodeURIComponent(result.handoffToken));
+      return;
+    }
+    const res = await adminFetch('POST', path, body);
     const data = await res.json().catch(() => ({}));
     if (res.ok && data.success) {
       location.reload();
@@ -219,7 +256,16 @@ async function submitLogin() {
       _('loginError').textContent = data.error || t('登录失败');
       if (_('loginPassword')) _('loginPassword').value = '';
     }
-  } catch (e) { _('loginError').textContent = t('网络错误，请重试'); }
+  } catch (reason) {
+    const code = typeof desktopSecurityErrorParts === 'function' ? desktopSecurityErrorParts(reason).code : reason.message;
+    if (code === 'password_rotation_required') {
+      setAdminAuthMode('legacy');
+      _('loginError').textContent = t('此安装仍使用旧密码格式，请设置新的永久密码。');
+    } else {
+      _('loginError').textContent = nativeDesktopAvailable() ? desktopSecurityErrorText(reason, '登录失败') : t('网络错误，请重试');
+    }
+    if (_('loginPassword')) _('loginPassword').value = '';
+  }
   finally { if (button) button.disabled = false; }
 }
 
@@ -240,6 +286,19 @@ function renderAdminRoleBadges(host, roles) {
 
 function renderAdminPrincipal(principal) {
   _adminPrincipal = principal || null;
+  const root = document.documentElement;
+  if (root) root.dataset.adminAuth = _adminPrincipal ? 'authenticated' : 'signed-out';
+  const authPage = _('adminAuthPage');
+  if (authPage) authPage.hidden = !!_adminPrincipal;
+  const login = _('loginOverlay');
+  const recovery = _('passwordRecoveryOverlay');
+  if (_adminPrincipal) {
+    if (login) { login.hidden = true; login.style.display = 'none'; }
+    if (recovery) { recovery.hidden = true; recovery.style.display = 'none'; }
+    if (typeof restoreAdminAuthDestination === 'function') restoreAdminAuthDestination();
+  } else if (typeof showAdminAuthPage === 'function') {
+    showAdminAuthPage(root && root.dataset.adminAuthView || 'login');
+  } else if (login) { login.hidden = false; login.style.display = 'flex'; }
   const identity = _('adminIdentity');
   if (identity) identity.textContent = principal ? principal.username : t('未登录');
   renderAdminRoleBadges(_('adminRoles'), principal && principal.roles);
@@ -282,8 +341,9 @@ function applyAdminPermissionVisibility() {
 
 async function initializeAdminAuth() {
   try {
+    await initializeNativeConsoleTransport();
     if (typeof consumeDesktopSessionHandoff === 'function') await consumeDesktopSessionHandoff();
-    const statusResponse = await fetch(API + '/auth/status', { credentials: 'same-origin' });
+    const statusResponse = await adminFetch('GET', '/auth/status');
     const statusEnvelope = await statusResponse.json();
     if (!statusResponse.ok || !statusEnvelope.success) throw new Error(statusEnvelope.error || 'security_unavailable');
     _adminAuthStatus = statusEnvelope.data || {};
@@ -291,14 +351,15 @@ async function initializeAdminAuth() {
     renderSSOLoginProviders();
     if (_adminAuthStatus.bootstrapRequired) { showLogin('bootstrap'); return false; }
     if (_adminAuthStatus.recoveryRequired) { showLogin('recovery'); return false; }
-    const sessionResponse = await fetch(API + '/auth/session', { credentials: 'same-origin' });
+    const sessionResponse = await adminFetch('GET', '/auth/session');
     const sessionEnvelope = await sessionResponse.json().catch(() => ({}));
     if (sessionResponse.status === 401) {
       showLogin(_adminAuthStatus.legacyRotationRequired ? 'legacy' : 'login');
       return false;
     }
-    if (!sessionResponse.ok || !sessionEnvelope.success) throw new Error(sessionEnvelope.error || 'session_unavailable');
-    renderAdminPrincipal(sessionEnvelope.data.principal);
+    const principal = sessionEnvelope.data && sessionEnvelope.data.principal;
+    if (!sessionResponse.ok || !sessionEnvelope.success || !principal || typeof principal.userID !== 'string' || !principal.userID || typeof principal.username !== 'string' || !Array.isArray(principal.roles)) throw new Error(sessionEnvelope.error || 'session_unavailable');
+    renderAdminPrincipal(principal);
     return true;
   } catch (e) {
     setGatewayReachability(false);
@@ -310,9 +371,22 @@ async function initializeAdminAuth() {
 
 async function logoutAdmin() {
   try {
-    await api('POST', '/logout', {});
-  } catch (e) {}
-  location.reload();
+    if (nativeDesktopAvailable()) {
+      const result = await nativeDesktopCall('SignOutDesktop');
+      _nativeAdminCSRF = '';
+      if (result && result.automaticSignInPauseIncomplete) toast(t('会话已结束，但无法确认自动登录已暂停。请修复凭据存储或通过浏览器撤销此设备。'), 'error');
+      else if (result && result.storageWarning) toast(t('会话已结束，但本机自动登录状态更新失败。服务器端自动登录已暂停。'), 'error');
+    } else {
+      await api('POST', '/logout', {});
+    }
+    renderAdminPrincipal(null);
+    location.reload();
+  } catch (reason) {
+    const error = _('desktopSignInError');
+    const message = nativeDesktopAvailable() ? desktopSecurityErrorText(reason, '退出登录失败') : reason.message || t('退出登录失败');
+    if (error) error.textContent = message;
+    else toast(message, 'error');
+  }
 }
 
 // 用系统默认浏览器打开外部链接（桌面 WebView 内导航不会跳外部浏览器，需走后端）
@@ -464,7 +538,22 @@ document.querySelectorAll('.drawer').forEach(dr => setDrawerInert(dr, !dr.classL
 // common visibility boundary so every modal gets the same focus trap and return.
 const _modalStack = [];
 const _modalReturnFocus = new WeakMap();
+const _modalBackgroundInert = new Map();
 const _modalVisible = el => !!el && !el.hidden && getComputedStyle(el).display !== 'none';
+function syncModalBackgroundInert() {
+  const top = [..._modalStack].reverse().find(_modalVisible);
+  for (const [element, previous] of _modalBackgroundInert) {
+    if (previous) element.setAttribute('inert', '');
+    else element.removeAttribute('inert');
+  }
+  _modalBackgroundInert.clear();
+  if (!top) return;
+  for (const element of document.body.children) {
+    if (element === top || element.contains(top)) continue;
+    _modalBackgroundInert.set(element, element.hasAttribute('inert'));
+    element.setAttribute('inert', '');
+  }
+}
 function modalFocusScope(overlay) {
   return overlay && (overlay.querySelector('[role="alertdialog"],[role="dialog"],.modal-card,.login-card,#modelSyncModal') || overlay);
 }
@@ -498,8 +587,9 @@ function syncModalFocusState(overlay) {
       }
     }, 0);
   }
+  syncModalBackgroundInert();
 }
-const _modalOverlays = Array.from(document.querySelectorAll('.overlay-modal,#modelSyncOverlay,#loginOverlay'));
+const _modalOverlays = Array.from(document.querySelectorAll('.overlay-modal,#modelSyncOverlay'));
 const _modalObserver = new MutationObserver(records => records.forEach(record => syncModalFocusState(record.target)));
 _modalOverlays.forEach(overlay => {
   _modalObserver.observe(overlay, { attributes: true, attributeFilter: ['style', 'class', 'hidden'] });

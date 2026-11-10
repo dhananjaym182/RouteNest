@@ -3,8 +3,11 @@ package admin
 import (
 	"context"
 	"errors"
+	"net"
 	"net/http"
+	"net/url"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -77,7 +80,7 @@ func (runtime *adminSecurityRuntime) handler(registry *adminRouteRegistry) http.
 
 		if policy.CSRF != csrfOIDCCallback && policy.CSRF != csrfSAMLACS {
 			mutation := policy.CSRF == csrfSession || policy.CSRF == csrfLocalEntry || policy.CSRF == csrfSSOStart
-			allowLoopbackMissingOrigin := policy.CSRF == csrfSession || policy.CSRF == csrfLocalEntry || policy.CSRF == csrfSSOStart
+			allowLoopbackMissingOrigin := policy.CSRF == csrfLocalEntry || policy.CSRF == csrfSSOStart
 			if err := adminauth.ValidateSameOrigin(r, security, mutation, allowLoopbackMissingOrigin); err != nil {
 				if !policy.Public {
 					runtime.service.RecordDenial(adminauth.AuditCSRFDenied, security.ClientIP.String())
@@ -111,7 +114,15 @@ func (runtime *adminSecurityRuntime) staticHandler(next http.Handler) http.Handl
 		applyAdminSecurityHeaders(w, false, runtime.formActionOrigins())
 		security, err := adminauth.ResolveRequestSecurity(r, runtime.requestOptions)
 		if err != nil {
-			writeAdminSecurityError(w, http.StatusBadRequest, "invalid_request_context")
+			redirectSecurity, location, ok := runtime.localAdminLandingRedirect(r)
+			if !ok {
+				writeAdminSecurityError(w, http.StatusBadRequest, "invalid_request_context")
+				return
+			}
+			if runtime.enableHSTS && redirectSecurity.Secure {
+				w.Header().Set("Strict-Transport-Security", "max-age=31536000")
+			}
+			http.Redirect(w, r, location, http.StatusTemporaryRedirect)
 			return
 		}
 		if runtime.enableHSTS && security.Secure {
@@ -125,6 +136,84 @@ func (runtime *adminSecurityRuntime) staticHandler(next http.Handler) http.Handl
 		ctx = context.WithValue(ctx, adminSecurityRuntimeContextKey{}, runtime)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
+}
+
+func (runtime *adminSecurityRuntime) localAdminLandingRedirect(r *http.Request) (adminauth.RequestSecurity, string, bool) {
+	var empty adminauth.RequestSecurity
+	if r == nil || r.URL == nil || (r.Method != http.MethodGet && r.Method != http.MethodHead) || r.URL.Path != "/admin/" || (r.URL.RawPath != "" && r.URL.RawPath != "/admin/") {
+		return empty, "", false
+	}
+	opts := runtime.requestOptions
+	if opts.ProxyMode || len(opts.TrustedProxyCIDRs) != 0 || opts.CanonicalURL == nil || adminLandingHasForwardingHeaders(r.Header) {
+		return empty, "", false
+	}
+	canonicalScheme, canonicalAuthority, err := adminauth.NormalizeCanonicalURL(opts.CanonicalURL)
+	if err != nil {
+		return empty, "", false
+	}
+	canonicalHost, canonicalPort, ok := adminLandingAuthority(canonicalAuthority, canonicalScheme)
+	if !ok || !adminLandingLoopbackHost(canonicalHost) {
+		return empty, "", false
+	}
+	directOpts := opts
+	directOpts.CanonicalURL = nil
+	security, err := adminauth.ResolveRequestSecurity(r, directOpts)
+	if err != nil || security.TrustedProxy || security.PeerIP == nil || security.ClientIP == nil || !security.PeerIP.IsLoopback() || !security.ClientIP.IsLoopback() {
+		return empty, "", false
+	}
+	if err := adminauth.ValidateSameOrigin(r, security, false, false); err != nil {
+		return empty, "", false
+	}
+	requestHost, requestPort, ok := adminLandingAuthority(security.ExternalHost, security.ExternalScheme)
+	if !ok || security.ExternalScheme != canonicalScheme || requestPort != canonicalPort || !adminLandingAliasHost(requestHost) || security.ExternalHost == canonicalAuthority {
+		return empty, "", false
+	}
+	location := (&url.URL{Scheme: canonicalScheme, Host: canonicalAuthority, Path: "/admin/"}).String()
+	return security, location, true
+}
+
+func adminLandingAuthority(authority, scheme string) (string, int, bool) {
+	parsed, err := url.Parse("//" + authority)
+	if err != nil || parsed.Hostname() == "" {
+		return "", 0, false
+	}
+	port := 80
+	if scheme == "https" {
+		port = 443
+	}
+	if rawPort := parsed.Port(); rawPort != "" {
+		port, err = strconv.Atoi(rawPort)
+		if err != nil || port < 1 || port > 65535 {
+			return "", 0, false
+		}
+	}
+	return strings.ToLower(parsed.Hostname()), port, true
+}
+
+func adminLandingHasForwardingHeaders(header http.Header) bool {
+	for name := range header {
+		if strings.EqualFold(name, "Forwarded") || strings.HasPrefix(strings.ToLower(name), "x-forwarded-") {
+			return true
+		}
+	}
+	return false
+}
+
+func adminLandingAliasHost(host string) bool {
+	switch host {
+	case "localhost", "127.0.0.1", "::1":
+		return true
+	default:
+		return false
+	}
+}
+
+func adminLandingLoopbackHost(host string) bool {
+	if host == "localhost" {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }
 
 func (runtime *adminSecurityRuntime) handlePreflight(w http.ResponseWriter, r *http.Request, registry *adminRouteRegistry, security adminauth.RequestSecurity) {

@@ -117,6 +117,7 @@ function applyTab(name){
     if (typeof adminHasPermission === 'function' && adminHasPermission('security.write')) {
       loadAdminSessions();
       if (typeof loadAdminUsers === 'function') loadAdminUsers();
+      if (typeof loadTrustedDevices === 'function') loadTrustedDevices();
       if (typeof loadSSOProviders === 'function') loadSSOProviders();
     }
     renderAdminPrincipal(_adminPrincipal);

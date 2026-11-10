@@ -1,0 +1,199 @@
+{
+  "evidence": "real HTTP service + headless Chromium browser; no authentication API mocks; not Wails or OS-keyring runtime",
+  "counters": {
+    "securityChecks": 397,
+    "httpChecks": 177,
+    "uiChecks": 54,
+    "navigationChecks": 158,
+    "aliasChecks": 14,
+    "accessibilityChecks": 848,
+    "contrastSamples": 213,
+    "reflowCells": 80,
+    "zoomCells": 32,
+    "screenshots": 17
+  },
+  "diagnostics": {
+    "consoleErrors": 36,
+    "pageErrors": 0,
+    "requestFailures": 0,
+    "externalRequests": 0,
+    "auxiliaryReadDeadlineHits": 0,
+    "auxiliaryHTTPFailures": 15,
+    "authenticationHTTPFailures": 21,
+    "otherHTTPFailures": 0,
+    "expectedNegativeResponses": 50,
+    "throttleRetries": 12,
+    "throttleWaitMs": 96200,
+    "contrastUnsupported": 0,
+    "minimum24Targets": 860,
+    "spacing24Targets": 20,
+    "comfortable44Targets": 615,
+    "pageErrorCategories": {},
+    "failedResponseCategories": {
+      "authentication:401": 12,
+      "authentication:429": 9,
+      "auxiliary:401": 15
+    }
+  },
+  "inventory": [
+    {
+      "label": "initial",
+      "sessions": 1,
+      "breakGlassSessions": 1,
+      "otherUserSessions": 0,
+      "trackedSessionsPresent": 1,
+      "untrackedSessions": 0,
+      "devices": 0,
+      "seededDevices": 0
+    },
+    {
+      "label": "authenticated-browser",
+      "sessions": 2,
+      "breakGlassSessions": 2,
+      "otherUserSessions": 0,
+      "trackedSessionsPresent": 2,
+      "untrackedSessions": 0,
+      "devices": 0,
+      "seededDevices": 0
+    },
+    {
+      "label": "after-boundary-negatives",
+      "sessions": 2,
+      "breakGlassSessions": 2,
+      "otherUserSessions": 0,
+      "trackedSessionsPresent": 2,
+      "untrackedSessions": 0,
+      "devices": 0,
+      "seededDevices": 0
+    },
+    {
+      "label": "before-password-change",
+      "sessions": 2,
+      "breakGlassSessions": 2,
+      "otherUserSessions": 0,
+      "trackedSessionsPresent": 2,
+      "untrackedSessions": 0,
+      "devices": 0,
+      "seededDevices": 0
+    },
+    {
+      "label": "password-change-source",
+      "sessions": 3,
+      "breakGlassSessions": 2,
+      "otherUserSessions": 1,
+      "trackedSessionsPresent": 3,
+      "untrackedSessions": 0,
+      "devices": 0,
+      "seededDevices": 0
+    },
+    {
+      "label": "after-password-change",
+      "sessions": 2,
+      "breakGlassSessions": 1,
+      "otherUserSessions": 1,
+      "trackedSessionsPresent": 2,
+      "untrackedSessions": 0,
+      "devices": 0,
+      "seededDevices": 0
+    },
+    {
+      "label": "after-code-issuance",
+      "sessions": 2,
+      "breakGlassSessions": 1,
+      "otherUserSessions": 1,
+      "trackedSessionsPresent": 2,
+      "untrackedSessions": 0,
+      "devices": 0,
+      "seededDevices": 0
+    },
+    {
+      "label": "before-code-reset",
+      "sessions": 3,
+      "breakGlassSessions": 2,
+      "otherUserSessions": 1,
+      "trackedSessionsPresent": 3,
+      "untrackedSessions": 0,
+      "devices": 0,
+      "seededDevices": 0
+    },
+    {
+      "label": "after-first-code-reset",
+      "sessions": 1,
+      "breakGlassSessions": 1,
+      "otherUserSessions": 0,
+      "trackedSessionsPresent": 1,
+      "untrackedSessions": 0,
+      "devices": 0,
+      "seededDevices": 0
+    },
+    {
+      "label": "after-replacement-code-reset",
+      "sessions": 1,
+      "breakGlassSessions": 1,
+      "otherUserSessions": 0,
+      "trackedSessionsPresent": 1,
+      "untrackedSessions": 0,
+      "devices": 0,
+      "seededDevices": 0
+    },
+    {
+      "label": "final-restored-password",
+      "sessions": 1,
+      "breakGlassSessions": 1,
+      "otherUserSessions": 0,
+      "trackedSessionsPresent": 1,
+      "untrackedSessions": 0,
+      "devices": 0,
+      "seededDevices": 0
+    }
+  ],
+  "screenshotLabels": [
+    "login-light-en-1440",
+    "login-light-zh-1440",
+    "login-dark-en-1440",
+    "login-dark-zh-1440",
+    "security-light-en-1440",
+    "security-light-zh-1440",
+    "security-dark-en-1440",
+    "security-dark-zh-1440",
+    "issued-code-redacted",
+    "recovery-form-light-en-1440",
+    "recovery-form-light-zh-1440",
+    "recovery-form-dark-en-1440",
+    "recovery-form-dark-zh-1440",
+    "recovery-result-light-en-1440",
+    "recovery-result-light-zh-1440",
+    "recovery-result-dark-en-1440",
+    "recovery-result-dark-zh-1440"
+  ],
+  "failures": [],
+  "coverage": {
+    "isolatedTemporaryPool": true,
+    "bootstrap": "already initialized; supplied password authenticated over real HTTP",
+    "browserPasswordLogins": 5,
+    "nativeDeviceTransitions": "Not exercised: ordinary HTTP browsers cannot enroll or use OS credentials. Native device transitions are covered separately by Go tests, not this browser run; this harness does not run or certify those tests.",
+    "nativeHandoff": {
+      "fabricatedTokenProbes": 2,
+      "validTokenProbes": 0,
+      "validTokenLimitation": "No native-issued token is available to an ordinary HTTP browser; fabricated tokens are not valid-token evidence."
+    },
+    "loginResponse": "Immediate UI reload can evict the login response body in Chromium. Login requires HTTP 200 plus a fresh authenticated session API response and authenticated principal/owner DOM, never visibility or status alone.",
+    "deviceFixtures": "none; a nonempty initial device list is rejected",
+    "nativeErrorPresentation": "Browser-only production guard invoked directly to inspect its real error presentation; no native transition or OS failure is simulated.",
+    "navigation": "13 canonical sidebar destinations and four aliases at 1440/light/EN and 390/dark/ZH; comprehensive history/font/width matrix remains in the existing navigation harness",
+    "accessibility": "Targeted computed sRGB text contrast, semantics, target size/spacing, keyboard/modal, reduced-motion and reflow checks; not a WCAG conformance audit.",
+    "zoom": "200%/400% desktop equivalent: effective layout viewport 720/360 CSS px with Chromium device scale 2/4, verified from innerWidth, DPR and layout; not native browser-menu zoom.",
+    "auxiliaryErrors": "Provider/model/network/update reads are diagnostic-only unless authentication, route ownership or tested security UI fails. No provider mutation controls are used; server-side upstream egress is not observable here.",
+    "cleanup": "test password restored/preserved; any harness-created viewer removed; recovery verifier intentionally rotated; stop server and discard isolated data",
+    "recoveryProof": "management replacement, successful reset, used-code rejection and successful replacement-code reset verified through actual UI; codes never persisted by harness",
+    "axe": {
+      "status": "unavailable; optional local axe-core only",
+      "runs": 0,
+      "incomplete": 0
+    },
+    "otherUserFixture": "one disposable local viewer created by real authenticated HTTP; no device fixture",
+    "finalAuthentication": "restored password verified by real UI plus HTTP session/owner DOM, then explicitly signed out"
+  },
+  "ok": true,
+  "completedJourneys": true
+}

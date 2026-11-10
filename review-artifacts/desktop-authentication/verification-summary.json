@@ -1,0 +1,42 @@
+{
+  "baseCommit": "4099b30fbecb97f0fe4c21416412565ac523da21",
+  "scope": "uncommitted source review; no packaged Wails/OS-vault runtime certification",
+  "go": {
+    "normalFullSuite": "pass, all 54 packages",
+    "raceFullSuite": "pass with -race -p 1; cached successful packages reused",
+    "nativeRootRace": "pass -tags desktop -race -count=1, 81.819 seconds, after cooldown cancellation/join fix",
+    "static": "go build ./..., go vet ./..., go vet -tags desktop ./..., go mod verify, assembled JS syntax, and git diff --check pass",
+    "earlierRuns": "parallel race/Argon2 hit existing hashing deadline once; concurrent test rename caused one generated-test-main compile failure; isolated retry passed, no production deadlines weakened"
+  },
+  "javascript": {
+    "mjsTests": 196,
+    "accountDeletionTests": 2,
+    "harnessSelfTests": 12,
+    "localizationKeys": 1566,
+    "missingDuplicateDeadUnkeyed": 0
+  },
+  "browser": {
+    "authEvidence": "browser-journeys.json",
+    "navigationEvidence": "browser-navigation.json",
+    "olderAccessHarness": "browser-access.json records incomplete Enter/form lifecycle coverage; new auth harness passes actual HTTP journeys",
+    "screenshotsRetained": 10,
+    "nativeUISimulation": "32 cases, 742 assertions, 80 screenshots; no Wails or OS-keyring runtime"
+  },
+  "builds": {
+    "windowsProduction": "cross-compilation pass",
+    "darwinArm64CGO0": "compile-only pass with -exec=true; native Security.framework adapter not verified",
+    "linuxProduction": "blocked: GTK3/WebKit2GTK development packages missing"
+  },
+  "limitations": [
+    "Packaged Windows/macOS/Linux window and real OS vault journeys not executed",
+    "axe-core, Docker, PowerShell, govulncheck, staticcheck unavailable",
+    "same-user host compromise remains outside vault/origin protection"
+  ],
+  "worktree": {
+    "committed": false,
+    "staged": false,
+    "pushed": false,
+    "released": false,
+    "testCredentialsRemoved": true
+  }
+}

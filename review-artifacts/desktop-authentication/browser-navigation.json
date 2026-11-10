@@ -1,0 +1,15 @@
+{
+  "navigationChecks": 156,
+  "aliasChecks": 48,
+  "historyChecks": 48,
+  "localizationChecks": 24,
+  "fontChecks": 72,
+  "focusChecks": 96,
+  "screenshots": 96,
+  "failures": [],
+  "diagnostics": {
+    "consoleErrors": 0,
+    "pageErrors": 0,
+    "requestFailures": 0
+  }
+}

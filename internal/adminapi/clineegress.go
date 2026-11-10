@@ -37,7 +37,7 @@ func (h *ClineEgress) logf(format string, args ...any) {
 	log.Printf(format, args...)
 }
 
-// Config handles GET /admin/api/cline-proxy/config with masked proxies.
+// Config handles GET /admin/api/routenest/config with masked proxies.
 func (h *ClineEgress) Config(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		httpx.WriteAPI(w, http.StatusMethodNotAllowed, httpx.Response{Error: h.msg(r, "method_not_allowed")})
@@ -54,7 +54,7 @@ func (h *ClineEgress) Config(w http.ResponseWriter, r *http.Request) {
 	}})
 }
 
-// Update handles POST /admin/api/cline-proxy/config/update.
+// Update handles POST /admin/api/routenest/config/update.
 func (h *ClineEgress) Update(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		httpx.WriteAPI(w, http.StatusMethodNotAllowed, httpx.Response{Error: h.msg(r, "method_not_allowed")})

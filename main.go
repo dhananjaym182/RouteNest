@@ -23,10 +23,11 @@ import (
 func main() {
 	if handled, err := runAdminRecoveryCommand(os.Args[1:]); handled {
 		if err != nil {
-			log.Fatalf("Administrator recovery failed: %v", err)
+			log.Fatalf("Administrator authentication command failed: %v", err)
 		}
 		return
 	}
+	configureRootHelp(flag.CommandLine)
 	loginMode := flag.Bool("login", false, "Run OAuth device login flow and add account to pool")
 	captureMode := flag.Bool("capture", false, "Run interactive OAuth capture (records ALL traffic)")
 	port := flag.Int("port", 3457, "Proxy server port")
@@ -116,9 +117,9 @@ func configuredHost() string {
 }
 
 func buildAndStart(host string, port int) {
-	exe := "cline-proxy.exe"
+	exe := "routenest.exe"
 	if runtime.GOOS != "windows" {
-		exe = "./cline-proxy"
+		exe = "./routenest"
 	}
 
 	fmt.Println("Building proxy...")
@@ -134,7 +135,7 @@ func buildAndStart(host string, port int) {
 	running := false
 	if runtime.GOOS == "windows" {
 		out, _ := exec.Command("powershell", "-Command",
-			"Get-Process cline-proxy -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Id").Output()
+			"Get-Process routenest -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Id").Output()
 		if len(out) > 0 {
 			running = true
 		}

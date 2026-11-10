@@ -1,5 +1,6 @@
 // ========== Quick Start：从当前运行实例生成可执行的客户端示例 ==========
 function quickStartGatewayBase() {
+  if (typeof nativeDesktopAvailable === 'function' && nativeDesktopAvailable()) return gatewayV1URL().replace(/\/v1\/?$/, '');
   try { return location.origin.replace(/\/$/, ''); } catch (e) { return 'http://127.0.0.1:3457'; }
 }
 

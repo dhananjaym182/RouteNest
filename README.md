@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="docs/assets/routenest-icon.svg" alt="RouteNest Logo" width="108" height="108" />
+
 # RouteNest
 
 **One endpoint. Multiple providers. Your models.**
@@ -41,8 +43,11 @@ Provider availability, authentication requirements, free allowances and supporte
 
 > **Security:** RouteNest has no universal default password and never permits anonymous administrative operations. A fresh install starts in one-time bootstrap mode and requires a permanent local administrator password before normal administration. The static admin shell and narrow status, bootstrap, login and SSO protocol-entry routes are public but do not grant administrative access.
 
-- **Bootstrap:** the CLI prints a generated one-time secret only to its controlling terminal. A first start without a controlling terminal must provide `ROUTENEST_ADMIN_BOOTSTRAP_PASSWORD`; the retained initialized authority ignores it. The desktop app uses a one-shot native dialog.
-- **Passwords:** permanent administrator passwords require at least 8 characters, with a maximum of 1024 UTF-8 bytes. Password changes revoke all sessions for that administrator.
+- **Bootstrap:** the CLI prints a generated one-time secret only to its controlling terminal. A first start without a controlling terminal must provide `ROUTENEST_ADMIN_BOOTSTRAP_PASSWORD`; the retained initialized authority ignores it. The desktop app provides native first-run setup without a terminal or environment variable.
+- **Desktop sign-in:** after password authentication, users can explicitly trust the desktop app. RouteNest stores a random revocable credential in Windows Credential Manager, the macOS Keychain, or Linux Secret Service, never the administrator password. Ordinary browsers still authenticate independently. Unavailable or damaged protected storage falls back to password login without plaintext storage.
+- **Passwords:** permanent administrator passwords require at least 8 characters, with a maximum of 1024 UTF-8 bytes. Password changes revoke all sessions and trusted devices for that administrator.
+- **Lock and sign out:** Lock ends only the current session. Sign out ends it and pauses desktop automatic sign-in without asking for the password merely to exit. Forget this device revokes its registration and verifies local credential deletion. Password login does not silently resume paused trust.
+- **Native isolation:** Wails v2.17.1 keeps setup and the dashboard on the embedded origin with no extra binding origins. Desktop session handoffs and protected API calls stay in process; an ordinary browser or preoccupied localhost port cannot receive native authority. Packaged WebView and real OS-vault verification remains separate from unit tests and cross-compilation.
 - **Separate controls:** Client API keys protect model and inference routes, including the key-wrapped `/v1/*` routes, once at least one key is loaded; `/health` and `/v1/health` are public liveness probes. `/ready` and `/v1/ready` are public readiness probes that return HTTP 503 when client-authentication storage is unavailable. An empty key list leaves the key-wrapped routes open for compatibility only after valid storage has loaded. Durable administrator sessions and server-side RBAC protect administrative operations; the listed bootstrap/login/SSO entry routes remain public and separately validated. Admin sessions store only hashed tokens, survive restart, can be revoked, and require session-bound CSRF tokens for authenticated mutations.
 - **Account-only deletion:** **Delete All Accounts** removes Cline accounts and their account-owned state only. Client API keys, models, the default model, listener settings, removal reservations and legacy migration sentinels are preserved. The operation reports success only after durable persistence.
 - **Hosted administration:** the binary and desktop app bind to `127.0.0.1` by default. A production non-loopback listener is rejected unless an exact public URL, trusted-proxy mode and trusted proxy CIDRs are configured. RouteNest accepts an HTTP canonical origin when HSTS is off, so HTTPS termination at the trusted proxy remains a required deployment practice rather than a universal server invariant.
@@ -50,7 +55,7 @@ Provider availability, authentication requirements, free allowances and supporte
 - **Sensitive data:** account refresh tokens, Provider Credentials and generated client API keys are stored in plaintext in the data directory. Protect that directory, and never commit or share it.
 - **Docker:** the sample compose file binds the backend port to host loopback and requires explicit bootstrap/public-URL/proxy settings. Do not expose the backend port directly to the internet.
 
-See [Administrator security and SSO](docs/admin-security.md) for RBAC, OIDC, SAML, recovery and reverse-proxy configuration.
+See [Administrator security and SSO](docs/admin-security.md) for RBAC, OIDC, SAML, recovery and reverse-proxy configuration. `routenest auth --help` and `routenest auth status` provide non-mutating help and validated read-only status; `routenest auth recover` remains the owner-controlled offline recovery command.
 
 ## Quick start
 
@@ -58,10 +63,11 @@ See [Administrator security and SSO](docs/admin-security.md) for RBAC, OIDC, SAM
 
 Download the desktop build for your platform from [Releases](https://github.com/dhananjaym182/RouteNest/releases) and run it.
 
-For a confirmed fresh installation, launch the desktop executable once from a terminal
-with `-initialize-empty-account-store`. After that successful startup, close it and use
-the normal launcher. The flag authorizes only the guarded one-time initialization; it
-cannot reset an established or uncertain data directory.
+For a confirmed fresh installation, open the desktop executable normally. Native setup
+creates the administrator password, displays the one-time recovery code, and optionally
+trusts the device for later automatic sign-in. No terminal command or environment
+variable is required. `-initialize-empty-account-store` remains an advanced first-run
+control and is not a password-reset mechanism.
 
 | Platform | What you need to run a release |
 | --- | --- |
@@ -82,7 +88,20 @@ go build -o routenest .
 ./routenest -host 0.0.0.0  # requires the hosted-admin settings below
 ```
 
-Open <http://127.0.0.1:3457/admin/> for the admin console. The listen address can also be set with `CLINE_PROXY_HOST`.
+This builds the **CLI/server**, not the native desktop application. For native password
+setup and OS-protected device trust, use the [desktop build instructions](desktop/README.md#building-for-each-platform).
+Run `./routenest --help` or `./routenest auth help` for password creation, password change,
+forgotten-password recovery, trusted devices, and the non-mutating `auth status` command.
+
+Open <http://127.0.0.1:3457/admin/> for the admin console. `/admin` redirects to `/admin/`.
+Direct local `localhost` navigation redirects to the configured canonical loopback address;
+this does not relax authentication or allow alternate origins for administrator API requests.
+Unauthenticated browsers see a plain sign-in or first-run password-creation page, not a
+popup. Password recovery opens its own `#recover` page with a Back to sign in link;
+`#login` and `#recover` support direct navigation and browser history without submitting
+a reset. The dashboard appears only after session verification. An existing valid browser session
+opens the dashboard directly; sign out or use a private window to view the login page.
+The listen address can also be set with `CLINE_PROXY_HOST`.
 
 ### Docker
 
@@ -97,8 +116,8 @@ The container listens on `0.0.0.0:3457`, while the sample compose file publishes
 ### First run
 
 1. **Desktop:** open RouteNest normally. The trusted native setup window verifies a fresh
-   data directory, creates the administrator password, and displays a one-time recovery
-   code without terminal commands or copied bootstrap secrets.
+   data directory, creates the administrator password, displays a one-time recovery code,
+   and lets the user explicitly trust the device for automatic sign-in.
 2. **CLI/headless/Docker:** for a confirmed new data directory, set
    `ROUTENEST_INITIALIZE_EMPTY_ACCOUNT_STORE=true` for the first startup only, then remove
    it. The CLI may instead use `-initialize-empty-account-store`. Neither control repairs
@@ -110,7 +129,8 @@ The container listens on `0.0.0.0:3457`, while the sample compose file publishes
    one key exists, key-wrapped model and inference routes accept anonymous requests under
    the documented compatibility policy.
 5. Save the administrator recovery code. **Forgot Password?** consumes it, rotates the
-   code, revokes administrator sessions, and preserves provider, model and routing data.
+   code, revokes administrator sessions and trusted devices, and preserves provider,
+   model and routing data.
 
 ## Client setup
 
@@ -254,7 +274,7 @@ The console at `/admin/` requires administrator bootstrap/login and manages the 
 - Model catalog, custom models, default model and model tests.
 - Model combos and ordered fallback.
 - Request logs with latency, tokens, TPS, upstream and model.
-- Client API keys, administrator users/roles/sessions, OIDC/SAML providers, listen security, password, egress proxies and runtime tuning.
+- Client API keys, administrator users/roles/sessions, trusted desktop devices, OIDC/SAML providers, listen security, password, egress proxies and runtime tuning.
 
 The UI is bilingual (English/Chinese), follows the browser language, and can be switched from the sidebar. On desktop widths the sidebar collapses to a rail; `Ctrl+B` toggles it.
 
@@ -284,7 +304,7 @@ compatibility override.
 | --- | --- |
 | `.routenest-accounts.json` | Cline account pool, client API keys, logical-model settings, saved listener host, and legacy administrator migration sentinels |
 | `.routenest-accounts.json.initialized` | Initialization witness for the account/client-authentication store; back up and restore it with the account-pool file |
-| `admin-auth/.routenest-admin-auth.json` | Durable administrator users, role/provider metadata and hashed sessions |
+| `admin-auth/.routenest-admin-auth.json` | Durable administrator users, role/provider metadata, trusted-device verifiers and hashed sessions |
 | `admin-auth/.routenest-admin-auth.journal` | Fsynced, hash-chained administrator security and audit journal |
 | `admin-auth/sso-secrets/` | Approved root for owner-only OIDC/SAML secret files |
 | `.routenest-config.json` | Proxy configuration, aliases, policies and model combos |

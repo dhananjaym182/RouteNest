@@ -63,7 +63,7 @@ func (p Principal) Authorize(want Permission) error {
 }
 func NormalizeUsername(s string) string { return strings.ToLower(strings.TrimSpace(s)) }
 func ValidateState(s State) error {
-	if s.Version != StateVersion || s.Users == nil || s.Sessions == nil || len(s.Users) > 1024 || len(s.Sessions) > 4096 || len(s.Providers) > 128 {
+	if s.Version != StateVersion || s.Users == nil || s.Sessions == nil || len(s.Users) > 1024 || len(s.Sessions) > 4096 || len(s.Providers) > 128 || len(s.TrustedDevices) > MaxTrustedDevices {
 		return ErrInvalidState
 	}
 	seen := map[string]bool{}
@@ -110,7 +110,7 @@ func ValidateState(s State) error {
 		if s.RecoveryPHC != "" || s.RecoveryCodePHC != "" {
 			return ErrInvalidState
 		}
-		if len(s.Sessions) > 0 {
+		if len(s.Sessions) > 0 || len(s.TrustedDevices) > 0 {
 			return fmt.Errorf("%w: sessions before bootstrap", ErrInvalidState)
 		}
 		if s.BootstrapPHC != "" {
@@ -120,7 +120,7 @@ func ValidateState(s State) error {
 		}
 	}
 	if s.RecoveryPHC != "" {
-		if !s.Initialized || len(s.Sessions) > 0 {
+		if !s.Initialized || len(s.Sessions) > 0 || len(s.TrustedDevices) > 0 {
 			return ErrInvalidState
 		}
 		if _, e := ParsePHC(s.RecoveryPHC); e != nil {
@@ -140,16 +140,30 @@ func ValidateState(s State) error {
 			return ErrInvalidState
 		}
 	}
+	for id, device := range s.TrustedDevices {
+		if _, err := trustedDeviceUser(s, id, device); err != nil {
+			return fmt.Errorf("%w: trusted device", ErrInvalidState)
+		}
+	}
 	for h, v := range s.Sessions {
 		u, ok := s.Users[v.UserID]
 		if !ok || h != v.TokenHash || !validDigest(h) || !validDigest(v.CSRFHash) || v.UserRevision == 0 || !v.ExpiresAt.After(v.IssuedAt) || v.ExpiresAt.Sub(v.IssuedAt) > 24*time.Hour || v.UserRevision > u.Revision || !validMethod(v.Method) || (v.UserID == BreakGlassID && v.Method != MethodLocal) {
 			return fmt.Errorf("%w: session", ErrInvalidState)
+		}
+		if v.Source != authenticationSource(v.Source) {
+			return fmt.Errorf("%w: session source", ErrInvalidState)
 		}
 		if v.Method == MethodLocal && (v.Provider != "" || u.Provider != "") {
 			return ErrInvalidState
 		}
 		if v.Method != MethodLocal && (v.Provider == "" || v.Provider != u.Provider) {
 			return ErrInvalidState
+		}
+		if v.DeviceID != "" {
+			device, ok := s.TrustedDevices[v.DeviceID]
+			if !ok || !validTrustedDeviceToken(v.DeviceID) || v.Method != MethodLocal || v.UserID != device.UserID || v.UserRevision != device.UserRevision {
+				return fmt.Errorf("%w: trusted device session", ErrInvalidState)
+			}
 		}
 	}
 	return nil

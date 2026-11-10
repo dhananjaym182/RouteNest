@@ -226,8 +226,9 @@ func GenerateBootstrapSecret() (string, error) {
 }
 
 type SecuritySetupStatus struct {
-	BootstrapRequired bool
-	RecoveryRequired  bool
+	BootstrapRequired      bool
+	RecoveryRequired       bool
+	LegacyRotationRequired bool
 }
 
 func SecuritySetupState() (SecuritySetupStatus, error) {
@@ -239,7 +240,11 @@ func SecuritySetupState() (SecuritySetupStatus, error) {
 	if err != nil {
 		return SecuritySetupStatus{}, err
 	}
-	return SecuritySetupStatus{BootstrapRequired: !state.Initialized, RecoveryRequired: state.RecoveryPHC != ""}, nil
+	return SecuritySetupStatus{
+		BootstrapRequired:      !state.Initialized,
+		RecoveryRequired:       state.RecoveryPHC != "",
+		LegacyRotationRequired: state.Users[adminauth.BreakGlassID].Legacy != nil,
+	}, nil
 }
 
 func configuredAdminSecurity() (*adminSecurityRuntime, error) {

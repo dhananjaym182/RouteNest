@@ -37,6 +37,14 @@ test('Quick Start falls back to the first enabled model', () => {
   assert.match(ui.elements.get('quickstartClaudeCode').textContent, /claude --model ready-model/);
 });
 
+test('Quick Start uses the owned HTTP gateway inside a native asset origin', () => {
+  const ui = quickStartUI({ origin: 'null', configuredModel: 'safe-model' });
+  ui.run("globalThis.nativeDesktopAvailable = () => true; globalThis.gatewayV1URL = () => 'http://127.0.0.1:3467/v1'");
+  ui.run('renderQuickStartExamples()');
+  assert.match(ui.elements.get('quickstartOpenAICode').textContent, /http:\/\/127\.0\.0\.1:3467\/v1/);
+  assert.doesNotMatch(ui.elements.get('quickstartCurlCode').textContent, /null|wails:/);
+});
+
 test('Quick Start never inserts a real client key', () => {
   const ui = quickStartUI({ configuredModel: 'safe-model' });
   ui.run('renderQuickStartExamples()');

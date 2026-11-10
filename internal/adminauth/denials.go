@@ -24,7 +24,7 @@ type denialBuffer struct {
 func newDenialBuffer() *denialBuffer { return &denialBuffer{entries: map[string]DenialSummary{}} }
 func (s *Service) RecordDenial(kind AuditKind, source string) {
 	switch kind {
-	case AuditLoginDenied, AuditRecoveryCodeDenied, AuditAccessDenied, AuditCSRFDenied:
+	case AuditLoginDenied, AuditRecoveryCodeDenied, AuditTrustedDeviceDenied, AuditAccessDenied, AuditCSRFDenied:
 	default:
 		return
 	}
@@ -79,12 +79,7 @@ func (s *Service) FlushDenials(ctx context.Context) error {
 	s.denials.lastFlush = s.now()
 	delete(s.denials.entries, key)
 	s.denials.mu.Unlock()
-	id, e := randomToken(s.random)
-	if e != nil {
-		return e
-	}
-	event := AuditEvent{ID: id, Kind: v.Kind, Source: v.Source, Outcome: "denied", At: s.now().UTC()}
-	e = s.repo.Apply(ctx, event, func(st *State) error { return ValidateState(*st) })
+	e := s.applyOutcome(ctx, v.Kind, "", "", v.Source, "denied", func(*State) error { return nil })
 	if e != nil {
 		s.denials.mu.Lock()
 		old := s.denials.entries[key]

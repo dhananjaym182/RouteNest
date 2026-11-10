@@ -55,7 +55,7 @@ Inter is embedded as an unmodified Latin WOFF2 font, and a Noto Sans SC variable
 
 ## Admin identity protocol dependencies
 
-The admin identity dependency baseline uses the following unmodified upstream libraries. The exact OIDC, SAML and OAuth2 versions are guarded by `TestAdminSecurityDependencyVersions`; XML signature verification requires stable goxmldsig v1.6.1 or newer.
+The admin identity and desktop credential dependency baseline uses the following unmodified upstream libraries. Exact security-sensitive versions are guarded by `TestAdminSecurityDependencyVersions`; XML signature verification requires stable goxmldsig v1.6.1 or newer.
 
 | Module | Selected version | License | Upstream license |
 | --- | --- | --- | --- |
@@ -69,6 +69,8 @@ The admin identity dependency baseline uses the following unmodified upstream li
 | `github.com/beevik/etree` | v1.8.1 | BSD-2-Clause | [LICENSE](https://github.com/beevik/etree/blob/v1.8.1/LICENSE) |
 | `github.com/mattermost/xml-roundtrip-validator` | v0.1.0 | Apache-2.0 | [LICENSE.txt](https://github.com/mattermost/xml-roundtrip-validator/blob/v0.1.0/LICENSE.txt) |
 | `github.com/jonboulle/clockwork` | v0.5.0 | Apache-2.0 | [LICENSE](https://github.com/jonboulle/clockwork/blob/v0.5.0/LICENSE) |
+| `github.com/wailsapp/wails/v2` | v2.17.1 | MIT | [LICENSE](https://github.com/wailsapp/wails/blob/v2.17.1/LICENSE) |
+| `github.com/zalando/go-keyring` | v0.2.8 | MIT | [LICENSE](https://github.com/zalando/go-keyring/blob/v0.2.8/LICENSE) |
 
 The SAML v0.5.2 license distributed by upstream has two redistribution clauses and is reproduced verbatim below. SAML v0.5.1 and goxmldsig versions before v1.6.1 are excluded from this baseline.
 

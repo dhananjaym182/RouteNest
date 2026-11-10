@@ -36,45 +36,64 @@ func replenish(b bucket, now time.Time, capacity, rate float64) bucket {
 // Allow bounds both total KDF work and source/account attempts. Entries are not
 // evicted while depleted: attackers cannot reset a bucket by filling the map.
 func (t *Throttler) Allow(source string) (bool, time.Duration) {
-	if len(source) > 256 {
-		return false, time.Minute
+	return t.allow(source)
+}
+
+func (t *Throttler) allow(sources ...string) (bool, time.Duration) {
+	keys := make(map[string]bucket, len(sources))
+	for _, source := range sources {
+		if len(source) > 256 {
+			return false, time.Minute
+		}
+		keys[source] = bucket{}
 	}
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	now := t.now()
 	t.global = replenish(t.global, now, 20, 2)
-	b, ok := t.sources[source]
-	if !ok {
-		if len(t.sources) >= t.maxSources {
-			for k, v := range t.sources {
-				if now.Sub(v.last) > time.Minute*5 {
-					delete(t.sources, k)
-				}
+	missing := 0
+	for source := range keys {
+		if _, exists := t.sources[source]; !exists {
+			missing++
+		}
+	}
+	if len(t.sources)+missing > t.maxSources {
+		for source, value := range t.sources {
+			if _, needed := keys[source]; !needed && now.Sub(value.last) > 5*time.Minute {
+				delete(t.sources, source)
 			}
 		}
-		if len(t.sources) >= t.maxSources {
-			return false, time.Minute
-		}
-		b = bucket{t.capacity, now}
 	}
-	b = replenish(b, now, t.capacity, t.rate)
+	if len(t.sources)+missing > t.maxSources {
+		return false, time.Minute
+	}
 	retry := time.Duration(0)
 	if t.global.tokens < 1 {
 		retry = time.Duration(math.Ceil((1-t.global.tokens)/2)) * time.Second
 	}
-	if b.tokens < 1 {
-		v := time.Duration(math.Ceil((1-b.tokens)/t.rate)) * time.Second
-		if v > retry {
-			retry = v
+	for source := range keys {
+		b, exists := t.sources[source]
+		if !exists {
+			b = bucket{t.capacity, now}
 		}
+		b = replenish(b, now, t.capacity, t.rate)
+		if b.tokens < 1 {
+			v := time.Duration(math.Ceil((1-b.tokens)/t.rate)) * time.Second
+			if v > retry {
+				retry = v
+			}
+		}
+		keys[source] = b
+		t.sources[source] = b
 	}
-	t.sources[source] = b
 	if retry > 0 {
 		return false, retry
 	}
 	t.global.tokens--
-	b.tokens--
-	t.sources[source] = b
+	for source, b := range keys {
+		b.tokens--
+		t.sources[source] = b
+	}
 	return true, 0
 }
 

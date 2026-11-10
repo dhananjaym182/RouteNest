@@ -178,14 +178,14 @@ try {
         await pending;
         await route.fulfill({ response }); // Real backend response, only delayed.
       });
-      for (const [path, owner] of [['/opencode/config/update', 'zen'], ['/cline-proxy/config/update', 'shared']]) {
+      for (const [path, owner] of [['/opencode/config/update', 'zen'], ['/routenest/config/update', 'shared']]) {
         await context.route('**/admin/api' + path, async route => {
           if (!proxyFixtures) { await route.continue(); return; }
           proxyFixtures[owner] = { ...proxyFixtures[owner], ...route.request().postDataJSON() };
           await route.fulfill({ json: envelope({}) });
         });
       }
-      await context.route('**/admin/api/cline-proxy/config', async route => {
+      await context.route('**/admin/api/routenest/config', async route => {
         if (proxyFixtures) await route.fulfill({ json: envelope(proxyFixtures.shared) });
         else await route.continue();
       });
@@ -531,16 +531,16 @@ try {
         await closeSetup(page);
         await page.evaluate(async () => { applyTab('network'); await loadClineProxyConfig(); });
         await page.evaluate(async () => { document.getElementById('clineProxyStrategy').value = 'random'; await saveClineProxyConfig(); });
-        proxyWrite = captured.filter(request => request.path === '/cline-proxy/config/update').at(-1);
+        proxyWrite = captured.filter(request => request.path === '/routenest/config/update').at(-1);
         check(proxyWrite.body.proxyStrategy === 'random' && !Object.hasOwn(proxyWrite.body, 'proxies'), 'default egress strategy save preserves existing proxy credentials');
         writesBeforeMask = captured.length;
         await page.evaluate(async value => { document.getElementById('clineProxies').value = value; await saveClineProxyConfig(); }, editedMask);
         check(captured.length === writesBeforeMask, 'edited default egress masks are rejected before a write');
         await page.evaluate(async value => { document.getElementById('clineProxies').value = value; await saveClineProxyConfig(); }, replacementProxy);
-        proxyWrite = captured.filter(request => request.path === '/cline-proxy/config/update').at(-1);
+        proxyWrite = captured.filter(request => request.path === '/routenest/config/update').at(-1);
         check(JSON.stringify(proxyWrite.body.proxies) === JSON.stringify([replacementProxy]), 'explicit default egress replacement retains original save contract');
         await page.evaluate(async () => { document.getElementById('clineProxies').value = ''; await saveClineProxyConfig(); });
-        proxyWrite = captured.filter(request => request.path === '/cline-proxy/config/update').at(-1);
+        proxyWrite = captured.filter(request => request.path === '/routenest/config/update').at(-1);
         check(Array.isArray(proxyWrite.body.proxies) && proxyWrite.body.proxies.length === 0, 'explicit default egress clearing sends an empty list');
         proxyFixtures = null;
         await page.evaluate(() => Promise.all([loadOcConfig(), loadClineProxyConfig()]));

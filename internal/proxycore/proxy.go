@@ -2,10 +2,7 @@ package proxycore
 
 import (
 	"errors"
-	"fmt"
-	"net"
 	"net/http"
-	"os/exec"
 	"routenest/internal/dispatch"
 	"routenest/internal/routing"
 	"routenest/internal/zen"
@@ -452,19 +449,4 @@ const streamFailoverCooldown = 2 * time.Minute
 
 func NormalizeOpenAIResponse(obj map[string]any) map[string]any {
 	return openaichat.NormalizeResponse(obj)
-}
-
-func freePort(port int) {
-	addr := fmt.Sprintf("127.0.0.1:%d", port)
-	conn, err := net.DialTimeout("tcp", addr, 2*time.Second)
-	if err != nil {
-		return // port is free
-	}
-	conn.Close()
-
-	// Try to kill the process using the port
-	cmd := exec.Command("powershell", "-Command",
-		fmt.Sprintf(`$p=Get-NetTCPConnection -LocalPort %d -ErrorAction SilentlyContinue; if($p){Stop-Process -Id $p.OwningProcess -Force}`, port))
-	_ = cmd.Run()
-	time.Sleep(500 * time.Millisecond)
 }

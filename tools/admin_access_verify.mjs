@@ -66,7 +66,8 @@ async function loginFormChecks(screenshotDir) {
         currentStep = theme + '-' + width + ': load the login page';
         await page.goto(base.href, { waitUntil: 'networkidle' });
         currentStep = theme + '-' + width + ': show the login form';
-        await page.locator('#loginOverlay').waitFor({ state: 'visible' });
+        await page.waitForFunction(() => document.documentElement.dataset.adminAuth === 'signed-out' && typeof _adminAuthStatus !== 'undefined' && _adminAuthStatus !== null);
+        await page.locator('#loginForm').waitFor({ state: 'visible' });
         currentStep = theme + '-' + width + ': inspect login spacing';
         const fields = await page.evaluate(() => {
           const username = document.getElementById('loginUsername');
@@ -275,11 +276,14 @@ async function passwordLifecycle(context, page) {
   await page.evaluate(() => { setLang('en'); closeSSOProviderEditor(); openAdminUserEditor(); });
   await page.locator('#adminUserUsername').fill(testUsername);
   await page.locator('#adminUserPassword').fill('🔒'.repeat(7));
-  await page.locator('#adminUserPassword').press('Enter');
+  await page.evaluate(() => closeModelSyncModal());
+  await page.locator('#saveAdminUserButton').click();
+  await page.waitForFunction(() => document.getElementById('adminUserError').textContent.includes('8'));
   check((await page.locator('#adminUserError').textContent()).includes('8'), true, 'UI rejects seven-character local-user password');
   await page.locator('#adminUserPassword').fill(userPassword);
   const created = mutationResponse(page, '/auth/users'); attemptedCreate = true;
-  await page.locator('#adminUserPassword').press('Enter');
+  await page.evaluate(() => closeModelSyncModal());
+  await page.locator('#saveAdminUserButton').click();
   check((await created).status(), 201, 'eight-character local-user creation', 'securityChecks');
   await page.waitForFunction(() => document.getElementById('adminUserEditor').style.display === 'none');
   const userContext = await browser.newContext();
@@ -290,6 +294,7 @@ async function passwordLifecycle(context, page) {
     await row.getByRole('button', { name: 'Edit', exact: true }).click();
     await page.locator('#adminUserPassword').fill(resetPassword);
     const reset = mutationResponse(page, '/auth/users/password');
+    await page.evaluate(() => closeModelSyncModal());
     await page.locator('#saveAdminUserButton').click();
     check((await reset).status(), 200, 'eight-character local-user reset', 'securityChecks');
     await api(userContext, '/auth/session', { status: 401 });
@@ -305,14 +310,17 @@ async function passwordLifecycle(context, page) {
     await page.locator('#settingCurrentPassword').fill(initialAdminPassword);
     await page.locator('#settingPassword').fill('🔒'.repeat(7));
     await page.locator('#settingPasswordConfirm').fill('🔒'.repeat(7));
+    await page.evaluate(() => closeModelSyncModal());
     await page.locator('#saveAdminPassword').click();
+    await page.waitForFunction(() => document.getElementById('adminPasswordError').textContent.includes('8'));
     check((await page.locator('#adminPasswordError').textContent()).includes('8'), true, 'UI rejects seven-character password rotation');
     await page.locator('#settingPassword').fill(rotatedPassword);
     await page.locator('#settingPasswordConfirm').fill(rotatedPassword);
     const rotation = mutationResponse(page, '/auth/password');
     const logoutNavigation = page.waitForNavigation({ waitUntil: 'networkidle' });
     logoutNavigation.catch(() => {});
-    await page.locator('#settingPasswordConfirm').press('Enter');
+    await page.evaluate(() => closeModelSyncModal());
+    await page.locator('#saveAdminPassword').click();
     check((await rotation).status(), 200, 'eight-character password rotation', 'securityChecks');
     activeAdminPassword = rotatedPassword; passwordRotated = true;
     await api(secondSession, '/auth/session', { status: 401 });
@@ -321,7 +329,8 @@ async function passwordLifecycle(context, page) {
     check([status.initialized, status.bootstrapRequired, status.recoveryRequired], [true, false, false], 'mandatory administrator identity remains initialized', 'securityChecks');
     currentStep = 'wait for the password-rotation reload';
     await logoutNavigation;
-    await page.waitForFunction(() => document.getElementById('loginOverlay').style.display === 'flex');
+    await page.waitForFunction(() => document.documentElement.dataset.adminAuth === 'signed-out' && typeof _adminAuthStatus !== 'undefined' && _adminAuthStatus !== null);
+    await page.locator('#loginForm').waitFor({ state: 'visible' });
     currentStep = 'sign in with the rotated eight-character password';
     await page.locator('#loginUsername').fill('admin');
     await page.locator('#loginPassword').fill(rotatedPassword);

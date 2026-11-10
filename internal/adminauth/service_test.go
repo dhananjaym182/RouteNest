@@ -142,6 +142,8 @@ func TestBootstrapSecretRetainsBytePolicy(t *testing.T) {
 		secret   string
 		accepted bool
 	}{
+		{"twelve spaces", strings.Repeat(" ", 12), false},
+		{"twelve Unicode whitespace bytes", strings.Repeat("\u3000", 4), false},
 		{"eight bytes", "Admin8!!", false},
 		{"eleven bytes", strings.Repeat("x", 11), false},
 		{"twelve bytes", strings.Repeat("x", 12), true},
@@ -247,6 +249,19 @@ func TestLegacyRotationSentinelOrder(t *testing.T) {
 		t.Fatal("sentinel match")
 	}
 }
+func TestPasswordRotationReauthenticationIsThrottled(t *testing.T) {
+	s, _ := testService(t)
+	credentials := bootstrap(t, s)
+	for attempt := 0; attempt < 5; attempt++ {
+		if err := s.RotatePassword(t.Context(), credentials.Principal, "wrong password", "Rotate8!"); !errors.Is(err, ErrUnauthorized) {
+			t.Fatalf("attempt %d = %v", attempt, err)
+		}
+	}
+	if err := s.RotatePassword(t.Context(), credentials.Principal, "wrong password", "Rotate8!"); !errors.Is(err, ErrRateLimited) {
+		t.Fatalf("unbounded password reauthentication = %v", err)
+	}
+}
+
 func TestPasswordRotationRevokesAllSessions(t *testing.T) {
 	s, _ := testService(t)
 	c := bootstrap(t, s)

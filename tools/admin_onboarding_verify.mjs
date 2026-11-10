@@ -141,12 +141,13 @@ try {
   await adminPage.locator('#issuedRecoveryCodePanel').waitFor({ state: 'hidden' });
 
   const recoveryContext = await browser.newContext({ viewport: { width: 1280, height: 1000 } });
+  const recoveryRequests = [];
+  recoveryContext.on('request', request => { if (new URL(request.url()).pathname === '/admin/api/auth/recovery') recoveryRequests.push(request.method()); });
   const recoveryPage = await recoveryContext.newPage();
   await attachDiagnostics(recoveryPage);
   step = 'open forgot-password flow';
-  await recoveryPage.goto(base.href, { waitUntil: 'networkidle' });
-  await recoveryPage.locator('#forgotPasswordButton').waitFor({ state: 'visible' });
-  await recoveryPage.locator('#forgotPasswordButton').click();
+  await recoveryPage.goto(base.href + '#recover', { waitUntil: 'networkidle' });
+  await recoveryPage.waitForFunction(() => document.documentElement.dataset.adminAuthView === 'recover' && document.activeElement?.id === 'passwordRecoveryCode');
 
   for (const theme of ['light', 'dark']) {
     for (const language of ['en', 'zh']) {
@@ -155,11 +156,34 @@ try {
         step = `recovery form ${theme} ${language} ${width}`;
         await recoveryPage.setViewportSize({ width, height: width <= 768 ? 900 : 800 });
         const layout = await recoveryPage.evaluate(() => {
-          const dialog = document.querySelector('#passwordRecoveryOverlay [role="dialog"]');
+          const visible = element => !!element && element.getClientRects().length > 0 && getComputedStyle(element).visibility !== 'hidden';
+          const root = document.getElementById('adminAuthPage');
+          const header = root.querySelector(':scope > header.auth-header');
+          const main = root.querySelector(':scope > main#adminAuthContent');
+          const login = document.getElementById('loginOverlay');
+          const recovery = document.getElementById('passwordRecoveryOverlay');
+          const dialog = recovery.querySelector(':scope > .recovery-dialog');
           const rect = dialog.getBoundingClientRect();
-          return { visible: getComputedStyle(document.getElementById('passwordRecoveryOverlay')).display === 'flex', contained: rect.left >= 0 && rect.right <= innerWidth + 1 && rect.top >= 0 && rect.bottom <= innerHeight + 1 };
+          const style = getComputedStyle(dialog);
+          const pageStyle = getComputedStyle(root);
+          return {
+            route: location.hash,
+            dataset: document.documentElement.dataset.adminAuthView,
+            structure: root.matches('.auth-page') && header.parentElement === root && main.parentElement === root && login.matches('section.auth-view') && recovery.matches('section.auth-view') && login.parentElement === main && recovery.parentElement === main,
+            views: [login, recovery].filter(visible).map(element => element.id),
+            mains: [...document.querySelectorAll('main')].filter(visible).map(element => element.id),
+            heading: document.getElementById('passwordRecoveryTitle').tagName === 'H1' && [...root.querySelectorAll('h1')].filter(visible).map(element => element.id).join(',') === 'passwordRecoveryTitle',
+            preferences: [...header.querySelectorAll('[data-theme-opt],[data-lang-opt]')].filter(visible).length === 4,
+            dashboardHidden: !visible(document.querySelector('.layout')),
+            nonModal: !root.querySelector('[role="dialog"],[role="alertdialog"],[aria-modal],.overlay-modal,.modal-close'),
+            flow: [root, header, main, recovery, dialog].every(element => getComputedStyle(element).position !== 'fixed' && ['none', ''].includes(getComputedStyle(element).backdropFilter || 'none')),
+            pageBackdrop: pageStyle.backgroundImage === 'none' && ['none', ''].includes(pageStyle.backdropFilter || 'none'),
+            undecorated: style.boxShadow === 'none' && parseFloat(style.borderTopWidth) === 0 && parseFloat(style.borderRadius) === 0,
+            contained: rect.left >= 0 && rect.right <= innerWidth + 1 && document.documentElement.scrollWidth <= innerWidth + 1,
+            back: !!document.getElementById('passwordRecoveryBack')?.closest('#passwordRecoveryFormView') && !document.querySelector('#passwordRecoveryResultView #passwordRecoveryBack'),
+          };
         });
-        check(layout, { visible: true, contained: true }, step);
+        check(layout, { route: '#recover', dataset: 'recover', structure: true, views: ['passwordRecoveryOverlay'], mains: ['adminAuthContent'], heading: true, preferences: true, dashboardHidden: true, nonModal: true, flow: true, pageBackdrop: true, undecorated: true, contained: true, back: true }, step);
         if (artifactDir) {
           await recoveryPage.screenshot({ path: resolve(artifactDir, `recovery-${theme}-${language}-${width}.png`), fullPage: true, animations: 'disabled' });
           result.screenshots++;
@@ -168,6 +192,9 @@ try {
       }
     }
   }
+  await recoveryPage.reload({ waitUntil: 'networkidle' });
+  await recoveryPage.waitForFunction(() => location.hash === '#recover' && document.documentElement.dataset.adminAuthView === 'recover' && document.activeElement?.id === 'passwordRecoveryCode');
+  check(recoveryRequests, [], 'direct #recover load/refresh and layout checks do not call the reset API');
 
   step = 'recover password';
   await adminPage.close();
@@ -178,14 +205,37 @@ try {
   await recoveryPage.locator('#passwordRecoveryConfirmPassword').fill(recoveredPassword);
   await recoveryPage.locator('#passwordRecoverySubmit').click();
   await recoveryPage.locator('#passwordRecoveryResultView').waitFor({ state: 'visible' });
+  await recoveryPage.waitForFunction(() => document.documentElement.dataset.adminAuthView === 'recovery-result' && location.hash === '#recover' && document.activeElement?.id === 'passwordRecoveryReplacementCode');
   replacementCode = (await recoveryPage.locator('#passwordRecoveryReplacementCode').textContent()) || '';
   check(replacementCode.length, 43, 'successful recovery rotates the recovery code');
   check(replacementCode === recoveryCode, false, 'recovery code is single-use and rotated');
+  const resultPage = await recoveryPage.evaluate(() => ({
+    views: ['loginOverlay', 'passwordRecoveryOverlay'].filter(id => document.getElementById(id).getClientRects().length > 0),
+    headings: [...document.querySelectorAll('#adminAuthPage h1')].filter(element => element.getClientRects().length > 0).map(element => element.id),
+    backControls: [...document.querySelectorAll('#passwordRecoveryOverlay #passwordRecoveryBack')].filter(element => element.getClientRects().length > 0).length,
+    closeControls: document.querySelectorAll('#passwordRecoveryOverlay .modal-close').length,
+  }));
+  check(resultPage, { views: ['passwordRecoveryOverlay'], headings: ['passwordRecoveryResultTitle'], backControls: 0, closeControls: 0 }, 'completed recovery stays a plain #recover page with its result h1 and no Back/close control');
+  await recoveryPage.keyboard.press('Escape');
+  await recoveryPage.waitForFunction(() => location.hash === '#recover' && document.documentElement.dataset.adminAuthView === 'recovery-result');
+  await recoveryPage.evaluate(() => closePasswordRecovery());
+  await recoveryPage.waitForFunction(() => location.hash === '#recover' && document.documentElement.dataset.adminAuthView === 'recovery-result');
+  await recoveryPage.evaluate(() => { location.hash = '#login'; });
+  await recoveryPage.waitForFunction(() => location.hash === '#recover' && document.documentElement.dataset.adminAuthView === 'recovery-result');
+  await recoveryPage.goBack();
+  await recoveryPage.waitForFunction(() => location.hash === '#recover' && document.documentElement.dataset.adminAuthView === 'recovery-result');
+  check((await recoveryPage.locator('#passwordRecoveryReplacementCode').textContent())?.length, 43, 'escape, direct close, hash, and Back cannot discard an unacknowledged result');
 
   const revoked = await adminContext.request.get(new URL('api/auth/session', base).href);
   check(revoked.status(), 401, 'password recovery revokes the existing administrator session');
   await recoveryPage.locator('#passwordRecoverySaved').check();
+  await recoveryPage.evaluate(() => { location.hash = '#login'; });
+  await recoveryPage.waitForFunction(() => location.hash === '#recover' && document.documentElement.dataset.adminAuthView === 'recovery-result');
+  await recoveryPage.goBack();
+  await recoveryPage.waitForFunction(() => location.hash === '#recover' && document.documentElement.dataset.adminAuthView === 'recovery-result');
+  check((await recoveryPage.locator('#passwordRecoveryReplacementCode').textContent())?.length, 43, 'acknowledgement alone does not discard the result before Finish');
   await recoveryPage.locator('#passwordRecoveryFinish').click();
+  await recoveryPage.waitForFunction(() => document.documentElement.dataset.adminAuthView === 'login' && location.hash === '#login');
   await recoveryPage.locator('#loginOverlay').waitFor({ state: 'visible' });
   await recoveryPage.locator('#loginPassword').fill(recoveredPassword);
   let loginResponsePromise = recoveryPage.waitForResponse(response => new URL(response.url()).pathname === '/admin/api/login' && response.request().method() === 'POST');
@@ -200,7 +250,7 @@ try {
     loginResponse = await loginResponsePromise;
   }
   check(loginResponse.status(), 200, 'new administrator password signs in');
-  await recoveryPage.waitForFunction(() => typeof _adminPrincipal !== 'undefined' && _adminPrincipal && document.getElementById('loginOverlay').style.display !== 'flex');
+  await recoveryPage.waitForFunction(() => typeof _adminPrincipal !== 'undefined' && _adminPrincipal && getComputedStyle(document.getElementById('adminAuthPage')).display === 'none');
   const replay = await post(recoveryContext, '/auth/recovery', { recoveryCode, newPassword: 'ReplayRejected8!', confirmPassword: 'ReplayRejected8!' });
   check(replay.status(), 401, 'used recovery code is rejected');
   await adminContext.close();

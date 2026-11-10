@@ -11,6 +11,7 @@
 /admin/api/auth/audit	GET	routes.go	wrap=security[security.write,csrf=safe]	handler=registry
 /admin/api/auth/bootstrap	POST	routes.go	wrap=security[public,csrf=local_entry]	handler=registry
 /admin/api/auth/desktop-handoff	POST	routes.go	wrap=security[public,csrf=local_entry]	handler=registry
+/admin/api/auth/desktop-signout	POST	routes.go	wrap=security[admin.view,csrf=session]	handler=registry
 /admin/api/auth/legacy/rotate	POST	routes.go	wrap=security[public,csrf=local_entry]	handler=registry
 /admin/api/auth/oidc/callback	GET	routes.go	wrap=security[public,csrf=oidc_callback]	handler=registry
 /admin/api/auth/oidc/start	POST	routes.go	wrap=security[public,csrf=sso_start]	handler=registry
@@ -27,6 +28,9 @@
 /admin/api/auth/sso/providers	PUT	routes.go	wrap=security[security.write,csrf=session]	handler=registry
 /admin/api/auth/sso/providers/delete	POST	routes.go	wrap=security[security.write,csrf=session]	handler=registry
 /admin/api/auth/status	GET	routes.go	wrap=security[public,csrf=safe]	handler=registry
+/admin/api/auth/trusted-devices	GET	routes.go	wrap=security[security.write,csrf=safe]	handler=registry
+/admin/api/auth/trusted-devices/revoke	POST	routes.go	wrap=security[security.write,csrf=session]	handler=registry
+/admin/api/auth/trusted-devices/revoke-all	POST	routes.go	wrap=security[security.write,csrf=session]	handler=registry
 /admin/api/auth/users	GET	routes.go	wrap=security[security.write,csrf=safe]	handler=registry
 /admin/api/auth/users	POST	routes.go	wrap=security[security.write,csrf=session]	handler=registry
 /admin/api/auth/users/delete	POST	routes.go	wrap=security[security.write,csrf=session]	handler=registry
@@ -97,6 +101,8 @@
 /admin/api/providers/test	POST	routes.go	wrap=security[provider.write,csrf=session]	handler=registry
 /admin/api/request-logs	GET	routes.go	wrap=security[admin.view,csrf=safe]	handler=registry
 /admin/api/request-logs/clear	POST	routes.go	wrap=security[security.write+dangerous.execute,csrf=session]	handler=registry
+/admin/api/routenest/config	GET	routes.go	wrap=security[admin.view,csrf=safe]	handler=registry
+/admin/api/routenest/config/update	POST	routes.go	wrap=security[provider.write,csrf=session]	handler=registry
 /admin/api/sso/import	POST	routes.go	wrap=security[credential.write,csrf=session]	handler=registry
 /admin/api/stats	GET	routes.go	wrap=security[admin.view,csrf=safe]	handler=registry
 /admin/api/version-check	GET	routes.go	wrap=security[admin.view,csrf=safe]	handler=registry

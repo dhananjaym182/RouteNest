@@ -28,25 +28,65 @@ input:focus-visible,textarea:focus-visible,select:focus-visible{outline:none}
 .model-toolbar .field{min-width:0}
 /* 长文本稳健性：避免超长 URL / 模型 ID 撑破布局 */
 .section-desc,.combo-preview,.log-attempts li,.log-req-model{overflow-wrap:break-word}
-/* 弹层：统一遮罩模糊与阴影：登录 / 模型同步浮层 */
-#loginOverlay{position:fixed;inset:0;z-index:var(--z-login);padding:var(--sp-5);background:var(--overlay-bg);backdrop-filter:saturate(150%) blur(6px);-webkit-backdrop-filter:saturate(150%) blur(6px);display:none;align-items:center;justify-content:center}
-.login-card{width:min(420px,100%);max-height:calc(100vh - var(--sp-8));max-height:calc(100dvh - var(--sp-8));overflow-y:auto;padding:var(--sp-7);background:var(--surface);border-radius:var(--radius);border:1px solid var(--border);text-align:left;box-shadow:var(--shadow-lg)}
-.login-card h2{margin:0;font-size:var(--fs-xl);line-height:1.4;color:var(--text)}
-.login-card #loginHelp{margin:var(--sp-2) 0 var(--sp-6);color:var(--text2);font-size:var(--fs-sm);line-height:1.65}
-.login-form,.login-password-fields{display:flex;flex-direction:column;gap:var(--sp-4)}
+html:not([data-admin-auth="authenticated"]) .layout,html:not([data-admin-auth="authenticated"]) .skip-link{display:none}
+html:not([data-admin-auth="authenticated"]) .overlay-modal,html:not([data-admin-auth="authenticated"]) .drawer-overlay,html:not([data-admin-auth="authenticated"]) .drawer,html:not([data-admin-auth="authenticated"]) #modelSyncOverlay,html:not([data-admin-auth="authenticated"]) .toast-stack,html:not([data-admin-auth="authenticated"]) .save-discard-bar{display:none!important}
+html[data-admin-auth="authenticated"] .auth-page{display:none}
+.auth-page{min-height:100vh;min-height:100dvh;background:var(--bg);color:var(--text)}
+.auth-header{min-height:64px;padding:10px clamp(20px,4vw,48px);border-bottom:1px solid var(--border);background:var(--surface)}
+.auth-header-content{width:min(100%,1120px);margin:0 auto;display:flex;align-items:center;justify-content:space-between;gap:var(--sp-4)}
+.auth-wordmark{min-height:44px;display:inline-flex;align-items:center;color:var(--text);font-size:var(--fs-lg);font-weight:700;letter-spacing:-.01em;text-decoration:none}
+.auth-preferences{display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:var(--sp-2)}
+.auth-preferences .seg{background:transparent;border-color:var(--border)}
+.auth-preferences .seg button{min-width:44px;min-height:44px;padding:var(--sp-2) var(--sp-3);transition:none;text-transform:none;letter-spacing:0}
+.auth-preferences .seg button.active{box-shadow:none}
+.auth-main{width:100%;max-width:440px;margin:0 auto;padding:clamp(48px,8vh,72px) var(--sp-5) var(--sp-8)}
+.auth-view{width:100%;position:static;background:transparent}
+#loginOverlay{background:var(--bg);display:flex}
+.login-card,.recovery-dialog{width:100%;max-width:none;max-height:none;overflow:visible;padding:0;background:transparent;border:0;border-radius:0;box-shadow:none;text-align:left}
+.login-card h1,.recovery-dialog h1{margin:0;color:var(--text);font-family:var(--font-display);font-size:var(--fs-2xl);font-weight:700;line-height:1.3;letter-spacing:-.02em}
+.login-card #loginHelp,.recovery-dialog>div>p{margin:var(--sp-2) 0 var(--sp-6);color:var(--text2);font-size:var(--fs-base);line-height:1.65}
+#loginStatus{display:none;margin:0;color:var(--text2);font-size:var(--fs-sm);line-height:1.6}
+html[data-admin-auth="pending"] #loginForm{display:none !important}
+html[data-admin-auth="pending"] #loginSSOProviders{display:none !important}
+html[data-admin-auth="pending"] #loginStatus{display:block}
+.login-form,.login-password-fields,#passwordRecoveryForm{display:flex;flex-direction:column;gap:var(--sp-4)}
 .login-field{display:flex;flex-direction:column;gap:var(--sp-2)}
 .login-field label{color:var(--text2);font-size:var(--fs-base);font-weight:500;line-height:1.5}
-.login-card input{width:100%;min-height:44px;padding:var(--sp-3);border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);color:var(--text);font:inherit}
-.login-card input:focus{border-color:var(--accent);box-shadow:var(--ring);outline:none}
-.login-card .btn-block{min-height:44px;margin-top:0;white-space:normal;overflow-wrap:anywhere}
+.login-card input:not([type="checkbox"]),.recovery-dialog input:not([type="checkbox"]){width:100%;min-height:44px;padding:var(--sp-3);border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);color:var(--text);font:inherit}
+.login-card input:focus,.recovery-dialog input:focus{border-color:var(--accent);box-shadow:var(--ring);outline:none}
+.login-card input:focus-visible,.recovery-dialog input:focus-visible{outline:2px solid var(--accent-hover);outline-offset:2px;box-shadow:var(--ring)}
+.login-card .btn,.recovery-dialog .btn{min-height:44px}
+.auth-page .btn{transition:none;animation:none;box-shadow:none;transform:none}
+.auth-page .btn:where(:not(:disabled)):hover,.auth-page .btn:active{transform:none;box-shadow:none}
+.auth-page .btn:focus-visible{outline:2px solid var(--accent-hover);outline-offset:2px;box-shadow:none}
+.login-card .btn-block,.recovery-dialog .btn-block{margin-top:0;white-space:normal;overflow-wrap:anywhere}
 .login-card #loginSSOProviders{margin-bottom:var(--sp-5)}
 .login-card #loginSSOButtons{display:grid;gap:var(--sp-2)}
 .login-card #loginLocalHelp{color:var(--text2);font-size:var(--fs-sm);line-height:1.6}
-.login-card .login-err{margin:0;padding:var(--sp-3);border:1px solid var(--red);border-radius:var(--radius-xs);background:var(--red-soft);color:var(--text);font-size:var(--fs-sm);line-height:1.6;overflow-wrap:anywhere}
-.login-card .login-err:empty{display:none}
+.login-link,.auth-back-link{display:inline-flex;width:max-content;max-width:100%;min-height:44px;align-items:center;color:var(--accent);font-size:var(--fs-sm);font-weight:600;text-decoration:none}
+.login-link:hover,.auth-back-link:hover{text-decoration:underline}
+[data-theme="dark"] .login-link,[data-theme="dark"] .auth-back-link{color:var(--accent-hover)}
+.auth-back-link{margin-bottom:var(--sp-4)}
+.login-trust-row{display:flex;align-items:flex-start;gap:var(--sp-2);margin:0;padding:var(--sp-3);border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface2);color:var(--text);font-size:var(--fs-sm);line-height:1.5}.login-trust-row input{width:20px;min-height:20px;margin-top:1px;flex:none}.login-security-note{margin:0;color:var(--text2);font-size:var(--fs-xs);line-height:1.6}
+.login-card .login-err,.recovery-dialog .login-err{margin:0;padding:var(--sp-3);border:1px solid var(--red);border-radius:var(--radius-xs);background:var(--red-soft);color:var(--text);font-size:var(--fs-sm);line-height:1.6;overflow-wrap:anywhere}
+.login-card .login-err:empty,.recovery-dialog .login-err:empty{display:none}
+.recovery-dialog .field+.field{margin-top:0}
+.recovery-dialog .security-note{margin:var(--sp-4) 0 0}
+.recovery-dialog .recovery-code-box{margin-top:0}
+.recovery-dialog .recovery-confirm{min-height:44px;align-items:flex-start;margin:var(--sp-5) 0}.recovery-dialog .recovery-confirm input{width:20px;height:20px;margin-top:1px;flex:none}
 @media (max-width:600px){
-  #loginOverlay{padding:var(--sp-4)}
-  .login-card{padding:var(--sp-5)}
+  .auth-header{padding:10px var(--sp-4)}
+  .auth-header-content{align-items:flex-start;gap:var(--sp-2)}
+  .auth-wordmark{font-size:var(--fs-base)}
+  .auth-preferences{gap:var(--sp-1)}
+  .auth-preferences .seg{padding:2px}
+  .auth-preferences .seg button{min-width:40px;padding:var(--sp-2) 6px}
+  .auth-main{padding:48px var(--sp-4) var(--sp-8)}
+}
+@media (max-width:380px){
+  .auth-header-content{display:block}
+  .auth-wordmark{margin-bottom:var(--sp-1)}
+  .auth-preferences{justify-content:flex-start}
 }
 #modelSyncOverlay{position:fixed;inset:0;z-index:var(--z-topmost);background:var(--overlay-bg);display:none;align-items:center;justify-content:center;backdrop-filter:saturate(150%) blur(6px);-webkit-backdrop-filter:saturate(150%) blur(6px)}
 #modelSyncModal{border-radius:var(--radius);box-shadow:var(--shadow-lg);width:min(560px,calc(100vw - 40px));max-height:calc(100dvh - 40px);display:flex;flex-direction:column;padding:var(--sp-6);background:var(--surface);border:1px solid var(--border)}

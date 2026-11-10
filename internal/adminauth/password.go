@@ -135,8 +135,8 @@ func (h *PasswordHasher) derive(ctx context.Context, fn func() []byte) ([]byte, 
 	}
 }
 func (h *PasswordHasher) Hash(ctx context.Context, password string) (string, error) {
-	if len(password) > MaxPasswordBytes || utf8.RuneCountInString(password) < MinPasswordCharacters {
-		return "", fmt.Errorf("password must contain at least %d characters and at most %d bytes", MinPasswordCharacters, MaxPasswordBytes)
+	if len(password) > MaxPasswordBytes || utf8.RuneCountInString(password) < MinPasswordCharacters || strings.TrimSpace(password) == "" {
+		return "", fmt.Errorf("password must contain at least %d characters, at most %d bytes, and a non-whitespace character", MinPasswordCharacters, MaxPasswordBytes)
 	}
 	return h.hash(ctx, password)
 }

@@ -199,6 +199,93 @@ func handleAdminPasswordRotation(w http.ResponseWriter, r *http.Request) {
 	httpx.WriteAPI(w, http.StatusOK, httpx.Response{Success: true, Data: map[string]any{"loginRequired": true}})
 }
 
+func handleAdminDesktopSessionSignOut(w http.ResponseWriter, r *http.Request) {
+	var request struct{}
+	if !decodeAdminJSON(w, r, &request) {
+		return
+	}
+	runtime, security, ok := authRuntimeAndSecurity(w, r)
+	if !ok {
+		return
+	}
+	principal, ok := adminPrincipal(r)
+	if !ok {
+		writeAdminSecurityError(w, http.StatusUnauthorized, "login_required")
+		return
+	}
+	if err := runtime.service.LogoutWithDevicePause(r.Context(), principal); err != nil {
+		writeAdminAuthOperationError(w, err)
+		return
+	}
+	clearAdminCredentialCookies(w, security.Secure)
+	httpx.WriteAPI(w, http.StatusOK, httpx.Response{Success: true, Data: map[string]any{"automaticSignIn": false}})
+}
+
+func handleAdminTrustedDevices(w http.ResponseWriter, r *http.Request) {
+	runtime, _, ok := authRuntimeAndSecurity(w, r)
+	if !ok {
+		return
+	}
+	principal, ok := adminPrincipal(r)
+	if !ok {
+		writeAdminSecurityError(w, http.StatusUnauthorized, "login_required")
+		return
+	}
+	devices, err := runtime.service.ListTrustedDevices(r.Context(), principal)
+	if err != nil {
+		writeAdminAuthOperationError(w, err)
+		return
+	}
+	httpx.WriteAPI(w, http.StatusOK, httpx.Response{Success: true, Data: map[string]any{"devices": devices}})
+}
+
+func handleAdminTrustedDeviceRevoke(w http.ResponseWriter, r *http.Request) {
+	var request struct {
+		DeviceID        string `json:"deviceID"`
+		CurrentPassword string `json:"currentPassword"`
+	}
+	if !decodeAdminJSON(w, r, &request) {
+		return
+	}
+	runtime, security, ok := authRuntimeAndSecurity(w, r)
+	if !ok {
+		return
+	}
+	principal, ok := adminPrincipal(r)
+	if !ok {
+		writeAdminSecurityError(w, http.StatusUnauthorized, "login_required")
+		return
+	}
+	if err := runtime.service.RevokeTrustedDevice(r.Context(), principal, request.CurrentPassword, request.DeviceID, security.ClientIP.String()); err != nil {
+		writeAdminAuthOperationError(w, err)
+		return
+	}
+	httpx.WriteAPI(w, http.StatusOK, httpx.Response{Success: true})
+}
+
+func handleAdminTrustedDevicesRevokeAll(w http.ResponseWriter, r *http.Request) {
+	var request struct {
+		CurrentPassword string `json:"currentPassword"`
+	}
+	if !decodeAdminJSON(w, r, &request) {
+		return
+	}
+	runtime, security, ok := authRuntimeAndSecurity(w, r)
+	if !ok {
+		return
+	}
+	principal, ok := adminPrincipal(r)
+	if !ok {
+		writeAdminSecurityError(w, http.StatusUnauthorized, "login_required")
+		return
+	}
+	if err := runtime.service.RevokeAllTrustedDevices(r.Context(), principal, request.CurrentPassword, security.ClientIP.String()); err != nil {
+		writeAdminAuthOperationError(w, err)
+		return
+	}
+	httpx.WriteAPI(w, http.StatusOK, httpx.Response{Success: true})
+}
+
 func handleAdminSessions(w http.ResponseWriter, r *http.Request) {
 	runtime, _, ok := authRuntimeAndSecurity(w, r)
 	if !ok {

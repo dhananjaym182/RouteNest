@@ -3,8 +3,6 @@ package proxycore
 import (
 	"context"
 	"net"
-	"net/http"
-	"strconv"
 	"sync"
 	"testing"
 	"time"
@@ -19,10 +17,9 @@ func protocolTestServer(t *testing.T) string {
 	t.Helper()
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
-		t.Fatalf("reserve protocol test port: %v", err)
+		t.Fatalf("reserve protocol test listener: %v", err)
 	}
-	port := listener.Addr().(*net.TCPAddr).Port
-	listener.Close()
+	ctx, cancel := context.WithCancel(context.Background())
 
 	protocolModelSyncOnce.Do(func() {
 		routing.SyncMu.Lock()
@@ -35,49 +32,38 @@ func protocolTestServer(t *testing.T) string {
 	zen.Config = &zen.ConfigData{BaseURL: zen.APIBase, Key: "public"}
 	zen.ConfigMu.Unlock()
 
-	oldServerMux := ServerMux
 	ServerMu.Lock()
-	oldServer := CurrentServer
+	oldServerMux, oldServer := ServerMux, CurrentServer
+	oldHost, oldPort := ListenHost, ListenPort
 	ServerMu.Unlock()
+	ready, done := make(chan struct{}), make(chan struct{})
+	var startErr error
 	t.Cleanup(func() {
-		ServerMu.Lock()
-		server := CurrentServer
-		CurrentServer = oldServer
-		ServerMu.Unlock()
-		if server != nil && server != oldServer {
-			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-			_ = server.Shutdown(ctx)
-			cancel()
+		cancel()
+		select {
+		case <-done:
+		case <-time.After(5 * time.Second):
+			t.Error("timed out waiting for protocol test server shutdown")
 		}
-		ServerMux = oldServerMux
+		ServerMu.Lock()
+		ServerMux, CurrentServer = oldServerMux, oldServer
+		ListenHost, ListenPort = oldHost, oldPort
+		ServerMu.Unlock()
 		zen.ConfigMu.Lock()
 		zen.Config = oldZenConfig
 		zen.ConfigMu.Unlock()
 	})
 
-	serverErr := make(chan error, 1)
-	go func() { serverErr <- Start("127.0.0.1", port, nil) }()
-
-	baseURL := "http://127.0.0.1:" + strconv.Itoa(port)
-	client := &http.Client{Transport: &http.Transport{}, Timeout: 2 * time.Second}
-	deadline := time.Now().Add(10 * time.Second)
-	for {
-		resp, requestErr := client.Get(baseURL + "/health")
-		if requestErr == nil {
-			resp.Body.Close()
-			if resp.StatusCode == http.StatusOK {
-				break
-			}
-		}
-		select {
-		case startErr := <-serverErr:
-			t.Fatalf("start protocol test server: %v", startErr)
-		default:
-		}
-		if time.Now().After(deadline) {
-			t.Fatal("timed out waiting for protocol test server")
-		}
-		time.Sleep(100 * time.Millisecond)
+	go func() {
+		startErr = StartWithListener(ctx, listener, nil, func() { close(ready) })
+		close(done)
+	}()
+	select {
+	case <-ready:
+	case <-done:
+		t.Fatalf("start protocol test server: %v", startErr)
+	case <-time.After(10 * time.Second):
+		t.Fatal("timed out waiting for protocol test server")
 	}
-	return baseURL
+	return "http://" + listener.Addr().String()
 }

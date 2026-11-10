@@ -87,7 +87,7 @@ func TestRecoveryCodeIssueRequiresSessionCSRFAndCurrentPassword(t *testing.T) {
 	}
 }
 
-func TestDesktopHandoffIsLoopbackBoundAndSingleUse(t *testing.T) {
+func TestDesktopHandoffIsPrivateAndSingleUse(t *testing.T) {
 	mux, runtime := newAdminAuthTestMux(t)
 	credentials, err := runtime.service.CompleteBootstrap(t.Context(), "one time bootstrap secret", "AdminRecovery8!")
 	if err != nil {
@@ -100,17 +100,23 @@ func TestDesktopHandoffIsLoopbackBoundAndSingleUse(t *testing.T) {
 	request := adminTestRequest(http.MethodPost, "/admin/api/auth/desktop-handoff", `{"token":"`+token+`"}`)
 	recorder := httptest.NewRecorder()
 	mux.ServeHTTP(recorder, request)
-	if recorder.Code != http.StatusOK {
-		t.Fatalf("handoff status=%d body=%s", recorder.Code, recorder.Body.String())
+	if recorder.Code != http.StatusForbidden || len(recorder.Result().Cookies()) != 0 {
+		t.Fatalf("ordinary handoff status=%d body=%s", recorder.Code, recorder.Body.String())
 	}
-	if cookieNamed(t, recorder, adminapi.SessionCookieName).Value == "" {
-		t.Fatal("handoff did not set session cookie")
+	console := desktopConsoleForTest(t, runtime)
+	response := console.Request(t.Context(), DesktopConsoleRequest{Method: http.MethodPost, Path: "/admin/api/auth/desktop-handoff", Body: `{"token":"` + token + `"}`})
+	if response.Status != http.StatusOK || response.CSRF != credentials.CSRFToken {
+		t.Fatalf("private handoff status=%d body=%s", response.Status, response.Body)
 	}
-	replay := httptest.NewRecorder()
-	mux.ServeHTTP(replay, adminTestRequest(http.MethodPost, "/admin/api/auth/desktop-handoff", `{"token":"`+token+`"}`))
-	if replay.Code != http.StatusUnauthorized {
-		t.Fatalf("handoff replay status=%d", replay.Code)
+	refreshed, err := console.Credentials(t.Context())
+	if err != nil || refreshed.Token != credentials.Token {
+		t.Fatalf("handoff did not retain the ordinary session: %v", err)
 	}
+	response = console.Request(t.Context(), DesktopConsoleRequest{Method: http.MethodPost, Path: "/admin/api/auth/desktop-handoff", Body: `{"token":"` + token + `"}`})
+	if response.Status != http.StatusUnauthorized || response.CSRF != "" {
+		t.Fatalf("handoff replay status=%d", response.Status)
+	}
+	requireDesktopConsoleSignedOut(t, console)
 }
 
 func TestDesktopBootstrapReturnsRecoveryCodeWhenHandoffGenerationFails(t *testing.T) {

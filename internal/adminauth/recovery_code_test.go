@@ -103,6 +103,19 @@ func TestConcurrentRecoveryAllowsOneWinner(t *testing.T) {
 	}
 }
 
+func TestRecoveryCodeIssueReauthenticationIsThrottled(t *testing.T) {
+	service, _ := testService(t)
+	credentials := bootstrap(t, service)
+	for attempt := 0; attempt < 5; attempt++ {
+		if _, err := service.IssueRecoveryCode(t.Context(), credentials.Principal, "wrong password", "192.0.2.70"); !errors.Is(err, ErrUnauthorized) {
+			t.Fatalf("attempt %d = %v", attempt, err)
+		}
+	}
+	if _, err := service.IssueRecoveryCode(t.Context(), credentials.Principal, "wrong password", "192.0.2.70"); !errors.Is(err, ErrRateLimited) {
+		t.Fatalf("unbounded recovery-code reauthentication = %v", err)
+	}
+}
+
 func TestIssueRecoveryCodeRequiresBreakGlassPassword(t *testing.T) {
 	service, _ := testService(t)
 	credentials := bootstrap(t, service)

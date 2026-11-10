@@ -74,6 +74,7 @@ function applyLang(){
   if (typeof syncNavCollapseBtn === 'function') syncNavCollapseBtn(); // 侧栏按钮 title 随语言更新
   if (typeof updateShellContext === 'function' && typeof _activeTabName !== 'undefined') updateShellContext(_activeTabName || getActiveTab());
   if (typeof setGatewayReachability === 'function' && typeof _gatewayReachable !== 'undefined') setGatewayReachability(_gatewayReachable);
+  if (typeof updateAdminAuthPageTitle === 'function') updateAdminAuthPageTitle();
 }
 function setLang(l){
   LANG = l;
@@ -91,10 +92,10 @@ function setLang(l){
     if (typeof renderGlobal === 'function' && typeof _globalData !== 'undefined' && _globalData) renderGlobal();
     renderAdminPrincipal(_adminPrincipal);
     if (typeof _activeTabName !== 'undefined' && _activeTabName === 'security' && adminHasPermission('security.write')) {
-      loadAdminSessions(); loadAdminUsers(); loadSSOProviders();
+      loadAdminSessions(); loadAdminUsers(); if (typeof loadTrustedDevices === 'function') loadTrustedDevices(); loadSSOProviders();
     }
   }
-  toast(l === 'en' ? 'Language switched to English' : '语言已切换为中文', 'success');
+  if (typeof _adminPrincipal !== 'undefined' && _adminPrincipal) toast(l === 'en' ? 'Language switched to English' : '语言已切换为中文', 'success');
 }
 LANG = detectLang();
 document.documentElement.lang = (LANG==='en')?'en':'zh-CN';

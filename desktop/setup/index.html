@@ -10,20 +10,20 @@
 <body>
   <main class="setup-shell">
     <header class="brand-row" aria-label="RouteNest">
-      <div class="brand-mark" aria-hidden="true">RN</div>
-      <div><strong>RouteNest</strong><span id="platformLabel">Desktop setup</span></div>
-      <button id="languageButton" class="quiet-button" type="button" aria-label="Switch language">中文</button>
+      <div class="brand-mark" aria-hidden="true"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.5 L20 7 v10 l-8 4.5 L4 17 V7 Z" opacity="0.45"/><path d="M4 12 h6.5"/><path d="M10.5 12 C12.5 12 14 8 18 8"/><path d="M10.5 12 h7.5"/><path d="M10.5 12 C12.5 12 14 16 18 16"/><circle cx="10.5" cy="12" r="1.5" fill="currentColor"/><circle cx="18" cy="8" r="1.2" fill="currentColor"/><circle cx="18" cy="12" r="1.2" fill="currentColor"/><circle cx="18" cy="16" r="1.2" fill="currentColor"/></svg></div>
+      <div><strong>RouteNest</strong><span data-copy="platformLabel">Desktop access</span></div>
+      <button id="languageButton" class="quiet-button" type="button" aria-label="Switch to Chinese">中文</button>
     </header>
 
-    <section id="loadingView" class="setup-card" aria-live="polite">
+    <section id="loadingView" class="setup-card" aria-live="polite" aria-busy="true">
       <div class="spinner" aria-hidden="true"></div>
-      <h1 data-copy="checkingTitle">Checking this installation</h1>
-      <p data-copy="checkingBody">RouteNest is verifying local security storage before opening.</p>
+      <h1 tabindex="-1" data-copy="checkingTitle">Checking this installation</h1>
+      <p class="lead" data-copy="checkingBody">RouteNest is verifying local security storage before opening.</p>
     </section>
 
     <section id="welcomeView" class="setup-card" hidden aria-labelledby="welcomeTitle">
       <div class="step-label" data-copy="stepOne">Step 1 of 3</div>
-      <h1 id="welcomeTitle" data-copy="welcomeTitle">Welcome to RouteNest</h1>
+      <h1 id="welcomeTitle" tabindex="-1" data-copy="welcomeTitle">Welcome to RouteNest</h1>
       <p class="lead" data-copy="welcomeBody">Create the local administrator that protects provider credentials, routing, and gateway access.</p>
       <ul class="trust-list">
         <li data-copy="trustLocal">Your password is hashed and stored only on this device.</li>
@@ -33,38 +33,96 @@
       <button id="beginButton" class="primary-button" type="button" data-copy="begin">Create administrator</button>
     </section>
 
-    <section id="passwordView" class="setup-card" hidden aria-labelledby="passwordTitle">
-      <div class="step-label" data-copy="stepTwo">Step 2 of 3</div>
-      <h1 id="passwordTitle" data-copy="passwordTitle">Create administrator password</h1>
-      <p class="lead" data-copy="passwordBody">Use at least 8 characters. A password manager is recommended.</p>
-      <form id="passwordForm" novalidate>
-        <label for="passwordInput" data-copy="passwordLabel">Password</label>
-        <div class="password-control"><input id="passwordInput" type="password" minlength="8" maxlength="1024" autocomplete="new-password" required aria-describedby="setupError"><button class="visibility-button" type="button" data-target="passwordInput" aria-label="Show password">Show</button></div>
-        <label for="confirmInput" data-copy="confirmLabel">Confirm password</label>
-        <div class="password-control"><input id="confirmInput" type="password" minlength="8" maxlength="1024" autocomplete="new-password" required aria-describedby="setupError"><button class="visibility-button" type="button" data-target="confirmInput" aria-label="Show password">Show</button></div>
-        <div id="setupError" class="error-message" role="alert" aria-live="assertive"></div>
-        <div class="button-row"><button id="backButton" class="secondary-button" type="button" data-copy="back">Back</button><button id="createButton" class="primary-button" type="submit" data-copy="create">Create administrator</button></div>
+    <section id="loginView" class="setup-card" hidden aria-labelledby="desktopLoginTitle">
+      <div class="step-label" data-copy="localAccess">Local administrator</div>
+      <h1 id="desktopLoginTitle" tabindex="-1" data-copy="loginTitle">Sign in to RouteNest</h1>
+      <p class="lead" data-copy="loginBody">Use your local administrator account. Ordinary browsers authenticate separately.</p>
+      <p id="desktopDeviceNotice" class="status-note" role="status" hidden></p>
+      <p id="desktopLoginNotice" class="status-note is-success" role="status" hidden></p>
+      <form id="desktopLoginForm" novalidate>
+        <fieldset id="desktopLoginFields">
+          <label for="desktopUsernameInput" data-copy="usernameLabel">Username</label>
+          <input id="desktopUsernameInput" class="text-input" type="text" value="admin" maxlength="128" autocomplete="username" autocapitalize="none" spellcheck="false" required aria-describedby="desktopLoginError">
+          <label for="desktopPasswordInput" data-copy="passwordLabel">Password</label>
+          <div class="password-control"><input id="desktopPasswordInput" type="password" maxlength="1024" autocomplete="current-password" required aria-describedby="desktopLoginError"><button class="visibility-button" type="button" data-target="desktopPasswordInput" data-label="passwordLabel" aria-label="Show password" aria-pressed="false">Show</button></div>
+          <label id="desktopTrustOption" class="confirmation trust-option"><input id="desktopTrustDeviceCheck" type="checkbox" aria-describedby="desktopTrustDeviceHelp desktopDeviceNotice"><span><strong data-copy="trustDevice">Trust this device for automatic sign-in</strong><small id="desktopTrustDeviceHelp" data-copy="trustDeviceHelp">Optional. RouteNest stores a revocable credential in protected OS storage, never your password. Only enable this on a device you control.</small></span></label>
+          <div id="desktopLoginError" class="error-message" role="alert" aria-live="assertive" tabindex="-1"></div>
+          <button id="desktopSignInButton" class="primary-button full-button" type="submit" data-copy="signIn">Sign in</button>
+          <button id="desktopForgotButton" class="quiet-button login-forgot" type="button" data-copy="forgotPassword">Forgot password?</button>
+        </fieldset>
       </form>
     </section>
 
+    <section id="passwordView" class="setup-card" hidden aria-labelledby="passwordTitle">
+      <div class="step-label" data-copy="stepTwo">Step 2 of 3</div>
+      <h1 id="passwordTitle" tabindex="-1" data-copy="passwordTitle">Create administrator password</h1>
+      <p id="passwordHelp" class="lead" data-copy="passwordBody">Use at least 8 characters. A password manager is recommended.</p>
+      <form id="passwordForm" novalidate>
+        <fieldset id="passwordFields">
+          <label for="passwordInput" data-copy="passwordLabel">Password</label>
+          <div class="password-control"><input id="passwordInput" type="password" minlength="8" maxlength="1024" autocomplete="new-password" required aria-describedby="passwordHelp setupError"><button class="visibility-button" type="button" data-target="passwordInput" data-label="passwordLabel" aria-label="Show password" aria-pressed="false">Show</button></div>
+          <label for="confirmInput" data-copy="confirmLabel">Confirm password</label>
+          <div class="password-control"><input id="confirmInput" type="password" minlength="8" maxlength="1024" autocomplete="new-password" required aria-describedby="setupError"><button class="visibility-button" type="button" data-target="confirmInput" data-label="confirmLabel" aria-label="Show confirmation password" aria-pressed="false">Show</button></div>
+          <label id="setupTrustOption" class="confirmation trust-option"><input id="trustDeviceCheck" type="checkbox" aria-describedby="trustDeviceHelp setupDeviceNotice"><span><strong data-copy="trustDevice">Trust this device for automatic sign-in</strong><small id="trustDeviceHelp" data-copy="trustDeviceHelp">Optional. RouteNest stores a revocable credential in protected OS storage, never your password. Only enable this on a device you control.</small></span></label>
+          <p id="setupDeviceNotice" class="security-note" role="status" hidden></p>
+          <div id="setupError" class="error-message" role="alert" aria-live="assertive" tabindex="-1"></div>
+          <div class="button-row"><button id="backButton" class="secondary-button" type="button" data-copy="back">Back</button><button id="createButton" class="primary-button" type="submit" data-copy="create">Create administrator</button></div>
+        </fieldset>
+      </form>
+    </section>
+
+    <section id="forgotView" class="setup-card" hidden aria-labelledby="forgotTitle">
+      <div class="step-label" data-copy="accountRecovery">Account recovery</div>
+      <h1 id="forgotTitle" tabindex="-1" data-copy="forgotTitle">Reset administrator password</h1>
+      <p class="lead" data-copy="forgotBody">Enter the recovery code saved for the local emergency administrator. Resetting the password revokes that account's sessions and trusted desktop devices.</p>
+      <form id="desktopRecoveryForm" novalidate>
+        <fieldset id="desktopRecoveryFields">
+          <label for="recoveryCodeInput" data-copy="recoveryCodeLabel">Recovery code</label>
+          <div class="password-control"><input id="recoveryCodeInput" type="password" maxlength="1024" autocomplete="off" autocapitalize="none" spellcheck="false" required aria-describedby="desktopRecoveryError"><button class="visibility-button" type="button" data-target="recoveryCodeInput" data-label="recoveryCodeLabel" aria-label="Show recovery code" aria-pressed="false">Show</button></div>
+          <label for="recoveryPasswordInput" data-copy="newPasswordLabel">New password</label>
+          <div class="password-control"><input id="recoveryPasswordInput" type="password" minlength="8" maxlength="1024" autocomplete="new-password" required aria-describedby="recoveryPasswordHelp desktopRecoveryError"><button class="visibility-button" type="button" data-target="recoveryPasswordInput" data-label="newPasswordLabel" aria-label="Show new password" aria-pressed="false">Show</button></div>
+          <p id="recoveryPasswordHelp" class="field-hint" data-copy="passwordBody">Use at least 8 characters. A password manager is recommended.</p>
+          <label for="recoveryConfirmInput" data-copy="confirmLabel">Confirm password</label>
+          <div class="password-control"><input id="recoveryConfirmInput" type="password" minlength="8" maxlength="1024" autocomplete="new-password" required aria-describedby="desktopRecoveryError"><button class="visibility-button" type="button" data-target="recoveryConfirmInput" data-label="confirmLabel" aria-label="Show confirmation password" aria-pressed="false">Show</button></div>
+          <div id="desktopRecoveryError" class="error-message" role="alert" aria-live="assertive" tabindex="-1"></div>
+          <div class="button-row"><button id="recoveryBackButton" class="secondary-button" type="button" data-copy="backToSignIn">Back to sign in</button><button id="desktopRecoverySubmit" class="primary-button" type="submit" data-copy="resetPassword">Reset password</button></div>
+        </fieldset>
+      </form>
+      <p class="security-note" data-copy="recoveryGuidance">Lost the recovery code? Stop RouteNest and use the documented offline emergency recovery procedure from a local terminal. Other local users should ask a security administrator to reset their password.</p>
+    </section>
+
     <section id="recoveryView" class="setup-card" hidden aria-labelledby="recoveryTitle">
-      <div class="step-label" data-copy="stepThree">Step 3 of 3</div>
-      <h1 id="recoveryTitle" data-copy="recoveryTitle">Save your recovery code</h1>
-      <p class="lead" data-copy="recoveryBody">This single-use code is the normal way to reset a forgotten administrator password. RouteNest cannot display it again.</p>
-      <p id="restartNotice" class="security-note" hidden data-copy="restartNotice">Setup was durably prepared, but RouteNest must restart before opening the dashboard. Save this recovery code, then close and reopen RouteNest.</p>
-      <div class="recovery-code-wrap"><code id="recoveryCode" tabindex="0"></code><button id="copyButton" class="secondary-button" type="button" data-copy="copy">Copy</button></div>
+      <div id="recoveryStep" class="step-label" data-copy="stepThree">Step 3 of 3</div>
+      <h1 id="recoveryTitle" tabindex="-1" data-copy="recoveryTitle">Save your recovery code</h1>
+      <p id="recoveryBody" class="lead" data-copy="recoveryBody">This single-use code resets a forgotten administrator password. RouteNest cannot display it again.</p>
+      <p id="restartNotice" class="status-note" hidden data-copy="restartNotice">The change was saved, but RouteNest must restart to finish it. Save this recovery code before closing and reopening RouteNest.</p>
+      <div class="recovery-code-wrap"><code id="recoveryCode" tabindex="0" aria-label="Recovery code" data-copy-aria="recoveryCodeLabel"></code><button id="copyButton" class="secondary-button" type="button" data-copy="copy">Copy</button></div>
+      <p id="copyStatus" class="field-hint" role="status"></p>
       <p class="security-note" data-copy="recoveryWarning">Store it in a password manager or another secure location. Do not save it beside provider credentials.</p>
-      <label class="confirmation"><input id="savedCheck" type="checkbox"><span data-copy="savedConfirm">I saved the recovery code securely.</span></label>
-      <div id="recoveryError" class="error-message" role="alert" aria-live="assertive"></div>
-      <button id="finishButton" class="primary-button" type="button" disabled data-copy="finish">Open RouteNest</button>
+      <p id="trustDeviceResult" class="status-note" hidden role="status"></p>
+      <label class="confirmation saved-confirmation"><input id="savedCheck" type="checkbox" aria-describedby="recoveryError"><span data-copy="savedConfirm">I saved the recovery code securely.</span></label>
+      <div id="recoveryError" class="error-message" role="alert" aria-live="assertive" tabindex="-1"></div>
+      <button id="finishButton" class="primary-button full-button" type="button" disabled data-copy="finish">Open RouteNest</button>
+    </section>
+
+    <section id="continuationView" class="setup-card" hidden aria-labelledby="continuationTitle">
+      <h1 id="continuationTitle" tabindex="-1"></h1>
+      <p id="continuationBody" class="lead"></p>
+      <button id="continueButton" class="primary-button" type="button" data-copy="continue">Continue in RouteNest</button>
+    </section>
+
+    <section id="restartView" class="setup-card" hidden aria-labelledby="restartTitle">
+      <h1 id="restartTitle" tabindex="-1" data-copy="restartTitle">Restart RouteNest</h1>
+      <p class="lead" data-copy="restartBody">Close and reopen RouteNest to finish the security update. Use your password to sign in when it opens.</p>
+      <button id="restartButton" class="primary-button" type="button" data-copy="restartFinish">Close RouteNest</button>
     </section>
 
     <section id="errorView" class="setup-card error-card" hidden aria-labelledby="errorTitle">
       <div class="error-icon" aria-hidden="true">!</div>
-      <h1 id="errorTitle" data-copy="errorTitle">Security storage needs attention</h1>
-      <p data-copy="errorBody">RouteNest stopped before changing credentials or configuration.</p>
-      <pre id="errorDetails"></pre>
-      <p class="security-note" data-copy="errorHelp">Restore the existing data directory from backup, or use the documented offline recovery command when administrator authority is intact.</p>
+      <h1 id="errorTitle" tabindex="-1" data-copy="errorTitle">Security storage needs attention</h1>
+      <p data-copy="errorBody">RouteNest cannot safely open this installation.</p>
+      <pre id="errorDetails" role="alert"></pre>
+      <p class="security-note" data-copy="errorHelp">Restore the existing data directory from backup, or use the documented offline recovery procedure when administrator authority is intact. Existing credentials will not be silently reset.</p>
     </section>
   </main>
   <script src="/setup.js"></script>

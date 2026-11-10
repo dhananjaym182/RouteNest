@@ -109,8 +109,8 @@ func NewService(repo Repository, opts Options) (*Service, error) {
 			return nil, fmt.Errorf("bootstrap needs a controlling TTY or native dialog; configure ROUTENEST_ADMIN_BOOTSTRAP_PASSWORD for a fresh headless installation")
 		}
 	}
-	if len(secret) < MinBootstrapSecretBytes || len(secret) > MaxPasswordBytes {
-		return nil, fmt.Errorf("bootstrap secret must contain %d to %d bytes", MinBootstrapSecretBytes, MaxPasswordBytes)
+	if len(secret) < MinBootstrapSecretBytes || len(secret) > MaxPasswordBytes || strings.TrimSpace(secret) == "" {
+		return nil, fmt.Errorf("bootstrap secret must contain %d to %d bytes and a non-whitespace character", MinBootstrapSecretBytes, MaxPasswordBytes)
 	}
 	phc, e := s.hasher.hash(context.Background(), secret)
 	if e != nil {
@@ -151,6 +151,9 @@ func (s *Service) applyOutcome(ctx context.Context, kind AuditKind, actor, targe
 	if e := s.check(); e != nil {
 		return e
 	}
+	if e := ctx.Err(); e != nil {
+		return e
+	}
 	id, e := randomToken(s.random)
 	if e != nil {
 		return e
@@ -161,7 +164,15 @@ func (s *Service) applyOutcome(ctx context.Context, kind AuditKind, actor, targe
 		source = ""
 	}
 	event := AuditEvent{ID: id, Kind: kind, ActorID: actor, TargetID: target, Source: source, Outcome: outcome, At: s.now().UTC()}
-	return s.repo.Apply(ctx, event, func(st *State) error {
+	var mutationErr error
+	e = s.repo.Apply(ctx, event, func(st *State) (err error) {
+		defer func() { mutationErr = err }()
+		if err := s.check(); err != nil {
+			return err
+		}
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		wasInitialized := st.Initialized
 		if e := mutate(st); e != nil {
 			return e
@@ -171,6 +182,15 @@ func (s *Service) applyOutcome(ctx context.Context, kind AuditKind, actor, targe
 		}
 		return ValidateState(*st)
 	})
+	mutationRejected := mutationErr != nil && errors.Is(e, mutationErr)
+	if e != nil && (errors.Is(e, ErrMutationPrepared) || errors.Is(e, ErrDegraded) || !mutationRejected && !expectedMutationError(e)) {
+		s.lockdown()
+	}
+	return e
+}
+
+func expectedMutationError(err error) bool {
+	return errors.Is(err, ErrUnauthorized) || errors.Is(err, ErrForbidden) || errors.Is(err, ErrConflict) || errors.Is(err, ErrRateLimited) || errors.Is(err, ErrReplay) || errors.Is(err, ErrNotInitialized) || errors.Is(err, ErrAlreadyInitialized) || errors.Is(err, ErrInvalidState) || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)
 }
 
 // RecordCredentialEvent durably records a redacted client-key security event.
@@ -264,6 +284,7 @@ func (s *Service) completeBootstrap(ctx context.Context, secret, password string
 	if e != nil {
 		return Credentials{}, "", e
 	}
+	session.Source = authenticationSource(src)
 	kind := AuditBootstrapComplete
 	if recovering {
 		kind = AuditRecoveryComplete
@@ -283,6 +304,9 @@ func (s *Service) completeBootstrap(ctx context.Context, secret, password string
 			next.RecoveryCodePHC = recoveryCodePHC
 		}
 		next.Users[BreakGlassID] = u
+		if recovering {
+			revokeAllTrustedDevices(next)
+		}
 		next.Sessions[session.TokenHash] = session
 		return nil
 	})
@@ -296,14 +320,11 @@ func (s *Service) completeBootstrap(ctx context.Context, secret, password string
 }
 
 func (s *Service) allow(source, username string) (bool, time.Duration) {
-	ok, retry := s.throttle.Allow(source)
-	if !ok {
-		return false, retry
-	}
+	source = authenticationSource(source)
 	if username == BreakGlassUsername {
-		return s.throttle.Allow("reserved-local:" + source)
+		return s.throttle.allow(source, "reserved-local:"+source)
 	}
-	return true, 0
+	return s.throttle.Allow(source)
 }
 
 func (s *Service) Login(ctx context.Context, username, password, source string) (credentials Credentials, err error) {
@@ -357,6 +378,7 @@ func (s *Service) Login(ctx context.Context, username, password, source string) 
 	if e != nil {
 		return Credentials{}, e
 	}
+	session.Source = authenticationSource(source)
 	var rehash string
 	if s.hasher.NeedsRehash(u.PasswordPHC) {
 		rehash, e = s.hasher.hash(ctx, password)
@@ -410,6 +432,7 @@ func (s *Service) CompleteLegacyRotation(ctx context.Context, username, oldPassw
 	if e != nil {
 		return Credentials{}, e
 	}
+	session.Source = authenticationSource(source)
 	e = s.apply(ctx, AuditLegacyMigrate, u.ID, u.ID, source, func(next *State) error {
 		current, ok := next.Users[u.ID]
 		if !ok || current.Legacy == nil || *current.Legacy != legacy || current.Revision+1 != u.Revision {
@@ -417,6 +440,7 @@ func (s *Service) CompleteLegacyRotation(ctx context.Context, username, oldPassw
 		}
 		next.Users[u.ID] = u
 		revokeUserSessions(next, u.ID)
+		revokeUserTrustedDevices(next, u.ID)
 		next.Sessions[session.TokenHash] = session
 		return nil
 	})
@@ -431,8 +455,13 @@ func (s *Service) CompleteLegacyRotation(ctx context.Context, username, oldPassw
 	}
 	return c, nil
 }
-func (s *Service) RotatePassword(ctx context.Context, p Principal, oldPassword, newPassword string) error {
-	if p.Method != MethodLocal {
+func (s *Service) RotatePassword(ctx context.Context, p Principal, oldPassword, newPassword string) (err error) {
+	defer func() {
+		if err != nil && errors.Is(err, ErrUnauthorized) {
+			s.RecordDenial(AuditLoginDenied, "")
+		}
+	}()
+	if p.Method != MethodLocal || p.Provider != "" {
 		return ErrForbidden
 	}
 	if e := s.validatePrincipal(ctx, p); e != nil {
@@ -443,9 +472,8 @@ func (s *Service) RotatePassword(ctx context.Context, p Principal, oldPassword, 
 		return e
 	}
 	u := st.Users[p.UserID]
-	ok, e := s.hasher.Verify(ctx, u.PasswordPHC, oldPassword)
-	if e != nil || !ok {
-		return ErrUnauthorized
+	if e := s.verifyCurrentPassword(ctx, p, st, oldPassword, ""); e != nil {
+		return e
 	}
 	phc, e := s.hasher.Hash(ctx, newPassword)
 	if e != nil {
@@ -463,6 +491,7 @@ func (s *Service) RotatePassword(ctx context.Context, p Principal, oldPassword, 
 		current.Revision++
 		next.Users[current.ID] = current
 		revokeUserSessions(next, current.ID)
+		revokeUserTrustedDevices(next, current.ID)
 		return nil
 	})
 }
@@ -490,8 +519,14 @@ func (s *Service) Mutate(ctx context.Context, p Principal, kind AuditKind, targe
 		if e := fn(st); e != nil {
 			return e
 		}
-		if st.Initialized != before.Initialized || st.BootstrapPHC != before.BootstrapPHC || st.RecoveryPHC != before.RecoveryPHC || st.RecoveryCodePHC != before.RecoveryCodePHC {
+		if st.Initialized != before.Initialized || st.BootstrapPHC != before.BootstrapPHC || st.RecoveryPHC != before.RecoveryPHC || st.RecoveryCodePHC != before.RecoveryCodePHC || !equalTrustedDevices(st.TrustedDevices, before.TrustedDevices) {
 			return ErrForbidden
+		}
+		for hash, session := range st.Sessions {
+			previous, exists := before.Sessions[hash]
+			if !exists || session != previous {
+				return ErrForbidden
+			}
 		}
 		reserved := st.Users[BreakGlassID]
 		oldReserved := before.Users[BreakGlassID]
@@ -505,11 +540,13 @@ func (s *Service) Mutate(ctx context.Context, p Principal, kind AuditKind, targe
 					return ErrForbidden
 				}
 				revokeUserSessions(st, id)
+				revokeUserTrustedDevices(st, id)
 				continue
 			}
-			if old.Username != current.Username || old.Disabled != current.Disabled || strings.Join(rolesStrings(old.Roles), ",") != strings.Join(rolesStrings(current.Roles), ",") || old.PasswordPHC != current.PasswordPHC || old.Provider != current.Provider || old.Subject != current.Subject {
+			if old.Username != current.Username || old.Disabled != current.Disabled || strings.Join(rolesStrings(old.Roles), ",") != strings.Join(rolesStrings(current.Roles), ",") || old.PasswordPHC != current.PasswordPHC || !equalLegacy(old.Legacy, current.Legacy) || old.Provider != current.Provider || old.Subject != current.Subject {
 				current.Revision = old.Revision + 1
 				revokeUserSessions(st, id)
+				revokeUserTrustedDevices(st, id)
 			} else {
 				current.Revision = old.Revision
 			}

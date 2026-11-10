@@ -1,0 +1,81 @@
+{
+  "simulation": true,
+  "scope": "Shipped HTML, CSS and JavaScript with a simulated native bridge and API. This does not validate Wails binding delivery, OS credential storage, Go authentication, or real sessions.",
+  "pendingTranslationKeys": [],
+  "translationSimulation": false,
+  "artifactDir": "/tmp/routenest-login-fix-simulation-reviewed",
+  "cases": 32,
+  "assertions": 750,
+  "screenshots": 80,
+  "errorContrast": [
+    {
+      "label": "simulation-login-en-US-light-1440",
+      "ratio": 6.12
+    },
+    {
+      "label": "simulation-admin-en-US-light-1440",
+      "ratio": 14.22
+    },
+    {
+      "label": "simulation-login-en-US-light-390",
+      "ratio": 6.12
+    },
+    {
+      "label": "simulation-admin-en-US-light-390",
+      "ratio": 14.22
+    },
+    {
+      "label": "simulation-login-en-US-dark-1440",
+      "ratio": 8.75
+    },
+    {
+      "label": "simulation-admin-en-US-dark-1440",
+      "ratio": 13.04
+    },
+    {
+      "label": "simulation-login-en-US-dark-390",
+      "ratio": 8.75
+    },
+    {
+      "label": "simulation-admin-en-US-dark-390",
+      "ratio": 13.04
+    },
+    {
+      "label": "simulation-login-zh-CN-light-1440",
+      "ratio": 6.12
+    },
+    {
+      "label": "simulation-admin-zh-CN-light-1440",
+      "ratio": 14.22
+    },
+    {
+      "label": "simulation-login-zh-CN-light-390",
+      "ratio": 6.12
+    },
+    {
+      "label": "simulation-admin-zh-CN-light-390",
+      "ratio": 14.22
+    },
+    {
+      "label": "simulation-login-zh-CN-dark-1440",
+      "ratio": 8.75
+    },
+    {
+      "label": "simulation-admin-zh-CN-dark-1440",
+      "ratio": 13.04
+    },
+    {
+      "label": "simulation-login-zh-CN-dark-390",
+      "ratio": 8.75
+    },
+    {
+      "label": "simulation-admin-zh-CN-dark-390",
+      "ratio": 13.04
+    }
+  ],
+  "diagnostics": {
+    "pageErrors": [],
+    "consoleErrors": []
+  },
+  "failures": []
+}

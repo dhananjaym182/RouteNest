@@ -20,7 +20,7 @@ Set `ARTIFACT_DIR` to save viewport screenshots of both protocol editors at ever
 
 Coverage:
 
-- Five clear access sections at 1440, 1280, 1024, 768, 390, and 360 pixels in both themes; inputs stay within cards and the page has no horizontal overflow.
+- Clear administrator-security sections, including Desktop Sign-In, at 1440, 1280, 1024, 768, 390, and 360 pixels in both themes; inputs stay within cards and the page has no horizontal overflow.
 - English and Chinese 8-character help, labels, bootstrap placeholders, and minimum-length attributes.
 - Input labels, accessible icon buttons, mobile touch targets, keyboard password-field order, role selection, and optional-field disclosure.
 - New optional OIDC/SAML and group fields start collapsed; populated configuration opens the applicable fields automatically.

@@ -1,7 +1,7 @@
 # Administrator security and SSO
 
 Status: **current operational documentation**
-Reviewed: **2026-11-09**
+Reviewed: **2026-11-10**
 
 RouteNest uses one durable administrator identity plane for local passwords, RBAC,
 OIDC and SAML. Corrupt or partially missing committed authority fails closed. If both
@@ -12,15 +12,17 @@ empty client-key list does not disable administrator authentication.
 
 ## First startup
 
-On an interactive CLI startup, RouteNest generates a one-time bootstrap secret
-and writes it only to the controlling terminal. The desktop build displays it
-once in a native dialog. A headless first start without a controlling terminal must provide
-`ROUTENEST_ADMIN_BOOTSTRAP_PASSWORD`; the value must contain 12 to 1024 bytes, and the
-operator is responsible for generating it randomly and delivering it privately.
+On an interactive CLI startup, RouteNest generates a one-time bootstrap secret and
+writes it only to the controlling terminal. A headless first start without a controlling
+terminal must provide `ROUTENEST_ADMIN_BOOTSTRAP_PASSWORD`; the value must contain 12 to
+1024 bytes, and the operator is responsible for generating it randomly and delivering it
+privately. Open `/admin/`, enter that secret, and set a permanent password for the
+reserved local administrator `admin`.
 
-Open `/admin/`, enter that secret, and set a permanent password for the reserved local
-administrator `admin`. While the durable initialized authority is retained, subsequent
-startup ignores the bootstrap environment variable.
+The desktop build instead performs guarded native first-run setup and asks for the new
+administrator password directly; no terminal, environment variable, or displayed
+bootstrap secret is required. While durable initialized authority is retained,
+subsequent startup ignores the bootstrap environment variable.
 New permanent passwords require at least 8 Unicode characters and may occupy
 at most 1024 UTF-8 bytes. The same policy applies to bootstrap completion,
 password changes, local account creation, resets and offline recovery completion.
@@ -33,18 +35,40 @@ administration.
 ## Public entry surfaces
 
 The static `/admin` and `/admin/` shell is public so it can render bootstrap or login;
-the shell contains no server-rendered authenticated data. Its browser scripts request
-protected data only after session establishment. The public administrator API routes are exactly:
+the shell contains no server-rendered authenticated data. The page starts with a standalone
+loading surface and hides the dashboard until the ordinary administrator session has been
+verified. Unauthenticated browsers see a plain full-page password login or first-run
+bootstrap/legacy-upgrade form. `#login` and `#recover` are distinct page views under
+`/admin/`, with one main landmark, a shared language/theme header, normal document
+scrolling, and no modal focus trap or decorative floating card. Recovery can be opened,
+refreshed, and navigated with browser history without submitting a reset. Recovery
+submission and its one-time replacement-code result cannot be abandoned until the code
+is saved and Finish is selected. Passwords, codes, sessions, and CSRF never enter the
+page route or history state. An expired or revoked session clears the displayed identity
+and returns to login. Successful sign-in restores only an approved console destination.
+For direct local GET/HEAD navigation only, `/admin/` at `localhost`, `127.0.0.1`, or `::1`
+redirects to the configured canonical loopback address when the scheme and port match.
+The redirect creates no session and copies no query values. Remote clients, arbitrary
+hosts, trusted-proxy mode, alternate ports/schemes, mutations, and API requests do not
+receive this exception. Administrator APIs retain exact canonical-origin validation.
+The presentation state is not authentication proof; server-side session, RBAC, and CSRF
+checks remain authoritative. Its browser scripts request protected data only after session
+establishment. The public administrator API routes are exactly:
 
 - `GET /admin/api/auth/status`;
-- `POST /admin/api/auth/bootstrap`, `POST /admin/api/login`, and
-  `POST /admin/api/auth/legacy/rotate`;
+- `POST /admin/api/auth/bootstrap`, `POST /admin/api/login`,
+  `POST /admin/api/auth/legacy/rotate`, and `POST /admin/api/auth/recovery`;
 - `POST /admin/api/auth/oidc/start` and `GET /admin/api/auth/oidc/callback`;
 - `GET /admin/api/auth/saml/metadata`, `POST /admin/api/auth/saml/start`, and
   `POST /admin/api/auth/saml/acs`.
 
-These are bootstrap, login, readiness, metadata, or protocol-entry routes, not anonymous
-administrative authority. Every other registered administrator API route requires a
+The registered `/admin/api/auth/desktop-handoff` path rejects ordinary HTTP/browser
+requests, even from localhost; only the private embedded desktop transport can redeem
+an issued handoff. There is no HTTP device-enrollment or device-secret sign-in endpoint.
+
+These are bootstrap, login, recovery, readiness, metadata, or protocol-entry routes,
+not anonymous administrative authority. Every other
+registered administrator API route requires a
 durable session plus all route permissions. Same-origin and protocol-specific callback
 checks still apply to the public routes.
 
@@ -59,6 +83,47 @@ server authority. Sessions survive restart until expiry or revocation.
 Logout revokes the current session. Password, role, account-status and identity changes
 revoke the affected user's sessions; changing or deleting an SSO provider revokes its
 sessions and pending flows. A `security_admin` can inspect and revoke active sessions.
+
+## Trusted desktop sign-in
+
+The desktop app can remember an explicitly trusted device without storing or replaying
+the administrator password. Enrollment follows valid local-password authentication and
+stores a 256-bit random device credential in Windows Credential Manager, the macOS login
+Keychain, or Linux Secret Service through the platform keyring adapter. The administrator
+authority stores only its SHA-256 verifier, owning user revision, activation/expiry and
+last-use times, and descriptive device metadata. Enrollment becomes usable only after the
+OS keyring write is read back successfully and the registration is durably activated.
+
+A valid enabled device credential issues a fresh ordinary 12-hour local administrator
+session, then passes that session to the existing console through a two-minute, single-use
+in-process handoff. The first setup handoff is created only after recovery-code saving
+is acknowledged. The 90-day device credential is not a browser cookie, recovery code,
+password, or proof that a process is RouteNest. Another process with sufficient access
+to the local user can still compromise it.
+
+The desktop console stays at `/admin/` on the embedded Wails origin. Its private Go
+transport uses the existing route registry, session validation, RBAC, and session-bound
+CSRF without relying on custom-scheme browser cookies. It never sends native session or
+device secrets to the gateway socket. Wails **v2.17.1** fixes the binding-origin advisory
+GHSA-47hv-j4px-h3c9 and the Linux child-frame IPC advisory GHSA-r5j2-ghh9-2jqw.
+Additional binding origins are empty; ordinary localhost pages and external development
+assets are not authorized native entry points.
+
+Ordinary browsers never receive or read the OS-stored credential and always authenticate
+independently. Missing, disabled, revoked, expired, corrupt, locked, or unavailable
+credential storage falls back to password login. RouteNest never falls back to plaintext
+credential files or anonymous administrator access and never silently replaces corrupted
+material.
+
+**Administrator Security → Desktop Sign-In** lists registered devices and last successful
+use, where available. Trusting, resuming, revoking, or forgetting a registered device
+requires the current local administrator password. Removing only an unusable local
+credential requires explicit deletion confirmation, never silently re-enrolls it, and
+cannot enable trust. Lock ends only the current session. Sign out needs no password
+merely to end its own session and pause automatic sign-in. Sign out ends
+the current session and pauses automatic sign-in. Forget this device also revokes the
+server registration and deletes the local OS credential. Password change, online reset,
+offline emergency recovery, and affected local-user changes revoke device registrations.
 
 ## Roles and permissions
 
@@ -103,10 +168,10 @@ rotation, and SSO-start entry points require same-origin validation but not an e
 session CSRF token. OIDC callback and SAML ACS routes use their protocol state, nonce/InResponseTo,
 signature and replay protections. Flow handles are not additionally bound to the
 initiating browser. These public entry routes do not grant anonymous administration.
-The missing-Origin loopback exception applies to session/local-entry/SSO-start policies,
-not protocol callbacks such as SAML ACS. For those ordinary mutations, the peer, client,
-and authority must all be loopback, fetch metadata must be absent or same-origin, and
-proxied requests receive no exception.
+The missing-Origin loopback exception applies only to local-entry and SSO-start policies,
+not authenticated session mutations or protocol callbacks such as SAML ACS. Qualifying
+local-entry requests require loopback peer, client and authority, compatible fetch
+metadata, and no trusted proxy.
 
 ## Hosted administration
 
@@ -164,7 +229,7 @@ environment is unsafe operational practice.
 
 ## OIDC and SAML
 
-SSO providers are managed under **API Keys & Security → Access Settings** by a
+SSO providers are managed under **Administrator Security** by a
 `security_admin`. RouteNest persists only provider metadata and secret references.
 
 - OIDC callback: `<canonical-url>/admin/api/auth/oidc/callback`
@@ -190,15 +255,28 @@ for each configured provider. Each provider must configure at least one default 
 group-mapped role; matching mapped roles are unioned with defaults. Federated identities
 cannot receive the reserved break-glass role.
 
+## Authentication CLI
+
+`routenest auth --help`, `routenest auth status`, `routenest auth recover`, and
+`routenest auth recover --help` are available in CLI and desktop binaries. Help commands
+never open or mutate security storage. Status validates the existing snapshot and
+hash-chained journal read-only while a server may retain its lifetime lock. It does not
+create files or locks, change permissions, or finalize prepared mutations. Missing,
+corrupt, or changing authority is reported explicitly; prepared mutations require a
+restart. Active-session and enabled-device counts exclude expired entries. The
+`-initialize-empty-account-store` option authorizes only guarded first-run client storage;
+it is not a password reset mechanism.
+
 ## Offline recovery
 
 ### Recovery codes
 
 Normal desktop setup generates a 256-bit recovery credential from `crypto/rand` and
 shows it once. RouteNest stores only an Argon2id verifier. Existing local break-glass
-administrators can issue or rotate a code under **API Keys & Security → Access Settings**
+administrators can issue or rotate a code under **Administrator Security → Recovery Code**
 after current-password reauthentication; a stolen administrator session alone cannot
-mint one.
+mint one. Rotating only the recovery code does not revoke otherwise valid trusted devices;
+using a code to reset the password does.
 
 The public recovery protocol still requires the recovery credential. It is protected by
 the same canonical-host and same-origin request policy as local login and does not trust
@@ -236,23 +314,29 @@ variable is not a reset path while initialized authority is retained.
 
 ## Desktop first run
 
-Normal Wails launches use a dedicated embedded setup origin and a native-only bridge.
-For a data directory with no RouteNest, legacy, migration, administrator-authority,
+Normal Wails launches use Wails v2.17.1, a dedicated embedded origin for setup and the
+console, and a native-only bridge with no additional binding origins. For a data
+directory with no RouteNest, legacy, migration, administrator-authority,
 corrupt-backup, account-pool, or initialization-witness evidence, the bridge may create
 the verified empty client-authentication store and complete administrator setup. It
 generates the bootstrap capability in memory, rechecks freshness immediately before the
 mutation, uses the existing administrator service and journal, and becomes inert after
 completion. A single-instance lock prevents competing desktop setup windows.
 
-The localhost administrator server does not expose a public administrator-creation
-shortcut for desktop. After setup, a 256-bit, two-minute, single-use handoff capability
-may transfer the already-created session to `/admin/`; it is accepted only when the
-effective client and peer are loopback. Existing installations skip setup. Missing,
-unreadable, corrupt, partially restored, or otherwise uncertain security state produces
-a recovery diagnostic and no storage recreation.
+The localhost administrator server does not expose a public administrator-creation or
+device-enrollment shortcut for desktop. After setup or verified device/password sign-in,
+a 256-bit, two-minute, single-use handoff capability may transfer the already-authorized
+session to embedded `/admin/`; it is accepted only through the private in-process
+transport, never by a localhost browser or HTTP client. The gateway listener is
+synchronously reserved before credential issuance; an occupied port cannot impersonate
+readiness or receive a native session. Existing installations skip setup and enter
+automatic sign-in only when both the OS
+credential and authoritative registration remain valid. Missing, unreadable, corrupt,
+partially restored, or otherwise uncertain security state produces a recovery diagnostic
+and no storage recreation.
 
-CLI, headless, and Docker deployments retain explicit first-run authorization and
-bootstrap delivery. `ROUTENEST_INITIALIZE_EMPTY_ACCOUNT_STORE` and
+CLI, headless, and Docker deployments remain password-based and never use native desktop
+automatic sign-in. `ROUTENEST_INITIALIZE_EMPTY_ACCOUNT_STORE` and
 `-initialize-empty-account-store` remain process-local advanced controls, not desktop
 user requirements and never reset established data.
 
@@ -264,9 +348,10 @@ For compatibility, a valid intentionally empty key list leaves those routes open
 `/health` and `/v1/health` remain public liveness endpoints. `/ready` and `/v1/ready`
 remain public but return HTTP 503 when client-authentication storage is unavailable, so
 deployment health checks can distinguish a running process from an operational gateway.
-A confirmed fresh installation must set
-`ROUTENEST_INITIALIZE_EMPTY_ACCOUNT_STORE=true` for one startup, then remove it. CLI and
-desktop binaries may instead use `-initialize-empty-account-store` for that one startup.
+A confirmed fresh CLI/headless installation must set
+`ROUTENEST_INITIALIZE_EMPTY_ACCOUNT_STORE=true` for one startup, then remove it, or use
+`-initialize-empty-account-store` for that one startup. Normal desktop setup authorizes
+the same guarded initialization through its native first-run capability.
 The variable is ignored as an initialization shortcut when independent RouteNest, legacy,
 administrator-authority, migration, or corrupt-backup evidence shows that the directory
 is established. Corrupt, unreadable, invalid-marker, partially restored, or uncertain

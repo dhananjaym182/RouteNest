@@ -86,7 +86,7 @@ in the repository root.
 | Request Logs (`#logs`) | request records, filters, attempt traces, export and explicit clearing | routing-policy mutation |
 | Usage & Quotas (`#quota`) | read-only provider budget/usage summaries and provider cooldown reset | budget editing, credential or account editing |
 | Provider Health (`#health`) | read-only availability, cooldown and quota-reset evidence | provider mutation |
-| API Keys & Security (`#security`) | client keys; current-admin password; users, roles, sessions, SSO and listener security; explicitly scoped dangerous actions | Provider Credentials |
+| Administrator Security (`#security`) | current-admin password and recovery code; trusted desktop devices; users, roles, sessions, SSO and listener security; explicitly scoped dangerous actions | Provider Credentials |
 | Settings & Runtime (`#about`) | process/version information and shortcuts to setting owners | independent copies of linked settings |
 | Quick Start (`#quickstart`) | static onboarding and links to owner workflows | mutable gateway state |
 
@@ -151,6 +151,13 @@ Review the proposed role, unavailable-state, dirty-form, confirmation, focus and
 responsive requirements in [CONTRACTS.md](CONTRACTS.md) before changing those
 behaviors. Server route policy remains the authorization authority; client-side
 visibility is presentation only.
+
+Use `node --test tools/admin_login_landing.test.mjs` for the first-paint login gate,
+bootstrap/session transitions, and expired-session focus regressions. The real
+`tools/admin_security_journeys_verify.mjs` harness checks both `/admin` and `/admin/`
+with JavaScript disabled before testing authenticated journeys. Wait for
+`data-admin-auth="signed-out"` and a visible login form, not the initially visible
+loading surface, when driving unauthenticated browser or desktop-simulation forms.
 
 A browser result is current only when it records the source revision, disposable data
 directory and port, explicit bootstrap/login state, retained administrator cookies and
@@ -326,6 +333,17 @@ go build -o /tmp/routenest .
   `node --check`.
 - Desktop builds (`-tags "desktop production"`) need GTK/WebKit system
   libraries; they may be verified in CI when the local environment lacks them.
+- Desktop authentication transitions use `go test -tags desktop -race -count=1 .`.
+  Keep packaged WebView/OS-vault execution separate from these Go tests.
+- `node tools/admin_security_journeys_verify.mjs --self-test` checks the browser
+  harness without a server. Its real HTTP run requires private test credentials,
+  `ROUTENEST_SECURITY_VERIFY_MUTATIONS=1`, and a separately initialized disposable
+  server; see `docs/desktop-authentication-review.md` for commands and evidence.
+- `node tools/desktop_setup_verify.mjs` is explicitly a native-bridge/API simulation,
+  not Wails or credential-vault verification. `node --test tools/*.test.mjs` and
+  `node tools/i18n_check.js` validate the frontend contracts.
+- Parallel race/Argon2 tests can exceed the existing hashing deadline on constrained
+  runners. Retry with `go test -race -p 1 ./...` without relaxing production deadlines.
 
 Do not run smoke tests against a live RouteNest server. Use a scratch port and a
 fresh `ROUTENEST_DATA_DIR`, record the PID you start, and terminate only that

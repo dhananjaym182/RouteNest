@@ -37,11 +37,20 @@ Inter and the existing CJK/system fallbacks own normal app content and metrics. 
 
 ## Components
 
-Reuse shared drawers, confirmations, original provider editor, login/import modals, buttons, inputs, selects, tables, cards and model controls. Preserve the existing primary, neutral, danger and compact variants, labelled form/error patterns, real table headers and responsive compact/card projections. Add a searchable setup directory; temporarily move original Cline/OpenCode nodes from Providers into its workspace and restore them without cloning IDs/listeners. Existing CSS tokens own spacing, sizing, radii, borders, typography, focus and state styling; do not create a parallel design system.
+Reuse shared drawers, confirmations, original provider editor, provider-login/import modals, buttons, inputs, selects, tables, cards and model controls. Preserve the existing primary, neutral, danger and compact variants, labelled form/error patterns, real table headers and responsive compact/card projections. Add a searchable setup directory; temporarily move original Cline/OpenCode nodes from Providers into its workspace and restore them without cloning IDs/listeners. Existing CSS tokens own spacing, sizing, radii, borders, typography, focus and state styling; do not create a parallel design system.
+
+Administrator sign-in and password recovery are plain full-page views under `/admin/`,
+with `#login` and `#recover` navigation, a shared wordmark/preferences header, one main
+landmark, and top-aligned forms. They are not modal dialogs and do not trap focus.
+Avoid decorative badges, floating cards, shadows, gradients, blurred backdrops, and
+animated controls on these pages. Normal document scrolling keeps forms usable on
+small screens and at enlarged text/zoom. Recovery results remain visible until the
+replacement code is acknowledged and the user selects Finish; browser history must
+not replay recovery or carry password, recovery-code, or session values.
 
 ## Accessibility
 
-Use semantic labelled dialogs and buttons, keyboard-operable tabs/sorts/rows/dropdowns, topmost-surface focus containment, deterministic focus restoration, Escape dismissal, meaningful state text and reduced motion. Preserve nested authentication dialogs and mobile navigation behavior. Visible focus and state meaning cannot rely on color alone; future browser gates use WCAG 2.2 AA contrast and focus criteria. Unauthorized, unavailable, unknown, unsupported, disabled and zero are distinct states; the proposed detailed role/state acceptance requirements are recorded in `CONTRACTS.md` for review.
+Use semantic labelled dialogs and buttons, keyboard-operable tabs/sorts/rows/dropdowns, topmost-surface focus containment, deterministic focus restoration, Escape dismissal, meaningful state text and reduced motion. Preserve provider authentication dialogs and mobile navigation behavior. Administrator login/recovery pages use document focus order; Escape does not dismiss them. Visible focus and state meaning cannot rely on color alone; future browser gates use WCAG 2.2 AA contrast and focus criteria. Unauthorized, unavailable, unknown, unsupported, disabled and zero are distinct states; the proposed detailed role/state acceptance requirements are recorded in `CONTRACTS.md` for review.
 
 ## Responsive behavior
 
@@ -59,10 +68,11 @@ Short user actions: Connect provider, Sign in, API key, Models, Advanced setting
 
 Go-embedded vanilla HTML/CSS/JS and existing manifests. UI refinement under this design adds no dependencies, new endpoints, storage migrations or backend/adapter rewrite. AuthFlow comes from backend metadata, never preset key inference. Generic provider OAuth creates a connection selected before explicit provider save; Cline OAuth creates a Cline Account directly. OpenCode has no supported OAuth/session import admin endpoint. Preserve existing dirty edits. C1 account deletion is implemented as the isolated Phase 2 safety fix recorded in `CONTRACTS.md`; C2 provider-scoped model removal remains a separate proposed backend fix, not a UI change authorized by this document.
 
-Desktop first-run administrator creation belongs to the embedded Wails setup origin and
-its native binding. The localhost admin UI owns login, credential-backed password
-recovery and the state-aware Welcome page, but it does not gain an anonymous setup
-authority. Recovery codes are shown once and only verifiers are durable.
+Desktop first-run administrator creation and trusted-device credential access belong to
+the embedded Wails origin and its native binding. The localhost admin UI owns browser
+login, credential-backed password recovery, trusted-device management and the state-aware
+Welcome page, but it does not gain an anonymous setup or native credential authority.
+Recovery codes are shown once; only recovery and desktop-device verifiers are durable.
 
 ## Open questions
 

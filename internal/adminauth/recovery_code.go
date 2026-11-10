@@ -27,7 +27,7 @@ func (s *Service) IssueRecoveryCode(ctx context.Context, principal Principal, cu
 			s.RecordDenial(AuditRecoveryCodeDenied, source)
 		}
 	}()
-	if principal.UserID != BreakGlassID || principal.Method != MethodLocal {
+	if principal.UserID != BreakGlassID || principal.Method != MethodLocal || principal.Provider != "" {
 		return "", ErrForbidden
 	}
 	if err := s.validatePrincipal(ctx, principal); err != nil {
@@ -44,9 +44,8 @@ func (s *Service) IssueRecoveryCode(ctx context.Context, principal Principal, cu
 	if !ok || user.PasswordPHC == "" || user.Legacy != nil || state.RecoveryPHC != "" {
 		return "", ErrForbidden
 	}
-	verified, err := s.hasher.Verify(ctx, user.PasswordPHC, currentPassword)
-	if err != nil || !verified {
-		return "", ErrUnauthorized
+	if err := s.verifyCurrentPassword(ctx, principal, state, currentPassword, source); err != nil {
+		return "", err
 	}
 	code, err = randomToken(s.random)
 	if err != nil {
@@ -128,6 +127,7 @@ func (s *Service) RecoverWithCode(ctx context.Context, code, newPassword, source
 		next.Users[BreakGlassID] = user
 		next.RecoveryCodePHC = replacementPHC
 		next.Sessions = map[string]Session{}
+		revokeAllTrustedDevices(next)
 		return nil
 	})
 	if err != nil {

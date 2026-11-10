@@ -17,7 +17,7 @@
       <section class="section access-card access-account-card" aria-labelledby="accessAccountTitle">
         <div class="access-card-head">
           <h3 id="accessAccountTitle"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21v-2a8 8 0 0 1 16 0v2"/></svg>当前管理员</h3>
-          <button type="button" class="btn btn-sm" onclick="logoutAdmin()">退出登录</button>
+          <div class="access-toolbar"><button type="button" class="btn btn-sm" onclick="lockAdmin()">锁定应用</button><button type="button" class="btn btn-sm" onclick="logoutAdmin()">退出登录</button></div>
         </div>
         <div class="access-identity">
           <strong id="adminIdentity">加载中…</strong>
@@ -35,14 +35,14 @@
             </div>
             <div id="adminPasswordError" class="login-err access-form-error" role="alert"></div>
             <div class="access-form-footer"><button type="submit" id="saveAdminPassword" class="btn btn-primary">更新密码</button></div>
-            <p class="access-footnote">密码更新会撤销该管理员的全部会话。管理员认证不能在线关闭。</p>
+            <p class="access-footnote">密码更新会撤销该管理员的全部会话和受信任桌面设备。管理员认证不能在线关闭。</p>
           </form>
           <p id="ssoAdminPasswordNotice" class="access-footnote" hidden>此账号通过单点登录验证，请在身份提供方修改密码。</p>
         </div>
 
         <div id="recoveryCodeManagement" class="access-password-area" data-admin-permission="security.write">
           <div class="access-heading-row"><h4>恢复码</h4><span id="recoveryCodeStatus" class="access-badge">检查中…</span></div>
-          <p class="access-footnote">忘记密码时使用。生成新恢复码会立即替换旧恢复码，明文只显示一次。</p>
+          <p class="access-footnote">忘记密码时使用。生成新恢复码会立即替换旧恢复码，明文只显示一次；有效的桌面设备不会因单纯轮换恢复码而失效。</p>
           <form id="recoveryCodeIssueForm" onsubmit="event.preventDefault();issueRecoveryCode()">
             <div class="field"><label for="recoveryCodeCurrentPassword">当前管理员密码</label><input id="recoveryCodeCurrentPassword" type="password" autocomplete="current-password" required aria-describedby="recoveryCodeIssueError"></div>
             <div id="recoveryCodeIssueError" class="login-err access-form-error" role="alert"></div>
@@ -59,6 +59,30 @@
       </section>
 
       <div class="access-side-stack" data-admin-permission="security.write">
+        <section id="desktopSignInCard" class="section access-card desktop-signin-card" aria-labelledby="desktopSignInTitle">
+          <div class="access-card-head"><h3 id="desktopSignInTitle"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8m-4-4v4"/></svg>桌面登录</h3><button type="button" class="btn btn-sm access-refresh" onclick="loadTrustedDevices()" aria-label="刷新桌面登录状态"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5"/><path d="M6.1 7a7 7 0 0 1 11.6-2L20 8M4 16l2.3 3A7 7 0 0 0 17.9 17"/></svg></button></div>
+          <p class="access-card-desc">受信任的桌面应用可使用操作系统保护的可撤销凭据自动登录。普通浏览器始终需要独立认证。</p>
+          <div class="desktop-signin-status" aria-live="polite">
+            <div><span>自动登录</span><strong id="desktopAutoSignInStatus" class="access-badge">检查中…</strong></div>
+            <div><span>此设备</span><strong id="desktopThisDeviceStatus" class="access-badge">检查中…</strong></div>
+            <div><span>凭据存储</span><strong id="desktopCredentialStorageStatus" class="access-badge">检查中…</strong></div>
+          </div>
+          <p id="desktopLastUsed" class="access-footnote">上次成功使用：—</p>
+          <p id="desktopSignInGuidance" class="security-note" role="status"></p>
+          <div id="trustedDevicesList" class="access-list desktop-device-list" aria-live="polite"><div class="access-empty">加载中…</div></div>
+          <form id="desktopSignInForm" class="desktop-signin-actions" novalidate onsubmit="event.preventDefault()">
+            <div class="field"><label for="desktopTrustCurrentPassword">当前管理员密码</label><input id="desktopTrustCurrentPassword" type="password" autocomplete="current-password" aria-describedby="desktopSignInError desktopSignInPasswordHelp"><div id="desktopSignInPasswordHelp" class="field-hint">信任、恢复自动登录或撤销设备前需要重新验证。</div></div>
+            <div id="desktopSignInError" class="login-err access-form-error" role="alert" aria-live="assertive"></div>
+            <div class="access-form-footer">
+              <button id="trustThisDeviceButton" type="button" class="btn btn-primary" onclick="trustThisDesktop()">信任此设备</button>
+              <button id="toggleDesktopAutoSignInButton" type="button" class="btn" onclick="toggleDesktopAutoSignIn()" hidden>关闭自动登录</button>
+              <button id="forgetThisDeviceButton" type="button" class="btn btn-danger" onclick="forgetThisDesktop()" hidden>忘记此设备</button>
+              <button id="revokeAllTrustedDevicesButton" type="button" class="btn btn-danger" onclick="revokeAllTrustedDevices()">撤销所有受信任设备</button>
+            </div>
+          </form>
+          <p class="access-footnote">锁定应用只结束当前会话。退出登录会结束会话并暂停自动登录；忘记此设备会撤销并删除本机桌面凭据。</p>
+        </section>
+
         <section class="section access-card" aria-labelledby="accessNetworkTitle">
           <div class="access-card-head"><h3 id="accessNetworkTitle"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="7" y="3" width="10" height="6" rx="2"/><rect x="2" y="16" width="7" height="5" rx="1"/><rect x="15" y="16" width="7" height="5" rx="1"/><path d="M12 9v4M5 16v-3h14v3"/></svg>网络访问</h3></div>
           <div class="access-form-grid">

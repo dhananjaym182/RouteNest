@@ -1,0 +1,797 @@
+{
+  "baseCommit": "4099b30fbecb97f0fe4c21416412565ac523da21",
+  "note": "Authentication-scoped review inventory. Modified files may contain pre-existing/concurrent changes; consult the full worktree diff. No files are staged or committed.",
+  "files": [
+    {
+      "path": ".github/workflows/build.yml",
+      "status": "modified",
+      "scope": "docs-and-ci"
+    },
+    {
+      "path": ".github/workflows/test.yml",
+      "status": "modified",
+      "scope": "docs-and-ci"
+    },
+    {
+      "path": ".gitignore",
+      "status": "modified",
+      "scope": "docs-and-ci"
+    },
+    {
+      "path": "CONTEXT.md",
+      "status": "modified",
+      "scope": "docs-and-ci"
+    },
+    {
+      "path": "CONTRACTS.md",
+      "status": "modified",
+      "scope": "docs-and-ci"
+    },
+    {
+      "path": "CONTRIBUTING.md",
+      "status": "modified",
+      "scope": "docs-and-ci"
+    },
+    {
+      "path": "DESIGN.md",
+      "status": "modified",
+      "scope": "docs-and-ci"
+    },
+    {
+      "path": "README.md",
+      "status": "modified",
+      "scope": "docs-and-ci"
+    },
+    {
+      "path": "README.zh-CN.md",
+      "status": "modified",
+      "scope": "docs-and-ci"
+    },
+    {
+      "path": "THIRD_PARTY_NOTICES.md",
+      "status": "modified",
+      "scope": "docs-and-ci"
+    },
+    {
+      "path": "admin_cli.go",
+      "status": "new",
+      "scope": "authentication-and-compatible-integration"
+    },
+    {
+      "path": "admin_cli_test.go",
+      "status": "new",
+      "scope": "authentication-and-compatible-integration"
+    },
+    {
+      "path": "admin_recovery_cli.go",
+      "status": "modified",
+      "scope": "authentication-and-compatible-integration"
+    },
+    {
+      "path": "admin_recovery_cli_test.go",
+      "status": "modified",
+      "scope": "authentication-and-compatible-integration"
+    },
+    {
+      "path": "desktop/README.md",
+      "status": "modified",
+      "scope": "docs-and-ci"
+    },
+    {
+      "path": "desktop/setup/index.html",
+      "status": "modified",
+      "scope": "authentication-and-compatible-integration"
+    },
+    {
+      "path": "desktop/setup/setup.css",
+      "status": "modified",
+      "scope": "authentication-and-compatible-integration"
+    },
+    {
+      "path": "desktop/setup/setup.js",
+      "status": "modified",
+      "scope": "authentication-and-compatible-integration"
+    },
+    {
+      "path": "desktop_logger.go",
+      "status": "new",
+      "scope": "authentication-and-compatible-integration"
+    },
+    {
+      "path": "desktop_logger_test.go",
+      "status": "new",
+      "scope": "authentication-and-compatible-integration"
+    },
+    {
+      "path": "desktop_main.go",
+      "status": "modified",
+      "scope": "authentication-and-compatible-integration"
+    },
+    {
+      "path": "desktop_runtime.go",
+      "status": "modified",
+      "scope": "authentication-and-compatible-integration"
+    },
+    {
+      "path": "desktop_runtime_test.go",
+      "status": "modified",
+      "scope": "authentication-and-compatible-integration"
+    },
+    {
+      "path": "desktop_session_integration_test.go",
+      "status": "new",
+      "scope": "authentication-and-compatible-integration"
+    },
+    {
+      "path": "desktop_setup_assets.go",
+      "status": "modified",
+      "scope": "authentication-and-compatible-integration"
+    },
+    {
+      "path": "desktop_setup_assets_test.go",
+      "status": "new",
+      "scope": "authentication-and-compatible-integration"
+    },
+    {
+      "path": "desktop_setup_bridge.go",
+      "status": "modified",
+      "scope": "authentication-and-compatible-integration"
+    },
+    {
+      "path": "desktop_setup_bridge_test.go",
+      "status": "modified",
+      "scope": "authentication-and-compatible-integration"
+    },
+    {
+      "path": "desktop_trusted_auth.go",
+      "status": "new",
+      "scope": "authentication-and-compatible-integration"
+    },
+    {
+      "path": "desktop_trusted_auth_test.go",
+      "status": "new",
+      "scope": "authentication-and-compatible-integration"
+    },
+    {
+      "path": "docs/admin-security.md",
+      "status": "modified",
+      "scope": "docs-and-ci"
+    },
+    {
+      "path": "docs/desktop-authentication-review.md",
+      "status": "new",
+      "scope": "docs-and-ci"
+    },
+    {
+      "path": "docs/desktop-trusted-auth-research.md",
+      "status": "new",
+      "scope": "docs-and-ci"
+    },
+    {
+      "path": "go.mod",
+      "status": "modified",
+      "scope": "authentication-and-compatible-integration"
+    },
+    {
+      "path": "go.sum",
+      "status": "modified",
+      "scope": "authentication-and-compatible-integration"
+    },
+    {
+      "path": "internal/admin/admin.go",
+      "status": "modified",
+      "scope": "authentication-and-compatible-integration"
+    },
+    {
+      "path": "internal/admin/desktop_console.go",
+      "status": "new",
+      "scope": "authentication-and-compatible-integration"
+    },
+    {
+      "path": "internal/admin/desktop_console_test.go",
+      "status": "new",
+      "scope": "authentication-and-compatible-integration"
+    },
+    {
+      "path": "internal/admin/desktop_devices.go",
+      "status": "new",
+      "scope": "authentication-and-compatible-integration"
+    },
+    {
+      "path": "internal/admin/desktop_devices_test.go",
+      "status": "new",
+      "scope": "authentication-and-compatible-integration"
+    },
+    {
+      "path": "internal/admin/desktop_handoff.go",
+      "status": "modified",
+      "scope": "authentication-and-compatible-integration"
+    },
+    {
+      "path": "internal/admin/desktop_handoff_negative_test.go",
+      "status": "new",
+      "scope": "authentication-and-compatible-integration"
+    },
+    {
+      "path": "internal/admin/desktop_handoff_security_test.go",
+      "status": "new",
+      "scope": "authentication-and-compatible-integration"
+    },
+    {
+      "path": "internal/admin/desktop_signout_test.go",
+      "status": "new",
+      "scope": "authentication-and-compatible-integration"
+    },
+    {
+      "path": "internal/admin/egress_aliases_test.go",
+      "status": "new",
+      "scope": "authentication-and-compatible-integration"
+    },
+    {
+      "path": "internal/admin/security.go",
+      "status": "modified",
+      "scope": "authentication-and-compatible-integration"
+    },
+    {
+      "path": "internal/admin/security_handlers.go",
+      "status": "modified",
+      "scope": "authentication-and-compatible-integration"
+    },
+    {
+      "path": "internal/admin/security_http.go",
+      "status": "modified",
+      "scope": "authentication-and-compatible-integration"
+    },
+    {
+      "path": "internal/admin/security_recovery.go",
+      "status": "modified",
+      "scope": "authentication-and-compatible-integration"
+    },
+    {
+      "path": "internal/admin/security_recovery_code_test.go",
+      "status": "modified",
+      "scope": "authentication-and-compatible-integration"
+    },
+    {
+      "path": "internal/admin/trusted_devices_test.go",
+      "status": "new",
+      "scope": "authentication-and-compatible-integration"
+    },
+    {
+      "path": "internal/admin/ui/css/50_components_a11y.css",
+      "status": "modified",
+      "scope": "authentication-and-compatible-integration"
+    },
+    {
+      "path": "internal/admin/ui/css/99_access_settings.css",
+      "status": "modified",
+      "scope": "authentication-and-compatible-integration"
+    },
+    {
+      "path": "internal/admin/ui/html/dialogs/login.html",
+      "status": "modified",
+      "scope": "authentication-and-compatible-integration"
+    },
+    {
+      "path": "internal/admin/ui/html/pages/security.html",
+      "status": "modified",
+      "scope": "authentication-and-compatible-integration"
+    },
+    {
+      "path": "internal/admin/ui/js/01_core.js",
+      "status": "modified",
+      "scope": "authentication-and-compatible-integration"
+    },
+    {
+      "path": "internal/admin/ui/js/01_i18n.js",
+      "status": "modified",
+      "scope": "authentication-and-compatible-integration"
+    },
+    {
+      "path": "internal/admin/ui/js/02_nav.js",
+      "status": "modified",
+      "scope": "authentication-and-compatible-integration"
+    },
+    {
+      "path": "internal/admin/ui/js/03_recovery.js",
+      "status": "modified",
+      "scope": "authentication-and-compatible-integration"
+    },
+    {
+      "path": "internal/admin/ui/js/03_shell.js",
+      "status": "modified",
+      "scope": "authentication-and-compatible-integration"
+    },
+    {
+      "path": "internal/admin/ui/js/06_security_devices.js",
+      "status": "new",
+      "scope": "authentication-and-compatible-integration"
+    },
+    {
+      "path": "internal/admin/ui/js/15_quickstart.js",
+      "status": "modified",
+      "scope": "authentication-and-compatible-integration"
+    },
+    {
+      "path": "internal/admin/ui_manifest.go",
+      "status": "modified",
+      "scope": "authentication-and-compatible-integration"
+    },
+    {
+      "path": "internal/adminauth/audit.go",
+      "status": "modified",
+      "scope": "authentication-and-compatible-integration"
+    },
+    {
+      "path": "internal/adminauth/denials.go",
+      "status": "modified",
+      "scope": "authentication-and-compatible-integration"
+    },
+    {
+      "path": "internal/adminauth/mutation_errors_test.go",
+      "status": "new",
+      "scope": "authentication-and-compatible-integration"
+    },
+    {
+      "path": "internal/adminauth/password.go",
+      "status": "modified",
+      "scope": "authentication-and-compatible-integration"
+    },
+    {
+      "path": "internal/adminauth/password_policy_test.go",
+      "status": "new",
+      "scope": "authentication-and-compatible-integration"
+    },
+    {
+      "path": "internal/adminauth/password_test.go",
+      "status": "modified",
+      "scope": "authentication-and-compatible-integration"
+    },
+    {
+      "path": "internal/adminauth/permissions.go",
+      "status": "modified",
+      "scope": "authentication-and-compatible-integration"
+    },
+    {
+      "path": "internal/adminauth/reauthentication.go",
+      "status": "new",
+      "scope": "authentication-and-compatible-integration"
+    },
+    {
+      "path": "internal/adminauth/reauthentication_test.go",
+      "status": "new",
+      "scope": "authentication-and-compatible-integration"
+    },
+    {
+      "path": "internal/adminauth/recovery.go",
+      "status": "modified",
+      "scope": "authentication-and-compatible-integration"
+    },
+    {
+      "path": "internal/adminauth/recovery_code.go",
+      "status": "modified",
+      "scope": "authentication-and-compatible-integration"
+    },
+    {
+      "path": "internal/adminauth/recovery_code_test.go",
+      "status": "modified",
+      "scope": "authentication-and-compatible-integration"
+    },
+    {
+      "path": "internal/adminauth/service.go",
+      "status": "modified",
+      "scope": "authentication-and-compatible-integration"
+    },
+    {
+      "path": "internal/adminauth/service_test.go",
+      "status": "modified",
+      "scope": "authentication-and-compatible-integration"
+    },
+    {
+      "path": "internal/adminauth/session.go",
+      "status": "modified",
+      "scope": "authentication-and-compatible-integration"
+    },
+    {
+      "path": "internal/adminauth/throttle.go",
+      "status": "modified",
+      "scope": "authentication-and-compatible-integration"
+    },
+    {
+      "path": "internal/adminauth/trusted_device.go",
+      "status": "new",
+      "scope": "authentication-and-compatible-integration"
+    },
+    {
+      "path": "internal/adminauth/trusted_device_activation_test.go",
+      "status": "new",
+      "scope": "authentication-and-compatible-integration"
+    },
+    {
+      "path": "internal/adminauth/trusted_device_explicit_logout_test.go",
+      "status": "new",
+      "scope": "authentication-and-compatible-integration"
+    },
+    {
+      "path": "internal/adminauth/trusted_device_inspect_test.go",
+      "status": "new",
+      "scope": "authentication-and-compatible-integration"
+    },
+    {
+      "path": "internal/adminauth/trusted_device_lifecycle_test.go",
+      "status": "new",
+      "scope": "authentication-and-compatible-integration"
+    },
+    {
+      "path": "internal/adminauth/trusted_device_logout_persistence_test.go",
+      "status": "new",
+      "scope": "authentication-and-compatible-integration"
+    },
+    {
+      "path": "internal/adminauth/trusted_device_logout_test.go",
+      "status": "new",
+      "scope": "authentication-and-compatible-integration"
+    },
+    {
+      "path": "internal/adminauth/trusted_device_persistence_test.go",
+      "status": "new",
+      "scope": "authentication-and-compatible-integration"
+    },
+    {
+      "path": "internal/adminauth/trusted_device_recovery_persistence_test.go",
+      "status": "new",
+      "scope": "authentication-and-compatible-integration"
+    },
+    {
+      "path": "internal/adminauth/trusted_device_seams_persistence_test.go",
+      "status": "new",
+      "scope": "authentication-and-compatible-integration"
+    },
+    {
+      "path": "internal/adminauth/trusted_device_security_test.go",
+      "status": "new",
+      "scope": "authentication-and-compatible-integration"
+    },
+    {
+      "path": "internal/adminauth/trusted_device_service.go",
+      "status": "new",
+      "scope": "authentication-and-compatible-integration"
+    },
+    {
+      "path": "internal/adminauth/trusted_device_state_test.go",
+      "status": "new",
+      "scope": "authentication-and-compatible-integration"
+    },
+    {
+      "path": "internal/adminauth/trusted_device_test.go",
+      "status": "new",
+      "scope": "authentication-and-compatible-integration"
+    },
+    {
+      "path": "internal/adminauth/types.go",
+      "status": "modified",
+      "scope": "authentication-and-compatible-integration"
+    },
+    {
+      "path": "internal/adminauth/users.go",
+      "status": "modified",
+      "scope": "authentication-and-compatible-integration"
+    },
+    {
+      "path": "internal/buildinfo/dependencies_test.go",
+      "status": "modified",
+      "scope": "authentication-and-compatible-integration"
+    },
+    {
+      "path": "internal/desktopauth/executor.go",
+      "status": "new",
+      "scope": "authentication-and-compatible-integration"
+    },
+    {
+      "path": "internal/desktopauth/executor_test.go",
+      "status": "new",
+      "scope": "authentication-and-compatible-integration"
+    },
+    {
+      "path": "internal/desktopauth/failures_test.go",
+      "status": "new",
+      "scope": "authentication-and-compatible-integration"
+    },
+    {
+      "path": "internal/desktopauth/fake_keyring_test.go",
+      "status": "new",
+      "scope": "authentication-and-compatible-integration"
+    },
+    {
+      "path": "internal/desktopauth/keyring.go",
+      "status": "new",
+      "scope": "authentication-and-compatible-integration"
+    },
+    {
+      "path": "internal/desktopauth/keyring_darwin.c",
+      "status": "new",
+      "scope": "authentication-and-compatible-integration"
+    },
+    {
+      "path": "internal/desktopauth/keyring_darwin.go",
+      "status": "new",
+      "scope": "authentication-and-compatible-integration"
+    },
+    {
+      "path": "internal/desktopauth/keyring_darwin.h",
+      "status": "new",
+      "scope": "authentication-and-compatible-integration"
+    },
+    {
+      "path": "internal/desktopauth/keyring_darwin_nocgo.go",
+      "status": "new",
+      "scope": "authentication-and-compatible-integration"
+    },
+    {
+      "path": "internal/desktopauth/keyring_darwin_nocgo_test.go",
+      "status": "new",
+      "scope": "authentication-and-compatible-integration"
+    },
+    {
+      "path": "internal/desktopauth/keyring_darwin_test.go",
+      "status": "new",
+      "scope": "authentication-and-compatible-integration"
+    },
+    {
+      "path": "internal/desktopauth/keyring_native.go",
+      "status": "new",
+      "scope": "authentication-and-compatible-integration"
+    },
+    {
+      "path": "internal/desktopauth/keyring_native_test.go",
+      "status": "new",
+      "scope": "authentication-and-compatible-integration"
+    },
+    {
+      "path": "internal/desktopauth/keyring_system.go",
+      "status": "new",
+      "scope": "authentication-and-compatible-integration"
+    },
+    {
+      "path": "internal/desktopauth/manager.go",
+      "status": "new",
+      "scope": "authentication-and-compatible-integration"
+    },
+    {
+      "path": "internal/desktopauth/manager_test.go",
+      "status": "new",
+      "scope": "authentication-and-compatible-integration"
+    },
+    {
+      "path": "internal/desktopauth/metadata.go",
+      "status": "new",
+      "scope": "authentication-and-compatible-integration"
+    },
+    {
+      "path": "internal/desktopauth/metadata_test.go",
+      "status": "new",
+      "scope": "authentication-and-compatible-integration"
+    },
+    {
+      "path": "internal/desktopauth/namespace_test.go",
+      "status": "new",
+      "scope": "authentication-and-compatible-integration"
+    },
+    {
+      "path": "internal/desktopauth/preference_test.go",
+      "status": "new",
+      "scope": "authentication-and-compatible-integration"
+    },
+    {
+      "path": "internal/desktopauth/record.go",
+      "status": "new",
+      "scope": "authentication-and-compatible-integration"
+    },
+    {
+      "path": "internal/desktopauth/record_test.go",
+      "status": "new",
+      "scope": "authentication-and-compatible-integration"
+    },
+    {
+      "path": "internal/desktopauth/redaction_test.go",
+      "status": "new",
+      "scope": "authentication-and-compatible-integration"
+    },
+    {
+      "path": "internal/desktopauth/timeout_test.go",
+      "status": "new",
+      "scope": "authentication-and-compatible-integration"
+    },
+    {
+      "path": "internal/integration/route_inventory_test.go",
+      "status": "modified",
+      "scope": "authentication-and-compatible-integration"
+    },
+    {
+      "path": "internal/integration/testdata/route_inventory.golden",
+      "status": "modified",
+      "scope": "authentication-and-compatible-integration"
+    },
+    {
+      "path": "internal/integration/testdata/route_probe.golden",
+      "status": "modified",
+      "scope": "authentication-and-compatible-integration"
+    },
+    {
+      "path": "internal/proxycore/protocol_test_helper_test.go",
+      "status": "modified",
+      "scope": "authentication-and-compatible-integration"
+    },
+    {
+      "path": "internal/proxycore/proxy.go",
+      "status": "modified",
+      "scope": "authentication-and-compatible-integration"
+    },
+    {
+      "path": "internal/proxycore/server.go",
+      "status": "modified",
+      "scope": "authentication-and-compatible-integration"
+    },
+    {
+      "path": "internal/proxycore/server_lifecycle.go",
+      "status": "new",
+      "scope": "authentication-and-compatible-integration"
+    },
+    {
+      "path": "internal/proxycore/server_listener_test.go",
+      "status": "new",
+      "scope": "authentication-and-compatible-integration"
+    },
+    {
+      "path": "internal/routing/account_health.go",
+      "status": "modified",
+      "scope": "authentication-and-compatible-integration"
+    },
+    {
+      "path": "internal/routing/cooldown_worker_test.go",
+      "status": "new",
+      "scope": "authentication-and-compatible-integration"
+    },
+    {
+      "path": "internal/store/adminauth/inspect.go",
+      "status": "new",
+      "scope": "authentication-and-compatible-integration"
+    },
+    {
+      "path": "internal/store/adminauth/inspect_test.go",
+      "status": "new",
+      "scope": "authentication-and-compatible-integration"
+    },
+    {
+      "path": "main.go",
+      "status": "modified",
+      "scope": "authentication-and-compatible-integration"
+    },
+    {
+      "path": "review-artifacts/desktop-authentication/README.md",
+      "status": "new",
+      "scope": "review-evidence"
+    },
+    {
+      "path": "review-artifacts/desktop-authentication/browser-access.json",
+      "status": "new",
+      "scope": "review-evidence"
+    },
+    {
+      "path": "review-artifacts/desktop-authentication/browser-journeys.json",
+      "status": "new",
+      "scope": "review-evidence"
+    },
+    {
+      "path": "review-artifacts/desktop-authentication/browser-login-dark-zh.png",
+      "status": "new",
+      "scope": "review-evidence"
+    },
+    {
+      "path": "review-artifacts/desktop-authentication/browser-login-light-en.png",
+      "status": "new",
+      "scope": "review-evidence"
+    },
+    {
+      "path": "review-artifacts/desktop-authentication/browser-navigation.json",
+      "status": "new",
+      "scope": "review-evidence"
+    },
+    {
+      "path": "review-artifacts/desktop-authentication/browser-recovery-form-dark-en.png",
+      "status": "new",
+      "scope": "review-evidence"
+    },
+    {
+      "path": "review-artifacts/desktop-authentication/browser-recovery-result-redacted.png",
+      "status": "new",
+      "scope": "review-evidence"
+    },
+    {
+      "path": "review-artifacts/desktop-authentication/browser-security-dark-en.png",
+      "status": "new",
+      "scope": "review-evidence"
+    },
+    {
+      "path": "review-artifacts/desktop-authentication/browser-security-light-en.png",
+      "status": "new",
+      "scope": "review-evidence"
+    },
+    {
+      "path": "review-artifacts/desktop-authentication/file-inventory.json",
+      "status": "new",
+      "scope": "review-evidence"
+    },
+    {
+      "path": "review-artifacts/desktop-authentication/simulation-login-mobile-zh.png",
+      "status": "new",
+      "scope": "review-evidence"
+    },
+    {
+      "path": "review-artifacts/desktop-authentication/simulation-security-mobile-dark.png",
+      "status": "new",
+      "scope": "review-evidence"
+    },
+    {
+      "path": "review-artifacts/desktop-authentication/simulation-setup-password-dark.png",
+      "status": "new",
+      "scope": "review-evidence"
+    },
+    {
+      "path": "review-artifacts/desktop-authentication/simulation-setup-recovery-dark.png",
+      "status": "new",
+      "scope": "review-evidence"
+    },
+    {
+      "path": "review-artifacts/desktop-authentication/verification-summary.json",
+      "status": "new",
+      "scope": "review-evidence"
+    },
+    {
+      "path": "tools/README-admin-access.md",
+      "status": "modified",
+      "scope": "docs-and-ci"
+    },
+    {
+      "path": "tools/admin_access_verify.mjs",
+      "status": "modified",
+      "scope": "authentication-and-compatible-integration"
+    },
+    {
+      "path": "tools/admin_modal_background.test.mjs",
+      "status": "new",
+      "scope": "authentication-and-compatible-integration"
+    },
+    {
+      "path": "tools/admin_native_transport.test.mjs",
+      "status": "new",
+      "scope": "authentication-and-compatible-integration"
+    },
+    {
+      "path": "tools/admin_quickstart.test.mjs",
+      "status": "modified",
+      "scope": "authentication-and-compatible-integration"
+    },
+    {
+      "path": "tools/admin_security_devices.test.mjs",
+      "status": "new",
+      "scope": "authentication-and-compatible-integration"
+    },
+    {
+      "path": "tools/admin_security_journeys_verify.mjs",
+      "status": "new",
+      "scope": "authentication-and-compatible-integration"
+    },
+    {
+      "path": "tools/desktop_auth.test.mjs",
+      "status": "new",
+      "scope": "authentication-and-compatible-integration"
+    },
+    {
+      "path": "tools/desktop_setup_verify.mjs",
+      "status": "modified",
+      "scope": "authentication-and-compatible-integration"
+    }
+  ],
+  "pendingDocumentation": []
+}

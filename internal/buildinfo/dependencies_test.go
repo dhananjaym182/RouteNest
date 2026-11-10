@@ -23,11 +23,14 @@ func TestAdminSecurityDependencyVersions(t *testing.T) {
 		"github.com/coreos/go-oidc/v3":  "v3.21.0",
 		"github.com/crewjam/saml":       "v0.5.2",
 		"github.com/klauspost/compress": "v1.20.3",
+		"github.com/wailsapp/wails/v2":  "v2.17.1",
+		"github.com/zalando/go-keyring": "v0.2.8",
 		"golang.org/x/oauth2":           "v0.37.0",
 	}
 	args := []string{"list", "-mod=readonly", "-m", "-json", "routenest",
 		"github.com/andybalholm/brotli", "github.com/coreos/go-oidc/v3",
 		"github.com/crewjam/saml", "github.com/klauspost/compress",
+		"github.com/wailsapp/wails/v2", "github.com/zalando/go-keyring",
 		"golang.org/x/oauth2", "github.com/russellhaering/goxmldsig"}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()

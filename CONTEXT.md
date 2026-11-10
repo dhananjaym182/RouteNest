@@ -48,6 +48,12 @@ An in-memory first-run capability bound to the trusted Wails setup origin. It au
 creation of the administrator only after fresh-install evidence is rechecked. It is not
 an HTTP credential and becomes unusable after setup completes or requires restart.
 
+**Trusted Desktop Device**:
+An explicitly authorized desktop installation that may sign in without re-entering the
+administrator password until its trust expires, is paused, or is revoked. Its device
+credential is distinct from an administrator password, browser login, recovery credential,
+or proof of application identity.
+
 **Logical Model**:
 The client-facing model identity requested from RouteNest. A Logical Model may be
 available through more than one Model Offering.

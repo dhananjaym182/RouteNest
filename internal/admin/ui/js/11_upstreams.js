@@ -125,7 +125,7 @@ async function saveOcConfig(btn) {
 
 async function loadClineProxyConfig() {
   try {
-    const d = await api('GET', '/cline-proxy/config');
+    const d = await api('GET', '/routenest/config');
     const c = d.data;
     _('clineProxyStrategy').value = c.proxyStrategy || 'round_robin';
     _('clineProxies').value = (c.proxies || []).join('\n');
@@ -146,7 +146,7 @@ async function saveClineProxyConfig(btn) {
   const orig = btn ? btn.innerHTML : '';
   if (btn) { btn.disabled = true; btn.innerHTML = '<span class="loading"></span> ' + t('保存中...'); }
   try {
-    await api('POST', '/cline-proxy/config/update', payload);
+    await api('POST', '/routenest/config/update', payload);
     showSaveResult('clineProxySaveResult', true, t('Cline 代理配置已保存'));
     await loadClineProxyConfig();
     loadGlobal(false);

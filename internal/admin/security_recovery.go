@@ -46,6 +46,10 @@ func recoveryDataDir() (string, error) {
 	return filepath.Abs(filepath.Join(base, "routenest"))
 }
 
+func SecurityDataDir() (string, error) {
+	return recoveryDataDir()
+}
+
 func recoverSecurityOffline(ctx context.Context, dataDir string, deliver func(string) error) (err error) {
 	if deliver == nil {
 		return fmt.Errorf("offline recovery requires private delivery")

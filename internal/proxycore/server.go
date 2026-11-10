@@ -49,6 +49,12 @@ func RestartListener(host string, port int) error {
 	if !IsLoopbackHost(host) {
 		return fmt.Errorf("non-loopback listener requires trusted-proxy/TLS configuration")
 	}
+	listenerLifecycleMu.Lock()
+	defer listenerLifecycleMu.Unlock()
+	ctx := listenerContextLocked()
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	addr := listenerAddress(host, port)
 	ServerMu.Lock()
 	old := CurrentServer
@@ -62,92 +68,86 @@ func RestartListener(host string, port int) error {
 		return nil
 	}
 
+	rollback := func(cause error) error {
+		if err := restoreListener(oldHost, oldPort, mux); err != nil {
+			cause = fmt.Errorf("%w; rollback failed: %w", cause, err)
+		}
+		if lifecycle := activeListenerLifecycle; lifecycle != nil && lifecycle.server == nil {
+			lifecycle.fail(cause)
+		}
+		return cause
+	}
+
 	if old != nil {
-		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-		err := old.Shutdown(ctx)
+		shutdownCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+		err := old.Shutdown(shutdownCtx)
 		cancel()
 		if err != nil {
-			return fmt.Errorf("stop old listener: %w", err)
+			failure := fmt.Errorf("stop old listener: %w", err)
+			if lifecycle := activeListenerLifecycle; lifecycle != nil {
+				lifecycle.fail(failure)
+			}
+			return failure
 		}
 	}
 
 	listener, err := net.Listen("tcp", addr)
 	if err != nil {
-		if rollbackErr := restoreListener(oldHost, oldPort, mux); rollbackErr != nil {
-			return fmt.Errorf("bind new listener: %v; rollback failed: %w", err, rollbackErr)
-		}
-		return fmt.Errorf("bind new listener: %w", err)
+		return rollback(fmt.Errorf("bind new listener: %w", err))
 	}
-	server := &http.Server{Addr: addr, Handler: mux}
+	server := newListenerServer(addr, mux, ctx)
 	ServerMu.Lock()
 	CurrentServer = server
 	ListenHost = host
-	ListenPort = port
+	ListenPort = listener.Addr().(*net.TCPAddr).Port
 	ServerMu.Unlock()
-	serveListener(server, listener)
-	if err := probeListener(addr); err != nil {
-		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-		_ = server.Shutdown(ctx)
-		cancel()
-		if rollbackErr := restoreListener(oldHost, oldPort, mux); rollbackErr != nil {
-			return fmt.Errorf("new listener readiness failed: %v; rollback failed: %w", err, rollbackErr)
-		}
-		return fmt.Errorf("new listener readiness failed: %w", err)
+	serving := serveListenerLocked(server, listener)
+	readyCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	err = serving.waitReady(readyCtx)
+	cancel()
+	if err != nil {
+		_ = server.Close()
+		return rollback(fmt.Errorf("new listener readiness failed: %w", err))
 	}
 
 	fmt.Println("")
 	fmt.Println(strings.Repeat("=", 58))
-	fmt.Printf("  Listener restarted: %s\n", addr)
+	fmt.Printf("  Listener restarted: %s\n", listener.Addr())
 	fmt.Println(strings.Repeat("=", 58))
 	return nil
 }
 
-func serveListener(server *http.Server, listener net.Listener) {
-	go func() {
-		if err := server.Serve(listener); err != nil && err != http.ErrServerClosed {
-			log.Printf("listener stopped unexpectedly: %v", err)
-		}
-	}()
-}
-
-func probeListener(addr string) error {
-	deadline := time.Now().Add(2 * time.Second)
-	var lastErr error
-	for time.Now().Before(deadline) {
-		conn, err := net.DialTimeout("tcp", addr, 200*time.Millisecond)
-		if err == nil {
-			_ = conn.Close()
-			return nil
-		}
-		lastErr = err
-		time.Sleep(25 * time.Millisecond)
-	}
-	return lastErr
-}
-
 func restoreListener(host string, port int, mux http.Handler) error {
+	ctx := listenerContextLocked()
+	if err := ctx.Err(); err != nil {
+		clearListenerLocked()
+		return err
+	}
 	if host == "" || port <= 0 {
-		ServerMu.Lock()
-		CurrentServer = nil
-		ServerMu.Unlock()
+		clearListenerLocked()
 		return nil
 	}
 	addr := listenerAddress(host, port)
 	listener, err := net.Listen("tcp", addr)
 	if err != nil {
-		ServerMu.Lock()
-		CurrentServer = nil
-		ServerMu.Unlock()
+		clearListenerLocked()
 		return err
 	}
-	server := &http.Server{Addr: addr, Handler: mux}
+	server := newListenerServer(addr, mux, ctx)
 	ServerMu.Lock()
 	CurrentServer = server
 	ListenHost = host
 	ListenPort = port
 	ServerMu.Unlock()
-	serveListener(server, listener)
-	return probeListener(addr)
+	serving := serveListenerLocked(server, listener)
+	readyCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	if err := serving.waitReady(readyCtx); err != nil {
+		_ = server.Close()
+		clearListenerLocked()
+		return err
+	}
+	return nil
 }
 
 // EffectiveAdminHost 返回管理后台/浏览器实际可用的访问地址：
@@ -224,6 +224,69 @@ func Start(host string, port int, registerAdmin func(*http.ServeMux)) error {
 // StartWithContext is Start with a caller-owned lifecycle for cancellable
 // background workers. The listener remains independently restartable.
 func StartWithContext(ctx context.Context, host string, port int, registerAdmin func(*http.ServeMux)) error {
+	if ctx == nil {
+		return fmt.Errorf("listener context is nil")
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if host == "" {
+		host = "127.0.0.1"
+	}
+	listener, err := net.Listen("tcp", listenerAddress(host, port))
+	if err != nil {
+		return fmt.Errorf("bind listener: %w", err)
+	}
+	return startWithListener(ctx, listener, host, registerAdmin, nil)
+}
+
+func StartWithListener(ctx context.Context, listener net.Listener, registerAdmin func(*http.ServeMux), onReady func()) error {
+	return startWithListener(ctx, listener, "", registerAdmin, onReady)
+}
+
+func startWithListener(ctx context.Context, listener net.Listener, host string, registerAdmin func(*http.ServeMux), onReady func()) error {
+	if listener == nil {
+		return fmt.Errorf("listener is nil")
+	}
+	defer listener.Close()
+	if ctx == nil {
+		return fmt.Errorf("listener context is nil")
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	tcpAddr, ok := listener.Addr().(*net.TCPAddr)
+	if !ok || tcpAddr == nil || tcpAddr.Port <= 0 || tcpAddr.Port > 65535 {
+		return fmt.Errorf("listener must have a bound TCP address")
+	}
+	if host == "" {
+		var err error
+		host, _, err = net.SplitHostPort(tcpAddr.String())
+		if err != nil {
+			return fmt.Errorf("listener address: %w", err)
+		}
+	}
+	port := tcpAddr.Port
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	stopClose := context.AfterFunc(ctx, func() { _ = listener.Close() })
+	defer stopClose()
+	lifecycle, err := beginListenerLifecycle(ctx)
+	if err != nil {
+		return err
+	}
+	var modelRecheckDone, cooldownRecoveryDone <-chan struct{}
+	defer func() {
+		cancel()
+		lifecycle.stop()
+		if cooldownRecoveryDone != nil {
+			<-cooldownRecoveryDone
+		}
+		if modelRecheckDone != nil {
+			<-modelRecheckDone
+		}
+	}()
+
 	log.Printf("Data directory: %s (set %s to override)", platform.CurrentDataDir(), platform.DataDirEnv)
 	p := accounts.LoadPool()
 	requestlog.Load()
@@ -231,6 +294,9 @@ func StartWithContext(ctx context.Context, host string, port int, registerAdmin 
 	providers.SyncModels()
 	activeCount := 0
 	for _, a := range p.Accounts {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		if a.Status == "active" {
 			// Try to pre-warm tokens
 			if a.AccessToken == "" || time.Now().UnixMilli() >= a.ExpiresAt {
@@ -242,26 +308,22 @@ func StartWithContext(ctx context.Context, host string, port int, registerAdmin 
 			activeCount++
 		}
 	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	log.Printf("Loaded %d active accounts from pool", activeCount)
 
 	// 启动时异步同步一次 Cline 官方推荐模型（不阻塞启动）
 	routing.StartModelSync()
 
 	// §W3-C：已启用 provider 的上游模型清单后台自动检测（下架标记 + 新模型入队待审）
-	modelRecheckDone := providers.StartModelRecheck(ctx)
-	defer func() {
-		if ctx.Err() != nil {
-			<-modelRecheckDone
-		}
-	}()
+	modelRecheckDone = providers.StartModelRecheck(ctx)
 
 	// opencode zen：定时同步免费模型列表 + 压缩会话状态清理
 	if zen.GetConfig().Enabled {
 		zen.StartModelsRefresher()
 	}
 	compaction.StartCleanup()
-
-	freePort(port)
 
 	mux := http.NewServeMux()
 
@@ -279,6 +341,9 @@ func StartWithContext(ctx context.Context, host string, port int, registerAdmin 
 	// Admin API (frontend + REST)
 	if registerAdmin != nil {
 		registerAdmin(mux)
+	}
+	if err := ctx.Err(); err != nil {
+		return err
 	}
 
 	apiKeyHandler := (&httpapi.APIKeyAuth{
@@ -337,23 +402,11 @@ func StartWithContext(ctx context.Context, host string, port int, registerAdmin 
 	mux.HandleFunc("/v1/responses", withBodyLimit(responsesHandler))
 	mux.HandleFunc("/responses", withBodyLimit(responsesHandler))
 
-	if host == "" {
-		host = "127.0.0.1"
-	}
 	addr := listenerAddress(host, port)
-	ListenHost = host
-	ListenPort = port
-	ServerMux = mux
-	server := &http.Server{
-		Addr:    addr,
-		Handler: mux,
-	}
-	ServerMu.Lock()
-	CurrentServer = server
-	ServerMu.Unlock()
+	server := newListenerServer(addr, mux, ctx)
 
 	// 启动后台冷却恢复巡检
-	routing.StartCooldownRecovery()
+	cooldownRecoveryDone = routing.StartCooldownRecoveryWithContext(ctx)
 
 	fmt.Println("")
 	fmt.Println(strings.Repeat("=", 58))
@@ -377,5 +430,32 @@ func StartWithContext(ctx context.Context, host string, port int, registerAdmin 
 	}
 	fmt.Println(strings.Repeat("=", 58))
 
-	return server.ListenAndServe()
+	listenerLifecycleMu.Lock()
+	if err := ctx.Err(); err != nil {
+		listenerLifecycleMu.Unlock()
+		return err
+	}
+	ServerMu.Lock()
+	ListenHost = host
+	ListenPort = port
+	ServerMux = mux
+	CurrentServer = server
+	ServerMu.Unlock()
+	serving := serveListenerLocked(server, listener)
+	listenerLifecycleMu.Unlock()
+	if err := serving.waitReady(ctx); err != nil {
+		return err
+	}
+	if onReady != nil {
+		onReady()
+	}
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case err := <-lifecycle.result:
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		return err
+	}
 }

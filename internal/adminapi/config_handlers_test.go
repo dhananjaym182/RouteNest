@@ -86,20 +86,20 @@ func TestClineEgressConfigAndUpdate(t *testing.T) {
 	}
 
 	rec := httptest.NewRecorder()
-	h.Config(rec, httptest.NewRequest(http.MethodGet, "/admin/api/cline-proxy/config", nil))
+	h.Config(rec, httptest.NewRequest(http.MethodGet, "/admin/api/routenest/config", nil))
 	if !strings.Contains(rec.Body.String(), "m:http://a:1") {
 		t.Fatalf("body = %s", rec.Body.String())
 	}
 
 	rec = httptest.NewRecorder()
-	h.Update(rec, postJSON("/admin/api/cline-proxy/config/update", `{"proxyStrategy":"random"}`))
+	h.Update(rec, postJSON("/admin/api/routenest/config/update", `{"proxyStrategy":"random"}`))
 	if rec.Code != http.StatusOK || saved == nil || saved.ProxyStrategy != "random" || len(saved.Proxies) != 2 {
 		t.Fatalf("status=%d saved=%+v", rec.Code, saved)
 	}
 
 	h.ValidateProxy = func([]string) error { return errors.New("bad proxy") }
 	rec = httptest.NewRecorder()
-	h.Update(rec, postJSON("/admin/api/cline-proxy/config/update", `{"proxies":["bad"]}`))
+	h.Update(rec, postJSON("/admin/api/routenest/config/update", `{"proxies":["bad"]}`))
 	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "bad proxy") {
 		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
 	}
@@ -107,7 +107,7 @@ func TestClineEgressConfigAndUpdate(t *testing.T) {
 	h.ValidateProxy = func([]string) error { return nil }
 	persistErr = errors.New("disk full")
 	rec = httptest.NewRecorder()
-	h.Update(rec, postJSON("/admin/api/cline-proxy/config/update", `{}`))
+	h.Update(rec, postJSON("/admin/api/routenest/config/update", `{}`))
 	if rec.Code != http.StatusInternalServerError || !strings.Contains(rec.Body.String(), "disk full") {
 		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
 	}

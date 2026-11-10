@@ -12,7 +12,7 @@
 #   1. 先运行 desktop/build.sh 构建 exe
 #   2. 管理员身份运行 PowerShell，执行：
 #        powershell -ExecutionPolicy Bypass -File desktop/sign-self.ps1
-#   3. 脚本会生成证书并签名 desktop/build/windows-amd64/cline-proxy-desktop.exe
+#   3. 脚本会生成证书并签名 desktop/build/windows-amd64/routenest-desktop.exe
 
 $ErrorActionPreference = "Stop"
 

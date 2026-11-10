@@ -50,6 +50,11 @@ func TestPasswordMinimumCharactersAndByteLimit(t *testing.T) {
 		password string
 		accepted bool
 	}{
+		{"blank", "", false},
+		{"spaces", strings.Repeat(" ", 8), false},
+		{"tabs and newlines", "\t\n\r \t\n\r ", false},
+		{"Unicode whitespace", "\u00a0\u1680\u2000\u2001\u2002\u2028\u2029\u3000", false},
+		{"significant surrounding spaces", "  pass  ", true},
 		{"seven ASCII characters", "Seven7!", false},
 		{"eight ASCII characters", "Eight8!!", true},
 		{"seven Chinese characters", strings.Repeat("密", 7), false},

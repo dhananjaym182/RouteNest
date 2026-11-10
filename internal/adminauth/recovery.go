@@ -63,6 +63,7 @@ func RecoverOffline(ctx context.Context, repo Repository, opts Options) error {
 		next.RecoveryPHC = phc
 		next.RecoveryCodePHC = ""
 		next.Sessions = map[string]Session{}
+		revokeAllTrustedDevices(next)
 		return ValidateState(*next)
 	})
 	if e != nil {

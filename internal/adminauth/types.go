@@ -61,6 +61,8 @@ type Session struct {
 	UserRevision uint64     `json:"userRevision"`
 	Method       AuthMethod `json:"method"`
 	Provider     string     `json:"provider,omitempty"`
+	DeviceID     string     `json:"deviceID,omitempty"`
+	Source       string     `json:"source,omitempty"`
 	IssuedAt     time.Time  `json:"issuedAt"`
 	ExpiresAt    time.Time  `json:"expiresAt"`
 }
@@ -83,10 +85,11 @@ type State struct {
 	Users           map[string]User          `json:"users"`
 	Sessions        map[string]Session       `json:"sessions"`
 	Providers       map[string]ProviderState `json:"providers,omitempty"`
+	TrustedDevices  map[string]TrustedDevice `json:"trustedDevices,omitempty"`
 }
 
 func EmptyState() State {
-	return State{Version: StateVersion, Users: map[string]User{}, Sessions: map[string]Session{}, Providers: map[string]ProviderState{}}
+	return State{Version: StateVersion, Users: map[string]User{}, Sessions: map[string]Session{}, Providers: map[string]ProviderState{}, TrustedDevices: map[string]TrustedDevice{}}
 }
 func CloneState(s State) State {
 	b, _ := json.Marshal(s)
@@ -94,6 +97,9 @@ func CloneState(s State) State {
 	_ = json.Unmarshal(b, &v)
 	if v.Providers == nil {
 		v.Providers = map[string]ProviderState{}
+	}
+	if v.TrustedDevices == nil {
+		v.TrustedDevices = map[string]TrustedDevice{}
 	}
 	return v
 }
@@ -111,6 +117,7 @@ type Principal struct {
 	Roles       []Role     `json:"roles"`
 	Method      AuthMethod `json:"method"`
 	Provider    string     `json:"provider,omitempty"`
+	DeviceID    string     `json:"deviceID,omitempty"`
 	SessionHash string     `json:"-"`
 	CSRFHash    string     `json:"-"`
 	ExpiresAt   time.Time  `json:"expiresAt"`

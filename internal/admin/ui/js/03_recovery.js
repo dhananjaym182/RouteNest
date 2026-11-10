@@ -2,44 +2,119 @@
 // the durable credential; localhost or an application window grants no authority.
 let _passwordRecoveryCompleted = false;
 let _passwordRecoveryRestartRequired = false;
+let _passwordRecoveryBusy = false;
 let _issuedRecoveryCodeRestartRequired = false;
+let _adminAuthReturnTab = 'dashboard';
+const ADMIN_AUTH_DESTINATIONS = new Set(['dashboard', 'providers', 'credentials', 'network', 'models', 'routing', 'combos', 'logs', 'quota', 'health', 'security', 'about', 'quickstart', 'global', 'accounts', 'import', 'upstreams']);
+
+function rememberAdminAuthDestination() {
+  const requested = String(location.hash || '').replace(/^#/, '');
+  const remembered = window.history && window.history.state && window.history.state.routenestAuthReturnTab;
+  if (ADMIN_AUTH_DESTINATIONS.has(requested)) _adminAuthReturnTab = requested;
+  else if (ADMIN_AUTH_DESTINATIONS.has(remembered)) _adminAuthReturnTab = remembered;
+}
+
+function setAdminAuthRoute(view, push = false) {
+  const hash = view === 'login' ? '#login' : '#recover';
+  if (location.hash === hash || !window.history) return;
+  const method = push ? 'pushState' : 'replaceState';
+  window.history[method]({ routenestAuthReturnTab: _adminAuthReturnTab }, '', location.pathname + hash);
+}
+
+function restoreAdminAuthDestination() {
+  if (!['#login', '#recover'].includes(location.hash)) return;
+  rememberAdminAuthDestination();
+  window.history.replaceState(null, '', location.pathname + '#' + _adminAuthReturnTab);
+}
+
+function updateAdminAuthPageTitle() {
+  if (_adminPrincipal) return;
+  const root = document.documentElement;
+  const view = root && root.dataset.adminAuthView;
+  const heading = view === 'recovery-result' ? '保存新的恢复码' : view === 'recover' ? '重置管理员密码' : _adminAuthMode === 'bootstrap' ? '初始化管理员' : _adminAuthMode === 'recovery' ? '完成离线恢复' : _adminAuthMode === 'legacy' ? '升级管理员密码' : '登录';
+  document.title = t(heading) + ' | RouteNest';
+}
+
+function showAdminAuthPage(view) {
+  const root = document.documentElement;
+  if (root) root.dataset.adminAuthView = view;
+  const page = _('adminAuthPage');
+  if (page) page.hidden = false;
+  const login = _('loginOverlay');
+  const recovery = _('passwordRecoveryOverlay');
+  if (login) { login.hidden = view !== 'login'; login.style.display = view === 'login' ? 'flex' : 'none'; }
+  if (recovery) {
+    recovery.hidden = view === 'login';
+    recovery.style.display = view === 'login' ? 'none' : 'flex';
+    recovery.setAttribute('aria-labelledby', view === 'recovery-result' ? 'passwordRecoveryResultTitle' : 'passwordRecoveryTitle');
+    if (view === 'recovery-result') recovery.removeAttribute('aria-describedby');
+    else recovery.setAttribute('aria-describedby', 'passwordRecoveryHelp');
+  }
+  updateAdminAuthPageTitle();
+}
+
+function clearPasswordRecoveryInputs() {
+  for (const id of ['passwordRecoveryCode', 'passwordRecoveryNewPassword', 'passwordRecoveryConfirmPassword']) {
+    if (_(id)) _(id).value = '';
+  }
+  if (_('passwordRecoveryReplacementCode')) _('passwordRecoveryReplacementCode').textContent = '';
+}
+
+function syncAdminAuthRoute() {
+  const root = document.documentElement;
+  if (!root || root.dataset.adminAuth === 'pending') return;
+  if (_adminPrincipal) { restoreAdminAuthDestination(); return; }
+  rememberAdminAuthDestination();
+  if (_passwordRecoveryBusy || _passwordRecoveryCompleted) {
+    setAdminAuthRoute('recover');
+    showAdminAuthPage(_passwordRecoveryCompleted ? 'recovery-result' : 'recover');
+    return;
+  }
+  if (location.hash === '#recover' && _adminAuthMode === 'login' && _adminAuthStatus && _adminAuthStatus.recoveryCodeAvailable) {
+    if (root.dataset.adminAuthView !== 'recover') openPasswordRecovery(false);
+    return;
+  }
+  clearPasswordRecoveryInputs();
+  setAdminAuthRoute('login');
+  showAdminAuthPage('login');
+}
 
 async function consumeDesktopSessionHandoff() {
   const prefix = '#desktop-handoff=';
   if (!location.hash.startsWith(prefix)) return;
   const token = decodeURIComponent(location.hash.slice(prefix.length));
-  history.replaceState(null, '', location.pathname + location.search + '#dashboard');
+  rememberAdminAuthDestination();
+  history.replaceState(null, '', location.pathname + '#' + _adminAuthReturnTab);
   if (!token) return;
-  const response = await fetch(API + '/auth/desktop-handoff', {
-    method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ token })
-  });
+  const response = await adminFetch('POST', '/auth/desktop-handoff', { token });
   const envelope = await response.json().catch(() => ({}));
   if (!response.ok || !envelope.success) throw new Error(envelope.error || 'desktop_handoff_failed');
 }
 
-function openPasswordRecovery() {
-  if (!(_adminAuthStatus && _adminAuthStatus.recoveryCodeAvailable)) return;
-  _passwordRecoveryCompleted = false;
+function openPasswordRecovery(push = true) {
+  if (_adminPrincipal || _adminAuthMode !== 'login' || !(_adminAuthStatus && _adminAuthStatus.recoveryCodeAvailable)) return;
+  if (_passwordRecoveryBusy || _passwordRecoveryCompleted) { syncAdminAuthRoute(); return; }
   _passwordRecoveryRestartRequired = false;
   _('passwordRecoveryFormView').hidden = false;
   _('passwordRecoveryResultView').hidden = true;
   _('passwordRecoveryForm').reset();
   _('passwordRecoveryError').textContent = '';
-  _('passwordRecoveryOverlay').style.display = 'flex';
+  if (_('loginPassword')) _('loginPassword').value = '';
+  setAdminAuthRoute('recover', push);
+  showAdminAuthPage('recover');
   setTimeout(() => _('passwordRecoveryCode').focus(), 40);
 }
 
-function closePasswordRecovery() {
-  if (_passwordRecoveryCompleted && !_('passwordRecoverySaved').checked) return;
-  _('passwordRecoveryOverlay').style.display = 'none';
-  _('passwordRecoveryCode').value = '';
-  _('passwordRecoveryNewPassword').value = '';
-  _('passwordRecoveryConfirmPassword').value = '';
-  _('passwordRecoveryReplacementCode').textContent = '';
+function closePasswordRecovery(push = true) {
+  if (_passwordRecoveryBusy || _passwordRecoveryCompleted) { syncAdminAuthRoute(); return; }
+  clearPasswordRecoveryInputs();
+  setAdminAuthRoute('login', push);
+  showAdminAuthPage('login');
+  setTimeout(() => _('loginPassword').focus(), 40);
 }
 
 async function submitPasswordRecovery() {
+  if (_passwordRecoveryBusy || _passwordRecoveryCompleted) return;
   const code = _('passwordRecoveryCode').value;
   const password = _('passwordRecoveryNewPassword').value;
   const confirmation = _('passwordRecoveryConfirmPassword').value;
@@ -48,15 +123,15 @@ async function submitPasswordRecovery() {
   if (adminPasswordTooShort(password)) { error.textContent = t('永久密码至少 8 位'); return; }
   if (password !== confirmation) { error.textContent = t('两次输入的密码不一致'); return; }
   const button = _('passwordRecoverySubmit');
+  _passwordRecoveryBusy = true;
   button.disabled = true; error.textContent = '';
+  if (_('passwordRecoveryBack')) _('passwordRecoveryBack').setAttribute('aria-disabled', 'true');
   try {
-    const response = await fetch(API + '/auth/recovery', {
-      method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ recoveryCode: code, newPassword: password, confirmPassword: confirmation })
-    });
+    const response = await adminFetch('POST', '/auth/recovery', { recoveryCode: code, newPassword: password, confirmPassword: confirmation });
     const envelope = await response.json().catch(() => ({}));
     const result = envelope.data || {};
-    if (!response.ok && !(envelope.error === 'security_restart_required' && result.recoveryCode)) throw new Error(envelope.error || t('恢复失败'));
+    if ((!response.ok || envelope.success !== true) && !(envelope.error === 'security_restart_required' && result.recoveryCode)) throw new Error(envelope.error || t('恢复失败'));
+    if (typeof result.recoveryCode !== 'string' || !result.recoveryCode) throw new Error(t('恢复失败'));
     _passwordRecoveryCompleted = true;
     _passwordRecoveryRestartRequired = envelope.error === 'security_restart_required' || result.restartRequired === true;
     _('passwordRecoveryCode').value = '';
@@ -69,10 +144,16 @@ async function submitPasswordRecovery() {
     updatePasswordRecoveryFinish();
     _('passwordRecoveryFormView').hidden = true;
     _('passwordRecoveryResultView').hidden = false;
+    setAdminAuthRoute('recover');
+    showAdminAuthPage('recovery-result');
     setTimeout(() => _('passwordRecoveryReplacementCode').focus(), 40);
   } catch (reason) {
     error.textContent = reason.message === 'authentication_failed' ? t('恢复码无效、已使用或已被替换。') : (reason.message || t('恢复失败'));
-  } finally { button.disabled = false; }
+  } finally {
+    _passwordRecoveryBusy = false;
+    button.disabled = false;
+    if (_('passwordRecoveryBack')) _('passwordRecoveryBack').removeAttribute('aria-disabled');
+  }
 }
 
 function updatePasswordRecoveryFinish() {
@@ -87,7 +168,7 @@ function finishPasswordRecovery() {
     return;
   }
   _passwordRecoveryCompleted = false;
-  closePasswordRecovery();
+  closePasswordRecovery(false);
   setAdminAuthMode('login');
   showLogin('login');
   _('loginPassword').value = '';
@@ -155,8 +236,10 @@ function finishIssuedRecoveryCode() {
   _('issuedRecoveryCodePanel').hidden = true;
 }
 
-document.addEventListener('keydown', event => {
-  if (event.key === 'Escape' && _('passwordRecoveryOverlay') && _('passwordRecoveryOverlay').style.display === 'flex' && !_passwordRecoveryCompleted) {
-    closePasswordRecovery();
-  }
+window.addEventListener('hashchange', syncAdminAuthRoute);
+window.addEventListener('popstate', syncAdminAuthRoute);
+window.addEventListener('beforeunload', event => {
+  if (!_passwordRecoveryBusy && !_passwordRecoveryCompleted) return;
+  event.preventDefault();
+  event.returnValue = '';
 });

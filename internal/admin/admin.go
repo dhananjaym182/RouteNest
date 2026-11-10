@@ -178,6 +178,10 @@ func registerSessionRoutes(registry *adminRouteRegistry) {
 	registerProtectedRoute(registry, http.MethodPost, "/admin/api/logout", csrfSession, handleAdminLogoutSecure, adminauth.PermissionView)
 	registerProtectedRoute(registry, http.MethodPost, "/admin/api/auth/password", csrfSession, handleAdminPasswordRotation, adminauth.PermissionView)
 	registerProtectedRoute(registry, http.MethodPost, "/admin/api/auth/recovery-code", csrfSession, handleAdminRecoveryCodeIssue, adminauth.PermissionSecurityWrite)
+	registerProtectedRoute(registry, http.MethodPost, "/admin/api/auth/desktop-signout", csrfSession, handleAdminDesktopSessionSignOut, adminauth.PermissionView)
+	registerProtectedRoute(registry, http.MethodGet, "/admin/api/auth/trusted-devices", csrfSafe, handleAdminTrustedDevices, adminauth.PermissionSecurityWrite)
+	registerProtectedRoute(registry, http.MethodPost, "/admin/api/auth/trusted-devices/revoke", csrfSession, handleAdminTrustedDeviceRevoke, adminauth.PermissionSecurityWrite)
+	registerProtectedRoute(registry, http.MethodPost, "/admin/api/auth/trusted-devices/revoke-all", csrfSession, handleAdminTrustedDevicesRevokeAll, adminauth.PermissionSecurityWrite)
 	registerProtectedRoute(registry, http.MethodGet, "/admin/api/auth/sessions", csrfSafe, handleAdminSessions, adminauth.PermissionSecurityWrite)
 	registerProtectedRoute(registry, http.MethodPost, "/admin/api/auth/sessions/revoke", csrfSession, handleAdminSessionRevoke, adminauth.PermissionSecurityWrite)
 	registerProtectedRoute(registry, http.MethodGet, "/admin/api/auth/users", csrfSafe, handleAdminUsers, adminauth.PermissionSecurityWrite)
@@ -234,6 +238,8 @@ func registerUpstreamsRoutes(registry *adminRouteRegistry) {
 	registerProtectedRoute(registry, http.MethodGet, "/admin/api/opencode/config", csrfSafe, handleOpenCodeConfig, adminauth.PermissionProviderWrite)
 	registerProtectedRoute(registry, http.MethodPost, "/admin/api/opencode/config/update", csrfSession, handleOpenCodeConfigUpdate, adminauth.PermissionProviderWrite)
 	registerProtectedRoute(registry, http.MethodPost, "/admin/api/opencode/models/sync", csrfSession, handleOpenCodeModelSync, adminauth.PermissionProviderWrite)
+	registerProtectedRoute(registry, http.MethodGet, "/admin/api/routenest/config", csrfSafe, handleClineProxyConfig, adminauth.PermissionView)
+	registerProtectedRoute(registry, http.MethodPost, "/admin/api/routenest/config/update", csrfSession, handleClineProxyConfigUpdate, adminauth.PermissionProviderWrite)
 	registerProtectedRoute(registry, http.MethodGet, "/admin/api/cline-proxy/config", csrfSafe, handleClineProxyConfig, adminauth.PermissionView)
 	registerProtectedRoute(registry, http.MethodPost, "/admin/api/cline-proxy/config/update", csrfSession, handleClineProxyConfigUpdate, adminauth.PermissionProviderWrite)
 }
@@ -505,12 +511,12 @@ func handleOpenCodeConfigUpdate(w http.ResponseWriter, r *http.Request) {
 	adminOpencode.Update(w, r)
 }
 
-// GET /admin/api/cline-proxy/config — Cline 出口代理配置（代理地址脱敏返回）
+// GET /admin/api/routenest/config — Cline 出口代理配置（代理地址脱敏返回）
 func handleClineProxyConfig(w http.ResponseWriter, r *http.Request) {
 	adminClineEgress.Config(w, r)
 }
 
-// POST /admin/api/cline-proxy/config/update — 更新 Cline 出口代理配置
+// POST /admin/api/routenest/config/update — 更新 Cline 出口代理配置
 func handleClineProxyConfigUpdate(w http.ResponseWriter, r *http.Request) {
 	adminClineEgress.Update(w, r)
 }
