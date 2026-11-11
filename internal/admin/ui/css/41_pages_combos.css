@@ -27,8 +27,6 @@
 .combo-entry-actions{display:flex;align-items:center;gap:4px;margin-left:auto;flex-shrink:0}
 .combo-entry-actions .btn{padding:3px 9px;font-size:12px}
 .combo-empty-entries{font-size:13px;color:var(--text3);padding:8px 2px}
-.combos-list{border:1px solid var(--border2);border-radius:var(--radius-sm);overflow:hidden}
-.combos-list .row-count{font-size:12px;color:var(--text2);white-space:nowrap}
 
 /* ===== 组合：多选模型选择器弹窗（样式对齐 #modelMetaEditor） ===== */
 .combo-picker-list{max-height:min(340px,46vh);overflow:auto;overscroll-behavior:contain;border:1px solid var(--border2);border-radius:10px;background:var(--surface);margin-top:10px}
@@ -40,7 +38,50 @@
 .combo-pick-row.combo-pick-used{cursor:default}
 .combo-pick-row.combo-pick-used .combo-pick-id{color:var(--text3)}
 .combo-pick-id{font-family:ui-monospace,'SF Mono','Cascadia Code','Consolas',monospace;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1 1 auto;min-width:0}
-.combo-pick-rank{flex-shrink:0;min-width:18px;height:18px;border-radius:9px;background:var(--accent);color:var(--on-accent);font-size:11px;font-weight:700;display:inline-flex;align-items:center;justify-content:center;padding:0 5px;font-variant-numeric:tabular-nums}
+.combo-pick-rank{flex-shrink:0;min-width:18px;height:18px;border-radius:9px;background:var(--accent);color:var(--on-button-accent);font-size:11px;font-weight:700;display:inline-flex;align-items:center;justify-content:center;padding:0 5px;font-variant-numeric:tabular-nums}
+
+/* ===== 组合列表：mgmt-table 自适应列宽 =====
+   短列（分类 / 条目 / 状态 / 操作）按内容收缩（width:1% + nowrap），剩余宽度全部给 ID 与名称；
+   ID / 名称过长时才省略（完整内容在 title 里）。窄屏由 .mgmt-table-wrap 横向滚动。 */
+.combos-table .combo-col-fit,.combos-table .combo-col-actions{width:1%;white-space:nowrap}
+.combos-table .combo-col-id,.combos-table .combo-col-name{white-space:nowrap}
+.combos-table .combo-name-text{display:inline-block;max-width:min(320px,34vw);overflow:hidden;text-overflow:ellipsis;vertical-align:bottom;font-weight:600}
+.combos-table .combo-name-text+.model-source-badge{margin-left:6px;vertical-align:middle}
+.combos-table .combo-category{display:inline-block;max-width:160px;overflow:hidden;text-overflow:ellipsis;vertical-align:bottom}
+.combos-table .mgmt-actions{flex-wrap:nowrap}
+
+/* ===== 组合：一键复制 ID、编辑器校验与未保存提示 ===== */
+.combo-id-copy{display:inline-flex;align-items:center;gap:6px;max-width:100%;padding:2px 6px;margin:-3px -7px;border:1px solid transparent;border-radius:6px;background:none;color:inherit;font:inherit;cursor:copy;text-align:left}
+.combos-table .combo-id-copy{font-family:var(--font-mono);font-size:12.5px}
+.combo-id-copy .combo-id-text{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.combos-table .combo-id-text{max-width:min(280px,28vw)}
+.combo-id-copy .ui-ic{opacity:0;color:var(--text3)}
+.combo-id-copy .ic-done{display:none;color:var(--green)}
+.combo-id-copy:hover,.combo-id-copy:focus-visible{background:var(--surface2);border-color:var(--border2)}
+.combo-id-copy:hover .ui-ic,.combo-id-copy:focus-visible .ui-ic{opacity:1}
+.combo-id-copy.copied .ic-copy{display:none}
+.combo-id-copy.copied .ic-done{display:inline-block;opacity:1}
+.combo-id-copy.copied .combo-id-text{color:var(--green)}
+@media (hover:none){.combo-id-copy .ui-ic{opacity:.7}}
+.combo-id-field{display:flex;gap:6px;align-items:stretch}
+.combo-id-field input{flex:1 1 auto;min-width:0}
+.combo-id-copy-btn{flex:0 0 auto;padding:0 10px}
+.combo-id-copy-btn.copied{color:var(--green);border-color:var(--green)}
+.field-error{margin-top:4px;font-size:12px;line-height:1.4;color:var(--red)}
+.field-error[hidden]{display:none}
+#comboEditor [aria-invalid="true"]{border-color:var(--red)}
+.combo-entries-summary{display:flex;align-items:center;flex-wrap:wrap;gap:6px 14px;margin:6px 0 8px;font-size:12px;color:var(--text2)}
+.combo-entries-summary:empty{display:none}
+.combo-entries-summary b{font-variant-numeric:tabular-nums;color:var(--text)}
+.combo-entries-summary .dot{display:inline-block;width:7px;height:7px;margin-right:4px;border-radius:50%;background:var(--green)}
+.combo-summary-warn{display:inline-flex;align-items:center;gap:8px;color:var(--yellow)}
+.combo-entry.combo-entry-dup{border-color:var(--red);background:var(--red-soft)}
+.combo-entry.combo-entry-empty{border-style:dashed}
+.combo-dirty-tag{margin-left:auto;font-size:12px;color:var(--yellow);white-space:nowrap}
+.combo-dirty-tag[hidden]{display:none}
+.combo-pick-filters{align-items:center;justify-content:space-between;gap:8px}
+.combo-pick-tiers{display:flex;gap:6px}
+.combo-pick-source{width:auto;min-width:150px;max-width:55%;padding:6px 10px;font-size:12px}
 
 /* 导入预览：操作过滤 + 分组表头 + 逐行判定依据 */
 .import-filter-row{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}

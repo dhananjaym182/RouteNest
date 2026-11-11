@@ -101,7 +101,7 @@ const _tierSignalWhy = {
 };
 function tierBasisTitle(it) {
   const why = _tierSignalWhy[it.signal];
-  const basis = why ? t(why) : (it.reason ? t(it.reason) : '');
+  const basis = why ? t(why) : (it.reason ? tx(t(it.reason)) : '');
   return basis;
 }
 function tierBadge(tier) {
@@ -189,7 +189,24 @@ function closeImportPreview() {
   document.querySelectorAll('.import-tier-filter').forEach(b => b.classList.toggle('active', !b.dataset.tier));
 }
 
+let _importTests = {}; // modelId → 行内测试结果（批次切换时清空）
+let _importTestsFor = null;
+// 导入前试用：provider 已保存（批次属于某个 provider ID），所以按 ID 测试，名称原样发送。
+async function testImportModel(btn) {
+  const id = btn.dataset.model;
+  const batch = _importBatch;
+  if (!batch || !batch.providerId) return;
+  _importTests[id] = { running: true };
+  paintModelTestResult('#importPreviewList .import-test-result', id, _importTests[id]);
+  btn.disabled = true;
+  const result = await provTestModel({ id: batch.providerId }, id, '');
+  btn.disabled = false;
+  if (_importBatch !== batch) return;
+  _importTests[id] = result;
+  paintModelTestResult('#importPreviewList .import-test-result', id, result);
+}
 function renderImportPreviewList() {
+  if (_importTestsFor !== _importBatch) { _importTests = {}; _importTestsFor = _importBatch; }
   const items = (_importBatch && _importBatch.items) || [];
   const st = importStatsFromBatch(_importBatch);
   _('importPreviewProv').textContent = _importBatch ? _importBatch.providerName : '';
@@ -237,16 +254,18 @@ function renderImportPreviewList() {
       const selectable = it.action === 'add' || it.action === 'tier_change';
       const why = tierBasisTitle(it);
       const sig = it.signal || it.reason
-        ? '<span class="import-basis" title="' + escAttr(why) + '">' + t('依据: ') + esc(t(_tierSignals[it.signal] || it.reason || it.signal)) + '</span>'
+        ? '<span class="import-basis" title="' + escAttr(why) + '">' + t('依据: ') + esc(tx(t(_tierSignals[it.signal] || it.reason || it.signal))) + '</span>'
         : '';
       let action;
       if (it.action === 'add') action = '<span class="model-source-badge zen">' + t('新增') + '</span>';
       else if (it.action === 'tier_change') action = '<span class="model-source-badge provider">' + t('层级变化') + ': ' + esc(it.oldTier === 'free' ? t('免费') : t('付费')) + ' → ' + esc(it.tier === 'free' ? t('免费') : t('付费')) + '</span>';
-      else if (it.action === 'protected') action = '<span class="model-source-badge" title="' + escAttr(it.reason || '') + '">' + t('受保护') + '</span>';
+      else if (it.action === 'protected') action = '<span class="model-source-badge" title="' + escAttr(tx(it.reason || '')) + '">' + t('受保护') + '</span>';
       else action = '<span class="model-source-badge dim-op">' + t('无变化') + '</span>';
       return '<label class="combo-pick-row prov-flow-row" data-action="' + escAttr(it.action) + '" data-tier="' + (it.tier === 'free' ? 'free' : 'paid') + '">' +
         '<input type="checkbox" class="import-approve" onchange="updateImportCount()" value="' + esc(it.modelId) + '" ' + (it.action === 'add' ? 'checked' : '') + (selectable ? '' : ' disabled') + '>' +
-        '<span class="combo-pick-id">' + esc(it.modelId) + '</span>' + tierBadge(it.tier) + sig + action + '</label>';
+        '<span class="combo-pick-id">' + esc(it.modelId) + '</span>' + tierBadge(it.tier) + sig + action +
+        (selectable ? '<button type="button" class="btn btn-sm import-test" data-model="' + escAttr(it.modelId) + '" onclick="event.preventDefault();event.stopPropagation();testImportModel(this)" title="' + escAttr(t('测试此模型')) + '">' + t('测试') + '</button>' +
+          '<span class="import-test-result" data-model="' + escAttr(it.modelId) + '">' + modelTestResultHTML(_importTests[it.modelId]) + '</span>' : '') + '</label>';
     }).join('');
     return '<div class="import-group" data-action="' + g.action + '">' + head + body + '</div>';
   }).join('');

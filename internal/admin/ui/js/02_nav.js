@@ -28,6 +28,7 @@ function updateShellContext(name) {
   const sectionEl = _('currentNavSection');
   if (titleEl) titleEl.textContent = title ? title.textContent.trim() : t('概览');
   if (sectionEl) sectionEl.textContent = sectionLabel ? sectionLabel.textContent.trim() : t('工作区');
+  if (typeof updateAdminAuthPageTitle === 'function') updateAdminAuthPageTitle(); // browser tab follows the page
 }
 
 function toggleLoginImport(forceOpen) {
@@ -106,7 +107,10 @@ function applyTab(name){
   if (fromImport || fromAccounts) switchPageSubTab('credentials', 'conns', true);
   if (fromImport) openProviderSetup('cline', '', true);
   else if (name === 'logs') { loadRequestLogs(true); startLogPolling(); }
-  else if (name === 'routing') { loadModels().then(() => { loadConfig(); if (typeof loadRouteInspector === 'function') loadRouteInspector(); }); }
+  else if (name === 'routing') {
+    if (typeof applyRoutingAccess === 'function') applyRoutingAccess();
+    loadModels().then(() => { loadConfig(); if (typeof maybeLoadRouteInspector === 'function') maybeLoadRouteInspector(); });
+  }
   else if (name === 'models') { loadGlobal(); loadModels().then(() => { loadConfig(); }); }
   else if (name === 'combos') { loadCombos(); }
   else if (name === 'network') { loadGlobal(); loadClineProxyConfig(); }
@@ -121,6 +125,11 @@ function applyTab(name){
       if (typeof loadSSOProviders === 'function') loadSSOProviders();
     }
     renderAdminPrincipal(_adminPrincipal);
+    // Restore last selected subtab or default to identity
+    let saved = null;
+    try { saved = localStorage.getItem(SUBTAB_KEY_PREFIX + 'security'); } catch(e) {}
+    const defaultSub = saved && document.querySelector('.page-subtabs[data-page="security"] .subtab[data-sub="' + saved + '"]') ? saved : 'identity';
+    switchPageSubTab('security', defaultSub, true);
   }
   else if (name === 'quickstart') {
     if (typeof loadQuickStart === 'function') loadQuickStart();
@@ -238,7 +247,7 @@ const SUBTAB_KEY_PREFIX = 'cline_admin_subtab_';
 function switchPageSubTab(page, sub, skipSave) {
   if (page === 'routing' && sub === 'models') { applyTab('models'); return; }
   if (page === 'accounts') page = 'credentials'; // legacy alias
-  if (page === 'credentials' && sub === 'pool') sub = 'conns';
+  if (page === 'credentials' && sub === 'pool') sub = 'cline'; // legacy: the Cline account pool has its own tab
   const nav = document.querySelector('.page-subtabs[data-page="' + page + '"]');
   if (!nav) return;
   nav.querySelectorAll('.subtab').forEach(e => {
@@ -267,6 +276,7 @@ function switchPageSubTab(page, sub, skipSave) {
 function onPageSubTabShown(page, sub) {
   if (page === 'providers' && sub === 'oauth') loadConnections();
   if (page === 'credentials' && sub === 'client-keys') loadKeys();
+  if (page === 'routing' && sub === 'inspect' && typeof routeInspectorShown === 'function') routeInspectorShown();
 }
 document.querySelectorAll('.page-subtabs').forEach(nav => {
   nav.setAttribute('role', 'tablist');

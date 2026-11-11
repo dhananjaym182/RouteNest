@@ -1,10 +1,11 @@
-/* ===== RouteNest AI Gateway Control Plane ===== */
+/* ===== RouteNest Free-First AI API Routing ===== */
 
 /* Shell */
 .layout{--nav-w:264px;background:var(--bg)}
 .sidebar{background:var(--surface);border-right:1px solid var(--border2)}
 .sidebar-header{min-height:72px;padding:16px 14px 16px 18px}
-.sidebar-header .logo,.app-logo-lg{background:var(--accent);box-shadow:inset 0 0 0 1px rgba(255,255,255,.16)}
+.sidebar-header .logo,.app-logo-lg{background:transparent;box-shadow:none}
+.sidebar-header .logo svg,.app-logo-lg svg{width:100%;height:100%;display:block}
 .sidebar-header .brand-name{font-family:var(--font-ui);font-size:15px;font-weight:700;letter-spacing:-.01em}
 .sidebar-header .brand-sub{font-size:12px;font-weight:600;letter-spacing:.02em}
 .sidebar-nav{padding:8px 10px 10px}
@@ -128,9 +129,9 @@ tbody tr:hover{background:color-mix(in srgb,var(--accent-soft) 45%,transparent)}
 .system-toolbar-grid{display:grid;grid-template-columns:minmax(220px,1.3fr) repeat(2,minmax(160px,.7fr));gap:10px;align-items:end;width:min(100%,760px)}
 .system-search-field{position:relative}
 .provider-inventory-grid{grid-template-columns:repeat(auto-fit,minmax(min(100%,390px),1fr));gap:12px}
-.provider-inventory-card,.system-card,.observation-card,.prov-card{border-color:var(--border);border-radius:12px;box-shadow:none}
+.provider-inventory-card,.system-card,.observation-card{border-color:var(--border);border-radius:12px;box-shadow:none}
 .provider-inventory-card::before{left:16px;width:32px;background:var(--accent)}
-.provider-inventory-card:hover,.system-card:hover,.observation-card:hover,.prov-card:hover{border-color:color-mix(in srgb,var(--accent) 40%,var(--border));transform:none;box-shadow:none}
+.provider-inventory-card:hover,.system-card:hover,.observation-card:hover{border-color:color-mix(in srgb,var(--accent) 40%,var(--border));transform:none;box-shadow:none}
 .provider-monogram{font-family:var(--font-ui);background:var(--accent-soft)}
 .provider-card-meta{grid-template-columns:repeat(2,minmax(0,1fr))}
 .system-card-grid{grid-template-columns:repeat(auto-fill,minmax(min(100%,320px),1fr))}
@@ -274,3 +275,9 @@ tbody tr:hover{background:color-mix(in srgb,var(--accent-soft) 45%,transparent)}
 @media (prefers-reduced-motion:reduce){
   .sidebar,.sidebar-scrim{transition:none}
 }
+
+/* 路由页：回退链的“添加模型”选择器与只读提示 */
+.chain-add{display:flex;align-items:center;gap:8px;margin-top:8px}
+.chain-add input{flex:1 1 auto;min-width:0;max-width:420px}
+.chain-add .btn{flex:0 0 auto}
+#routeReadOnlyNotice{margin:0 0 14px}

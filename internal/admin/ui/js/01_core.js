@@ -1,12 +1,32 @@
 // ===== core: language, escaping, formatting, icons, toasts =====
-let LANG = 'zh';
-const LC = () => LANG === 'en' ? 'en-US' : 'zh-CN';
+let LANG = 'en';
+const LC = () => LANG === 'zh' ? 'zh-CN' : 'en-US';
 function detectLang(){
   try { const m = document.cookie.match(/cline_admin_lang=(zh|en)/); if (m) return m[1]; } catch(e){}
   try { const l = localStorage.getItem('cline_admin_lang'); if (l==='en'||l==='zh') return l; } catch(e){}
-  return (navigator.language||'').toLowerCase().startsWith('zh') ? 'zh' : 'en';
+  return 'en';
 }
 function t(s){ if (LANG==='en' && s && I18N[s]) return I18N[s]; return s; }
+// Server-built messages (Go) that embed Chinese hints and dynamic values cannot
+// be exact dictionary keys. Translate their known fragments in English mode;
+// anything unmatched passes through untouched.
+const SERVER_MSG_RULES = [
+  [/（opencode\.ai (?:当前)?网络不可达，可在管理页「(?:上游服务 → opencode|Providers → OpenCode Zen →) 出口代理」配置代理(?:后重试)?）/g,
+   ' (opencode.ai is unreachable from this network. Configure a proxy under Providers → OpenCode Zen → egress proxy, then retry.)'],
+  [/（未找到已注册的 opencode 会话：免费层只服务上游已登记的 session；请在管理页填入 sessionIds，或在本机用 opencode\/wu 正常对话一次以生成）/g,
+   ' (No registered opencode session found. The free tier only serves sessions registered upstream. Enter sessionIds in the admin page, or chat once with opencode/wu on this machine to create one.)'],
+  [/（opencode 免费层出口 IP 限流 ~([^，）]+)，切换代理节点后可立即重试）/g,
+   ' (The opencode free tier is rate-limiting this egress IP for about $1. Switch proxy nodes to retry immediately.)'],
+  [/模型归属 (.+?) 同步链，不跨源改层级/g, 'Model belongs to the $1 sync chain; its tier is not changed across sources'],
+  [/用户手动设置过层级/g, 'Tier was set manually by the user'],
+  [/管理页「导入账号」→ OAuth 登录/g, 'Admin page: Import Account → OAuth login'],
+];
+function tx(s) {
+  if (LANG !== 'en' || typeof s !== 'string' || !/[\u4e00-\u9fff]/.test(s)) return s;
+  let out = s;
+  for (const [re, rep] of SERVER_MSG_RULES) out = out.replace(re, rep);
+  return out;
+}
 // Only retain unambiguous English → Chinese fallbacks. Static DOM nodes keep
 // their own source key below, so collisions such as "Providers" cannot restore
 // the wrong Chinese label after an English session.
@@ -99,7 +119,7 @@ function setLang(l){
   // No toast: the pressed segment in the language control already confirms the switch.
 }
 LANG = detectLang();
-document.documentElement.lang = (LANG==='en')?'en':'zh-CN';
+document.documentElement.lang = (LANG==='zh')?'zh-CN':'en';
 // ===== /i18n =====
 const API = '/admin/api';
 
@@ -107,6 +127,9 @@ const _ = id => document.getElementById(id);
 const esc = s => { const d=document.createElement('div'); d.textContent=s||''; return d.innerHTML; };
 // 属性上下文转义：esc 不处理引号，注入到 onclick / value 等属性时需额外转义引号
 const escAttr = s => esc(s).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+// A value passed as a JS string argument inside a double-quoted inline event-handler attribute.
+// JSON quoting makes it a valid JS literal; escAttr then protects the HTML attribute around it.
+const jsArg = value => escAttr(JSON.stringify(String(value == null ? '' : value)));
 
 // §9.3 tier-signal provenance labels, shared by the provider import preview
 // and the per-row badges on the Models page.
@@ -153,6 +176,7 @@ const UI_ICONS = {
   caretDown: '<polyline points="6 9 12 15 18 9"/>',
   hourglass: '<path d="M5 22h14"/><path d="M5 2h14"/><path d="M17 22v-4.172a2 2 0 0 0-.586-1.414L12 12l-4.414-4.414A2 2 0 0 1 7 6.172V2"/><path d="M7 2v4.172a2 2 0 0 0 .586 1.414L12 12l4.414 4.414A2 2 0 0 1 17 17.828V22"/>',
   arrowDown: '<line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/>',
+  copy: '<rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>',
   edit: '<path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/>',
   pause: '<rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/>',
   play: '<polygon points="5 3 19 12 5 21 5 3"/>'
@@ -172,7 +196,7 @@ function toast(msg, tone) {
   const item = document.createElement('div');
   item.className = 'toast ' + tone;
   item.innerHTML = uiIcon(tone === 'success' ? 'check' : (tone === 'error' ? 'close' : 'bolt')) + '<span class="toast-msg"></span>';
-  item.querySelector('.toast-msg').textContent = msg;
+  item.querySelector('.toast-msg').textContent = tx(msg);
   stack.appendChild(item);
   while (stack.children.length > 3) stack.removeChild(stack.firstChild);
   requestAnimationFrame(() => item.classList.add('show'));
@@ -199,7 +223,7 @@ function toastError(msg) {
   item.className = 'sticky-alert';
   item.innerHTML = uiIcon('bolt', 'sticky-alert-icon') + '<span class="sticky-alert-msg"></span>' +
     '<button type="button" class="sticky-alert-close" aria-label="' + escAttr(t('关闭')) + '">' + uiIcon('close') + '</button>';
-  item.querySelector('.sticky-alert-msg').textContent = String(msg || '');
+  item.querySelector('.sticky-alert-msg').textContent = tx(String(msg || ''));
   const close = item.querySelector('.sticky-alert-close');
   close.title = t('关闭');
   close.addEventListener('click', () => item.remove());

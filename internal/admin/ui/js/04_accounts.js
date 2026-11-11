@@ -4,6 +4,36 @@ let _accPage = 1;
 const _accPageSize = 20;
 const _checkedAccounts = new Set();
 let _lastAccountList = []; // loadAccounts 缓存：全选本页/分页器复用，避免重复请求
+// idle: not requested yet · ok · failed · denied (the principal lacks credential.write)
+let _accountsState = 'idle';
+
+// Every endpoint behind Accounts & Credentials (/accounts, /connections, /credentials, /keys,
+// /account-health) requires credential.write, so roles without it must not fire those calls.
+function canManageCredentials() {
+  return typeof adminHasPermission !== 'function' || adminHasPermission('credential.write');
+}
+
+// Without credential.write the page has nothing readable: show why, instead of 403 toasts and
+// empty states that read as "no accounts". CONTRACTS.md: render a persistent explanation.
+function applyCredentialAccess() {
+  const allowed = canManageCredentials();
+  const note = _('credentialAccessNote');
+  if (note) note.hidden = allowed;
+  const panel = _('tab-credentials');
+  if (!panel) return;
+  const tabs = panel.querySelector('.credential-view-tabs');
+  if (tabs) tabs.hidden = !allowed;
+  panel.querySelectorAll(':scope > .page-subpage').forEach(page => { page.hidden = !allowed; });
+}
+
+// Header refresh: everything on the page, including the client-key list.
+function refreshCredentials() {
+  loadGlobal(true);
+  loadAccounts();
+  loadConnections(true);
+  loadStats();
+  loadKeys();
+}
 let _accSearch = ''; // 邮箱搜索词（不区分大小写）
 let _accSort = { key: null, dir: 1 }; // 列排序：key 见 _accSortValue，dir 1/-1
 
@@ -25,7 +55,29 @@ function onAccSort(key) {
   if (_accSort.key === key) _accSort.dir = -_accSort.dir;
   else _accSort = { key: key, dir: 1 };
   _accPage = 1;
+  updateAccSortAria(key, _accSort.dir);
   loadAccounts();
+}
+
+// 键盘排序支持：Enter/Space 触发排序，Arrow 切换列
+function onAccSortKey(event, key) {
+  if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onAccSort(key); }
+  else if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') {
+    event.preventDefault();
+    const ths = document.querySelectorAll('.account-table .th-sort');
+    const idx = Array.from(ths).findIndex(th => th.getAttribute('onkeydown')?.includes("'" + key + "'"));
+    const nextIdx = event.key === 'ArrowRight' ? (idx + 1) % ths.length : (idx - 1 + ths.length) % ths.length;
+    ths[nextIdx]?.focus();
+  }
+}
+
+// 更新 aria-sort 状态
+function updateAccSortAria(activeKey, dir) {
+  document.querySelectorAll('.account-table .th-sort').forEach(th => {
+    const k = th.getAttribute('onclick')?.match(/'(email|status|usage|total|cached|lastUsed|createdAt)'/)?.[1];
+    if (!k) return;
+    th.setAttribute('aria-sort', k === activeKey ? (dir === 1 ? 'ascending' : 'descending') : 'none');
+  });
 }
 
 // 按搜索词过滤 + 列排序后的完整列表（分页/全选/计数都基于它）
@@ -55,12 +107,13 @@ function onAccSearch(v) {
 // ========== 账号最近成败热度（account-health） ==========
 let _acctHealth = null;
 
-async function ensureAcctHealth() {
-  if (_acctHealth) return;
+// Refetched on every account load so the success/failure strips follow tests, resets and traffic.
+// A failed refresh keeps the strips already shown rather than blanking them.
+async function refreshAcctHealth() {
   try {
     const d = await api('GET', '/account-health');
     _acctHealth = (d.data && d.data.accounts) || {};
-  } catch (e) { _acctHealth = {}; }
+  } catch (e) { if (!_acctHealth) _acctHealth = {}; }
 }
 
 function acctHeatHtml(id) {
@@ -75,13 +128,23 @@ function acctHeatHtml(id) {
 }
 
 async function loadAccounts() {
+  if (!canManageCredentials()) {
+    _lastAccountList = [];
+    _accountsState = 'denied';
+    if (window.renderAttention) renderAttention();
+    renderCredentialSummary();
+    return;
+  }
+  let loaded = false;
   try {
     if (!_cachedModels.length) {
       try { const dm = await api('GET', '/models'); _cachedModels = dm.data.models || []; } catch (e) {}
     }
-    const [d] = await Promise.all([api('GET', '/accounts'), ensureAcctHealth()]);
+    const [d] = await Promise.all([api('GET', '/accounts'), refreshAcctHealth()]);
     const list = d.data.accounts;
     _lastAccountList = list || [];
+    _accountsState = 'ok';
+    loaded = true;
     if (window.renderAttention) renderAttention();
     const view = filteredAccountList(); // 搜索后的视图
     const tbody = _('accountTableBody');
@@ -120,7 +183,7 @@ async function loadAccounts() {
     tbody.innerHTML = pageList.map((a, i) => {
       const seq = start + i + 1;
       const statusBadge = acctStatusBadge(a, sn);
-      const selBox = '<input type="checkbox" ' + (_checkedAccounts.has(a.accountId) ? 'checked' : '') + ' onchange="onSelAccount(\'' + a.accountId + '\', this.checked)">';
+      const selBox = '<input type="checkbox" data-account-id="' + escAttr(a.accountId) + '" ' + (_checkedAccounts.has(a.accountId) ? 'checked' : '') + ' onchange="onSelAccount(' + jsArg(a.accountId) + ', this.checked)">';
       return '<tr>' +
         '<td class="td-center">' + selBox + '</td>' +
         '<td class="mono hint-sm">' + seq + '</td>' +
@@ -134,9 +197,9 @@ async function loadAccounts() {
         '<td>' + formatDateTime(a.lastUsed, true) + '</td>' +
         '<td>' + formatDateTime(a.createdAt, true) + '</td>' +
         '<td class="td-nowrap">' +
-          '<button class="btn btn-sm" onclick="testAccount(\'' + a.accountId + '\',this)" title="' + t('测试') + '" aria-label="' + t('测试') + '">'+uiIcon('bolt')+'</button> ' +
-          '<button class="btn btn-sm" onclick="resetAccount(\'' + a.accountId + '\')" title="' + t('重置') + '" aria-label="' + t('重置') + '">'+uiIcon('reset')+'</button> ' +
-          '<button class="btn btn-sm btn-danger" onclick="deleteAccount(\'' + a.accountId + '\', this)" title="' + t('删除') + '" aria-label="' + t('删除') + '">'+uiIcon('close')+'</button>' +
+          '<button class="btn btn-sm" onclick="testAccount(' + jsArg(a.accountId) + ',this)" title="' + t('测试') + '" aria-label="' + t('测试') + '">'+uiIcon('bolt')+'</button> ' +
+          '<button class="btn btn-sm" onclick="resetAccount(' + jsArg(a.accountId) + ')" title="' + t('重置') + '" aria-label="' + t('重置') + '">'+uiIcon('reset')+'</button> ' +
+          '<button class="btn btn-sm btn-danger" onclick="deleteAccount(' + jsArg(a.accountId) + ', this)" title="' + t('删除') + '" aria-label="' + t('删除') + '">'+uiIcon('close')+'</button>' +
         '</td></tr>';
     }).join('');
     cards.innerHTML = pageList.map(a => {
@@ -157,12 +220,15 @@ async function loadAccounts() {
           '<div class="account-metric"><span class="account-metric-label">' + t('输出') + '</span><span class="account-metric-value">' + formatTokenCount(a.completionTokens) + '</span></div>' +
         '</div>' + modelHtml +
         '<div class="account-card-footer"><span>' + t('最后使用：') + lu + '</span><span class="account-card-actions">' +
-          '<button class="btn btn-sm" onclick="testAccount(\'' + a.accountId + '\',this)" title="' + t('测试') + '" aria-label="' + t('测试') + '">'+uiIcon('bolt')+'</button>' +
-          '<button class="btn btn-sm" onclick="resetAccount(\'' + a.accountId + '\')" title="' + t('重置') + '" aria-label="' + t('重置') + '">'+uiIcon('reset')+'</button>' +
-          '<button class="btn btn-sm btn-danger" onclick="deleteAccount(\'' + a.accountId + '\', this)" title="' + t('删除') + '" aria-label="' + t('删除') + '">'+uiIcon('close')+'</button>' +
+          '<button class="btn btn-sm" onclick="testAccount(' + jsArg(a.accountId) + ',this)" title="' + t('测试') + '" aria-label="' + t('测试') + '">'+uiIcon('bolt')+'</button>' +
+          '<button class="btn btn-sm" onclick="resetAccount(' + jsArg(a.accountId) + ')" title="' + t('重置') + '" aria-label="' + t('重置') + '">'+uiIcon('reset')+'</button>' +
+          '<button class="btn btn-sm btn-danger" onclick="deleteAccount(' + jsArg(a.accountId) + ', this)" title="' + t('删除') + '" aria-label="' + t('删除') + '">'+uiIcon('close')+'</button>' +
         '</span></div></article>';
     }).join('');
-  } catch (e) { toast(t('加载账号失败: ') + e.message, 'error'); }
+  } catch (e) {
+    if (!loaded) { _accountsState = 'failed'; renderCredentialSummary(); }
+    toast(t('加载账号失败: ') + e.message, 'error');
+  }
 }
 
 // 分页器：页码按钮 + 总数（total 为缓存列表长度）
@@ -176,25 +242,38 @@ function countLabel(n, one, many) {
 }
 
 function renderCredentialSummary() {
+  applyCredentialAccess();
   const box = _('credentialSummary');
   if (!box) return;
-  const oauthAccounts = _connList.length;
-  const oauthActive = _connList.filter(c => c.status === 'active').length;
-  const oauthProviders = new Set(_connList.map(c => c.provider)).size;
-  const apiCreds = (_globalData && _globalData.credentials) || [];
-  const credProvider = c => (c.providerIds && c.providerIds[0]) || c.provider || '';
-  const apiProviders = new Set(apiCreds.map(credProvider).filter(Boolean)).size;
-  const apiRequests = apiCreds.reduce((sum, c) => sum + (Number(c.usageCount) || 0), 0);
-  const clineAccounts = (_lastAccountList || []).length;
-  const pool = _('statTotal');
-  const tile = (label, value, sub) =>
-    '<div class="credential-summary-tile"><div class="credential-summary-value">' + esc(value) + '</div>' +
+  if (!canManageCredentials()) { box.innerHTML = ''; return; }
+  // A tile is only a count once its own source has answered. Before that it says so, and a
+  // failed source says that, instead of reading as "none connected".
+  const loading = { value: '—', sub: t('加载中…') };
+  const failed = { value: '—', sub: t('加载失败'), error: true };
+  const globalFailed = typeof _globalLoadFailed !== 'undefined' && _globalLoadFailed;
+
+  let oauth = _connState === 'failed' ? failed : loading;
+  if (_connState === 'ok') {
+    const active = _connList.filter(c => c.status === 'active').length;
+    const providers = new Set(_connList.map(c => c.provider)).size;
+    oauth = { value: String(_connList.length), sub: _connList.length ? t('活跃') + ' ' + active + ' · ' + countLabel(providers, '个服务（单数）', '个服务') : t('尚未登录') };
+  }
+  let apiCreds = globalFailed && !_globalData ? failed : loading;
+  if (_globalData) {
+    const creds = _globalData.credentials || [];
+    const credProvider = c => (c.providerIds && c.providerIds[0]) || c.provider || '';
+    const providers = new Set(creds.map(credProvider).filter(Boolean)).size;
+    const requests = creds.reduce((sum, c) => sum + (Number(c.usageCount) || 0), 0);
+    apiCreds = { value: String(creds.length), sub: creds.length ? countLabel(providers, '个 Provider（单数）', '个 Provider') + ' · ' + formatNumber(requests) + ' ' + t('请求') : t('尚未配置') };
+  }
+  let pool = _accountsState === 'failed' ? failed : loading;
+  if (_accountsState === 'ok') pool = { value: String((_lastAccountList || []).length), sub: t('内置账号池') };
+
+  const tile = (label, state) =>
+    '<div class="credential-summary-tile' + (state.error ? ' is-error' : '') + '"><div class="credential-summary-value">' + esc(state.value) + '</div>' +
     '<div class="credential-summary-label">' + esc(t(label)) + '</div>' +
-    (sub ? '<div class="credential-summary-sub">' + esc(sub) + '</div>' : '') + '</div>';
-  box.innerHTML =
-    tile('OAuth 账号', String(oauthAccounts), oauthAccounts ? t('活跃') + ' ' + oauthActive + ' · ' + countLabel(oauthProviders, '个服务（单数）', '个服务') : t('尚未登录')) +
-    tile('API 凭据', String(apiCreds.length), apiCreds.length ? countLabel(apiProviders, '个 Provider（单数）', '个 Provider') + ' · ' + formatNumber(apiRequests) + ' ' + t('请求') : t('尚未配置')) +
-    tile('Cline 账号池', clineAccounts ? String(clineAccounts) : (pool ? pool.textContent : '0'), t('内置账号池'));
+    (state.sub ? '<div class="credential-summary-sub">' + esc(state.sub) + '</div>' : '') + '</div>';
+  box.innerHTML = tile('OAuth 账号', oauth) + tile('API 凭据', apiCreds) + tile('Cline 账号池', pool);
 }
 
 function renderAccountPager(total) {
@@ -225,7 +304,7 @@ function onSelAccount(id, checked) {
 }
 
 // 全选/全不选当前页：优先用缓存列表；缓存为空（刚删除/导出后尚未刷新）时
-// 退回当前渲染行上的勾选框（从 onchange="onSelAccount('id',...)" 解析账号 ID）。
+// 退回当前渲染行上的勾选框（账号 ID 取自 data-account-id）。
 function toggleAllAccountSel(box) {
   const list = filteredAccountList();
   const totalPages = Math.max(1, Math.ceil(list.length / _accPageSize));
@@ -243,11 +322,11 @@ function toggleAllAccountSel(box) {
   const boxes = document.querySelectorAll('#accountTableBody input[type="checkbox"][onchange*="onSelAccount"]');
   if (!boxes.length) { loadAccounts(); return; }
   boxes.forEach(cb => {
-    const m = (cb.getAttribute('onchange') || '').match(/onSelAccount\('([^']+)'/);
-    if (!m) return;
+    const id = cb.dataset.accountId;
+    if (!id) return;
     cb.checked = box.checked;
-    if (box.checked) _checkedAccounts.add(m[1]);
-    else _checkedAccounts.delete(m[1]);
+    if (box.checked) _checkedAccounts.add(id);
+    else _checkedAccounts.delete(id);
   });
   updateSelCount();
 }

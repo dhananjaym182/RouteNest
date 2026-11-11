@@ -19,7 +19,7 @@ function createUI({ models = [], providers = [], instances = providers, sync = {
     get innerHTML() { return this.html || ''; },
     set innerHTML(value) { this.html = value; this.rows = []; },
   });
-  for (const id of ['modelsList', 'providersList', 'modelSyncModal', 'modelSyncOverlay', 'provDetailRecheckOut']) {
+  for (const id of ['modelsList', 'providerCooldowns', 'modelSyncModal', 'modelSyncOverlay', 'provDetailRecheckOut']) {
     elements.set(id, field());
   }
   const queryAll = selector => {
@@ -49,7 +49,7 @@ function createUI({ models = [], providers = [], instances = providers, sync = {
       setItem: (key, value) => storage.set(key, String(value)),
       removeItem: key => storage.delete(key),
     },
-    t: value => value,
+    t: value => value, tx: value => value,
     esc: escapeHTML,
     escAttr: escapeHTML,
     uiIcon: () => '',
@@ -87,7 +87,6 @@ function createUI({ models = [], providers = [], instances = providers, sync = {
     renderModelList = () => {};
     renderGlobal = () => {};
     renderProvCooldownBar = () => '';
-    provCardHTML = () => '';
     refreshProvDetailIfOpen = () => {};
     renderProvPickerList = () => {};
     renderImportPreviewList = () => {};

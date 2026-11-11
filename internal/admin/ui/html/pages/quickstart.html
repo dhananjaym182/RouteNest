@@ -1,37 +1,50 @@
 <div id="tab-quickstart" class="tab-panel" style="display:none">
-  <div class="page-header">
+  <div class="page-header quickstart-header">
     <div>
-      <div class="page-kicker">工作区</div>
+      <div class="page-kicker">工作区 · 引导</div>
       <div class="large-title">快速开始</div>
-      <div class="large-subtitle">三步接入：添加账号 → 生成密钥 → 配置客户端</div>
+      <div class="large-subtitle">三步接入：添加 Provider、生成密钥、连接你的客户端</div>
     </div>
+    <div class="quickstart-header-badge"><span class="quickstart-live-dot"></span>配置示例实时生成</div>
   </div>
 
   <div class="section">
     <div class="section-title">接入步骤</div>
     <div class="section-body">
       <div class="stack-col">
-        <div class="step-item">
-          <div class="step-dot">1</div>
+        <div class="step-item" id="step-provider">
+          <div class="step-dot step-incomplete">1</div>
           <div>
             <div class="txt-strong">连接第一个 Provider</div>
             <div class="page-sub-title">复用现有 Provider 设置流程添加账号、Token 或 API Provider。</div>
+            <div class="step-status">
+              <span class="step-status-text">未连接</span>
+              <span class="step-status-check hidden">✓ 已连接</span>
+            </div>
             <button class="btn btn-sm mt-6" onclick="openProviderSetup()">连接 Provider</button>
           </div>
         </div>
-        <div class="step-item">
-          <div class="step-dot">2</div>
+        <div class="step-item" id="step-api-key">
+          <div class="step-dot step-incomplete">2</div>
           <div>
             <div class="txt-strong">生成 API Key</div>
             <div class="page-sub-title">前往「账号与凭据 → 客户端 API 密钥」生成密钥。如有意不配置任何密钥，现有兼容策略保持不变。</div>
+            <div class="step-status">
+              <span class="step-status-text">未生成</span>
+              <span class="step-status-check hidden">✓ 已生成</span>
+            </div>
             <button class="btn btn-sm mt-6" onclick="showPageSubTab('credentials','client-keys')">管理客户端 API 密钥</button>
           </div>
         </div>
-        <div class="step-item">
-          <div class="step-dot">3</div>
+        <div class="step-item" id="step-configure">
+          <div class="step-dot step-incomplete">3</div>
           <div>
             <div class="txt-strong">配置客户端</div>
             <div class="page-sub-title">按下方客户端示例填入 Base URL 与密钥即可。</div>
+            <div class="step-status">
+              <span class="step-status-text">待配置</span>
+              <span class="step-status-check hidden">✓ 可配置</span>
+            </div>
           </div>
         </div>
       </div>
@@ -42,6 +55,18 @@
     <div class="section-title">客户端配置示例</div>
     <div class="section-desc">Base URL 中的端口与监听地址以「关于」页 API 地址为准；多 Provider 同名模型可用 <code>模型@Provider名</code> 钉选来源（失败只报错、不悄悄换源）。</div>
     <div class="section-body">
+      <div class="model-selector-section">
+        <div>
+          <div class="field-label">示例模型</div>
+          <div class="field-help">选择后，下面所有客户端命令会立即更新。</div>
+        </div>
+        <label class="quickstart-model-control">
+          <span>选择示例模型</span>
+          <select id="quickstartModelSelect" class="select" aria-label="选择示例模型">
+            <option value="">正在加载模型列表…</option>
+          </select>
+        </label>
+      </div>
       <div class="quickstart-grid">
         <div class="quickstart-card">
           <div class="quickstart-card-title">Claude Code（Anthropic 协议）</div>

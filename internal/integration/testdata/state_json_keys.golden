@@ -237,6 +237,8 @@ provider-a.runtime.tombstones[].scope.providerId
 [].headers.fixture-key
 [].id
 [].modelIds
+[].modelMap
+[].modelMap.fixture-key
 [].name
 [].priority
 [].proxyUrl

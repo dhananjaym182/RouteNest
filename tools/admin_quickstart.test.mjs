@@ -3,9 +3,10 @@ import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import vm from 'node:vm';
 
-function quickStartUI({ origin = 'http://127.0.0.1:3467', configuredModel = '', models = [] } = {}) {
+function quickStartUI({ origin = 'http://127.0.0.1:3467', configuredModel = '', selectedModel = '', models = [] } = {}) {
   const elements = new Map([
     ['settingDefModel', { value: configuredModel, dataset: configuredModel ? { configLoaded: '1' } : {} }],
+    ...(selectedModel ? [['quickstartModelSelect', { value: selectedModel }]] : []),
     ...['quickstartClaudeCode', 'quickstartClineCode', 'quickstartOpenAICode', 'quickstartCurlCode']
       .map(id => [id, { textContent: '' }]),
   ]);
@@ -52,4 +53,21 @@ test('Quick Start never inserts a real client key', () => {
     if ('textContent' in element) assert.doesNotMatch(element.textContent, /sk-|Bearer [A-Za-z0-9]/);
   }
   assert.match(ui.elements.get('quickstartCurlCode').textContent, /<your-api-key>/);
+});
+
+test('Quick Start selection overrides the configured model in every example', () => {
+  const ui = quickStartUI({ configuredModel: 'default-model', selectedModel: 'picked-model' });
+  ui.run('renderQuickStartExamples()');
+  assert.match(ui.elements.get('quickstartClaudeCode').textContent, /picked-model/);
+  assert.match(ui.elements.get('quickstartCurlCode').textContent, /"model":"picked-model"/);
+});
+
+test('Quick Start model choices exclude disabled and duplicate models', () => {
+  const ui = quickStartUI({ models: [
+    { id: 'z-model', disabled: false },
+    { id: 'a-model', disabled: false },
+    { id: 'a-model', disabled: false },
+    { id: 'hidden-model', disabled: true },
+  ] });
+  assert.equal(ui.run('JSON.stringify(quickStartAvailableModels().map(model => model.id))'), '["a-model","z-model"]');
 });

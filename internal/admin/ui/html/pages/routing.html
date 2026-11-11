@@ -23,49 +23,17 @@
     <div class="route-flow-node"><span>05</span><small>失败后的兜底</small><strong id="routeFlowFallback">加载中…</strong></div>
   </div>
 
-  <div class="section route-inspector" id="routeInspectorSection">
-    <div class="section-title">模型路由检查</div>
-    <div class="section-desc">仅展示当前配置投影与已存储请求记录，不代表实时路由决策。选择模型后查看候选与回退配置，再对照最近一次已存储请求。</div>
-    <div class="section-body">
-      <div class="ri-controls">
-        <label class="ri-field">
-          <span>逻辑模型</span>
-          <select id="routeInspectorModel" onchange="selectRouteInspectorModel(this.value)"><option value="">加载中…</option></select>
-        </label>
-        <button type="button" class="btn btn-sm ri-refresh" onclick="loadRouteInspector(true)">刷新</button>
-        <span class="ri-hint">只读取现有接口，不计算资格或路由顺序</span>
-      </div>
-      <div id="routeInspectorError" class="ri-error" hidden></div>
-      <div id="routeInspectorSummary" class="ri-summary"><div class="ri-hint">加载中…</div></div>
-      <div class="ri-block">
-        <div class="ri-block-head">
-          <h3>候选与回退配置</h3>
-          <span class="ri-block-tag config">配置预览</span>
-        </div>
-        <div class="ri-hint ri-block-note">以下为当前配置与投影事实，不是预测，也不代表请求会被路由到这些候选项。</div>
-        <div id="routeInspectorCandidates"></div>
-        <div class="ri-subhead">回退配置（配置，不是预测）</div>
-        <div id="routeInspectorFallback"></div>
-      </div>
-      <div class="ri-block">
-        <div class="ri-block-head">
-          <h3>近期请求</h3>
-          <span class="ri-block-tag runtime">运行请求追踪</span>
-        </div>
-        <div id="routeInspectorRuntime"></div>
-      </div>
-    </div>
-  </div>
+  <div id="routeReadOnlyNotice" class="system-note" role="status" hidden>当前账号没有修改路由配置的权限（需要 provider.write）。可以在「路由检查」中查看候选与最近请求。</div>
 
   <div class="subtabs page-subtabs" data-page="routing">
-    <div class="subtab active" data-sub="config">路由策略</div>
-    <div class="subtab" data-sub="tuning">运行调优</div>
-    <div class="subtab" data-sub="models" title="打开模型页">模型目录 ↗</div>
+    <button type="button" class="subtab active" data-sub="config">路由策略</button>
+    <button type="button" class="subtab" data-sub="inspect">路由检查</button>
+    <button type="button" class="subtab" data-sub="tuning">运行调优</button>
   </div>
 
-  <div class="page-subpage" data-subpage="config">
+  <div class="page-subpage" data-subpage="config" data-route-write>
   <div class="section">
-    <div class="section-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>路由策略</div>
+    <div class="section-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>默认模型与回退</div>
     <div class="section-desc">设置默认模型、Cline 账号选择、全局回退链与客户端模型列表策略。</div>
     <div class="section-body">
       <div class="form-row">
@@ -85,6 +53,10 @@
         <div class="field">
           <label for="settingModelChain">回退模型链</label>
           <input type="text" id="settingModelChain" placeholder="z-ai/glm-5.3-flash, deepseek/deepseek-v4-flash, cline-free/longcat-2.0, free" oninput="this.dataset.dirty='1'" onchange="updateConfig()">
+          <div class="chain-add">
+            <input type="text" id="settingChainAdd" list="modelIdList" placeholder="搜索模型并添加到回退链…" aria-label="添加模型到回退链" autocomplete="off" onfocus="ensureModelIdList()" onkeydown="if(event.key==='Enter'){event.preventDefault();addModelToChain()}">
+            <button type="button" class="btn btn-sm" onclick="addModelToChain()">添加</button>
+          </div>
           <div class="hint-sm mt-4">逗号分隔模型 ID，可用 free 表示内置免费回退链；留空则自动回退到内置免费链。允许填写不在上方列表里的模型 ID（列表外的模型实测仍可用时可直接填入，同步列表只是参考）；失效条目由冷却与故障转移自动跳过</div>
           <div class="field-hint mt-2"><a href="#" onclick="switchTab('combos');return false" class="lnk-a">组合的回退顺序与紧急回退在「模型组合」页管理 →</a></div>
         </div>
@@ -105,13 +77,13 @@
       </div>
       <div class="form-group-label">策略与回退一览</div>
       <div class="field-hint">本页「轮询策略」= 从 Cline 账号池取号的方式（quality 同时参与自定义 Provider 评分排序）；全局「回退模型链」是组合失败的最终兜底。其余两处策略选择器在别的页面：</div>
-      <div class="field-hint mt-2"><a href="#" onclick="showPageSubTab('upstreams', 'cline');return false" class="lnk-a">网络 → 出口代理池：选择 OpenCode Zen / Cline 的出口代理地址 →</a></div>
+      <div class="field-hint mt-2"><a href="#" onclick="showPageSubTab('upstreams', 'cline');return false" class="lnk-a">全局出口代理：出口代理池内多个地址的选择方式 →</a></div>
       <div class="field-hint mt-2"><a href="#" onclick="switchTab('combos');return false" class="lnk-a">模型组合页：组合条目顺序与紧急回退 →</a></div>
     </div>
   </div>
   </div>
 
-  <div class="page-subpage" data-subpage="tuning" style="display:none">
+  <div class="page-subpage" data-subpage="tuning" style="display:none" data-route-write>
   <div class="section">
     <div class="section-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg><span>运行调优</span></div>
     <div class="section-desc">回退轮次、流式心跳/引导缓冲、会话亲和与请求体上限等运行期开关；留空或 0 表示沿用内置默认。保存后即刻生效（写入运行配置并持久化）。</div>
@@ -180,4 +152,41 @@
   </div>
   </div>
 
+
+  <div class="page-subpage" data-subpage="inspect" style="display:none">
+  <div class="section route-inspector" id="routeInspectorSection">
+    <div class="section-title">模型路由检查</div>
+    <div class="section-desc">仅展示当前配置投影与已存储请求记录，不代表实时路由决策。选择模型后查看候选与回退配置，再对照最近一次已存储请求。</div>
+    <div class="section-body">
+      <div class="ri-controls">
+        <div class="ri-field">
+          <label for="routeInspectorModel">逻辑模型 <small id="routeInspectorModelCount" class="ri-count"></small></label>
+          <input type="search" id="routeInspectorModelFilter" class="ri-filter" placeholder="筛选模型…" aria-label="筛选逻辑模型" autocomplete="off" oninput="filterRouteInspectorModels(this.value)" onkeydown="if(event.key==='Enter'){event.preventDefault();pickFirstRouteInspectorModel()}">
+          <select id="routeInspectorModel" onchange="selectRouteInspectorModel(this.value)"><option value="">加载中…</option></select>
+        </div>
+        <button type="button" class="btn btn-sm ri-refresh" onclick="loadRouteInspector(true)">刷新</button>
+        <span class="ri-hint">只读取现有接口，不计算资格或路由顺序</span>
+      </div>
+      <div id="routeInspectorError" class="ri-error" hidden></div>
+      <div id="routeInspectorSummary" class="ri-summary"><div class="ri-hint">加载中…</div></div>
+      <div class="ri-block">
+        <div class="ri-block-head">
+          <h3>候选与回退配置</h3>
+          <span class="ri-block-tag config">配置预览</span>
+        </div>
+        <div class="ri-hint ri-block-note">以下为当前配置与投影事实，不是预测，也不代表请求会被路由到这些候选项。</div>
+        <div id="routeInspectorCandidates"></div>
+        <div class="ri-subhead">回退配置（配置，不是预测）</div>
+        <div id="routeInspectorFallback"></div>
+      </div>
+      <div class="ri-block">
+        <div class="ri-block-head">
+          <h3>近期请求</h3>
+          <span class="ri-block-tag runtime">运行请求追踪</span>
+        </div>
+        <div id="routeInspectorRuntime"></div>
+      </div>
+    </div>
+  </div>
+  </div>
 </div>

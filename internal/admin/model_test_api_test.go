@@ -456,3 +456,119 @@ func postAdminRoute(t *testing.T, path, body string) (int, admin.APIResponse) {
 	}
 	return rec.Code, resp
 }
+
+// Test-before-add: the editor sends each row's draft upstream ID so the probe
+// goes out exactly as the model would after saving.
+func TestProviderTestUnsavedUsesDraftUpstreamModel(t *testing.T) {
+	installPool(t, nil)
+	installConfig(t, admin.DefaultProxyConfig())
+	var gotModel string
+	installTransport(t, func(req *http.Request) *http.Response {
+		gotModel = readReqModel(req)
+		return stubResp(req, http.StatusOK, okCompletion)
+	})
+	_, resp := postAdminRoute(t, "/admin/api/providers/test",
+		`{"baseURL":"http://up.test/v1","apiKey":"sk","model":"friendly","upstreamModel":"vendor/real"}`)
+	d := dataMap(t, resp)
+	if d["ok"] != true || gotModel != "vendor/real" {
+		t.Fatalf("ok=%v upstream saw %q, want true and vendor/real (d=%v)", d["ok"], gotModel, d)
+	}
+	if d["model"] != "friendly" || d["upstreamModel"] != "vendor/real" {
+		t.Errorf("result model=%v upstreamModel=%v, want the client name plus the upstream ID that was sent", d["model"], d["upstreamModel"])
+	}
+}
+
+func TestProviderTestSavedDraftOverridesAndClearsSavedMapping(t *testing.T) {
+	installPool(t, nil)
+	installConfig(t, admin.DefaultProxyConfig())
+	installProviders(t, &CustomProvider{ID: "p1", Name: "P1", BaseURL: "http://p.test/v1",
+		ModelIDs: []string{"friendly"}, ModelMap: map[string]string{"friendly": "vendor/saved"}, Enabled: true})
+	var gotModel string
+	installTransport(t, func(req *http.Request) *http.Response {
+		gotModel = readReqModel(req)
+		return stubResp(req, http.StatusOK, okCompletion)
+	})
+	probe := func(body string) map[string]any {
+		_, resp := postAdminRoute(t, "/admin/api/providers/test", body)
+		return dataMap(t, resp)
+	}
+	probe(`{"id":"p1","model":"friendly"}`)
+	if gotModel != "vendor/saved" {
+		t.Errorf("no draft: upstream saw %q, want the saved mapping vendor/saved", gotModel)
+	}
+	probe(`{"id":"p1","model":"friendly","upstreamModel":"vendor/draft"}`)
+	if gotModel != "vendor/draft" {
+		t.Errorf("draft: upstream saw %q, want vendor/draft", gotModel)
+	}
+	probe(`{"id":"p1","model":"friendly","upstreamModel":"friendly"}`)
+	if gotModel != "friendly" {
+		t.Errorf("draft equal to the name: upstream saw %q, want the name sent unchanged", gotModel)
+	}
+	probe(`{"id":"p1","model":"friendly"}`)
+	if gotModel != "vendor/saved" {
+		t.Errorf("after probes: upstream saw %q, a probe must not modify the saved mapping (want vendor/saved)", gotModel)
+	}
+}
+
+func TestProviderTestInvalidDraftIsAFailedResultNotAnError(t *testing.T) {
+	installPool(t, nil)
+	installConfig(t, admin.DefaultProxyConfig())
+	called := false
+	installTransport(t, func(req *http.Request) *http.Response {
+		called = true
+		return stubResp(req, http.StatusOK, okCompletion)
+	})
+	code, resp := postAdminRoute(t, "/admin/api/providers/test",
+		`{"baseURL":"http://up.test/v1","model":"friendly","upstreamModel":"bad\u0000id"}`)
+	d := dataMap(t, resp)
+	if code != 200 || !resp.Success || d["ok"] != false || d["error"] == nil || called {
+		t.Fatalf("code=%d success=%v data=%v upstreamCalled=%v, want a failed result and no upstream call", code, resp.Success, d, called)
+	}
+}
+
+// The editor loads a provider from GET /providers and posts the whole record on
+// save, so the mapping must survive that round trip or a plain save would erase it.
+func TestProviderSaveAndListRoundTripModelMap(t *testing.T) {
+	installPool(t, nil)
+	installConfig(t, admin.DefaultProxyConfig())
+	installProviders(t)
+	harness := newAdminRouteTestHarness(t)
+	call := func(method, path, body string) map[string]any {
+		t.Helper()
+		rec := httptest.NewRecorder()
+		harness.mux.ServeHTTP(rec, harness.request(method, path, body))
+		var resp admin.APIResponse
+		if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil || !resp.Success {
+			t.Fatalf("%s %s: err=%v success=%v body=%s", method, path, err, resp.Success, rec.Body.String())
+		}
+		return resp.Data.(map[string]any)
+	}
+	saved := call(http.MethodPost, "/admin/api/providers/save",
+		`{"name":"RT","baseURL":"http://rt.test/v1","enabled":true,"modelIds":["friendly","plain"],"modelMap":{"friendly":"vendor/real","plain":"plain","ghost":"x"}}`)
+	provider := saved["provider"].(map[string]any)
+	if got := provider["modelMap"].(map[string]any); len(got) != 1 || got["friendly"] != "vendor/real" {
+		t.Fatalf("saved modelMap = %v, want only friendly -> vendor/real", got)
+	}
+	listed := call(http.MethodGet, "/admin/api/providers", "")["providers"].([]any)
+	if len(listed) != 1 {
+		t.Fatalf("listed %d providers, want 1", len(listed))
+	}
+	if got := listed[0].(map[string]any)["modelMap"].(map[string]any); got["friendly"] != "vendor/real" {
+		t.Fatalf("listed modelMap = %v, want the saved mapping so the editor can show it", got)
+	}
+	// Saving the same record back (what the editor does) keeps the mapping.
+	again, _ := json.Marshal(listed[0])
+	kept := call(http.MethodPost, "/admin/api/providers/save", string(again))["provider"].(map[string]any)
+	if got := kept["modelMap"].(map[string]any); got["friendly"] != "vendor/real" {
+		t.Fatalf("modelMap after re-save = %v, want it kept", got)
+	}
+	// An explicit empty map clears it.
+	var cleared map[string]any
+	_ = json.Unmarshal(again, &cleared)
+	cleared["modelMap"] = map[string]string{}
+	body, _ := json.Marshal(cleared)
+	final := call(http.MethodPost, "/admin/api/providers/save", string(body))["provider"].(map[string]any)
+	if _, has := final["modelMap"]; has {
+		t.Fatalf("modelMap after clearing = %v, want it omitted", final["modelMap"])
+	}
+}

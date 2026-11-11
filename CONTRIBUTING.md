@@ -79,7 +79,7 @@ in the repository root.
 | Overview (`#dashboard`) | read-only traffic, provider and model summaries; links to owner workflows | provider, credential, model or routing mutations |
 | Providers (`#providers`) | provider setup and instances, credential binding, source model membership/import/recheck, provider-native configuration | client API keys or global logical-model policy |
 | Accounts & Credentials (`#credentials`) | Cline accounts, Provider Connections and redacted API-credential inventory | Provider Instance routing rules or provider-secret editing |
-| Network & Egress (`#network`) | shared default egress pool and read-only named global/Zen profile inventory | provider-specific proxy/header settings or generic profile binding |
+| Global Egress Proxy (`#network`) | shared default egress pool for all providers and read-only named global/Zen profile inventory | provider-specific proxy/header settings or generic profile binding |
 | Models & Offerings (`#models`) | logical-model catalog, provider offerings, enablement, metadata, sync and provider-scoped removal | provider credentials or global fallback policy |
 | Routing Policy (`#routing`) | default model, global fallback, aliases, exclusions, retry/stream/affinity/error policy and read-only inspection | Provider Instance or credential CRUD |
 | Routing Combos (`#combos`) | named ordered route definitions and their tests | physical provider/model configuration |

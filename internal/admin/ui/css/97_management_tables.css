@@ -40,22 +40,30 @@
 .mgmt-actions{display:flex;flex-wrap:wrap;align-items:center;justify-content:flex-end;gap:6px}
 .mgmt-actions .btn{font-size:12px;padding:4px 10px;white-space:nowrap}
 
-/* Reserve provider actions; long identity, authentication and URL values shrink. */
+/* Unified provider table: one <tbody> per provider holds the main row, an inline result row and
+   an optional expanded-models row. Identity, status and actions are always visible; the address
+   column yields first when the container narrows (the address is repeated in the expanded row). */
 #globalInstances{container-name:provider-inventory;container-type:inline-size}
 #globalInstances .provider-table{table-layout:fixed}
-#globalInstances .provider-table th,#globalInstances .provider-table td{padding:8px 6px}
+#globalInstances .provider-table th,#globalInstances .provider-table .prov-row>td{padding:8px 6px}
 #globalInstances .provider-table th{font-size:11.5px}
-#globalInstances .provider-table td{height:48px;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-#globalInstances .provider-table th:nth-child(1){width:18%}
-#globalInstances .provider-table th:nth-child(2){width:9%}
-#globalInstances .provider-table th:nth-child(3){width:7%}
-#globalInstances .provider-table th:nth-child(4){width:12%}
+#globalInstances .provider-table .prov-row>td{height:52px;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#globalInstances .provider-table th:nth-child(1){width:21%}
+#globalInstances .provider-table th:nth-child(2){width:14%}
+#globalInstances .provider-table th:nth-child(3){width:10%}
+#globalInstances .provider-table th:nth-child(4){width:7%;text-align:right}
 #globalInstances .provider-table th:nth-child(5){width:9%;text-align:right}
-#globalInstances .provider-table th:nth-child(6){width:12%;text-align:right}
-#globalInstances .provider-table th:last-child{width:208px;z-index:2;background:var(--surface2)}
-#globalInstances .provider-table th:last-child,#globalInstances .provider-table td:last-child{position:sticky;right:0;text-align:right;box-shadow:-1px 0 0 var(--border2)}
-#globalInstances .provider-table td:last-child{z-index:1;background:var(--surface);overflow:visible}
-#globalInstances .provider-table tbody tr:hover td:last-child{background:var(--surface2)}
+#globalInstances .provider-table th:nth-child(6){width:7%;text-align:right}
+#globalInstances .provider-table th:nth-child(7){width:14%}
+#globalInstances .provider-table th:last-child{width:276px;z-index:2;background:var(--surface2)}
+#globalInstances .provider-table th:last-child,#globalInstances .provider-table .prov-row>td:last-child{position:sticky;right:0;text-align:right;box-shadow:-1px 0 0 var(--border2)}
+#globalInstances .provider-table .prov-row>td:last-child{z-index:1;background:var(--surface);overflow:visible}
+#globalInstances .provider-table .prov-group:hover .prov-row>td:last-child,#globalInstances .provider-table .prov-group:hover .prov-row{background:var(--surface2)}
+#globalInstances .provider-table tbody tr:hover{background:transparent}
+#globalInstances .provider-table .prov-group>tr>td{border-bottom:0}
+#globalInstances .provider-table .prov-group:last-child>tr:last-child>td{border-bottom:0}
+#globalInstances .provider-table .prov-group{border-bottom:1px solid var(--border)}
+#globalInstances .provider-table .prov-group:last-child{border-bottom:0}
 #globalInstances .mgmt-provider-cell{gap:8px}
 #globalInstances .mgmt-primary,#globalInstances .mgmt-url{max-width:100%}
 #globalInstances .mgmt-name{font-size:13px}
@@ -64,9 +72,47 @@
 #globalInstances .system-badge{padding:3px 6px}
 #globalInstances .mgmt-actions{flex-wrap:nowrap;gap:6px}
 #globalInstances .mgmt-actions .btn{min-height:30px;padding:4px 8px}
+#globalInstances .mgmt-actions .btn-icon{min-width:30px;padding:4px 6px}
 #globalInstances .provider-compact-list{grid-template-columns:minmax(0,1fr)}
 #globalInstances .provider-compact-item{min-width:0}
 #globalInstances .pc-line2>span:first-child{flex-basis:100%;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#globalInstances .pc-line3{display:flex;flex-wrap:wrap;align-items:center;gap:4px 10px;min-width:0;font-size:12px;color:var(--text2)}
+
+/* Name line carries the free / token tags; the stacked cells keep one fact per line. */
+.mgmt-name-line{display:flex;align-items:center;gap:6px;min-width:0}
+.mgmt-name-line .mgmt-name{flex:0 1 auto;min-width:0}
+.mgmt-name-line .green-xs,.mgmt-name-line .acc-xs{flex-shrink:0}
+.mgmt-stack{display:flex;flex-direction:column;min-width:0;line-height:1.3}
+.mgmt-stack>span{overflow:hidden;text-overflow:ellipsis;color:var(--text2)}
+.mgmt-stack>small{overflow:hidden;text-overflow:ellipsis;color:var(--text3);font-size:11px}
+.prov-health{margin-top:3px;min-width:0;overflow:hidden;text-overflow:ellipsis}
+.prov-sync{display:inline-flex;align-items:center;gap:6px;min-width:0;max-width:100%;overflow:hidden}
+
+/* Models cell: a count that opens the expanded row. */
+.prov-models-toggle{display:inline-flex;align-items:center;gap:4px;padding:2px 6px;border:1px solid transparent;border-radius:6px;background:transparent;color:var(--accent);font:inherit;font-variant-numeric:tabular-nums;cursor:pointer}
+.prov-models-toggle:hover{border-color:var(--border2);background:var(--surface2)}
+.prov-models-toggle:focus-visible{outline:none;box-shadow:var(--ring)}
+.prov-models-chevron{display:inline-block;font-size:10px;transition:transform .15s var(--ease)}
+.prov-models-toggle.open .prov-models-chevron{transform:rotate(90deg)}
+
+/* Inline test / re-check outcome: its own full-width row, invisible while empty. */
+#globalInstances .provider-table .prov-result-row>td{padding:0 12px;height:auto;white-space:normal}
+.prov-result-row .prov-row-test-out:not(:empty),.prov-result-row .prov-row-recheck-out:not(:empty),
+.pc-result .prov-row-test-out:not(:empty),.pc-result .prov-row-recheck-out:not(:empty){display:inline-flex;margin:0 12px 8px 0}
+.pc-result:empty{display:none}
+.pc-result .prov-row-test-out:not(:empty),.pc-result .prov-row-recheck-out:not(:empty){margin:4px 12px 0 0}
+
+/* Expanded models row. */
+#globalInstances .provider-table .prov-expand-row>td{padding:0 12px 12px;height:auto;white-space:normal;background:var(--surface)}
+.prov-expand{display:flex;flex-direction:column;gap:8px;min-width:0;padding:10px 12px;border:1px solid var(--border2);border-radius:8px;background:var(--surface2)}
+.prov-expand-meta{display:flex;flex-wrap:wrap;gap:4px 18px;font-size:12px;color:var(--text2)}
+.prov-expand-meta b{font-weight:600;color:var(--text3);margin-right:4px}
+.prov-expand-meta code{overflow-wrap:anywhere}
+.prov-expand-models{display:flex;flex-wrap:wrap;gap:4px;max-height:168px;overflow:auto;overscroll-behavior:contain}
+.prov-expand-models .model-tag{margin:0;padding:2px 8px;font-size:11px}
+.prov-chip-up{color:var(--text3)}
+.prov-chip-off{opacity:.55;text-decoration:line-through}
+.provider-compact-item>.prov-expand{margin-top:2px}
 
 /* ===== Compact summaries (mobile) ===== */
 .provider-compact-list,
@@ -81,6 +127,9 @@
 .pc-actions .btn{font-size:12px;padding:4px 10px}
 .pc-actions .mgmt-actions{justify-content:flex-start}
 
+@container provider-inventory (max-width:1179px){
+  #globalInstances .provider-table th:nth-child(8),#globalInstances .provider-table .prov-row>td:nth-child(8){display:none}
+}
 @container provider-inventory (max-width:879px){
   .provider-table-wrap{display:none}
   .provider-compact-list{display:grid}

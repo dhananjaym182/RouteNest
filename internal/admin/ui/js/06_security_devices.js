@@ -198,6 +198,8 @@ function desktopTrustGuidance(model) {
 }
 
 function setDesktopStatusBadge(id, label, success, warning) {
+  const overview = _('overview' + id.replace(/^desktop/, ''));
+  if (overview) overview.textContent = t(label);
   const element = _(id);
   if (!element) return;
   element.textContent = t(label);

@@ -1,21 +1,25 @@
 /* ===== 设计令牌（浅色为默认，data-theme="dark" 覆盖同名颜色令牌） ===== */
 :root{
   color-scheme:light;
-  --bg:#F7F8FC;--surface:#FFFFFF;--surface2:#F0F2F8;--surface3:#E9ECF5;
-  --border:#E3E7F0;--border2:#EDF0F6;
-  --text:#182033;--text2:#5E6A7E;--text3:#7C879B;
-  --accent:#6655E8;--accent-hover:#5948D8;--accent-soft:rgba(102,85,232,.10);--accent2:#4778E8;
-  --green:#168A63;--green-hover:#117352;--green-soft:rgba(22,138,99,.11);
-  --red:#C94A55;--red-soft:rgba(201,74,85,.10);
-  --yellow:#B7791F;--yellow-soft:rgba(183,121,31,.12);
-  --purple:#6655E8;--purple-soft:rgba(102,85,232,.11);
-  --cyan:#4778E8;--cyan-soft:rgba(71,120,232,.10);
+  /* RightStockAI brand palette (share-market-app globals.css / brand.config.ts): brand violet
+     scale, gray neutrals, success / error / warning scales. Where a scale's mid-tone fails
+     WCAG AA as small text on every surface, the nearest darker step is used (see
+     tools/admin_theme_contrast.test.mjs). */
+  --bg:#F7F8FA;--surface:#FFFFFF;--surface2:#F2F4F7;--surface3:#E4E7EC;
+  --border:#DFE3EA;--border2:#EBEEF2;
+  --text:#101828;--text2:#344054;--text3:#475467;
+  --accent:#673DE6;--accent-hover:#471EA7;--accent-soft:rgba(103,61,230,.10);--accent2:#0086C9;
+  --green:#027646;--green-hover:#05603A;--green-soft:rgba(2,118,70,.11);
+  --red:#C3271B;--red-soft:rgba(195,39,27,.10);
+  --yellow:#AE4409;--yellow-soft:rgba(174,68,9,.11);
+  --purple:#673DE6;--purple-soft:rgba(103,61,230,.11);
+  --cyan:#026AA2;--cyan-soft:rgba(2,106,162,.10);
   --on-accent:#ffffff;--on-button-accent:var(--on-accent);
-  --switch-off:#d3d6db;--switch-knob:#ffffff;
-  --row-alt:rgba(127,127,140,.045);
-  --shadow-sm:0 1px 2px rgba(24,32,51,.05);
-  --shadow-md:0 8px 24px rgba(24,32,51,.08);
-  --shadow-lg:0 18px 48px rgba(24,32,51,.14);
+  --switch-off:#D0D5DD;--switch-knob:#ffffff;
+  --row-alt:rgba(102,112,133,.045);
+  --shadow-sm:0 1px 2px rgba(16,24,40,.05);
+  --shadow-md:0 8px 24px rgba(16,24,40,.08);
+  --shadow-lg:0 18px 48px rgba(16,24,40,.14);
   --radius:14px;--radius-sm:10px;--radius-xs:7px;
   --ease:cubic-bezier(0.4,0,0.2,1);
   --font-ui:"Inter","Noto Sans SC","SF Pro Text","Segoe UI",Helvetica,Arial,sans-serif;
@@ -28,29 +32,30 @@
   --fs-2xs:11px;--fs-xs:12px;--fs-sm:13px;--fs-base:14px;--fs-md:14px;--fs-lg:15px;--fs-xl:20px;--fs-2xl:26px;--fs-3xl:28px;
   --control-h:38px;--control-h-sm:30px;
   --ring:0 0 0 3px var(--accent-soft);
-  --radius-lg:12px;--radius-pill:999px;
-  --overlay-bg:rgba(15,23,42,0.45);
+  --radius-lg:14px;--radius-pill:999px;
+  --overlay-bg:rgba(16,24,40,0.45);
   --bar-track:var(--surface2);
   --z-menu:30;--z-sync:9998;--z-login:9999;--z-modal:10000;--z-drawer-overlay:10001;--z-drawer:10002;--z-topmost:10003;--z-toast:10100;
 }
 [data-theme="dark"]{
   color-scheme:dark;
-  --bg:#0B1020;--surface:#111A2D;--surface2:#182238;--surface3:#202C43;
-  --border:#2A3854;--border2:#202D47;
-  --text:#F0F3FA;--text2:#AAB4C7;--text3:#7F8CA5;
-  --accent:#7968F8;--accent-hover:#8A7BFF;--accent-soft:rgba(121,104,248,.16);--accent2:#5B8CFF;
-  --green:#43C995;--green-hover:#5AD7A7;--green-soft:rgba(67,201,149,.14);
-  --red:#EF6B73;--red-soft:rgba(239,107,115,.14);
-  --yellow:#E2AA4A;--yellow-soft:rgba(226,170,74,.14);
-  --purple:#9B8CFB;--purple-soft:rgba(155,140,251,.15);
-  --cyan:#6C9BFF;--cyan-soft:rgba(108,155,255,.14);
+  /* Dark ladder follows the app: gray-950 page, gray-900 / gray-800 surfaces, brand-400 accent. */
+  --bg:#0C111D;--surface:#101828;--surface2:#1D2939;--surface3:#283446;
+  --border:#344054;--border2:#283446;
+  --text:#F9FAFB;--text2:#D0D5DD;--text3:#98A2B3;
+  --accent:#9D99FF;--accent-hover:#BCBDFF;--accent-soft:rgba(157,153,255,.16);--accent2:#36BFFA;
+  --green:#32D583;--green-hover:#6CE9A6;--green-soft:rgba(50,213,131,.14);
+  --red:#F97066;--red-soft:rgba(249,112,102,.14);
+  --yellow:#FDB022;--yellow-soft:rgba(253,176,34,.14);
+  --purple:#BCBDFF;--purple-soft:rgba(188,189,255,.15);
+  --cyan:#36BFFA;--cyan-soft:rgba(54,191,250,.14);
   --on-accent:#FFFFFF;--on-button-accent:var(--bg);
-  --switch-off:#33415E;--switch-knob:#F0F3FA;
+  --switch-off:#475467;--switch-knob:#F9FAFB;
   --row-alt:rgba(255,255,255,.03);
   --shadow-sm:0 1px 2px rgba(0,0,0,.28);
   --shadow-md:0 12px 28px rgba(0,0,0,.30);
   --shadow-lg:0 24px 64px rgba(0,0,0,.42);
-  --overlay-bg:rgba(2,6,16,0.62);
+  --overlay-bg:rgba(12,17,29,0.62);
 }
 *{margin:0;padding:0;box-sizing:border-box}
 /* hidden 属性强约束：防止别处 display:flex/grid 类规则压过 UA 默认 [hidden]，导致应隐藏的元素仍然显示 */
@@ -64,8 +69,8 @@ body{font-family:var(--font-ui);background:var(--bg);color:var(--text);font-size
 .sidebar-header{padding:16px 14px 14px 20px;border-bottom:1px solid var(--border2);flex-shrink:0;display:flex;align-items:center;gap:10px}
 .sidebar-nav{flex:1 1 auto;min-height:0;overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;padding-bottom:6px}
 .sidebar-header .brand{display:flex;align-items:center;gap:10px;flex:1;min-width:0}
-.sidebar-header .logo{width:30px;height:30px;border-radius:8px;background:linear-gradient(135deg,var(--accent),var(--accent2));display:flex;align-items:center;justify-content:center;flex-shrink:0;color:var(--on-accent)}
-.sidebar-header .logo svg{width:16px;height:16px}
+.sidebar-header .logo{width:32px;height:32px;display:flex;align-items:center;justify-content:center;flex-shrink:0;background:transparent;box-shadow:none}
+.sidebar-header .logo svg{width:100%;height:100%;display:block}
 .nav-collapse-btn{width:28px;height:28px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;border:1px solid transparent;border-radius:8px;background:transparent;color:var(--text3);cursor:pointer;transition:all 0.15s var(--ease)}
 .nav-collapse-btn:hover{color:var(--text);background:var(--surface2)}
 .nav-collapse-btn svg{width:16px;height:16px}

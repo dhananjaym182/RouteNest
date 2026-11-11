@@ -22,7 +22,7 @@
 /* ---------- 1. Scale tokens ---------- */
 :root{
   /* Radius: control (6) < raised surface (8) < container (10) < pill. */
-  --radius-xs:4px;--radius-sm:6px;--radius:10px;--radius-lg:8px;--radius-pill:999px;
+  --radius-xs:4px;--radius-sm:6px;--radius-md:8px;--radius:8px;--radius-lg:10px;--radius-pill:999px;
   /* Elevation: hairline, resting card, raised menu, overlay. Neutral only. */
   --shadow-sm:0 1px 2px rgba(16,24,40,.06);
   --shadow-md:0 2px 4px -1px rgba(16,24,40,.08),0 4px 10px -2px rgba(16,24,40,.10);
@@ -41,29 +41,15 @@
   --shadow-lg:0 12px 24px -8px rgba(0,0,0,.55),0 24px 48px -12px rgba(0,0,0,.60);
 }
 
-/* ---------- 2. Contrast corrections (WCAG AA, hues preserved) ----------
-   Measured on the shipped 2026-11 baseline (text on --surface / --surface2):
-     light --text2  #5E6A7E   5.47:1 / 5.15:1
-     light --text3  #7C879B   3.62:1 / 3.24:1   FAIL
-     light --green  #168A63   4.33:1 / 3.87:1   FAIL
-     light --red    #C94A55   4.57:1 / 4.08:1   FAIL
-     light --yellow #B7791F   3.64:1 / 3.24:1   FAIL
-     dark  --accent #7968F8   4.26:1 / 3.87:1   FAIL
-   Each replacement keeps the original hue and saturation and moves only the
-   lightness until it clears 4.5:1 against --surface2, the darkest light
-   surface that normal-size text sits on. Ratios after the change are listed
-   per token as surface:surface2. */
-:root{
-  --text2:#5E6A7E;                    /* unchanged: 5.47 : 5.15 */
-  --text3:#636E81;                    /* 5.15 : 4.60 */
-  --green:#147C59;                    /* 5.18 : 4.62 */
-  --red:#C43B47;                      /* 5.17 : 4.62 */
-  --yellow:#956319;                   /* 5.15 : 4.60 */
-}
-[data-theme="dark"]{
-  --accent:#7E6EF8;                   /* 4.53 on --surface, 4.93 on --bg */
-  --accent-hover:#8E7FF9;             /* 5.42 : 5.91 */
-}
+/* ---------- 2. Colour tokens ----------
+   The palette (RightStockAI brand violet, gray neutrals, success / error / warning) is defined once,
+   in 00_base.css. Nothing here overrides it, so a token has exactly one value per theme.
+
+   WCAG AA (4.5:1) is enforced for text, muted text, accent and status colours on every surface
+   by tools/admin_theme_contrast.test.mjs. The source palette's own mid-tones (success-600/700,
+   error-600, warning-600/700, blue-light-600) fail AA as small text on the light surfaces, so the
+   nearest darker step on the same hue is used for those. The text tiers are kept visibly apart
+   (text > text2 > text3) so secondary copy does not read as one flat grey. */
 
 /* ---------- 3. Type rhythm ---------- */
 .large-title{font-size:var(--page-title);letter-spacing:-.02em}
@@ -86,7 +72,7 @@
 .onboarding-intro h1{font-size:var(--page-title);letter-spacing:-.02em}
 
 /* ---------- 5. Cards ---------- */
-.section,.system-section,.metric-section>.dash-hero,.dash-hero,.pool-hero{
+.section,.system-section,.pool-hero{
   border:1px solid var(--border-strong);border-radius:var(--radius);box-shadow:none;
 }
 .section{background:var(--surface);margin-bottom:16px}
@@ -177,9 +163,13 @@ html[dir="rtl"] th:last-child,html[dir="rtl"] td:last-child{text-align:left}
    single place for those preferences on small screens; the top bar keeps the
    menu button, the page identity, the gateway status and refresh. */
 @media (max-width:900px){
-  .route-flow{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+  .route-flow{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;overflow:visible;padding-bottom:0;scroll-snap-type:none}
   .route-flow>i{display:none}
-  .route-flow-node{height:100%}
+  .route-flow-node{flex:none;height:100%;scroll-snap-align:none}
+  .route-flow-node:last-child{grid-column:1/-1}
+}
+@media (max-width:420px){
+  .route-flow{grid-template-columns:minmax(0,1fr)}
 }
 @media (max-width:900px){
   .top-tools{min-height:56px;padding:8px 12px;gap:8px}
@@ -193,6 +183,9 @@ html[dir="rtl"] th:last-child,html[dir="rtl"] td:last-child{text-align:left}
   .toast-stack{left:16px;right:16px;bottom:12px;align-items:stretch}
   .toast{max-width:none;justify-content:center}
   .sticky-alerts{left:16px;right:16px;max-width:none}
+  /* Gateway pill: icon only at narrow widths — label stays accessible */
+  .gateway-url{display:flex;align-items:center;gap:4px;min-width:0;padding:4px}
+  .gateway-url #gatewayStatusLabel{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
 }
 @media (max-width:640px){
   .toolbar,.filter-row,.filters,.page-toolbar{display:grid;grid-template-columns:1fr;gap:8px}
@@ -208,12 +201,118 @@ html[dir="rtl"] th:last-child,html[dir="rtl"] td:last-child{text-align:left}
   .toast,.toast.show{transition:none;transform:none}
 }
 
-/* ---------- 12. Login / recovery dialogs ----------
-   The auth views rendered flat: content hung from the top of the page with
-   no surface separation. Center the form in the space below the header and
-   give the login card and recovery dialog a real surface (border, radius,
-   shadow) with inset inputs, without touching any IDs, ARIA or form flow. */
-.auth-page{display:flex;flex-direction:column}
+/* ---------- 12. Login / recovery dialogs ---------- */
+.auth-page{
+  display:flex;
+  flex-direction:column;
+  min-height:100vh;
+  min-height:100dvh;
+  background:var(--bg);
+  color:var(--text);
+}
+.auth-header{
+  min-height:58px;
+  height:58px;
+  padding:0 clamp(20px,4vw,40px);
+  border-bottom:1px solid var(--border);
+  background:var(--surface);
+  display:flex;
+  align-items:center;
+  z-index:10;
+}
+.auth-header-content{
+  width:100%;
+  max-width:1200px;
+  margin:0 auto;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:var(--sp-4);
+}
+.auth-wordmark{
+  display:inline-flex;
+  align-items:center;
+  gap:10px;
+  text-decoration:none;
+  color:var(--text);
+  font-size:var(--fs-base);
+  font-weight:700;
+  letter-spacing:-.01em;
+  transition:opacity 0.15s ease;
+}
+.auth-wordmark:hover{
+  opacity:0.85;
+}
+.auth-preferences{
+  display:inline-flex;
+  align-items:center;
+  justify-content:flex-end;
+  gap:10px;
+  flex-wrap:nowrap;
+}
+.auth-preferences .seg{
+  display:inline-flex;
+  align-items:center;
+  height:36px;
+  box-sizing:border-box;
+  background:var(--surface2) !important;
+  border:1px solid var(--border) !important;
+  border-radius:var(--radius-pill) !important;
+  padding:2px !important;
+  gap:2px;
+  margin:0 !important;
+}
+.auth-preferences .seg button{
+  height:30px !important;
+  min-height:30px !important;
+  max-height:30px !important;
+  line-height:30px !important;
+  box-sizing:border-box;
+  border:none !important;
+  border-radius:var(--radius-pill) !important;
+  background:transparent;
+  color:var(--text2);
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  margin:0 !important;
+  cursor:pointer;
+  transition:all 0.15s var(--ease);
+  vertical-align:middle;
+}
+.auth-preferences .theme-switch button{
+  width:30px !important;
+  min-width:30px !important;
+  max-width:30px !important;
+  padding:0 !important;
+}
+.auth-preferences .theme-switch button svg{
+  width:15px;
+  height:15px;
+  display:block;
+  margin:0 auto;
+}
+.auth-preferences .lang-switch button{
+  min-width:52px !important;
+  padding:0 12px !important;
+  font-size:12px !important;
+  font-weight:600;
+  white-space:nowrap;
+}
+.auth-preferences .seg button:hover{
+  color:var(--text);
+}
+.auth-preferences .seg button.active{
+  background:var(--surface) !important;
+  color:var(--accent) !important;
+  box-shadow:var(--shadow-sm) !important;
+  font-weight:700;
+}
+.auth-preferences .seg button:focus-visible{
+  outline:2px solid var(--accent) !important;
+  outline-offset:1px;
+}
+
 .auth-main{
   flex:1 1 auto;
   min-height:0;
@@ -221,40 +320,375 @@ html[dir="rtl"] th:last-child,html[dir="rtl"] td:last-child{text-align:left}
   flex-direction:column;
   justify-content:center;
   justify-content:safe center;
-  padding-block:clamp(24px,5vh,48px);
+  align-items:center;
+  padding:clamp(28px,6vh,56px) var(--sp-4);
+  width:100%;
 }
-.auth-main>.auth-view{width:100%}
+.auth-main>.auth-view{
+  width:100%;
+  max-width:480px;
+  margin:0 auto;
+}
 .login-card,.recovery-dialog{
-  background:var(--surface);
-  border:1px solid var(--border2);
-  border-radius:var(--radius);
-  box-shadow:var(--shadow-md);
-  padding:clamp(22px,5vw,32px);
+  background:var(--surface) !important;
+  border:1px solid var(--border) !important;
+  border-radius:18px !important;
+  box-shadow:var(--shadow-md) !important;
+  padding:clamp(28px,4vw,40px) !important;
+  text-align:left;
+  width:100%;
+  box-sizing:border-box;
 }
-#loginHelp,.recovery-dialog>div>p{margin:var(--sp-2) 0 var(--sp-5);font-size:var(--fs-sm);line-height:1.6}
-#loginStatus:not(:empty){margin:0 0 var(--sp-3);color:var(--text2);font-size:var(--fs-sm);line-height:1.6}
-#loginLocalHelp{
-  padding:7px 10px;
-  border:1px solid var(--border);
-  border-radius:var(--radius-xs);
-  background:var(--surface2);
+.login-card h1,.recovery-dialog h1{
+  margin:0;
+  color:var(--text);
+  font-family:var(--font-display);
+  font-size:24px;
+  font-weight:700;
+  line-height:1.25;
+  letter-spacing:-.02em;
+}
+#loginHelp,.recovery-dialog>div>p{
+  margin:6px 0 20px;
+  font-size:var(--fs-sm);
   color:var(--text2);
   line-height:1.55;
 }
-.login-card input:not([type="checkbox"]),.recovery-dialog input:not([type="checkbox"]){
-  background:var(--bg);
-  border-color:var(--border2);
+#loginStatus:not(:empty){
+  margin:0 0 var(--sp-3);
+  color:var(--text2);
+  font-size:var(--fs-sm);
+  line-height:1.6;
 }
-.login-card input:hover:not(:focus),.recovery-dialog input:hover:not(:focus){border-color:var(--text3)}
+#loginLocalHelp{
+  padding:8px 12px;
+  border:1px solid var(--border);
+  border-left:3px solid var(--accent);
+  border-radius:var(--radius-xs);
+  background:var(--surface2);
+  color:var(--text2);
+  font-size:var(--fs-xs);
+  font-weight:500;
+  line-height:1.5;
+  margin-bottom:var(--sp-2);
+}
+.login-field{
+  display:flex;
+  flex-direction:column;
+  gap:6px;
+}
+.login-field label{
+  color:var(--text);
+  font-size:var(--fs-xs);
+  font-weight:600;
+  line-height:1.4;
+}
+.login-card input:not([type="checkbox"]),.recovery-dialog input:not([type="checkbox"]){
+  width:100%;
+  min-height:42px;
+  height:42px;
+  padding:0 14px;
+  border:1px solid var(--border);
+  border-radius:var(--radius-sm);
+  background:var(--surface2);
+  color:var(--text);
+  font:inherit;
+  font-size:var(--fs-base);
+  transition:border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+}
+.login-card input:hover:not(:focus),.recovery-dialog input:hover:not(:focus){
+  border-color:var(--text3);
+}
+.login-card input:focus,.recovery-dialog input:focus{
+  background:var(--surface);
+  border-color:var(--accent);
+  box-shadow:0 0 0 3px var(--accent-soft);
+  outline:none;
+}
+.login-trust-row{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  padding:10px 14px;
+  border:1px solid var(--border2);
+  border-radius:var(--radius-sm);
+  background:var(--surface2);
+  cursor:pointer;
+  transition:background 0.15s ease;
+}
+.login-trust-row:hover{
+  background:var(--surface3);
+}
+.login-trust-row input{
+  width:16px;
+  height:16px;
+  accent-color:var(--accent);
+  margin:0;
+  cursor:pointer;
+}
+.login-trust-row span{
+  font-size:var(--fs-xs);
+  color:var(--text);
+  font-weight:500;
+}
+.login-security-note{
+  font-size:var(--fs-2xs);
+  color:var(--text3);
+  line-height:1.5;
+  margin:-4px 0 0 2px;
+}
+/* First-run key location and the "no recovery code" reset hint share the note look. */
+.login-setup-help,.login-reset-hint{
+  margin:var(--sp-2) 0 0;
+  padding:var(--sp-3);
+  border:1px solid var(--border);
+  border-radius:var(--radius-sm);
+  background:var(--surface2);
+  color:var(--text2);
+  font-size:var(--fs-sm);
+  line-height:1.6;
+}
+.login-setup-help strong{display:block;margin-bottom:var(--sp-1);color:var(--text);font-weight:600}
+.login-setup-help ul{margin:0;padding-left:var(--sp-5)}
+.login-setup-help li+li{margin-top:var(--sp-1)}
+.login-reset-hint{margin-top:0}
+.auth-page .btn.btn-primary.btn-block{
+  min-height:44px;
+  height:44px;
+  border-radius:var(--radius-sm);
+  background:linear-gradient(135deg, #7358F5 0%, #673DE6 100%) !important;
+  color:#ffffff !important;
+  font-size:var(--fs-base);
+  font-weight:600;
+  border:none !important;
+  cursor:pointer;
+  box-shadow:0 4px 14px rgba(103,61,230,0.28) !important;
+  transition:all 0.15s ease !important;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+}
+.auth-page .btn.btn-primary.btn-block:hover:not(:disabled){
+  filter:brightness(1.08) !important;
+  transform:translateY(-1px) !important;
+  box-shadow:0 6px 20px rgba(103,61,230,0.38) !important;
+}
+.auth-page .btn.btn-primary.btn-block:active:not(:disabled){
+  transform:translateY(0) !important;
+  filter:brightness(0.96) !important;
+}
+.login-card .login-err,.recovery-dialog .login-err{
+  margin:0;
+  padding:10px 14px;
+  border:1px solid var(--red);
+  border-radius:var(--radius-sm);
+  background:var(--red-soft);
+  color:var(--red);
+  font-size:var(--fs-sm);
+  font-weight:500;
+  line-height:1.5;
+  overflow-wrap:anywhere;
+}
+.login-card .login-err:empty,.recovery-dialog .login-err:empty{display:none}
 .login-card #forgotPasswordButton[hidden]{display:none}
-.login-card #forgotPasswordButton{justify-content:center}
+.login-card #forgotPasswordButton{
+  display:inline-block;
+  text-align:center;
+  justify-content:center;
+  color:var(--accent);
+  font-size:var(--fs-xs);
+  font-weight:600;
+  text-decoration:none;
+  margin-top:2px;
+  transition:color 0.15s ease;
+}
+.login-card #forgotPasswordButton:hover{
+  text-decoration:underline;
+  color:var(--accent-hover);
+}
 .auth-back-link{margin-top:2px}
+
+/* Split layout: brand panel + sign-in column. */
+.auth-brand-panel{display:none}
+@media (min-width:960px){
+  .auth-page{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    grid-template-rows:64px 1fr;
+    min-height:100vh;
+  }
+  .auth-brand-panel{
+    grid-column:1;
+    grid-row:1 / -1;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    padding:clamp(40px,5vw,80px);
+    background:radial-gradient(ellipse at 25% 25%, rgba(123,102,255,0.08) 0%, rgba(103,61,230,0.05) 50%, transparent 100%), var(--surface2);
+    border-right:1px solid var(--border);
+    position:relative;
+    overflow:hidden;
+  }
+  [data-theme="dark"] .auth-brand-panel{
+    background:radial-gradient(ellipse at 25% 25%, rgba(157,153,255,0.14) 0%, rgba(123,102,255,0.08) 50%, transparent 100%), var(--bg);
+    border-right:1px solid var(--border);
+  }
+  .auth-header{
+    grid-column:2;
+    grid-row:1;
+    height:64px;
+    min-height:64px;
+    border-bottom:1px solid var(--border);
+    padding:0 clamp(24px,4vw,48px);
+    display:flex;
+    align-items:center;
+  }
+  .auth-header .auth-wordmark{
+    display:none;
+  }
+  .auth-header-content{
+    justify-content:flex-end;
+  }
+  .auth-page>.auth-main{
+    grid-column:2;
+    grid-row:2;
+    align-self:center;
+    justify-self:center;
+    width:100%;
+    max-width:none;
+    padding:clamp(24px,4vh,48px) clamp(24px,4vw,64px);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+  }
+}
+/* Stable layout while content grows (e.g. the "Forgot password?" guidance expands):
+   - the sign-in card is anchored to a fixed top offset instead of re-centering, so it only
+     grows downward and never jumps;
+   - on the split layout the brand panel stays pinned to the viewport instead of stretching
+     with the page, so its content does not slide;
+   - scrollbar space is reserved so a scrollbar appearing does not shift everything sideways. */
+html:not([data-admin-auth="authenticated"]){scrollbar-gutter:stable}
+.auth-main{
+  justify-content:flex-start;
+  padding-top:clamp(28px,8vh,96px);
+}
+@media (min-width:960px){
+  .auth-page>.auth-main{
+    align-self:stretch;
+    align-items:flex-start;
+    padding-top:clamp(32px,10vh,112px);
+  }
+  .auth-brand-panel{
+    position:sticky;
+    top:0;
+    align-self:start;
+    height:100vh;
+    height:100dvh;
+  }
+}
 @media (max-width:600px){
-  .auth-main{padding-block:24px}
-  .login-card,.recovery-dialog{padding:20px 16px;box-shadow:var(--shadow-sm)}
+  .auth-main{padding-top:clamp(20px,5vh,40px)}
+}
+.auth-brand-content{
+  width:100%;
+  max-width:480px;
+  margin:0 auto;
+}
+.auth-brand-lockup{
+  display:flex;
+  flex-direction:row;
+  flex-wrap:nowrap;
+  align-items:center;
+  gap:14px;
+  margin-bottom:20px;
+  white-space:nowrap;
+}
+.auth-brand-name{
+  font-size:28px;
+  font-weight:800;
+  letter-spacing:-.02em;
+  color:var(--text);
+  line-height:1;
+  white-space:nowrap;
+}
+.auth-brand-tagline h2{
+  margin:0;
+  color:var(--text);
+  font-family:var(--font-display);
+  font-size:28px;
+  font-weight:800;
+  line-height:1.2;
+  letter-spacing:-.02em;
+}
+.auth-brand-tagline p{
+  margin:8px 0 0;
+  color:var(--text2);
+  font-size:var(--fs-sm);
+  line-height:1.6;
+}
+.auth-brand-features{
+  display:grid;
+  gap:12px;
+  margin:28px 0 0;
+  padding:0;
+  list-style:none;
+}
+.brand-feature{
+  display:flex;
+  align-items:flex-start;
+  gap:14px;
+  padding:14px 16px;
+  border-radius:12px;
+  background:var(--surface);
+  border:1px solid var(--border2);
+  box-shadow:var(--shadow-sm);
+  transition:border-color 0.15s ease, transform 0.15s ease;
+}
+.brand-feature:hover{
+  border-color:var(--border);
+  transform:translateY(-1px);
+}
+.brand-feature-icon{
+  width:34px;
+  height:34px;
+  border-radius:8px;
+  background:var(--accent-soft);
+  color:var(--accent);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  flex-shrink:0;
+}
+.brand-feature-icon svg{
+  width:18px;
+  height:18px;
+}
+[data-theme="dark"] .brand-feature-icon{
+  background:rgba(157,153,255,0.18);
+  color:var(--accent-hover);
+}
+.brand-feature-text{
+  display:flex;
+  flex-direction:column;
+  gap:2px;
+}
+.brand-feature-text strong{
+  font-size:var(--fs-sm);
+  font-weight:600;
+  color:var(--text);
+}
+.brand-feature-text span{
+  font-size:var(--fs-xs);
+  color:var(--text2);
+  line-height:1.45;
+}
+@media (max-width:600px){
+  .auth-main{padding-block:20px}
+  .login-card,.recovery-dialog{padding:24px 18px !important;border-radius:14px !important;box-shadow:var(--shadow-sm) !important}
 }
 
-/* ---------- 12. Drawers and modals ----------
+/* ---------- 13. Drawers and modals ----------
    Reference overlays use an 8px modal radius, 16px/20px header padding and a
    tinted footer. Behavior (focus trap, Escape, scrim) is untouched. */
 .modal-card{border-radius:var(--radius-lg)}
@@ -266,7 +700,7 @@ html[dir="rtl"] th:last-child,html[dir="rtl"] td:last-child{text-align:left}
   .drawer-footer{padding:10px 16px}
 }
 
-/* ---------- 13. Sidebar rhythm ----------
+/* ---------- 14. Sidebar rhythm ----------
    One item height, one group-label style and one 32px collapse target, matching
    the reference navigation. Routes, drag ordering and the rail are unchanged. */
 .nav-section-label{font-size:12px;font-weight:600;letter-spacing:.06em;color:var(--text3);padding:0 10px 6px}
@@ -274,11 +708,128 @@ html[dir="rtl"] th:last-child,html[dir="rtl"] td:last-child{text-align:left}
 .nav-item svg{width:16px;height:16px}
 .nav-collapse-btn{width:32px;height:32px;border-radius:var(--radius-sm)}
 
-/* ---------- 14. Dashboard KPI band ----------
-   The first row reads as a KPI band: no outer hero card, and each tile shows its
-   caption above the value, with the meter last. Markup and ids are unchanged. */
-.dash-hero{background:transparent;border:0;box-shadow:none;padding:0 0 4px}
-.dash-kpi{display:flex;flex-direction:column}
-.dash-kpi .kpi-label{order:-1;margin-bottom:6px;font-size:12px;color:var(--text2)}
-.dash-kpi .kpi-num{order:0}
-.dash-kpi .kpi-meter{order:1}
+/* ---------- 15. Dashboard hero card & KPI band ----------
+   The hero row reads as a unified executive overview card with generous internal padding:
+   verdict & request status on the left, and 4 KPI tiles on the right with caption
+   above the value and meter last. Markup and ids are unchanged. */
+.dash-hero{
+  display:grid;
+  grid-template-columns:minmax(280px,.95fr) minmax(440px,1.3fr);
+  gap:24px;
+  align-items:center;
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:var(--radius-lg);
+  padding:22px 24px;
+  box-shadow:var(--shadow-sm);
+  transition:border-color .3s;
+}
+.dash-hero-main{min-width:0}
+.dash-kpis{
+  display:grid;
+  grid-template-columns:repeat(4,minmax(0,1fr));
+  gap:10px;
+}
+.dash-kpi{
+  display:flex;
+  flex-direction:column;
+  justify-content:center;
+  background:var(--surface2);
+  border:1px solid var(--border2);
+  border-radius:var(--radius);
+  padding:14px 16px;
+  min-height:108px;
+  transition:border-color .15s;
+}
+.dash-kpi:hover{border-color:var(--border)}
+.dash-kpi .kpi-label{order:-1;margin-bottom:6px;font-size:12px;font-weight:500;color:var(--text2)}
+.dash-kpi .kpi-num{order:0;font-size:20px;font-weight:700;font-variant-numeric:tabular-nums;line-height:1.2}
+.dash-kpi .kpi-meter{order:1;height:4px;border-radius:var(--radius-pill);background:var(--border2);margin-top:10px;overflow:hidden}
+
+.metric-section{margin-bottom:24px}
+.overview-section-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px}
+.overview-section-head .metric-heading{margin:0}
+.dash-grid .metric-heading{margin-bottom:12px}
+.metric-heading{font-size:15px;font-weight:600;color:var(--text)}
+
+.dash-chart{
+  min-height:152px;
+  border:1px solid var(--border);
+  border-radius:var(--radius);
+  background:var(--surface);
+  padding:16px 20px 14px;
+  box-shadow:var(--shadow-sm);
+  overflow:hidden;
+}
+.dash-grid{display:grid;grid-template-columns:1.2fr 1fr;gap:20px}
+.dash-fleet,.dash-models{
+  min-height:152px;
+  border:1px solid var(--border);
+  border-radius:var(--radius);
+  background:var(--surface);
+  box-shadow:var(--shadow-sm);
+  overflow:hidden;
+}
+.dash-activity{
+  min-height:120px;
+  border:1px solid var(--border);
+  border-radius:var(--radius);
+  background:var(--surface);
+  box-shadow:var(--shadow-sm);
+  overflow:hidden;
+}
+.dash-activity-row{
+  display:grid;
+  grid-template-columns:minmax(120px,.8fr) minmax(180px,1.4fr) minmax(120px,1fr) auto auto;
+  gap:12px;
+  align-items:center;
+  padding:12px 18px;
+  border-bottom:1px solid var(--border2);
+  font-size:13px;
+}
+.attention-list{
+  display:flex;
+  flex-direction:column;
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:var(--radius);
+  overflow:hidden;
+  box-shadow:var(--shadow-sm);
+  min-height:56px;
+}
+.attention-row{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  padding:12px 18px;
+  border-bottom:1px solid var(--border2);
+  font-size:var(--fs-base);
+  color:var(--text);
+  min-width:0;
+}
+.attention-empty{padding:16px 20px;font-size:var(--fs-base);color:var(--text3)}
+
+@media (max-width:1180px){
+  .dash-hero{grid-template-columns:1fr;gap:20px;padding:20px}
+  .dash-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media (max-width:900px){
+  .dash-grid{grid-template-columns:1fr;gap:16px}
+}
+@media (max-width:760px){
+  .dash-hero{padding:16px}
+  .dash-kpis{gap:8px}
+  .dash-kpi{padding:10px 12px;min-height:88px}
+  .dash-activity-row{grid-template-columns:minmax(0,1fr) auto;gap:5px 10px;padding:10px 14px}
+}
+@media (max-width:440px){
+  .dash-kpis{grid-template-columns:1fr 1fr}
+}
+
+/* ---------- 16. Sign-out affordance ----------
+   Logout lives in the top bar (desktop) and the mobile drawer footer so it is
+   reachable from any page instead of only the security page. */
+.tool-btn-signout:hover,.tool-btn-signout:focus-visible{color:var(--red);border-color:var(--red)}
+@media (max-width:900px){
+  .mobile-sidebar-tools .mobile-signout-btn{width:100%;justify-content:center}
+}

@@ -18,6 +18,36 @@
 
 /* 弹窗遮罩统一由 .overlay-modal / .overlay-top 提供（见弹窗层标准化区块） */
 
+/* ===== Provider 编辑器「选择模型」弹窗（仅此弹窗）=====
+   更宽的卡片 + 列表占满剩余高度；标题 / 说明 / 搜索 / 页脚不收缩，只有列表滚动。 */
+#provPickerModal .modal-card{overflow:hidden}
+#provPickerModal .modal-title,
+#provPickerModal .modal-sub,
+#provPickerModal .modal-search-row,
+#provPickerModal .modal-actions{flex-shrink:0}
+#provPickerModal .picker-notes{display:grid;gap:2px;margin:6px 0 var(--sp-3);line-height:1.5}
+#provPickerModal .modal-search-row{margin-bottom:0}
+#provPickerModal .modal-search-row input{min-height:36px}
+#provPickerModal .combo-picker-list{flex:1 1 auto;min-height:min(320px,45vh);max-height:none;margin-top:var(--sp-3)}
+/* 分组标题：名称 / 数量 / 口径说明左对齐，「全选本组」靠右 */
+#provPickerModal .preset-group-title{display:flex;align-items:center;gap:var(--sp-2);padding:8px 12px;font-size:12px}
+#provPickerModal .grp-name{font-weight:700;color:var(--text)}
+#provPickerModal .grp-count{font-variant-numeric:tabular-nums;color:var(--text2)}
+#provPickerModal .preset-group-title .grp-scope{margin-left:0;flex:1 1 auto;min-width:0;font-size:11px}
+#provPickerModal .grp-select{flex-shrink:0;padding:1px 10px;font-size:11px}
+/* 行：勾选 / 模型 ID（可截断）/ 徽章 / 测试按钮靠右；测试结果另起一行显示完整文字 */
+#provPickerModal .combo-pick-row,
+#importPreviewModal .combo-pick-row{flex-wrap:wrap;min-height:40px;padding:8px 12px}
+#provPickerModal .combo-pick-id,
+#importPreviewModal .combo-pick-id{flex:1 1 0;min-width:0}
+.prov-pick-test,.import-test{flex-shrink:0;padding:2px 10px;font-size:12px}
+.prov-pick-result,.import-test-result{flex:1 0 100%;min-width:0;padding-left:28px;font-size:12px;overflow-wrap:anywhere}
+.prov-pick-result:empty,.import-test-result:empty{display:none}
+@media (max-width:760px){
+  #provPickerModal .combo-picker-list{min-height:0;max-height:min(52vh,420px)}
+  .prov-pick-result,.import-test-result{padding-left:0}
+}
+
 .preset-group-title{position:sticky;top:0;z-index:1;background:var(--surface);padding:7px 10px;font-size:11px;font-weight:700;color:var(--text2);border-bottom:1px solid var(--border2)}
 .preset-group-title .preset-group-desc{font-weight:400;color:var(--text3);margin-left:6px}
 .preset-group-title .grp-scope{font-weight:400;color:var(--text3);margin-left:6px;font-size:10.5px}
@@ -37,10 +67,7 @@
 .prov-row-test-out:empty,.prov-row-recheck-out:empty,.conn-row-test-out:empty{display:none}
 @media (max-width:760px){
   .combo-test-error{max-width:100%}
-  .combos-list{overflow-x:auto} /* 触面核对：新增「测试」后行更宽，表格窄屏可横向滚动而非撑破 */
 }
-/* 行内测试追加后放宽两处表格操作列（5 个紧凑按钮 + 结果位不折行） */
-.combos-list .action-table th:last-child,.combos-list .action-table td:last-child{width:var(--action-col-wide);min-width:var(--action-col-wide)}
 /* 连接池表仅 2 按钮 → 收窄到紧凑预算 */
 #connectionsList .action-table th:first-child,#connectionsList .action-table td:first-child{width:34px;min-width:34px;text-align:center}
 #connectionsList .action-table th:last-child,#connectionsList .action-table td:last-child{width:var(--action-col-mid);min-width:var(--action-col-mid)}
@@ -50,5 +77,5 @@
 .action-table tbody tr.alt:hover{background:var(--surface2)}
 /* table 全局 fixed 列宽（styles.css:254）在连接表会引发真实文本重叠：
    fixed 布局忽略单元格 min-width，"0/2,000,000" 这类 nowrap 内容会横向绘制到相邻列。
-   → 连接表改 auto 布局。Provider 侧已弃表换卡片（prov-cards），重叠压力从根上消除。 */
+   → 连接表改 auto 布局。Provider 表格每个服务一个 <tbody>，列宽固定且单元格内容各自 ellipsis。 */
 #connectionsList .action-table{table-layout:auto}

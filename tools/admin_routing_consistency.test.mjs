@@ -21,7 +21,7 @@ function createUI({ canReadCredentials = true, credentialError, saveError, offer
   const context = vm.createContext({
     _: id => elements.get(id) || null,
     document: { addEventListener: () => {} },
-    t: value => value,
+    t: value => value, tx: value => value,
     esc: value => String(value),
     escAttr: value => String(value),
     formatNumber: value => String(value),
@@ -64,6 +64,7 @@ function createUI({ canReadCredentials = true, credentialError, saveError, offer
       const response = await api('GET', '/config');
       _('settingModelChain').value = (response.data.modelChain || []).join(', ');
       renderRouteSummary(response.data);
+      return response.data; // the real loadConfig returns the config it rendered
     }
   };`, context);
   return { elements, calls, notices, run: source => vm.runInContext(source, context) };

@@ -211,7 +211,7 @@ func TestAdminUICanonicalNavigationLabels(t *testing.T) {
 				`data-tab="combos"`,
 				`class="nav-label">路由组合</span>`,
 				`data-tab="network"`,
-				`class="nav-label">网络与出口</span>`,
+				`class="nav-label">全局出口代理</span>`,
 				`data-tab="logs"`,
 				`class="nav-label">请求日志</span>`,
 				`data-tab="quota"`,
@@ -237,17 +237,17 @@ func TestAdminUICanonicalNavigationLabels(t *testing.T) {
 			asset: "ui/html/pages/routing.html",
 			want: []string{
 				`class="large-title">路由策略</div>`,
-				`data-sub="config">路由策略</div>`,
-				`data-sub="tuning">运行调优</div>`,
-				`data-sub="models" title="打开模型页">模型目录 ↗</div>`,
+				`data-sub="config">路由策略</button>`,
+				`data-sub="inspect">路由检查</button>`,
+				`data-sub="tuning">运行调优</button>`,
 			},
 		},
 		{
 			name:  "network",
-			asset: "ui/html/pages/upstreams.html",
+			asset: "ui/html/pages/network.html",
 			want: []string{
 				`id="tab-network"`,
-				`class="large-title">网络与出口</div>`,
+				`class="large-title">全局出口代理</div>`,
 				`id="clineProxies"`,
 				`默认出口代理</div>`,
 				`服务专属网络设置</span>`,
@@ -264,7 +264,7 @@ func TestAdminUICanonicalNavigationLabels(t *testing.T) {
 				`'路由策略': 'Routing Policy'`,
 				`'运行调优': 'Runtime Tuning'`,
 				`'模型目录': 'Model Catalog'`,
-				`'网络与出口': 'Network & Egress'`,
+				`'全局出口代理': 'Global Egress Proxy'`,
 				`'Provider 健康': 'Provider Health'`,
 				`'出口代理池': 'Egress Proxies'`,
 				`'OAuth 已连接账号': 'OAuth Connected Accounts'`,
@@ -337,7 +337,7 @@ func TestAdminUIStaticFormLabelsTargetControls(t *testing.T) {
 		"ui/html/pages/routing.html": {
 			`<label for="settingDefModel">`, `<label for="settingStrategy">`, `<label for="tunRetryRounds">`, `<label for="tunExcluded">`,
 		},
-		"ui/html/pages/upstreams.html": {
+		"ui/html/pages/network.html": {
 			`<label for="clineProxyStrategy">`, `<label for="clineProxies">`,
 		},
 	}
@@ -393,8 +393,15 @@ func TestAdminUISeparatesAdministratorSecurityFromClientKeys(t *testing.T) {
 	if !strings.Contains(shell, `data-tab="security"`) || !strings.Contains(shell, `class="nav-label">管理员安全</span>`) {
 		t.Error("administrator security is not a direct sidebar destination")
 	}
-	if strings.Contains(security, `data-page="security"`) || strings.Contains(security, `id="keysList"`) {
-		t.Error("administrator security still nests page tabs or client API-key management")
+	// Administrator security owns its own sub-tabs, but client API-key
+	// management belongs to Accounts & Credentials and must not appear here.
+	if strings.Contains(security, `id="keysList"`) || strings.Contains(security, `data-sub="client-keys"`) || strings.Contains(security, `data-subpage="client-keys"`) {
+		t.Error("administrator security still nests client API-key management")
+	}
+	for _, sub := range []string{"identity", "devices", "network", "team", "danger"} {
+		if !strings.Contains(security, `data-sub="`+sub+`"`) || !strings.Contains(security, `data-subpage="`+sub+`"`) {
+			t.Errorf("administrator security missing sub-tab %q or its subpage", sub)
+		}
 	}
 	for _, contract := range []string{
 		`class="large-title">管理员安全</div>`,
@@ -424,7 +431,7 @@ func TestAdminUISeparatesAdministratorSecurityFromClientKeys(t *testing.T) {
 }
 
 func TestAdminUIUpstreamProxyOwnership(t *testing.T) {
-	network := adminUIAsset(t, "ui/html/pages/upstreams.html")
+	network := adminUIAsset(t, "ui/html/pages/network.html")
 	providers := adminUIAsset(t, "ui/html/pages/providers.html")
 	for _, id := range []string{"clineProxyStrategy", "clineProxies", "clineProxySaveResult"} {
 		if !strings.Contains(network, `id="`+id+`"`) {
@@ -459,7 +466,7 @@ func TestAdminUIDirectSubtabLinks(t *testing.T) {
 	if !strings.Contains(routing, `showPageSubTab('upstreams', 'cline')`) {
 		t.Error("routing policy does not link directly to upstream proxy settings")
 	}
-	upstreams := adminUIAsset(t, "ui/html/pages/upstreams.html")
+	upstreams := adminUIAsset(t, "ui/html/pages/network.html")
 	if !strings.Contains(upstreams, `showPageSubTab('routing', 'config')`) {
 		t.Error("proxy settings do not link directly to routing policy")
 	}
@@ -473,9 +480,15 @@ func TestAdminUIDirectSubtabLinks(t *testing.T) {
 	if !strings.Contains(quickstart, `showPageSubTab('credentials','client-keys')`) {
 		t.Error("quick start does not link directly to client API keys")
 	}
+	// The editor's link calls a named function (inline handlers carry no logic); that function
+	// leaves the editor and then opens the routing policy subtab.
 	comboEditor := adminUIAsset(t, "ui/html/dialogs/combo_editor.html")
-	if !strings.Contains(comboEditor, `showPageSubTab('routing', 'config')`) {
-		t.Error("combo editor does not link directly to routing policy")
+	if !strings.Contains(comboEditor, `onclick="openRoutingPolicyFromComboEditor();return false"`) {
+		t.Error("combo editor does not link to routing policy through openRoutingPolicyFromComboEditor")
+	}
+	combos := adminUIAsset(t, "ui/js/12_combos.js")
+	if !strings.Contains(combos, "function openRoutingPolicyFromComboEditor()") || !strings.Contains(combos, `showPageSubTab('routing', 'config')`) {
+		t.Error("openRoutingPolicyFromComboEditor does not open the routing policy subtab")
 	}
 	dashboard := adminUIAsset(t, "ui/js/15_dashboard.js")
 	if !strings.Contains(dashboard, `showPageSubTab('credentials', 'pool')`) {
@@ -516,7 +529,7 @@ func TestAdminUICanonicalOpenCodeLabels(t *testing.T) {
 		want  string
 	}{
 		{"ui/html/pages/providers.html", "OpenCode Zen 今日用量"},
-		{"ui/html/pages/models.html", "从 OpenCode Zen 同步模型"},
+		{"ui/js/13_model_sync.js", "label: 'OpenCode Zen'"},
 		{"ui/html/pages/providers.html", "OpenCode Zen 出口代理"},
 		{"ui/html/pages/providers.html", "OpenCode Zen 请求头"},
 		{"ui/js/11_upstreams.js", "t('OpenCode Zen 配置已保存')"},
@@ -549,7 +562,7 @@ func TestAdminGlobalProviderViewCoversCapabilityInventory(t *testing.T) {
 		"ui/html/pages/providers.html": "globalInstances",
 		"ui/html/pages/accounts.html":  "globalCredentials",
 		"ui/html/pages/models.html":    "globalOfferings",
-		"ui/html/pages/upstreams.html": "globalEgress",
+		"ui/html/pages/network.html":   "globalEgress",
 		"ui/html/pages/health.html":    "globalState",
 	} {
 		if page := adminUIAsset(t, asset); !strings.Contains(page, `id="`+id+`"`) {

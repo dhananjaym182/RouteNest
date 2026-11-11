@@ -1,0 +1,19 @@
+/* ===== Provider 表格内的小部件：待同步徽章、健康微状态、模型芯片截断 ===== */
+.chip-clip{max-width:230px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.model-chips .model-tag{min-width:0}
+/* 最近检测：单行（时间 ∕ 错误图标 ∕ 待同步 pill；原因全文在详情抽屉） */
+.pending-pill{display:inline-flex;align-items:center;gap:4px;padding:1px 8px;border-radius:var(--radius-pill);background:var(--accent-soft);border:1px solid var(--border2);color:var(--accent);font-size:11px;white-space:nowrap;cursor:default;text-decoration:none}
+.pending-pill.pending-open{cursor:pointer}
+.pending-pill:hover{border-color:var(--accent)}
+.pending-pill .pp-num{font-weight:600;font-variant-numeric:tabular-nums}
+
+/* 列表健康微型状态：色点 + 一行短语 + RPM 计数（完整计量/热度 → 详情抽屉） */
+.pmini{display:inline-flex;align-items:center;gap:5px;font-size:12px;white-space:nowrap}
+.pmini-dot{width:8px;height:8px;border-radius:50%;background:var(--green);flex-shrink:0}
+.pmini.tone-warn .pmini-dot{background:var(--yellow)}
+.pmini.tone-warn{color:var(--yellow)}
+.pmini.tone-bad .pmini-dot{background:var(--red)}
+.pmini.tone-bad{color:var(--red);font-weight:600}
+.pmini-rpm{color:var(--text3);font-size:11px}
+.pmini.tone-idle{color:var(--text3)}
+.pmini.tone-idle .pmini-dot{background:var(--border)}

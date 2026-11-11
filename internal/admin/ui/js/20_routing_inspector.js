@@ -5,6 +5,91 @@
 let _routeInspectorData = null;
 let _routeInspectorModel = '';
 let _routeInspectorLoadGen = 0;
+let _routeInspectorLoadedAt = 0;
+let _routeInspectorFilter = '';
+const ROUTE_INSPECTOR_FRESH_MS = 30000; // 切回「路由检查」时，30 秒内不重复读取
+
+// ===== 权限：没有 provider.write 的账号只读 =====
+// GET /config 与保存都需要 provider.write；没有它时表单整体禁用并给出说明，
+// 流程图不再停在「加载中」，检查器照常工作（只是没有全局配置部分）。
+function routingCanWrite() {
+  return typeof adminHasPermission !== 'function' || adminHasPermission('provider.write');
+}
+
+function applyRoutingAccess() {
+  const canWrite = routingCanWrite();
+  const notice = _('routeReadOnlyNotice');
+  if (notice) notice.hidden = canWrite;
+  document.querySelectorAll('#tab-routing [data-route-write]').forEach(page => {
+    page.querySelectorAll('input, select, textarea, button').forEach(el => {
+      if (!canWrite) {
+        if (!('routeWasDisabled' in el.dataset)) el.dataset.routeWasDisabled = el.disabled ? '1' : '0';
+        el.disabled = true;
+      } else if ('routeWasDisabled' in el.dataset) {
+        el.disabled = el.dataset.routeWasDisabled === '1';
+        delete el.dataset.routeWasDisabled;
+      }
+    });
+  });
+  if (!canWrite) {
+    ['routeFlowModel', 'routeFlowStrategy', 'routeFlowFallback'].forEach(id => {
+      const el = _(id);
+      if (el) { el.textContent = t('无权限查看'); el.title = t('需要 provider.write 权限'); }
+    });
+  }
+}
+
+// ===== 惰性加载：检查器是独立子页，只有看得到时才读取 =====
+function routeInspectorVisible() {
+  const tab = document.querySelector('.page-subtabs[data-page="routing"] .subtab.active');
+  return !!tab && tab.dataset.sub === 'inspect';
+}
+
+function routeInspectorShown() {
+  const fresh = _routeInspectorData && Date.now() - _routeInspectorLoadedAt < ROUTE_INSPECTOR_FRESH_MS;
+  return fresh ? Promise.resolve() : loadRouteInspector(false);
+}
+
+// 进入路由页时调用：上次停留在「路由检查」才立即加载，否则等用户切过去
+function maybeLoadRouteInspector() {
+  return routeInspectorVisible() ? routeInspectorShown() : Promise.resolve();
+}
+
+// 保存配置后只更新检查器里的配置部分（默认模型 / 回退链），不重读其余六个接口
+function refreshRouteInspectorConfig(config) {
+  if (!_routeInspectorData) return;
+  _routeInspectorData.config = config || {};
+  _routeInspectorData.configAvailable = true;
+  renderRouteInspector();
+}
+
+// 保存失败：下拉框回到服务端当前值（回退链文本是草稿，不动）
+function restoreRouteSelects() {
+  const c = typeof _lastAdminConfig !== 'undefined' ? _lastAdminConfig : null;
+  if (!c) return;
+  if (c.strategy && _('settingStrategy')) _('settingStrategy').value = c.strategy;
+  if (c.defaultModel !== undefined && _('settingDefModel')) _('settingDefModel').value = c.defaultModel;
+  if (c.onlyFree !== undefined && _('settingOnlyFree')) _('settingOnlyFree').value = String(c.onlyFree);
+}
+
+// 「回退模型链」旁的选择器：从目录里挑一个模型追加到链尾并保存
+function addModelToChain() {
+  const input = _('settingChainAdd'), chain = _('settingModelChain');
+  if (!input || !chain) return;
+  const id = input.value.trim();
+  if (!id) return;
+  if (id !== 'free' && !(_cachedModels || []).some(m => m.id === id)) {
+    toast(t('目录里没有这个模型；要填列表外的 ID 请直接在上方输入框输入'), 'info');
+    return;
+  }
+  const ids = chain.value.split(',').map(x => x.trim()).filter(Boolean);
+  input.value = '';
+  if (ids.indexOf(id) !== -1) { toast(t('已在回退链中'), 'info'); return; }
+  ids.push(id);
+  chain.value = ids.join(', ');
+  chain.dataset.dirty = '1';
+  return updateConfig();
+}
 
 // Same guard as globalTime(): a Go zero time is not a real timestamp.
 function routeInspectorTime(value) {
@@ -58,21 +143,23 @@ function routeInspectorShowError(message) {
   });
 }
 
-async function loadRouteInspector(force) {
+async function loadRouteInspector(force, quiet) {
   if (!_('routeInspectorSection')) return;
   const generation = ++_routeInspectorLoadGen;
-  if (!_routeInspectorData || force) routeInspectorSetLoading();
+  if (!quiet && (!_routeInspectorData || force)) routeInspectorSetLoading();
   try {
     const canReadCredentials = typeof adminHasPermission !== 'function' || adminHasPermission('credential.write');
+    // 凭据与全局配置对只读账号是不可见的：跳过请求，或把权限拒绝当作“没有这部分”
+    const optional = (allowed, request) => allowed ? request().catch(e => {
+      if (e && e.message === 'permission_denied') return null;
+      throw e;
+    }) : Promise.resolve(null);
     const [instances, credentials, offerings, state, config, combos, logs] = await Promise.all([
       api('GET', '/provider-instances'),
-      canReadCredentials ? api('GET', '/credentials').catch(e => {
-        if (e && e.message === 'permission_denied') return null;
-        throw e;
-      }) : Promise.resolve(null),
+      optional(canReadCredentials, () => api('GET', '/credentials')),
       api('GET', '/model-offerings'),
       api('GET', '/provider-state'),
-      api('GET', '/config'),
+      optional(routingCanWrite(), () => fetchAdminConfig()),
       api('GET', '/combos'),
       api('GET', '/request-logs?limit=100'),
     ]);
@@ -83,10 +170,12 @@ async function loadRouteInspector(force) {
       credentialsAvailable: credentials !== null,
       offerings: (offerings.data && offerings.data.offerings) || [],
       observations: (state.data && state.data.observations) || [],
-      config: (config.data) || {},
+      config: (config && config.data) || {},
+      configAvailable: config !== null,
       combos: (combos.data && combos.data.combos) || [],
       logs: (logs.data && logs.data.items) || [],
     };
+    _routeInspectorLoadedAt = Date.now();
     const err = _('routeInspectorError');
     if (err) { err.hidden = true; err.innerHTML = ''; }
     renderRouteInspector();
@@ -102,43 +191,73 @@ function selectRouteInspectorModel(value) {
   if (_routeInspectorData) renderRouteInspector();
 }
 
-// Union of known model ids. Offering order is the API order; no routing order
-// is implied by this picker.
+// Union of known model ids. The default model and the global fallback chain come
+// first (in that order); everything else is sorted by name. No routing order is
+// implied by this picker.
 function routeInspectorModelIDs(data) {
-  const ids = [];
   const seen = {};
-  const add = value => {
-    const id = String(value == null ? '' : value).trim();
+  const clean = value => String(value == null ? '' : value).trim();
+  const pinned = [];
+  const rest = [];
+  const add = (list, value) => {
+    const id = clean(value);
     if (!id || seen[id]) return;
     seen[id] = true;
-    ids.push(id);
+    list.push(id);
   };
-  add(data.config && data.config.defaultModel);
-  ((data.config && data.config.modelChain) || []).forEach(add);
-  (data.offerings || []).forEach(o => add(o.modelId));
-  (_cachedModels || []).forEach(m => add(m && m.id));
+  add(pinned, data.config && data.config.defaultModel);
+  ((data.config && data.config.modelChain) || []).forEach(id => add(pinned, id));
+  (data.offerings || []).forEach(o => add(rest, o.modelId));
+  (_cachedModels || []).forEach(m => add(rest, m && m.id));
+  rest.sort((a, b) => a.localeCompare(b));
+  const ids = pinned.concat(rest);
+  ids.pinnedCount = pinned.length;
   return ids;
+}
+
+function filterRouteInspectorModels(value) {
+  _routeInspectorFilter = String(value || '').trim().toLowerCase();
+  if (_routeInspectorData) routeInspectorSyncModelSelect(_routeInspectorData);
+}
+
+// Enter in the filter box: choose the first model that matches
+function pickFirstRouteInspectorModel() {
+  if (!_routeInspectorData) return;
+  const first = routeInspectorModelIDs(_routeInspectorData).find(id => !_routeInspectorFilter || id.toLowerCase().indexOf(_routeInspectorFilter) !== -1);
+  if (!first) return;
+  _routeInspectorModel = first;
+  renderRouteInspector();
 }
 
 function routeInspectorSyncModelSelect(data) {
   const sel = _('routeInspectorModel');
   if (!sel) return;
   const ids = routeInspectorModelIDs(data);
+  const count = _('routeInspectorModelCount');
   if (!ids.length) {
     _routeInspectorModel = '';
     sel.disabled = true;
     sel.innerHTML = '<option value="">' + esc(t('没有可用模型')) + '</option>';
+    if (count) count.textContent = '';
     return;
   }
   if (!_routeInspectorModel || ids.indexOf(_routeInspectorModel) === -1) {
+    // 默认模型优先；读不到配置（只读账号）或没有默认时，选第一个确实有授权的模型，
+    // 这样一打开就有内容可看，而不是一个没有候选的空面板
     const preferred = String((data.config && data.config.defaultModel) || '');
-    _routeInspectorModel = ids.indexOf(preferred) !== -1 ? preferred : ids[0];
+    const offered = {};
+    (data.offerings || []).forEach(o => { offered[String(o.modelId || '')] = true; });
+    _routeInspectorModel = ids.indexOf(preferred) !== -1 ? preferred : (ids.find(id => offered[id]) || ids[0]);
   }
+  const matches = id => !_routeInspectorFilter || id === _routeInspectorModel || id.toLowerCase().indexOf(_routeInspectorFilter) !== -1;
+  const option = id => '<option value="' + escAttr(id) + '"' + (id === _routeInspectorModel ? ' selected' : '') + '>' + esc(id) + '</option>';
+  const pinned = ids.slice(0, ids.pinnedCount || 0).filter(matches);
+  const rest = ids.slice(ids.pinnedCount || 0).filter(matches);
   sel.disabled = false;
-  sel.innerHTML = ids.map(id =>
-    '<option value="' + escAttr(id) + '"' + (id === _routeInspectorModel ? ' selected' : '') + '>' + esc(id) + '</option>'
-  ).join('');
+  sel.innerHTML = (pinned.length ? '<optgroup label="' + escAttr(t('默认与回退链')) + '">' + pinned.map(option).join('') + '</optgroup>' : '') +
+    (pinned.length ? '<optgroup label="' + escAttr(t('全部模型')) + '">' + rest.map(option).join('') + '</optgroup>' : rest.map(option).join(''));
   sel.value = _routeInspectorModel;
+  if (count) count.textContent = _routeInspectorFilter ? (pinned.length + rest.length) + ' / ' + ids.length : String(ids.length);
 }
 
 function renderRouteInspector() {
@@ -349,7 +468,9 @@ function routeInspectorFallbackHTML(data, model) {
   let html = '<div class="ri-config-note">' + esc(t('以下为配置，不是运行时决策。')) + '</div>';
   html += '<div class="ri-fallback-row">' +
     '<div class="ri-sub-label">' + esc(t('全局回退链（配置）')) + '</div>';
-  if (chain.length) {
+  if (data.configAvailable === false) {
+    html += '<div class="ri-chain-empty"><span class="ri-unknown">' + esc(t('需要 provider.write 权限才能查看全局回退链')) + '</span></div>';
+  } else if (chain.length) {
     html += '<ol class="ri-chain">' + chain.map((id, index) =>
       '<li><span class="ri-order">' + (index + 1) + '</span>' + routeInspectorMono(id) + '</li>').join('') + '</ol>';
   } else {

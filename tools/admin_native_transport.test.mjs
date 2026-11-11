@@ -24,7 +24,7 @@ function nativeConsole({ native = true, bridgeMethod = true } = {}) {
     window: { location: { protocol: 'wails:', host: 'wails' } },
     location: { replace: value => calls.push(['replace', value]), reload: () => calls.push(['reload']) },
     URL, Response,
-    t: value => value,
+    t: value => value, tx: value => value,
     nativeDesktopAvailable: () => native,
     nativeDesktopBridge: () => bridge,
     nativeDesktopCall: async (method, ...args) => {

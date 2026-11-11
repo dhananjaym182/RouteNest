@@ -4,8 +4,6 @@ let _provEditorRevision = 0;
 // 从免费类预设新建并保存后，自动触发一次分级导入预览（用户勾选后才写入）
 let _previewAfterSave = false;
 
-// 首次加载占位：列表尚未渲染过且请求在途时显示骨架，避免空白闪动
-let _provFirstLoad = true;
 let _provLoadGeneration = 0;
 // 行内测试/检测结果跨 re-render 保留（loadProviders 重绘后回填到结果位）
 const _provRowResults = {};
@@ -14,15 +12,10 @@ function provRowResultHTML(kind, id) {
   return r ? renderTestResultHTML(r.ok, r.text) : '';
 }
 
+// Loads the managed-provider data (health, sync state, cooldowns) and hands it to the one
+// provider table (renderGlobalInstances), which merges it with the instance/offering data.
 async function loadProviders() {
-  const box0 = _('providersList');
-  if (!box0) return;
   const generation = ++_provLoadGeneration;
-  if (_provFirstLoad) {
-    // 骨架与卡片同构：占多个卡位而非一条，避免加载完成后从「一条」跳到「网格」的布局闪动
-    const skCard = '<div class="prov-card sk-card"><div class="sk-stack"><span class="skeleton"></span><span class="skeleton w70"></span><span class="skeleton w45"></span><span class="skeleton w70"></span><span class="skeleton w45"></span></div></div>';
-    box0.innerHTML = '<div class="prov-cards">' + skCard.repeat(6) + '</div>';
-  }
   try {
     const [d, sd] = await Promise.all([
       api('GET', '/providers'),
@@ -32,99 +25,26 @@ async function loadProviders() {
     _provSync = (sd && sd.data && sd.data.providers) || {};
     _provHealth = (d.data && d.data.health) || {};
     const list = d.data.providers || [];
-    _provFirstLoad = false;
     const ids = new Set(list.map(p => p.id));
     Object.keys(_provCache).forEach(id => { if (!ids.has(id)) delete _provCache[id]; });
     list.forEach(p => { _provCache[p.id] = p; });
-    const box = _('providersList');
     renderProviderSyncBanner(list);
+    renderProviderCooldowns(list);
     refreshProvDetailIfOpen();
-    if (!list.length) { box.innerHTML = listEmptyState(ICON_PROVIDERS, t('暂无自定义 Provider'), '<button type="button" class="btn btn-sm btn-primary" onclick="openProviderSetup()">' + t('连接 Provider') + '</button>'); return; }
-    box.innerHTML = renderProvCooldownBar(list) +
-      '<div class="prov-cards">' + list.map(provCardHTML).join('') + '</div>';
+    if (typeof refreshProviderInventory === 'function') refreshProviderInventory();
     observeProviderSyncDelistings(list, _provSync);
     if (list.some(p => (_provSync[p.id] || {}).delistedMarked)) await checkModelDelistings();
   } catch (e) {
     if (generation !== _provLoadGeneration) return;
-    _provFirstLoad = false;
-    const box = _('providersList');
-    if (box) box.innerHTML = '<div class="empty">' + t('加载失败') + ': ' + esc(e.message) +
-      '<div class="mt-10"><button class="btn btn-sm" onclick="loadProviders()">' + uiIcon('reset') + t('重试') + '</button></div></div>';
+    const box = _('providerCooldowns');
+    if (box) box.innerHTML = '<div class="sync-banner on sync-banner-warn"><span class="hint-mut">' + t('加载失败') + ': ' + esc(e.message) + '</span>' +
+      '<span class="row-bulk"><button type="button" class="btn btn-sm" onclick="loadProviders()">' + uiIcon('reset') + t('重试') + '</button></span></div>';
   }
 }
 
-// ========== §模型列：紧凑芯片 + 可展开（与日志详情行的渐进披露一致） ==========
-const PROV_CHIP_PREVIEW = 3;
-function provModelsCellHTML(id, modelIds) {
-  const total = (modelIds || []).length;
-  if (!total) return '<span class="hint-sm">—</span>';
-  const chip = m => '<span class="model-tag chip-clip" title="' + escAttr(m) + '">' + esc(m) + '</span>';
-  const shown = modelIds.slice(0, PROV_CHIP_PREVIEW);
-  const rest = total - shown.length;
-  let html = '<div class="model-chips">' + shown.map(chip).join('');
-  if (rest > 0) {
-    html += '<button type="button" class="model-tag chip-more" data-count="' + rest + '" data-prov-id="' + escAttr(id) + '" onclick="event.stopPropagation();toggleProvModelChips(this)" aria-expanded="false" title="' + escAttr(t('展开全部') + ' ' + total + t(' 个模型')) + '">+' + rest + '</button>';
-  }
-  html += '</div>';
-  if (rest > 0) {
-    html += '<div class="model-chips model-chips-extra">' + modelIds.slice(PROV_CHIP_PREVIEW).map(chip).join('') + '</div>';
-  }
-  return html;
-}
-
-// ========== §卡片视图（master–detail 主侧）：每个卡片区域是独立的流式块，禁止绝对定位/固定高，
-// 「0/2,000,000」这类最宽数据在各自块内 ellipsis，天然无重叠（旧表 table-layout:fixed 忽略
-// min-width 导致 nowrap 数字横向绘制进邻列，即此前两次返工的重叠根因）。 ==========
-function provCardHTML(p) {
-  const id = escAttrJS(p.id);
-  const n = (p.connectionIds || []).length || (p.connectionId ? 1 : 0);
-  const h = _provHealth[p.id] || {};
-  // 卡片健康行只放「无样本」徽章；热度块全尺寸进详情
-  const heatNone = (h.recent || []).length ? '' : '<span class="heat-none">' + t('暂无样本') + '</span>';
-  return '<article class="prov-card" data-prov="' + id + '">' +
-    '<div class="prov-card-hit" onclick="openProvDetail(\'' + id + '\')" title="' + t('打开详情') + '">' +
-      '<div class="prov-card-head">' +
-        '<div class="prov-card-title">' +
-          '<button type="button" class="prov-card-name" onclick="event.stopPropagation();openProvDetail(\'' + id + '\')" title="' + t('打开详情') + '" aria-haspopup="dialog">' + esc(p.name) + '</button>' +
-          (p.free ? '<span class="green-xs" title="' + escAttr(t('整源免费标记，不代表池内每个模型都免费；逐模型计费以分级预览为准')) + '">free</span>' : '') +
-          (n ? '<span class="acc-xs" title="' + t('连接池轮转派发') + '">token×' + n + '</span>' : '') +
-        '</div>' +
-        '<span class="prov-card-status">' + (p.enabled
-          ? '<span class="status active"><span class="status-dot active"></span>' + t('已启用') + '</span>'
-          : '<span class="status disabled"><span class="status-dot disabled"></span>' + t('已停用') + '</span>') + '</span>' +
-      '</div>' +
-      '<div class="prov-models-cell">' + provModelsCellHTML(p.id, p.modelIds || []) + '</div>' +
-      '<div class="prov-card-health">' + provMiniHealthHTML(p) + heatNone + '</div>' +
-      '<div class="prov-card-url mono" title="' + escAttr(p.baseURL) + '">' + esc(p.baseURL) + '</div>' +
-      '<div class="prov-card-meta">' +
-        '<span class="pm-k">' + t('优先级') + '</span><span class="pm-v mono">' + esc(String(p.priority)) + '</span>' +
-        (p.enabled ? '<span class="pm-sync">' + provSyncCellHTML(p.id) + '</span>' : '<span class="hint-xs">—</span>') +
-      '</div>' +
-    '</div>' +
-    '<div class="prov-card-foot">' +
-      '<button type="button" class="btn btn-sm btn-primary" onclick="openProvDetail(\'' + id + '\')">' + t('打开详情') + '</button>' +
-      '<button type="button" class="btn btn-sm btn-icon" onclick="editProvider(\'' + p.id + '\')" title="' + t('编辑') + '" aria-label="' + t('编辑') + '">' + uiIcon('edit') + '</button>' +
-      '<button type="button" class="btn btn-sm btn-icon" onclick=\'testProviderById("' + p.id + '", this)\' title="' + t('测试') + '" aria-label="' + t('测试') + '">' + uiIcon('bolt') + '</button>' +
-      '<button type="button" class="btn btn-sm btn-icon" onclick=\'recheckProvider("' + p.id + '", this)\' title="' + t('重新检测') + '" aria-label="' + t('重新检测') + '">' + uiIcon('reset') + '</button>' +
-      '<button type="button" class="btn btn-sm btn-icon" onclick=\'toggleProvider("' + p.id + '", ' + !p.enabled + ', this)\' title="' + t(p.enabled ? '停用' : '启用') + '" aria-label="' + t(p.enabled ? '停用' : '启用') + '">' + uiIcon(p.enabled ? 'pause' : 'play') + '</button>' +
-      '<button type="button" class="btn btn-sm btn-icon btn-danger" onclick=\'deleteProvider("' + p.id + '")\' title="' + t('删除') + '" aria-label="' + t('删除') + '">' + uiIcon('close') + '</button>' +
-    '</div>' +
-    '<div class="prov-card-result">' +
-      '<span class="prov-row-test-out">' + provRowResultHTML('test', p.id) + '</span>' +
-      '<span class="prov-row-recheck-out">' + provRowResultHTML('recheck', p.id) + '</span>' +
-    '</div>' +
-  '</article>';
-}
-
-// 展开态行高易抖：追加芯片而不是整体换面板，行本身仍受 chips 最大两行约束
-function toggleProvModelChips(btn) {
-  const cell = btn && btn.closest ? btn.closest('.prov-models-cell') : null;
-  const extra = cell ? cell.querySelector('.model-chips-extra') : null;
-  if (!extra) return;
-  const open = extra.classList.toggle('open');
-  btn.classList.toggle('open', open);
-  btn.setAttribute('aria-expanded', open ? 'true' : 'false');
-  btn.textContent = open ? t('收起') : '+' + btn.dataset.count;
+function renderProviderCooldowns(list) {
+  const box = _('providerCooldowns');
+  if (box) box.innerHTML = renderProvCooldownBar(list);
 }
 
 // ========== §健康：配额表 / 冷却恢复 / 近期成败热度 ==========
@@ -206,10 +126,14 @@ function provMiniHealthHTML(p) {
   const cool = (h.cooldowns || []).length;
   const dailyUsed = Number(h.daily) || 0, rpmUsed = Number(h.rpm) || 0;
   const tok = Number(lim.tokens) || 0, tokUsed = Number(h.tokens) || 0;
+  // The server reports rate 0 for a provider with no traffic, so a rate only counts once samples exist.
+  const samples = Number(h.samples) || 0;
   let tone = 'ok', label = '正常';
   if (cool) { tone = 'bad'; label = '冷却中'; }
   else if (!st.lastCheckedMs && st.lastError) { tone = 'bad'; label = '检测出错'; }
-  else if (daily > 0 && dailyUsed / daily >= 0.7 || rpm > 0 && rpmUsed / rpm >= 0.7 || tok > 0 && tokUsed / tok >= 0.7 || h.rate !== undefined && h.rate < 0.5) { tone = 'warn'; label = '接近上限'; }
+  else if (daily > 0 && dailyUsed / daily >= 0.7 || rpm > 0 && rpmUsed / rpm >= 0.7 || tok > 0 && tokUsed / tok >= 0.7) { tone = 'warn'; label = '接近上限'; }
+  else if (samples > 0 && Number(h.rate) < 0.5) { tone = 'warn'; label = '成功率偏低'; }
+  else if (samples === 0) { tone = 'idle'; label = '暂无样本'; }
   let html = '<span class="pmini tone-' + tone + '"><span class="pmini-dot" aria-hidden="true"></span>' + t(label) + '</span>';
   if (rpm > 0) html += ' <span class="pmini-rpm mono" title="' + escAttr(t('每分钟已用 ') + rpmUsed + '/' + rpm) + '">RPM ' + rpmUsed + '/' + rpm + '</span>';
   if (cool) html += ' <button type="button" class="chip warn cooldown-chip" onclick="event.stopPropagation();providersResetCooldown(\'' + escAttr(p.id) + '\', \'\', this)" title="' + escAttr(t('点击清除该 Provider 全部冷却')) + '">' + uiIcon('hourglass') + ' ' + cool + ' · ' + fmtLeft(h.recoveryAt) + '</button>';

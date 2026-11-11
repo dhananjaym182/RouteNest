@@ -1,7 +1,7 @@
 const setupCopy = {
   en: {
-    platformLabel: 'Desktop access',
-    pageTitle: 'RouteNest · Desktop access',
+    platformLabel: 'Free-First AI API Routing',
+    pageTitle: 'RouteNest · Free-First AI API Routing',
     checkingTitle: 'Checking this installation',
     checkingBody: 'RouteNest is verifying local security storage before opening.',
     stepOne: 'Step 1 of 3',
@@ -96,8 +96,8 @@ const setupCopy = {
     continue: 'Continue in RouteNest'
   },
   zh: {
-    platformLabel: '桌面访问',
-    pageTitle: 'RouteNest · 桌面访问',
+    platformLabel: '免费优先 AI API 路由',
+    pageTitle: 'RouteNest · 免费优先 AI API 路由',
     checkingTitle: '正在检查此安装',
     checkingBody: 'RouteNest 正在验证本机安全存储，然后再打开应用。',
     stepOne: '第 1 步，共 3 步',

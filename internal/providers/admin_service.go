@@ -73,6 +73,11 @@ func SaveCustomProvider(p CustomProvider) (CustomProvider, error) {
 		}
 	}
 	p.ModelIDs = models
+	modelMap, mapErr := SanitizeModelMap(p.ModelIDs, p.ModelMap)
+	if mapErr != nil {
+		return CustomProvider{}, mapErr
+	}
+	p.ModelMap = modelMap
 	hdrs := map[string]string{}
 	for k, v := range p.Headers {
 		k = strings.TrimSpace(k)
@@ -150,7 +155,35 @@ func DeleteCustomProvider(id string) error {
 
 // ProbeSavedProvider sends one minimal request through a saved provider. An empty
 // model falls back to the provider's first model ID.
-func ProbeSavedProvider(id, model string) (map[string]any, error) {
+// applyDraftMapping makes a probe use the editor's per-row draft: a non-empty
+// upstreamModel replaces whatever the provider had saved for model, and a value
+// equal to the name clears it ("send the name unchanged"). An empty value leaves
+// the saved mapping alone. An invalid draft is returned as a failed test result,
+// not as a transport error.
+func applyDraftMapping(target *CustomProvider, model, upstreamModel string) map[string]any {
+	upstreamModel = strings.TrimSpace(upstreamModel)
+	if upstreamModel == "" {
+		return nil
+	}
+	mapped, err := SanitizeModelMap([]string{model}, map[string]string{model: upstreamModel})
+	if err != nil {
+		return map[string]any{"ok": false, "model": model, "durationMs": 0, "error": err.Error()}
+	}
+	next := make(map[string]string, len(target.ModelMap)+1)
+	for name, upstream := range target.ModelMap {
+		next[name] = upstream
+	}
+	delete(next, model)
+	for name, upstream := range mapped {
+		next[name] = upstream
+	}
+	target.ModelMap = next
+	return nil
+}
+
+// ProbeSavedProvider tests one model on a saved provider. A non-empty
+// upstreamModel overrides the saved mapping for this probe only.
+func ProbeSavedProvider(id, model, upstreamModel string) (map[string]any, error) {
 	Load()
 	Mu.Lock()
 	var target *CustomProvider
@@ -168,12 +201,15 @@ func ProbeSavedProvider(id, model string) (map[string]any, error) {
 	if model == "" && len(target.ModelIDs) > 0 {
 		model = target.ModelIDs[0]
 	}
+	if failure := applyDraftMapping(target, model, upstreamModel); failure != nil {
+		return failure, nil
+	}
 	return runProviderMiniTest(target, model), nil
 }
 
 // ProbeUnsavedProvider tests a configuration that is not stored. Nothing is
 // persisted. A missing model is reported as a failed probe, not an error.
-func ProbeUnsavedProvider(baseURL, apiKey string, headers map[string]string, model string) (map[string]any, error) {
+func ProbeUnsavedProvider(baseURL, apiKey string, headers map[string]string, model, upstreamModel string) (map[string]any, error) {
 	baseURL = strings.TrimSpace(strings.TrimRight(baseURL, "/"))
 	if !strings.HasPrefix(baseURL, "http://") && !strings.HasPrefix(baseURL, "https://") {
 		return nil, errors.New("baseURL must start with http:// or https://")
@@ -190,6 +226,9 @@ func ProbeUnsavedProvider(baseURL, apiKey string, headers map[string]string, mod
 		APIKey:     strings.TrimSpace(apiKey),
 		Headers:    headers,
 		TimeoutSec: 20, // 探测用短超时
+	}
+	if failure := applyDraftMapping(target, model, upstreamModel); failure != nil {
+		return failure, nil
 	}
 	return runProviderMiniTest(target, model), nil
 }
@@ -283,6 +322,9 @@ func runProviderMiniTest(p *CustomProvider, model string) map[string]any {
 	started := time.Now()
 	resp, err := Call(p, params, false)
 	result := map[string]any{"durationMs": time.Since(started).Milliseconds(), "model": model}
+	if upstream := UpstreamModelFor(*p, model); upstream != model {
+		result["upstreamModel"] = upstream
+	}
 	if err != nil {
 		result["ok"] = false
 		result["error"] = platform.Truncate(err.Error(), 300)

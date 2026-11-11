@@ -15,6 +15,8 @@
   <div id="globalSummary" class="provider-overview-strip" aria-live="polite"></div>
   <div class="section system-section">
     <div class="section-title"><span>已配置的服务</span></div>
+    <div id="providerSyncBanner" class="sync-banner" aria-live="polite"></div>
+    <div id="providerCooldowns" aria-live="polite"></div>
     <div class="system-toolbar">
       <div class="system-toolbar-grid">
         <div class="field system-filter-field system-search-field">
@@ -37,16 +39,6 @@
     </div>
     <div id="globalInstances" class="section-body system-inventory" aria-live="polite"></div>
   </div>
-  <details class="provider-advanced-details">
-    <summary>自定义 Provider 高级管理</summary>
-    <div class="section">
-      <div class="section-title"><span>自定义 Provider 管理</span>
-        <span class="title-tools"><button type="button" class="btn btn-sm" onclick="loadProviderPresets()">从预设添加 Provider</button><button type="button" class="btn btn-sm" onclick="showProviderEditor()">添加自定义 Provider</button></span>
-      </div>
-      <div id="providerSyncBanner" class="sync-banner" aria-live="polite"></div>
-      <div class="section-body"><div id="providersList"></div></div>
-    </div>
-  </details>
 
   </div>
   <div class="page-subpage" data-subpage="oauth" style="display:none">

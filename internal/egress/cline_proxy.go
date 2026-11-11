@@ -110,9 +110,7 @@ func clineProxiesActive() bool {
 	return len(cfg.Proxies) > 0
 }
 
-// pickClineProxy 按策略选代理；未配置返回 ""。
-// ponytail: 无单代理故障冷却（zen 侧有），代理挂了会体现在账号冷却与日志里，
-// 升级路径：仿 cooldownZenProxy 增加索引冷却并在上游拨号失败处标记。
+// pickClineProxy 按策略选代理；未配置返回 "".
 func pickClineProxy() string {
 	proxies, strategy := snapshotClineProxyConfig()
 	return pickFromClineProxies(proxies, strategy)
@@ -169,14 +167,84 @@ func clineOutboundProxy(req *http.Request) (*url.URL, error) {
 // clineDialContext 全局 transport 的拨号钩子。应用内代理生效时 addr 一定是目标
 // 地址（Proxy 钩子已返回 nil），回环/内网目标直连（自定义 Provider 可能指向本机
 // 模型服务），其余经代理池隧道；未生效时直连（可能是环境变量代理地址或目标本身）。
+//
+// 策略只决定先试哪个代理；拨号失败会依次尝试池中其余代理（见 orderClineProxies），
+// 所以「fill」也有故障转移：首个代理不可用时自动改用下一个。
 func clineDialContext(ctx context.Context, network, addr string) (net.Conn, error) {
 	if proxies, strategy := snapshotClineProxyConfig(); len(proxies) > 0 && !clineDirectDialHost(addr) {
-		if p := pickFromClineProxies(proxies, strategy); p != "" {
-			return transport.DialViaProxy(ctx, p, network, addr)
+		if first := pickFromClineProxies(proxies, strategy); first != "" {
+			var lastErr error
+			for _, p := range orderClineProxies(first, proxies) {
+				conn, err := clineProxyDial(ctx, p, network, addr)
+				if err == nil {
+					markClineProxyUp(p)
+					return conn, nil
+				}
+				if ctx.Err() != nil {
+					return nil, err // 调用方已放弃，不是代理的问题
+				}
+				markClineProxyDown(p)
+				lastErr = err
+			}
+			return nil, lastErr
 		}
 	}
 	d := &net.Dialer{Timeout: 12 * time.Second, KeepAlive: 30 * time.Second}
 	return d.DialContext(ctx, network, addr)
+}
+
+// clineProxyFailCooldown 是拨号失败的代理被排到队尾的时长。只是降低优先级，
+// 不会把代理排除出池：所有代理都在冷却时仍会按顺序全部再试一遍。
+const clineProxyFailCooldown = 30 * time.Second
+
+var (
+	clineProxyDial = transport.DialViaProxy // 测试接缝
+	clineProxyNow  = time.Now               // 测试接缝
+
+	clineProxyDownMu    sync.Mutex
+	clineProxyDownUntil = map[string]time.Time{}
+)
+
+func markClineProxyDown(proxy string) {
+	clineProxyDownMu.Lock()
+	defer clineProxyDownMu.Unlock()
+	clineProxyDownUntil[proxy] = clineProxyNow().Add(clineProxyFailCooldown)
+}
+
+func markClineProxyUp(proxy string) {
+	clineProxyDownMu.Lock()
+	defer clineProxyDownMu.Unlock()
+	delete(clineProxyDownUntil, proxy)
+}
+
+// orderClineProxies 返回本次拨号的尝试顺序：从策略选中的 first 开始沿池循环，
+// 近期失败过的代理排在最后；每个地址只出现一次。
+func orderClineProxies(first string, proxies []string) []string {
+	start := 0
+	for i, p := range proxies {
+		if p == first {
+			start = i
+			break
+		}
+	}
+	now := clineProxyNow()
+	clineProxyDownMu.Lock()
+	defer clineProxyDownMu.Unlock()
+	seen := make(map[string]bool, len(proxies))
+	var healthy, cooling []string
+	for offset := 0; offset < len(proxies); offset++ {
+		p := proxies[(start+offset)%len(proxies)]
+		if seen[p] {
+			continue
+		}
+		seen[p] = true
+		if until, down := clineProxyDownUntil[p]; down && now.Before(until) {
+			cooling = append(cooling, p)
+		} else {
+			healthy = append(healthy, p)
+		}
+	}
+	return append(healthy, cooling...)
 }
 
 // clineDirectDialHost 回环 / 内网 / 链路本地目标不走代理（本机 Ollama、LAN 网关等）。

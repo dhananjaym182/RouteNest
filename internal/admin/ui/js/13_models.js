@@ -3,6 +3,12 @@ let _cachedModels = [];
 let _modelGroupOpen = {}; // 分组折叠状态（localStorage 持久化）
 const _modelFilters = { search: '', provider: '', cost: '', status: '' };
 const MODEL_GROUP_OPEN_KEY = 'cline_admin_model_groups_open';
+const MODEL_FILTER_KEY = 'cline_admin_model_filters';
+const MODEL_ROWS_PAGE = 120;       // 每个分组一次最多构建的行数，其余点「显示更多」
+let _modelGroupRows = new Map();   // 分组 key -> 上次渲染的已排序行（折叠分组按需再构建）
+let _modelGroupShown = {};         // 分组 key -> 已构建行数
+let _modelFilterOpen = {};         // 有筛选时各分组的展开状态（仅本次筛选有效，不持久化）
+let _modelSearchTimer = 0;
 try {
   const _mgo = JSON.parse(localStorage.getItem(MODEL_GROUP_OPEN_KEY) || '{}');
   if (_mgo && typeof _mgo === 'object') _modelGroupOpen = _mgo;
@@ -25,9 +31,12 @@ function modelProviderNameButton(offering) {
   const name = offering.qualifiedId;
   const slash = name.indexOf('/');
   const label = t('复制模型名') + ': ' + name;
+  // The provider's upstream expects a different ID than the name clients send.
+  const mapped = offering.upstreamModelId && offering.upstreamModelId !== offering.modelId ? offering.upstreamModelId : '';
   return '<button type="button" class="model-provider-name" onclick="copyText(' + escAttr(JSON.stringify(name)) + ')"' +
-    ' title="' + escAttr(label + (offering.providerName ? ' · ' + offering.providerName : '')) + '" aria-label="' + escAttr(label) + '">' +
+    ' title="' + escAttr(label + (offering.providerName ? ' · ' + offering.providerName : '') + (mapped ? ' · ' + t('上游模型 ID') + ': ' + mapped : '')) + '" aria-label="' + escAttr(label + (mapped ? ' · ' + t('上游模型 ID') + ': ' + mapped : '')) + '">' +
     '<code><span class="model-provider-prefix">' + esc(name.slice(0, slash + 1)) + '</span><span class="model-provider-model">' + esc(name.slice(slash + 1)) + '</span></code>' +
+    (mapped ? '<span class="model-provider-upstream" title="' + escAttr(t('上游模型 ID')) + '">→ ' + esc(mapped) + '</span>' : '') +
     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>';
 }
 
@@ -48,6 +57,20 @@ function sourceGroupKey(m) {
   if (src === 'custom') return 'src:custom';
   if (src === 'remote') return 'src:cline';
   return 'src:other';
+}
+
+// 模型所属的全部一级来源：一个模型可同时来自 Cline / Zen / 多个 Provider / 自定义。
+// 筛选、分组计数与「全部启用/停用」都按这个集合，主来源 sourceGroupKey 只是其中之一。
+function modelSourceKeys(m) {
+  const keys = [];
+  if (m._sources.indexOf('custom') !== -1 || m._customAny) keys.push('src:custom');
+  if (m._sources.indexOf('provider') !== -1) {
+    if (m._provNames && m._provNames.length) m._provNames.forEach(n => keys.push('src:prov:' + n));
+    else keys.push('src:prov:' + (m.provider || 'Provider'));
+  }
+  if (m._sources.indexOf('zen') !== -1) keys.push('src:zen');
+  if (m._sources.indexOf('remote') !== -1) keys.push('src:cline');
+  return keys.length ? Array.from(new Set(keys)) : ['src:other'];
 }
 
 function sourceGroupLabel(key) {
@@ -133,17 +156,50 @@ function mergeModelsById(models) {
   return Array.from(map.values());
 }
 
+function modelFilterActive() {
+  return !!(_modelFilters.search || _modelFilters.provider || _modelFilters.cost || _modelFilters.status);
+}
+
 function onModelFilterChange(key, value) {
   _modelFilters[key] = value;
+  if (key === 'search') {
+    // 逐字输入不立刻重绘整张列表
+    clearTimeout(_modelSearchTimer);
+    _modelSearchTimer = setTimeout(applyModelFilters, 160);
+    return;
+  }
+  applyModelFilters();
+}
+
+function applyModelFilters() {
+  clearTimeout(_modelSearchTimer);
+  _modelGroupShown = {};
+  _modelFilterOpen = {};
+  persistModelFilters();
   renderModelList();
+}
+
+function clearModelFilters() {
+  _modelFilters.search = _modelFilters.provider = _modelFilters.cost = _modelFilters.status = '';
+  const search = _('modelSearch');
+  if (search) search.value = '';
+  const cost = _('modelFilterCost');
+  if (cost) cost.value = '';
+  applyModelFilters();
+}
+
+// 统计条上的数字就是快捷筛选：再点一次取消
+function setModelStatusFilter(value) {
+  _modelFilters.status = _modelFilters.status === value ? '' : value;
+  applyModelFilters();
 }
 
 // 状态筛选走工具栏下拉（与来源/计费同款式）：''|enabled|disabled|failed|delisted
 
 function modelMatchesFilters(m) {
-  const searchable = [m.id].concat((m._providerModelNames || []).flatMap(o => [o.qualifiedId, o.providerName])).filter(Boolean).join(' ').toLowerCase();
+  const searchable = [m.id].concat((m._providerModelNames || []).flatMap(o => [o.qualifiedId, o.providerName, o.upstreamModelId])).filter(Boolean).join(' ').toLowerCase();
   if (_modelFilters.search && !searchable.includes(_modelFilters.search.toLowerCase())) return false;
-  if (_modelFilters.provider && sourceGroupKey(m) !== _modelFilters.provider) return false;
+  if (_modelFilters.provider && modelSourceKeys(m).indexOf(_modelFilters.provider) === -1) return false;
   if (_modelFilters.cost && m._costs.indexOf(_modelFilters.cost) === -1) return false;
   if (_modelFilters.status === 'disabled' && !m._disabled) return false;
   if (_modelFilters.status === 'enabled' && m._disabled) return false;
@@ -156,10 +212,14 @@ function modelMatchesFilters(m) {
 function buildProviderOptions(merged) {
   const sel = _('modelFilterProvider');
   if (!sel) return;
-  const keys = Array.from(new Set(merged.map(sourceGroupKey))).sort(sourceSortKey);
-  const cur = _modelFilters.provider || sel.value;
+  const counts = new Map();
+  merged.forEach(m => modelSourceKeys(m).forEach(k => counts.set(k, (counts.get(k) || 0) + 1)));
+  const keys = Array.from(counts.keys()).sort(sourceSortKey);
+  // 已保存的来源筛选对应的 Provider 被移除后，不能让列表一直为空
+  if (_modelFilters.provider && !counts.has(_modelFilters.provider)) { _modelFilters.provider = ''; persistModelFilters(); }
+  const cur = _modelFilters.provider;
   sel.innerHTML = '<option value="">' + t('全部来源') + '</option>' +
-    keys.map(k => '<option value="' + escAttr(k) + '"' + (k === cur ? ' selected' : '') + '>' + esc(sourceGroupLabel(k)) + '</option>').join('');
+    keys.map(k => '<option value="' + escAttr(k) + '"' + (k === cur ? ' selected' : '') + '>' + esc(sourceGroupLabel(k)) + ' (' + counts.get(k) + ')</option>').join('');
 }
 
 // 「状态」筛选下拉：与来源/计费同款样式，选项带全量口径的计数
@@ -189,16 +249,33 @@ function renderModelStats(merged) {
   }
   const disabled = merged.filter(m => m._disabled).length;
   const delisted = merged.filter(m => m._delistedAll).length;
+  const failed = modelStatusCount(merged, 'failed');
   if (!bar) return;
+  // 数字即快捷筛选（与「状态」下拉联动）；再点一次取消
+  const stat = (value, dot, label, count) =>
+    '<button type="button" class="model-stat' + (_modelFilters.status === value ? ' active' : '') + '" aria-pressed="' + (_modelFilters.status === value) + '"' +
+      ' onclick="setModelStatusFilter(\'' + value + '\')" title="' + escAttr(t('点击筛选')) + '">' +
+      (dot ? '<span class="dot ' + dot + '"></span>' : '') + esc(t(label)) + ' <b>' + count + '</b></button>';
   bar.innerHTML =
     '<span>' + t('共') + ' <b>' + merged.length + '</b> ' + t('个模型') + '</span>' +
-    '<span><span class="dot g"></span>' + t('已启用') + ' <b>' + (merged.length - disabled) + '</b></span>' +
-    '<span><span class="dot y"></span>' + t('已停用') + ' <b>' + disabled + '</b></span>' +
-    (delisted ? '<span><span class="dot r"></span>' + t('已下架') + ' <b>' + delisted + '</b></span>' : '');
+    stat('enabled', 'g', '已启用', merged.length - disabled) +
+    stat('disabled', 'y', '已停用', disabled) +
+    (delisted ? stat('delisted', 'r', '已下架', delisted) : '') +
+    (failed ? stat('failed', 'r', '测试失败', failed) : '');
 }
 
-function renderModelRow(m) {
+// 分组内只显示该分组自己的 Provider 别名（如 nvidia 分组只列 nvidia 的名字）；
+// 同一模型在其它来源下的别名，在那个来源的分组里看。解析不出 Provider 时回退为全部。
+function modelGroupProviderIDs(key) {
+  if (!key || key === 'src:other') return null;
+  const ids = modelGroupProviders(key).map(p => p.id);
+  return ids.length ? new Set(ids) : null;
+}
+
+// scope 省略 = 合并视图，列出全部 Provider 别名
+function renderModelRow(m, scope) {
   const argument = value => escAttr(JSON.stringify(value));
+  const names = scope ? (m._providerModelNames || []).filter(o => scope.has(o.providerId)) : (m._providerModelNames || []);
   let tags = '';
   const hasFree = m._costs.indexOf('free') !== -1;
   const hasPass = m._costs.indexOf('pass') !== -1;
@@ -231,20 +308,22 @@ function renderModelRow(m) {
   // 手动设置的 Output 会作为 modelMaxOutputLimit 的封顶值生效
   const prevTest = _modelTestResults[m.id] || null;
   let actions =
-    '<button class="btn btn-sm btn-xs" onclick="testModelRow(' + argument(m.id) + ', this)" title="' + t('测试') + '" aria-label="' + t('测试') + '">' + t('测试') + '</button>' +
-    '<button class="btn btn-sm btn-xs" onclick="editModelMeta(' + [m.id, m.context, m.output, m.cost || '', m.tierSignal || ''].map(argument).join(',') + ')" title="' + t('上下文窗口 / 最大输出 (token)，点击⚙修改') + '" aria-label="' + t('上下文窗口 / 最大输出 (token)，点击⚙修改') + '">⚙</button>';
+    '<button class="btn btn-sm btn-xs" data-focus="test" onclick="testModelRow(' + argument(m.id) + ', this)" title="' + t('测试') + '" aria-label="' + escAttr(t('测试') + ': ' + m.id) + '">' + t('测试') + '</button>' +
+    '<button class="btn btn-sm btn-xs" data-focus="edit" onclick="editModelMeta(' + [m.id, m.context, m.output, m.cost || '', m.tierSignal || ''].map(argument).join(',') + ')" title="' + t('上下文窗口 / 最大输出 (token)，点击⚙修改') + '" aria-label="' + escAttr(t('编辑上下文与输出') + ': ' + m.id) + '">⚙</button>';
   if (m._customAny || m._delistedAny) {
-    actions += '<button class="btn btn-sm btn-danger btn-xs" onclick="deleteModel(' + argument(m.id) + ')" title="' + (m._delistedAny ? t('移除（已下架模型支持手动移除）') : t('删除')) + '" aria-label="' + (m._delistedAny ? t('移除（已下架模型支持手动移除）') : t('删除')) + '">'+uiIcon('close')+'</button>';
+    actions += '<button class="btn btn-sm btn-danger btn-xs" data-focus="delete" onclick="deleteModel(' + argument(m.id) + ')" title="' + (m._delistedAny ? t('移除（已下架模型支持手动移除）') : t('删除')) + '" aria-label="' + escAttr((m._delistedAny ? t('移除（已下架模型支持手动移除）') : t('删除')) + ': ' + m.id) + '">'+uiIcon('close')+'</button>';
   }
-  return '<div class="model-row' + (m._disabled ? ' disabled-row' : '') + '">' +
-    '<label class="switch model-col-switch" title="' + (m._disabled ? t('点击启用该模型') : t('点击停用该模型')) + '"><input type="checkbox"' + (m._disabled ? '' : ' checked') + ' onchange="toggleModel(' + argument(m.id) + ', !this.checked)"><span class="slider"></span></label>' +
-    '<div class="model-row-main' + (m._providerModelNames && m._providerModelNames.length > 1 ? ' has-many-provider-names' : '') + '"><div class="model-row-names"><span class="model-row-id mono" title="' + escAttr(m.id) + '">' + esc(m.id) + '</span>' +
-      (m._providerModelNames && m._providerModelNames.length ? '<div class="model-provider-names" role="group" aria-label="' + escAttr(t('Provider 模型名')) + '">' + m._providerModelNames.map(modelProviderNameButton).join('') + '</div>' : '') +
+  return '<div class="model-row' + (m._disabled ? ' disabled-row' : '') + '" data-model-id="' + escAttr(m.id) + '">' +
+    '<label class="switch model-col-switch" title="' + (m._disabled ? t('点击启用该模型') : t('点击停用该模型')) + '"><input type="checkbox" data-focus="switch" aria-label="' + escAttr(t('启用模型') + ': ' + m.id) + '"' + (m._disabled ? '' : ' checked') + ' onchange="toggleModel(' + argument(m.id) + ', !this.checked)"><span class="slider"></span></label>' +
+    '<div class="model-row-main' + (names.length > 1 ? ' has-many-provider-names' : '') + '"><div class="model-row-names"><span class="model-row-id mono" title="' + escAttr(m.id) + '">' + esc(m.id) + '</span>' +
+      (names.length ? '<div class="model-provider-names" role="group" aria-label="' + escAttr(t('Provider 模型名')) + '">' + names.map(modelProviderNameButton).join('') + '</div>' : '') +
       '</div>' +
-      (tags ? '<span class="model-row-tags">' + tags + '</span>' : '') + '</div>' +
+      (tags || (m._providerModelNames && m._providerModelNames.length) ? '<span class="model-row-tags">' + tags +
+        (m._providerModelNames && m._providerModelNames.length ? '<button type="button" class="model-link-btn" data-focus="offerings" onclick="showModelOfferings(' + argument(m.id) + ')" title="' + escAttr(t('在「Provider 模型授权」中查看')) + '" aria-label="' + escAttr(t('查看 Provider 授权') + ': ' + m.id) + '">' + esc(t('查看授权')) + '</button>' : '') +
+        '</span>' : '') + '</div>' +
     '<div class="model-row-cell mono" title="' + t('上下文') + '">' + (m.context ? formatTokenCount(m.context) : '—') + '</div>' +
     '<div class="model-row-cell mono" title="' + t('输出') + '">' + (m.output ? formatTokenCount(m.output) : '—') + '</div>' +
-    '<div class="model-row-test" title="' + (prevTest && !prevTest.ok ? escAttr(prevTest.text) : '') + '" ' + (prevTest ? 'data-tested="1"' : '') + '>' + (prevTest ? renderTestResultHTML(prevTest.ok, prevTest.text) : '<span class="model-untested">—</span>') + '</div>' +
+    '<div class="model-row-test"' + (prevTest ? ' data-tested="1"' : '') + '>' + modelTestCellHTML(m.id, prevTest) + '</div>' +
     '<div class="model-row-actions">' + actions + '</div>' +
   '</div>';
 }
@@ -254,12 +333,35 @@ function renderModelRow(m) {
 // 仍可回显上次测试结论，「测试失败」状态筛选也依赖这份数据
 const _modelTestResults = {}; // id -> { ok, text }
 const MODEL_TEST_STORE_KEY = 'cline_admin_model_tests';
+const MODEL_TEST_TTL_MS = 7 * 24 * 3600 * 1000; // 测试结论保留 7 天，过期不再计入「测试失败」
 try {
   const _savedTests = JSON.parse(localStorage.getItem(MODEL_TEST_STORE_KEY) || '{}');
   if (_savedTests && typeof _savedTests === 'object') {
-    for (const k in _savedTests) _modelTestResults[k] = _savedTests[k];
+    const now = Date.now();
+    let pruned = false;
+    for (const k in _savedTests) {
+      const v = _savedTests[k];
+      if (!v || typeof v !== 'object') { pruned = true; continue; }
+      if (!v.at) { v.at = now; pruned = true; }              // 旧版本没有时间戳：从现在起算
+      if (now - v.at > MODEL_TEST_TTL_MS) { pruned = true; continue; }
+      _modelTestResults[k] = v;
+    }
+    if (pruned) persistModelTests();
   }
 } catch (e) {}
+
+// 测试列：失败原因做成按钮，触屏与读屏无需悬停就能读到完整原因
+function modelTestCellHTML(id, r) {
+  if (!r) return '<span class="model-untested">—</span>';
+  const age = r.at && typeof fmtAgo === 'function' ? ' · ' + t('测试于') + ' ' + fmtAgo(r.at) : '';
+  if (r.ok) return '<span title="' + escAttr(r.text + age) + '">' + renderTestResultHTML(true, r.text) + '</span>';
+  return '<button type="button" class="model-test-fail" data-focus="fail" onclick="showModelTestDetail(' + escAttr(JSON.stringify(id)) + ')" title="' + escAttr(r.text + age) + '" aria-label="' + escAttr(t('测试失败') + ': ' + id + ' · ' + r.text) + '">' + renderTestResultHTML(false, r.text) + '</button>';
+}
+
+function showModelTestDetail(id) {
+  const r = _modelTestResults[id];
+  if (r) toastError(id + ': ' + r.text);
+}
 function persistModelTests() {
   try { localStorage.setItem(MODEL_TEST_STORE_KEY, JSON.stringify(_modelTestResults)); } catch (e) {}
 }
@@ -274,22 +376,18 @@ async function testModelRow(id, btn) {
   try {
     const d = await api('POST', '/models/test', { model: id });
     const r = d.data || {};
-    const text = r.ok ? ((r.upstream || '') + ' · ' + (r.durationMs || 0) + 'ms') : (r.error || t('失败'));
-    _modelTestResults[id] = { ok: !!r.ok, text: text };
-    if (out) {
-      out.innerHTML = renderTestResultHTML(r.ok, text);
-      out.title = r.ok ? '' : text;
-    }
+    const text = r.ok ? ((r.upstream || '') + ' · ' + (r.durationMs || 0) + 'ms') : (tx(r.error) || t('失败'));
+    _modelTestResults[id] = { ok: !!r.ok, text: text, at: Date.now() };
+    if (out) out.innerHTML = modelTestCellHTML(id, _modelTestResults[id]);
   } catch (e) {
     const text = friendlyTestError(e);
-    _modelTestResults[id] = { ok: false, text: text };
-    if (out) out.innerHTML = renderTestResultHTML(false, text);
-    if (out) out.title = text;
+    _modelTestResults[id] = { ok: false, text: text, at: Date.now() };
+    if (out) out.innerHTML = modelTestCellHTML(id, _modelTestResults[id]);
   } finally {
     if (btn) { btn.disabled = false; btn.innerHTML = orig; }
     persistModelTests();
-    if (_modelFilters.status === 'failed') renderModelList();
-    else renderModelStats(mergeModelsById(_cachedModels));
+    // 重绘以同步分组头的失败数与「测试失败」筛选，并保持焦点在原来的按钮上
+    renderModelListKeepFocus();
   }
 }
 
@@ -298,8 +396,29 @@ let _modelSort = { key: 'id', dir: 1 };
 function setModelSort(key) {
   if (_modelSort.key === key) _modelSort.dir = -_modelSort.dir;
   else _modelSort = { key: key, dir: 1 };
-  renderModelList();
+  _modelGroupShown = {};
+  persistModelFilters();
+  renderModelListKeepFocus();
 }
+
+// 来源 / 计费 / 状态筛选与排序随浏览器保存；搜索词只在本次有效
+function persistModelFilters() {
+  try {
+    localStorage.setItem(MODEL_FILTER_KEY, JSON.stringify({
+      provider: _modelFilters.provider, cost: _modelFilters.cost, status: _modelFilters.status, sort: _modelSort,
+    }));
+  } catch (e) {}
+}
+try {
+  const _savedFilters = JSON.parse(localStorage.getItem(MODEL_FILTER_KEY) || '{}');
+  if (_savedFilters && typeof _savedFilters === 'object') {
+    if (typeof _savedFilters.provider === 'string') _modelFilters.provider = _savedFilters.provider;
+    if (['free', 'pass'].indexOf(_savedFilters.cost) !== -1) _modelFilters.cost = _savedFilters.cost;
+    if (['enabled', 'disabled', 'failed', 'delisted'].indexOf(_savedFilters.status) !== -1) _modelFilters.status = _savedFilters.status;
+    const sort = _savedFilters.sort;
+    if (sort && ['id', 'ctx', 'out', 'test'].indexOf(sort.key) !== -1) _modelSort = { key: sort.key, dir: sort.dir === -1 ? -1 : 1 };
+  }
+} catch (e) {}
 function modelSortCmp(a, b) {
   let r = 0;
   if (_modelSort.key === 'ctx') r = (a.context - b.context) || a.id.localeCompare(b.id);
@@ -314,7 +433,7 @@ function modelSortCmp(a, b) {
 
 function modelColHead() {
   const col = (key, label) =>
-    '<button type="button" class="model-col-sort' + (_modelSort.key === key ? ' active' : '') + '"' +
+    '<button type="button" class="model-col-sort' + (_modelSort.key === key ? ' active' : '') + '" data-sort="' + key + '"' +
       ' onclick="setModelSort(\'' + key + '\')" title="' + t('点击排序') + '">' +
       esc(t(label)) + (_modelSort.key === key ? ' <span class="model-col-arrow">' + (_modelSort.dir > 0 ? '▲' : '▼') + '</span>' : '') +
     '</button>';
@@ -328,36 +447,80 @@ function modelColHead() {
   '</div>';
 }
 
-// 模型管理列表渲染：单级分组（主来源 / 提供商）+ 表头排序 + 工具栏筛选；
-// 分组默认折叠、组头显示「启用数/总数」与测试失败数，展开仅按需
-// （模型 ID 前缀不再作为二级厂商分组：同一个提供商下只平铺模型行）
+function syncModelToolbarState() {
+  const search = _('modelSearch');
+  if (search && search.value !== _modelFilters.search) search.value = _modelFilters.search;
+  const cost = _('modelFilterCost');
+  if (cost && cost.value !== _modelFilters.cost) cost.value = _modelFilters.cost;
+  const clear = _('modelClearFilters');
+  if (clear) clear.hidden = !modelFilterActive();
+  const syncAll = _('syncAllModelsBtn');
+  if (syncAll) syncAll.hidden = !modelSyncCanRemove();
+}
+
+// 分组体按需构建：折叠的分组不生成行；一次最多 MODEL_ROWS_PAGE 行
+function modelGroupBodyHTML(key) {
+  const rows = _modelGroupRows.get(key) || [];
+  const shown = Math.max(MODEL_ROWS_PAGE, _modelGroupShown[key] || 0);
+  const scope = modelGroupProviderIDs(key);
+  let html = rows.slice(0, shown).map(m => renderModelRow(m, scope)).join('');
+  if (rows.length > shown) {
+    html += '<div class="model-more-row"><button type="button" class="btn btn-sm" data-focus="more" onclick="showMoreModelRows(this)">' +
+      esc(t('显示更多')) + ' (' + (rows.length - shown) + ')</button></div>';
+  }
+  return html;
+}
+
+function showMoreModelRows(btn) {
+  const body = btn && btn.closest ? btn.closest('.model-group-body') : null;
+  if (!body) return;
+  const key = body.dataset.key || '';
+  const before = Math.max(MODEL_ROWS_PAGE, _modelGroupShown[key] || 0);
+  _modelGroupShown[key] = before + MODEL_ROWS_PAGE;
+  body.innerHTML = modelGroupBodyHTML(key);
+  // 焦点落在第一条新增的行，键盘与读屏用户不会被甩回页首
+  const rows = body.querySelectorAll('.model-row');
+  const target = rows[before] && rows[before].querySelector('[data-focus="switch"]');
+  if (target) target.focus();
+}
+
+// 模型管理列表渲染：单级分组（来源 / 提供商）+ 表头排序 + 工具栏筛选；
+// 一个模型出现在它所属的每个来源下（计数、筛选、批量操作口径一致）；
+// 分组默认折叠，折叠分组不构建行，展开时再生成
 function renderModelList() {
   const listEl = _('modelsList');
   if (!listEl) return;
   const merged = mergeModelsById(_cachedModels);
   renderModelStats(merged);
   buildProviderOptions(merged);
+  syncModelToolbarState();
   if (!merged.length) {
-    listEl.innerHTML = listEmptyState(ICON_MODELS, t('暂无模型'), '<button type="button" class="btn btn-sm btn-primary" onclick="syncModels()">' + t('从 Cline 同步模型') + '</button>');
+    listEl.innerHTML = listEmptyState(ICON_MODELS, t('暂无模型'),
+      '<button type="button" class="btn btn-sm btn-primary" onclick="openProviderSetup()">' + t('连接 Provider') + '</button> ' +
+      '<button type="button" class="btn btn-sm" onclick="syncAllModels()">' + t('同步全部模型') + '</button>');
     return;
   }
   const filtered = merged.filter(modelMatchesFilters);
   if (!filtered.length) {
-    listEl.innerHTML = listEmptyState(ICON_MODELS, t('无匹配模型'));
+    listEl.innerHTML = listEmptyState(ICON_MODELS, t('无匹配模型'),
+      modelFilterActive() ? '<button type="button" class="btn btn-sm" onclick="clearModelFilters()">' + t('清除筛选') + '</button>' : '');
     return;
   }
-  // 单级分组：主来源（提供商）→ 该来源下的全部模型行
   const sources = new Map(); // sourceKey -> rows[]
   for (const m of filtered) {
-    const sk = sourceGroupKey(m);
-    if (!sources.has(sk)) sources.set(sk, []);
-    sources.get(sk).push(m);
+    for (const sk of (_modelFilters.provider ? [_modelFilters.provider] : modelSourceKeys(m))) {
+      if (!sources.has(sk)) sources.set(sk, []);
+      sources.get(sk).push(m);
+    }
   }
+  const canProviderAdmin = modelSyncCanRemove();
   const groupActions = key =>
     '<span class="model-group-actions" onclick="event.stopPropagation()">' +
       '<button class="btn" onclick="toggleModelsBatchEl(this, false)">' + t('全部启用') + '</button>' +
       '<button class="btn" onclick="toggleModelsBatchEl(this, true)">' + t('全部停用') + '</button>' +
-      (modelSyncCanRemove() && key !== 'src:other' ?
+      (canProviderAdmin && modelGroupSyncable(key) ?
+        '<button type="button" class="btn" data-model-sync="' + escAttr(key) + '" onclick="syncModelGroup(this)">' + t('同步') + '</button>' : '') +
+      (canProviderAdmin && key !== 'src:other' ?
         '<button type="button" class="btn" data-model-provider-action="edit" onclick="openModelProviderAction(this, &quot;edit&quot;)">' + t('编辑 Provider') + '</button>' +
         '<button type="button" class="btn btn-danger" data-model-provider-action="remove" onclick="openModelProviderAction(this, &quot;remove&quot;)">' + t('移除模型') + '</button>' : '') +
     '</span>';
@@ -369,36 +532,128 @@ function renderModelList() {
     }
     return { en, fail };
   };
-  const groupHead = (key, label, rows, open, src) => {
+  // 组头 = 一个真正的按钮（键盘可达、aria-expanded）+ 并列的操作按钮；点击组头空白处同样折叠
+  const groupHead = (key, label, rows, open) => {
     const st = groupStats(rows);
-    return '<div class="model-group-head' + (src ? ' model-group-src-head' : '') + (open ? ' expanded' : '') + '" data-key="' + escAttr(key) + '" data-provider-ids="' + escAttr(JSON.stringify(modelGroupProviders(key).map(p => p.id))) + '" onclick="toggleModelGroupEl(this)" title="' + t('点击展开/折叠') + '">' +
-      '<span class="model-group-caret">' + uiIcon('caretRight') + '</span>' +
-      '<span class="model-group-label">' + esc(label) + '</span>' +
-      '<span class="model-group-count">' + st.en + '/' + rows.length + '</span>' +
-      (st.fail ? '<span class="model-group-fail">' + st.fail + ' ' + t('测试失败') + '</span>' : '') +
+    const name = label + ', ' + st.en + '/' + rows.length + ' ' + t('已启用') + (st.fail ? ', ' + st.fail + ' ' + t('测试失败') : '');
+    return '<div class="model-group-head model-group-src-head' + (open ? ' expanded' : '') + '" data-key="' + escAttr(key) + '" data-provider-ids="' + escAttr(JSON.stringify(modelGroupProviders(key).map(p => p.id))) + '" onclick="toggleModelGroupEl(this)">' +
+      '<button type="button" class="model-group-toggle" aria-expanded="' + (open ? 'true' : 'false') + '" aria-label="' + escAttr(name) + '" title="' + escAttr(t('点击展开/折叠')) + '">' +
+        '<span class="model-group-caret">' + uiIcon('caretRight') + '</span>' +
+        '<span class="model-group-label">' + esc(label) + '</span>' +
+        '<span class="model-group-count" title="' + escAttr(t('已启用') + ' / ' + t('全部')) + '">' + st.en + '/' + rows.length + '</span>' +
+        (st.fail ? '<span class="model-group-fail">' + st.fail + ' ' + t('测试失败') + '</span>' : '') +
+      '</button>' +
       groupActions(key) +
     '</div>';
   };
+  const filtering = modelFilterActive();
+  _modelGroupRows = new Map();
   listEl.innerHTML = modelColHead() + Array.from(sources.keys()).sort(sourceSortKey).map(sk => {
     const rows = sources.get(sk).slice().sort(modelSortCmp);
-    const sOpen = !!_modelFilters.search || _modelGroupOpen[sk] === true;
+    _modelGroupRows.set(sk, rows);
+    // 有筛选时命中的分组默认展开（本次筛选内可手动折叠）；没有筛选时按已保存的状态
+    const sOpen = filtering ? _modelFilterOpen[sk] !== false : _modelGroupOpen[sk] === true;
     return '<div class="model-group model-group-src">' +
-      groupHead(sk, sourceGroupLabel(sk), rows, sOpen, true) +
-      '<div class="model-group-body" style="display:' + (sOpen ? 'block' : 'none') + '">' + rows.map(renderModelRow).join('') + '</div>' +
+      groupHead(sk, sourceGroupLabel(sk), rows, sOpen) +
+      '<div class="model-group-body" data-key="' + escAttr(sk) + '" data-rendered="' + (sOpen ? '1' : '0') + '" style="display:' + (sOpen ? 'block' : 'none') + '">' +
+        (sOpen ? modelGroupBodyHTML(sk) : '') + '</div>' +
     '</div>';
   }).join('');
 }
 
-// 展开全部 / 折叠全部：作用于当前渲染出的两级分组头并持久化
+// 重绘后把焦点还给原来的控件（开关、测试按钮、列头排序等），键盘与读屏用户不会掉回页首
+function renderModelListKeepFocus() {
+  const active = typeof document !== 'undefined' ? document.activeElement : null;
+  const inList = !!(active && active.closest && active.closest('#modelsList'));
+  const row = inList ? active.closest('.model-row') : null;
+  const body = inList ? active.closest('.model-group-body') : null;
+  const token = row && body && active.dataset ? { group: body.dataset.key, id: row.dataset.modelId, role: active.dataset.focus || 'switch' } : null;
+  const sortKey = inList && active.dataset && active.dataset.sort ? active.dataset.sort : '';
+  renderModelList();
+  if (token) {
+    const nb = Array.from(document.querySelectorAll('#modelsList .model-group-body')).find(b => b.dataset.key === token.group);
+    const nr = nb && Array.from(nb.querySelectorAll('.model-row')).find(r => r.dataset.modelId === token.id);
+    const target = nr && (nr.querySelector('[data-focus="' + token.role + '"]') || nr.querySelector('[data-focus="switch"]'));
+    if (target) target.focus();
+  } else if (sortKey) {
+    const btn = document.querySelector('#modelsList .model-col-sort[data-sort="' + sortKey + '"]');
+    if (btn) btn.focus();
+  }
+}
+
+// 展开 / 折叠分组：有筛选时记在本次筛选里，没有筛选时才持久化
+function setModelGroupOpen(head, open) {
+  head.classList.toggle('expanded', open);
+  const toggle = head.querySelector ? head.querySelector('.model-group-toggle') : null;
+  if (toggle) toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+  const body = head.nextElementSibling; // 直接相邻的 .model-group-body
+  if (body && body.classList.contains('model-group-body')) {
+    if (open && body.dataset.rendered !== '1') {
+      body.innerHTML = modelGroupBodyHTML(head.dataset.key || '');
+      body.dataset.rendered = '1';
+    }
+    body.style.display = open ? 'block' : 'none';
+  }
+}
+
+function rememberModelGroupOpen(key, open) {
+  if (modelFilterActive()) { _modelFilterOpen[key] = open; return; }
+  _modelGroupOpen[key] = open;
+  try { localStorage.setItem(MODEL_GROUP_OPEN_KEY, JSON.stringify(_modelGroupOpen)); } catch (e) {}
+}
+
 function setAllModelGroups(open) {
   _setToolbarMoreOpen(false);
   document.querySelectorAll('#modelsList .model-group-head').forEach(h => {
-    h.classList.toggle('expanded', open);
-    const body = h.nextElementSibling;
-    if (body && body.classList.contains('model-group-body')) body.style.display = open ? 'block' : 'none';
-    _modelGroupOpen[h.dataset.key || ''] = open;
+    setModelGroupOpen(h, open);
+    rememberModelGroupOpen(h.dataset.key || '', open);
   });
-  try { localStorage.setItem(MODEL_GROUP_OPEN_KEY, JSON.stringify(_modelGroupOpen)); } catch (e) {}
+}
+
+function toggleModelGroupEl(head) {
+  if (!head) return;
+  const open = !head.classList.contains('expanded');
+  setModelGroupOpen(head, open);
+  rememberModelGroupOpen(head.dataset.key || '', open);
+}
+
+// ===== 启用 / 停用：先改本地缓存并立即重绘，再按顺序提交；失败时回滚 =====
+// 不再每次切换都重新拉取 5 个全局接口 + 模型目录 + 配置
+let _modelToggleChain = Promise.resolve();
+function setModelsDisabledLocal(ids, disabled) {
+  const set = new Set(ids);
+  const prev = [];
+  _cachedModels.forEach(m => { if (set.has(m.id)) { prev.push([m, !!m.disabled]); m.disabled = disabled; } });
+  const offerings = typeof _globalData !== 'undefined' && _globalData ? _globalData.offerings || [] : [];
+  offerings.forEach(o => { if (set.has(o.modelId)) { prev.push([o, !!o.disabled]); o.disabled = disabled; } });
+  return () => prev.forEach(entry => { entry[0].disabled = entry[1]; });
+}
+
+async function commitModelToggle(ids, disabled) {
+  const undo = setModelsDisabledLocal(ids, disabled);
+  renderModelListKeepFocus();
+  const run = _modelToggleChain.then(() => api('POST', '/models/toggle', { ids: ids, disabled: disabled }));
+  _modelToggleChain = run.catch(() => {});
+  try {
+    await run;
+    return true;
+  } catch (e) {
+    undo();
+    renderModelListKeepFocus();
+    toast(t('保存失败: ') + e.message, 'error');
+    return false;
+  }
+}
+
+// 后端在停用当前默认模型时会清空默认；默认模型下拉需跟着刷新
+function refreshDefaultModelSetting() {
+  if (_('settingDefModel')) loadConfig();
+}
+
+async function toggleModel(id, disabled) {
+  if (!(await commitModelToggle([id], disabled))) return;
+  toast((disabled ? t('已停用') : t('已启用')) + ': ' + id, 'success');
+  refreshDefaultModelSetting();
 }
 
 // 批量启停「当前筛选结果」：与按分组批量共用 /models/toggle 批量接口
@@ -410,53 +665,24 @@ async function bulkToggleFiltered(disabled) {
   if (!(await showConfirm(confirmMsg + ' (' + ids.length + ')'))) return;
   const btn = disabled ? _('bulkDisableFilteredBtn') : _('bulkEnableFilteredBtn');
   if (btn) btn.disabled = true;
-  try {
-    await api('POST', '/models/toggle', { ids: ids, disabled: disabled });
-    toast((disabled ? t('已停用') : t('已启用')) + ' ' + ids.length + ' ' + t('个模型'), 'success');
-    await loadGlobal(false);
-  } catch (e) {
-    toast(t('保存失败: ') + e.message, 'error');
-  }
+  const ok = await commitModelToggle(ids, disabled);
   if (btn) btn.disabled = false;
-  await loadModels();
-  if (_('settingDefModel')) loadConfig();
+  if (!ok) return;
+  toast((disabled ? t('已停用') : t('已启用')) + ' ' + ids.length + ' ' + t('个模型'), 'success');
+  refreshDefaultModelSetting();
 }
 
-// 折叠/展开分组（两级通用）：直接读自身 data-key，避免把 key 拼进 onclick 字符串
-function toggleModelGroupEl(head) {
-  if (!head) return;
-  const key = head.dataset.key || '';
-  const open = !head.classList.contains('expanded');
-  head.classList.toggle('expanded', open);
-  const body = head.nextElementSibling; // 直接相邻的 .model-group-body
-  if (body && body.classList.contains('model-group-body')) body.style.display = open ? 'block' : 'none';
-  _modelGroupOpen[key] = open;
-  try { localStorage.setItem(MODEL_GROUP_OPEN_KEY, JSON.stringify(_modelGroupOpen)); } catch (e) {}
-}
-
-// 启用/停用模型：按 ID 提交（池内同 ID 的多来源条目一并切换），后端在
-// 停用当前默认模型时会自动清空默认；完成后刷新列表与默认模型下拉。
-async function toggleModel(id, disabled) {
-  try {
-    await api('POST', '/models/toggle', { ids: [id], disabled: disabled });
-    toast((disabled ? t('已停用') : t('已启用')) + ': ' + id, 'success');
-    await loadGlobal(false);
-  } catch (e) {
-    toast(t('保存失败: ') + e.message, 'error');
-  }
-  await loadModels();
-  if (_('settingDefModel')) loadConfig();
-}
-
-// 将分组 key 解析为合并行集合：src:xxx 匹配整个来源；src:xxx/vendor 匹配单一厂商
+// 将分组 key 解析为合并行集合：src:xxx 匹配属于该来源的全部模型（含同时来自其他来源的）
 function mergedRowsForGroupKey(key) {
   const merged = mergeModelsById(_cachedModels);
   if (!key || key.indexOf('src:') !== 0) return merged.filter(m => vendorKey(m) === key);
+  const direct = merged.filter(m => modelSourceKeys(m).indexOf(key) !== -1);
   const slash = key.indexOf('/');
-  if (slash === -1) return merged.filter(m => sourceGroupKey(m) === key);
+  if (direct.length || slash === -1) return direct;
+  // 旧的「来源/厂商」二级 key
   const srcKey = key.slice(0, slash);
   const vKey = key.slice(slash + 1);
-  return merged.filter(m => sourceGroupKey(m) === srcKey && vendorKey(m) === vKey);
+  return merged.filter(m => modelSourceKeys(m).indexOf(srcKey) !== -1 && vendorKey(m) === vKey);
 }
 
 // 分组按钮入口：从按钮所在分组头读取 key（两级通用）
@@ -471,15 +697,9 @@ async function toggleModelsBatch(groupKey, disabled) {
   if (!ids.length) return;
   const confirmMsg = disabled ? t('确定停用该分组全部模型？') : t('确定启用该分组全部模型？');
   if (!(await showConfirm(confirmMsg + ' (' + ids.length + ')'))) return;
-  try {
-    await api('POST', '/models/toggle', { ids: ids, disabled: disabled });
-    toast((disabled ? t('已停用') : t('已启用')) + ' ' + ids.length + ' ' + t('个模型'), 'success');
-    await loadGlobal(false);
-  } catch (e) {
-    toast(t('保存失败: ') + e.message, 'error');
-  }
-  await loadModels();
-  if (_('settingDefModel')) loadConfig();
+  if (!(await commitModelToggle(ids, disabled))) return;
+  toast((disabled ? t('已停用') : t('已启用')) + ' ' + ids.length + ' ' + t('个模型'), 'success');
+  refreshDefaultModelSetting();
 }
 
 // 免费导向的批量开关：一次作用于全部合并行（不受工具栏筛选影响）
@@ -503,16 +723,11 @@ async function bulkModelToggle(mode) {
   if (!ids.length) { toast(t('没有符合条件的模型'), 'info'); return; }
   if (!(await showConfirm(confirmMsg + ' (' + ids.length + ')'))) return;
   if (btn) btn.disabled = true;
-  try {
-    await api('POST', '/models/toggle', { ids: ids, disabled: disabled });
-    toast((disabled ? t('已停用') : t('已启用')) + ' ' + ids.length + ' ' + t('个模型'), 'success');
-    await loadGlobal(false);
-  } catch (e) {
-    toast(t('保存失败: ') + e.message, 'error');
-  }
+  const ok = await commitModelToggle(ids, disabled);
   if (btn) btn.disabled = false;
-  await loadModels();
-  if (_('settingDefModel')) loadConfig();
+  if (!ok) return;
+  toast((disabled ? t('已停用') : t('已启用')) + ' ' + ids.length + ' ' + t('个模型'), 'success');
+  refreshDefaultModelSetting();
 }
 
 // ===== 模型工具栏「更多」溢出菜单：开关 + 点击外部收起（vanilla，无外部库） =====
@@ -520,6 +735,16 @@ function _setToolbarMoreOpen(open) {
   const more = _('modelBulkMore'), btn = _('toolbarMoreBtn');
   if (more) more.classList.toggle('open', open);
   if (btn) btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+  if (more && open) _alignToolbarMoreMenu(more);
+}
+// 菜单默认贴按钮右缘向左展开；按钮靠近左侧（工具栏换行后）放不下时改为贴左缘向右展开，
+// 这样菜单总是接在按钮正下方，不会伸出视口
+function _alignToolbarMoreMenu(more) {
+  more.classList.remove('align-left');
+  const menu = more.querySelector ? more.querySelector('.toolbar-more-menu') : null;
+  if (!menu || !more.getBoundingClientRect) return;
+  const width = menu.offsetWidth || 160;
+  if (more.getBoundingClientRect().right - width < 8) more.classList.add('align-left');
 }
 function toggleToolbarMore(ev) {
   ev.stopPropagation();
@@ -529,6 +754,15 @@ function toggleToolbarMore(ev) {
 document.addEventListener('click', e => {
   const more = _('modelBulkMore');
   if (more && more.classList.contains('open') && !more.contains(e.target)) _setToolbarMoreOpen(false);
+});
+// Esc 收起菜单并把焦点还给按钮
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Escape') return;
+  const more = _('modelBulkMore');
+  if (!more || !more.classList.contains('open')) return;
+  _setToolbarMoreOpen(false);
+  const btn = _('toolbarMoreBtn');
+  if (btn) btn.focus();
 });
 
 // 修改模型上下文/最大输出：压缩阈值按此计算，设置后 zen 同步保留该值
@@ -640,11 +874,23 @@ async function deleteModel(id) {
 }
 
 // ========== 配置加载 ==========
+// 同一时刻的多次 GET /config 合并为一次请求（路由页的表单与检查器同时需要它）
+let _adminConfigInflight = null;
+let _lastAdminConfig = null; // 最近一次从服务端读到的配置：保存失败时用它还原下拉框
+function fetchAdminConfig() {
+  if (!_adminConfigInflight) _adminConfigInflight = api('GET', '/config').finally(() => { _adminConfigInflight = null; });
+  return _adminConfigInflight;
+}
+
 async function loadConfig(options = {}) {
-  if (typeof adminHasPermission === 'function' && !adminHasPermission('provider.write')) return;
+  if (typeof adminHasPermission === 'function' && !adminHasPermission('provider.write')) {
+    if (typeof applyRoutingAccess === 'function') applyRoutingAccess();
+    return;
+  }
   try {
-    const d = await api('GET', '/config');
+    const d = await fetchAdminConfig();
     const c = d.data;
+    _lastAdminConfig = c;
     if (c.address) _('settingAddr').value = c.address;
     if (c.strategy) _('settingStrategy').value = c.strategy;
     const chainField = _('settingModelChain');
@@ -664,7 +910,8 @@ async function loadConfig(options = {}) {
       const sel = _('settingDefModel');
       // 免费一组、付费一组（optgroup 分类 + 选项标注计费）；
       // 当前默认值不在可用列表时补在开头，避免选中值丢失
-      const has = id => (_cachedModels || []).some(m => m.id === id);
+      const catalog = mergeModelsById(_cachedModels || []);
+      const has = id => catalog.some(m => m.id === id);
       let opts = '';
       if (c.defaultModel && !has(c.defaultModel)) {
         opts += '<option value="' + esc(c.defaultModel) + '" selected>' + esc(c.defaultModel) + esc(t('（当前）')) + '</option>';
@@ -672,7 +919,8 @@ async function loadConfig(options = {}) {
       [{ key: 'free', label: t('免费模型'), tag: t('（免费）') },
        { key: 'pass', label: t('付费模型'), tag: t('（付费）') }].forEach(g => {
         // 已停用的模型不进默认模型下拉
-        const items = (_cachedModels || []).filter(m => !m.disabled && (m.cost === 'free') === (g.key === 'free'));
+        // 同一模型 ID 只列一次；任一来源为免费即归入免费组
+        const items = catalog.filter(m => !m._disabled && (m._costs.indexOf('free') !== -1) === (g.key === 'free'));
         if (!items.length) return;
         opts += '<optgroup label="' + esc(g.label) + ' (' + items.length + ')">' +
           items.map(m => '<option value="' + esc(m.id) + '"' + (m.id === c.defaultModel ? ' selected' : '') + '>' + esc(m.id) + esc(g.tag) + '</option>').join('') +
@@ -722,6 +970,7 @@ async function loadConfig(options = {}) {
     }
     if (typeof fillTuning === 'function') fillTuning(c, options);
     renderRouteSummary(c);
+    return c;
   } catch (e) { toast(t('加载失败') + ': ' + e.message, 'error'); }
 }
 

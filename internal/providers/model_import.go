@@ -68,7 +68,12 @@ func buildImportBatch(p CustomProvider, entries []upstreamModelEntry) *importBat
 	batch := &importBatch{ID: newImportBatchID(), ProviderID: p.ID, ProviderName: p.Name, CreatedAt: time.Now()}
 	existing := make(map[string]modelcatalog.Existing)
 	for modelID, state := range providerOfferingStates(p, models.Snapshot()) {
-		existing[modelID] = modelcatalog.Existing{Source: models.SourceProvider, TierSignal: state.TierSignal, Cost: state.Cost}
+		known := modelcatalog.Existing{Source: models.SourceProvider, TierSignal: state.TierSignal, Cost: state.Cost}
+		existing[modelID] = known
+		// A mapped name is already served by its upstream ID.
+		if upstream := UpstreamModelFor(p, modelID); upstream != modelID {
+			existing[upstream] = known
+		}
 	}
 	batch.Items, batch.Stats = modelcatalog.BuildImportItems(entries, p.Free, existing, freeModelIDAllowlist())
 	importsMu.Lock()

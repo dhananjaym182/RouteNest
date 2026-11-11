@@ -238,7 +238,7 @@ function renderLogList() {
   const renderRow = (l, idx) => {
     const st = l.completed
       ? '<span class="log-status ok">' + t('完成') + '</span>'
-      : '<span class="log-status fail" title="' + escAttr(l.error || '') + '">' + t('失败') + '</span>';
+      : '<span class="log-status fail" title="' + escAttr(tx(l.error || '')) + '">' + t('失败') + '</span>';
     const tk = l.usageAvailable
       ? formatTokenCount(l.inputTokens) + '</td><td>' + formatTokenCount(l.outputTokens) + '</td><td>' + formatTokenCount(l.cachedTokens) + '</td><td>' + formatTokenCount(l.totalTokens)
       : '-</td><td>-</td><td>-</td><td>-';
@@ -473,7 +473,7 @@ function openLogDetail(idx) {
 
   // 3) 错误 / 响应：有 error 就展示；完成且无错误时明确说明未记录错误。
   const errorBody = l.error
-    ? '<div class="log-detail-error">' + esc(l.error) + '</div>'
+    ? '<div class="log-detail-error">' + esc(tx(l.error)) + '</div>'
     : '<div class="log-detail-note">' + t('未记录错误') + '</div>';
   html += logDetailSection(t('错误 / 响应'), errorBody);
 

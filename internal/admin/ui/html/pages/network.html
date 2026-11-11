@@ -3,8 +3,8 @@
   <div class="page-header">
     <div>
       <div class="page-kicker">连接管理</div>
-      <div class="large-title">网络与出口</div>
-      <div class="large-subtitle">管理默认出口代理。服务专属的代理与请求头请在 Providers 中配置。</div>
+      <div class="large-title">全局出口代理</div>
+      <div class="large-subtitle">为所有 Provider 设置统一的出口代理。单个 Provider 可在 Providers 中单独覆盖。</div>
     </div>
     <div class="action-row"><button type="button" class="btn btn-sm" onclick="loadGlobal(true);loadClineProxyConfig()">刷新</button></div>
   </div>
@@ -17,7 +17,7 @@
   </div>
   <div class="section">
     <div class="section-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>默认出口代理</div>
-    <div class="section-desc">Cline、OAuth 登录与刷新，以及未设置出口覆盖的自定义 Provider 使用此代理池。OpenCode Zen 使用服务专属设置；回环与内网服务保持直连。未配置时使用环境代理或直连。</div>
+    <div class="section-desc">所有 Provider 的请求默认使用此代理池，Cline 与 OAuth 的登录、刷新和模型同步也一样。Provider 设置了专属代理（或填「-」直连）时不使用它；OpenCode Zen 使用自己的代理池；localhost 和内网 IP 地址保持直连。未配置时使用环境代理或直连。</div>
     <div class="section-body">
       <div class="form-row">
         <div class="field w-260">
@@ -28,11 +28,13 @@
             <option value="fill">填满 (fill)</option>
           </select>
           <div class="field-hint">仅决定多个出口代理地址之间的选择；Cline 账号轮询与 Provider 评分在 <a href="#" onclick="showPageSubTab('routing', 'config');return false" class="lnk-a">「路由 → 路由策略」</a></div>
+          <div class="field-hint">轮询与随机按新建连接选择，而不是按请求。代理连接失败时自动改用列表中的下一个，该代理 30 秒内排到最后。</div>
         </div>
       </div>
       <div class="field mt-10">
         <label for="clineProxies">代理列表</label>
         <textarea id="clineProxies" rows="4" placeholder="socks5://127.0.0.1:1080&#10;http://user:pass@proxy.example.com:8080"></textarea>
+        <div class="field-hint">只有 localhost 和内网 IP 地址直连。用域名访问内网服务（如 ollama.lan）时也会经代理转发，请在该 Provider 的「出口代理」中填「-」设为直连。</div>
       </div>
       <div class="form-actions mt-14">
         <button class="btn btn-primary" onclick="saveClineProxyConfig(this)">保存默认代理</button>

@@ -146,6 +146,10 @@ async function openPage(width, theme, state, tab = 'providers') {
     else if (path === '/providers') {
       if (state.providerReadDelayMs) await new Promise(resolve => setTimeout(resolve, state.providerReadDelayMs));
       data = { providers: [state.provider], health: {} };
+    } else if (path === '/provider-instances') {
+      // The unified provider table is built from provider instances, so the fixture provider needs one.
+      const p = state.provider;
+      data = { instances: [{ id: p.id, name: p.name, baseURL: p.baseURL, enabled: p.enabled, deletable: true, runtimeBuiltin: false, priority: p.priority, kind: 'other', adapter: 'openaicompat', capabilities: {} }] };
     } else if (path === '/providers/sync-status') {
       if (state.providerReadDelayMs) await new Promise(resolve => setTimeout(resolve, state.providerReadDelayMs));
       data = { providers: { p1: { delistedMarked: state.providerMarked, delistedModels: [...state.providerDelistedModels] } } };
@@ -225,8 +229,9 @@ try {
     const state = fixture();
     const { page, context } = await openPage(width, theme, state);
     try {
-      await page.locator('.provider-advanced-details > summary').click();
-      await page.locator('#providersList .prov-card-name').click();
+      // Table row (or the compact item on narrow widths) -> Details drawer -> the managed-provider detail.
+      await page.locator('#globalInstances [data-prov="p1"] .btn-primary:visible').first().click();
+      await page.locator('#globalProviderDetail [onclick*="openProvDetail"]').click();
       await page.locator('#provDetail.open').waitFor();
       await page.locator('#provDetail [onclick="provDetailRecheck(this)"]').click();
       await popup(page, 'provider-detail-' + suffix, ['Example Provider', 'retired-provider-model']);
@@ -297,7 +302,8 @@ try {
     const manualState = fixture();
     const manual = await openPage(width, theme, manualState, 'models');
     try {
-      await manual.page.locator('#syncModelsBtn').click();
+      // The page-level button now syncs every source; invoke the Cline entry point this scenario covers.
+      await manual.page.evaluate(() => syncModels());
       await popup(manual.page, 'cline-sync-' + suffix, ['Cline', 'retired-cline-model']);
       // The Cline notice intentionally remains open so both sources share one
       // popup. Invoke the controller because the overlay covers the Zen button.

@@ -3,6 +3,7 @@ let _provPickerModels = [];   // 上游返回的全部模型 id（服务端已�
 let _provPickerTiers = {};    // id → 'free' | 其他（来自分级预览的有序信号判定）
 let _provPickerOrder = [];    // 勾选顺序（确认后即追加顺序）
 let _provPickerExisting = {}; // 编辑器中已有的模型 id（预勾选且禁用，确认时跳过）
+let _provPickerTests = {};   // id → 行内测试结果（添加前试用；重绘列表时保留）
 let _provPickerStats = null;  // 本批次服务端 stats（免费/付费全量口径，与导入预览同一批次）
 
 // 已有 Provider 用 {id}（服务端补全 baseURL/key/headers）；新建直接传表单未保存值
@@ -53,6 +54,7 @@ async function fetchProviderModels(btn) {
       return;
     }
     _provPickerModels = Array.from(new Set(items.map(it => it.modelId)));
+    _provPickerTests = {};
     _provPickerTiers = {};
     items.forEach(it => { _provPickerTiers[it.modelId] = it.tier; });
     _provPickerStats = importStatsFromBatch(batch);
@@ -123,15 +125,19 @@ function renderProvPickerList() {
     const checked = used || rank !== -1;
     return '<label class="combo-pick-row' + (used ? ' combo-pick-used' : '') + '">' +
       '<input type="checkbox"' + (checked ? ' checked' : '') + (used ? ' disabled' : '') + ' onchange="provPickerToggle(\'' + escAttr(id) + '\', this.checked)">' +
-      '<span class="combo-pick-id">' + esc(id) + '</span>' +
+      '<span class="combo-pick-id" title="' + escAttr(id) + '">' + esc(id) + '</span>' +
       (used ? '<span class="model-source-badge" title="' + t('已在 Provider 中，无需重复添加') + '">' + t('已添加') + '</span>' : '') +
       (rank !== -1 ? '<span class="combo-pick-rank" title="' + t('勾选顺序即尝试优先级') + '">#' + (rank + 1) + '</span>' : '') +
+      // Models already in the provider are tested from the editor row, where their upstream ID lives.
+      (used ? '' : '<button type="button" class="btn btn-sm prov-pick-test" data-model="' + escAttr(id) + '" onclick="event.preventDefault();event.stopPropagation();testProvPickerModel(this)" title="' + escAttr(t('测试此模型')) + '">' + t('测试') + '</button>' +
+        '<span class="prov-pick-result" data-model="' + escAttr(id) + '">' + modelTestResultHTML(_provPickerTests[id]) + '</span>') +
     '</label>';
   };
   const groupTitle = (label, n, tier, total) =>
-    '<div class="preset-group-title">' + label + ' ' + n + (total > n ? ' / ' + total : '') +
+    '<div class="preset-group-title"><span class="grp-name">' + label + '</span>' +
+    '<span class="grp-count">' + n + (total > n ? ' / ' + total : '') + '</span>' +
     '<span class="grp-scope">' + t('（全部可拉取）') + '</span>' +
-    '<button type="button" class="btn btn-sm float-note" onclick="event.preventDefault();provPickerSelectAllTier(\'' + tier + '\')">' + t('全选') + '</button></div>';
+    '<button type="button" class="btn btn-sm grp-select" onclick="event.preventDefault();provPickerSelectAllTier(\'' + tier + '\')">' + t('全选本组') + '</button></div>';
   const freeIds = visible.filter(id => _provPickerTiers[id] === 'free');
   const paidIds = visible.filter(id => _provPickerTiers[id] !== 'free');
   const localFree = _provPickerModels.filter(id => _provPickerTiers[id] === 'free').length;
@@ -156,6 +162,19 @@ function renderProvPickerCount() {
 }
 
 // 确认：写入「模型 ID」真值（隐藏的高级输入框），芯片即时回显
+// 在加入列表之前试用上游目录里的某个模型（名称原样发送；需要不同的上游 ID 时在编辑器行内设置）
+async function testProvPickerModel(btn) {
+  const id = btn.dataset.model;
+  const revision = _provEditorRevision;
+  _provPickerTests[id] = { running: true };
+  paintModelTestResult('#provPickerList .prov-pick-result', id, _provPickerTests[id]);
+  btn.disabled = true;
+  const result = await provTestModel(provEditorPayload(), id, '');
+  btn.disabled = false;
+  if (revision !== _provEditorRevision) return;
+  _provPickerTests[id] = result;
+  paintModelTestResult('#provPickerList .prov-pick-result', id, result);
+}
 function provPickerConfirm() {
   if (!_provPickerOrder.length) { toast(t('请先勾选至少一个模型'), 'error'); return; }
   const cur = _('provModels').value.split(',').map(s => s.trim()).filter(Boolean);
@@ -166,6 +185,7 @@ function provPickerConfirm() {
     if (seen[id]) continue; // 防重复
     cur.push(id);
     seen[id] = true;
+    if (_provPickerTests[id] && !_provPickerTests[id].running) _provRowTests[id] = _provPickerTests[id];
     added++;
   }
   closeProvModelPicker();

@@ -47,7 +47,18 @@ func Call(p *CustomProvider, params map[string]any, stream bool) (*http.Response
 	}
 	httpCli := &http.Client{Transport: tr, Timeout: timeout}
 	modelKey := fmt.Sprintf("%v", params["model"])
-	log.Printf("  provider upstream: name=%s model=%v stream=%v msgs=%d", p.Name, modelKey, stream, messageCount(params))
+	// modelKey stays the client-visible name: cooldowns, budgets and outcome
+	// statistics are keyed by it. Only the request itself carries the upstream ID.
+	upstreamModel := UpstreamModelFor(*p, modelKey)
+	if upstreamModel != modelKey {
+		sent := make(map[string]any, len(params))
+		for key, value := range params {
+			sent[key] = value
+		}
+		sent["model"] = upstreamModel
+		params = sent
+	}
+	log.Printf("  provider upstream: name=%s model=%v upstream=%s stream=%v msgs=%d", p.Name, modelKey, upstreamModel, stream, messageCount(params))
 
 	// Wave-4 connection pool: walk the usable connections in rotation order.
 	// A connection-authenticated 401/403/429 parks that connection and retries
@@ -107,7 +118,7 @@ func Call(p *CustomProvider, params map[string]any, stream bool) (*http.Response
 			ProviderID: domain.ProviderInstanceID(p.ID), HTTP: httpCli,
 			BaseURL: p.BaseURL, APIKey: p.APIKey, Headers: p.Headers,
 			Credential: credential, Params: params, Stream: stream,
-			Protocol: Protocol(p), ModelID: modelKey,
+			Protocol: Protocol(p), ModelID: upstreamModel,
 		})
 		latency := time.Since(started).Milliseconds()
 		if err != nil {

@@ -81,13 +81,30 @@ func handleAdminBootstrap(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	credentials, err := runtime.service.CompleteBootstrap(r.Context(), request.Secret, request.Password, security.ClientIP.String())
+	// Browser setup issues the recovery code in the same durable mutation as the password,
+	// exactly like native desktop setup, so "Forgot password?" works from the first sign-in.
+	// The plaintext is returned once and never stored.
+	credentials, recoveryCode, err := runtime.service.CompleteBootstrapWithRecovery(r.Context(), request.Secret, request.Password, security.ClientIP.String())
 	if err != nil {
+		if errors.Is(err, adminauth.ErrMutationPrepared) && recoveryCode != "" {
+			clearAdminCredentialCookies(w, security.Secure)
+			httpx.WriteAPI(w, http.StatusServiceUnavailable, httpx.Response{Error: "security_restart_required", Data: map[string]any{
+				"recoveryCode":    recoveryCode,
+				"shownOnce":       true,
+				"restartRequired": true,
+			}})
+			return
+		}
 		writeAdminAuthOperationError(w, err)
 		return
 	}
 	setAdminCredentialCookies(w, credentials, security.Secure)
-	writeAdminCredentialsResponse(w, credentials)
+	httpx.WriteAPI(w, http.StatusOK, httpx.Response{Success: true, Data: map[string]any{
+		"principal":    credentials.Principal,
+		"expiresAt":    credentials.ExpiresAt,
+		"recoveryCode": recoveryCode,
+		"shownOnce":    true,
+	}})
 }
 
 func handleAdminLoginSecure(w http.ResponseWriter, r *http.Request) {

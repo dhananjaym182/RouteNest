@@ -177,6 +177,9 @@
 /* ========== 结构化编辑器（别名 / 错误规则 / 排除勾选） ========== */
 .structured-editor{display:flex;flex-direction:column;gap:6px;margin-bottom:6px}
 .se-row{display:flex;align-items:center;gap:6px;flex-wrap:wrap;background:var(--surface2);border:1px solid var(--border2);border-radius:var(--radius-sm);padding:6px 8px}
+.se-preview{flex:1 0 100%;min-width:0;font-family:ui-monospace,monospace;font-size:12px;color:var(--text2);overflow-wrap:anywhere}
+.se-preview:empty{display:none}
+.se-preview.se-preview-none{color:var(--yellow)}
 .se-row input[type=text]{font-size:12px;font-family:ui-monospace,monospace;padding:4px 8px;border:1px solid var(--border2);border-radius:var(--radius-xs);background:var(--surface);color:var(--text)}
 .se-row .se-alias{width:130px}
 .se-row .se-target{flex:1;min-width:160px}
@@ -235,6 +238,10 @@
 .quickstart-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px}
 .about-feature-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px}
 @media (max-width:760px){.quickstart-grid,.about-feature-grid{grid-template-columns:1fr}}
-.quickstart-card{background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:10px 12px}
+.quickstart-card{background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:10px 12px;position:relative}
 .quickstart-card-title{font-size:12px;font-weight:600;color:var(--text2);margin-bottom:6px}
 .quickstart-code{margin:0;font-family:ui-monospace,monospace;font-size:12px;line-height:1.6;color:var(--text);white-space:pre-wrap;word-break:break-all}
+/* Copy button for quickstart code blocks */
+.quickstart-card .copy-btn{position:absolute;top:8px;right:8px;padding:4px 8px;font-size:11px;opacity:.9}
+.quickstart-card .copy-btn:hover{opacity:1}
+.quickstart-card .copy-btn.copied{background:var(--green);color:#fff;border-color:var(--green)}

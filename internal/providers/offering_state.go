@@ -213,7 +213,12 @@ func stateForModel(provider CustomProvider, modelID string, persisted map[string
 	model, hasLegacy := legacy[modelID]
 	base := seedProviderOffering(provider, modelID, model, hasLegacy, allowLegacy)
 	if state, ok := persisted[modelID]; ok && state.Valid() {
-		return mergeProviderOfferingState(base, state)
+		base = mergeProviderOfferingState(base, state)
+	}
+	// ModelMap is the single source of truth for the upstream ID. A persisted
+	// value can only be stale (written before the mapping changed).
+	if mapped := strings.TrimSpace(provider.ModelMap[modelID]); mapped != "" {
+		base.UpstreamModelID = mapped
 	}
 	return base
 }
@@ -363,7 +368,7 @@ func applyProviderOfferingDecisions(provider CustomProvider, decisions []offerin
 		if !isAdded && (current.Cost != decision.Cost || current.Access != access || current.TierSignal != decision.Signal || current.TierDecidedAt == 0 || delisted) {
 			changed++
 		}
-		current.UpstreamModelID = decision.ID
+		current.UpstreamModelID = UpstreamModelFor(provider, decision.ID)
 		current.Cost = decision.Cost
 		current.Access = access
 		current.TierSignal = decision.Signal

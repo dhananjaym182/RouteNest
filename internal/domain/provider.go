@@ -13,6 +13,7 @@ type CustomProvider struct {
 	Enabled    bool              `json:"enabled"`
 	Priority   int               `json:"priority"`
 	TimeoutSec int               `json:"timeoutSec,omitempty"`
+	ModelMap   map[string]string `json:"modelMap,omitempty"`
 	// ProxyURL overrides the egress for this provider: empty inherits the
 	// global transport, "direct"/"none" bypasses every proxy, and any other
 	// value must be a supported proxy URL.

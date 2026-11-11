@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import { adminSecuritySimulation } from './admin_security_devices.test.mjs';
 
 const head = readFileSync(new URL('../internal/admin/ui/head.html', import.meta.url), 'utf8');
-const login = readFileSync(new URL('../internal/admin/ui/html/dialogs/login.html', import.meta.url), 'utf8');
+const login = readFileSync(new URL('../internal/admin/ui/html/pages/login.html', import.meta.url), 'utf8');
 const styles = readFileSync(new URL('../internal/admin/ui/css/50_components_a11y.css', import.meta.url), 'utf8');
 const status = { initialized: true, bootstrapRequired: false, recoveryRequired: false, legacyRotationRequired: false, recoveryCodeAvailable: true, ssoProviders: [] };
 
@@ -88,4 +88,41 @@ test('a malformed successful session envelope cannot open the dashboard', async 
   assert.equal(await ui.run('initializeAdminAuth()'), false);
   assert.equal(ui.document.documentElement.dataset.adminAuth, 'signed-out');
   assert.equal(ui.run('_adminPrincipal'), null);
+});
+
+test('the sign-in shell stays invisible during the pending check, so a reload does not flash it', () => {
+  assert.match(styles, /html\[data-admin-auth="pending"\] \.auth-page\{[^}]*visibility:hidden[^}]*animation:auth-pending-reveal/);
+  assert.match(styles, /@keyframes auth-pending-reveal\{to\{visibility:visible\}\}/);
+});
+
+test('the tab title is not "Sign in" while pending or after a verified session', async () => {
+  const ui = await adminSecuritySimulation({ load: false, useNativeAPI: true });
+  ui.document.documentElement.dataset.adminAuth = 'pending';
+  ui.run('updateAdminAuthPageTitle()');
+  assert.doesNotMatch(ui.document.title, /Sign in|登录/i);
+  ui.document.title = 'Sign In | RouteNest'; // what a stale title looked like before the fix
+  assert.equal(await ui.run('initializeAdminAuth()'), true);
+  assert.equal(ui.document.title, 'RouteNest Admin'); // no page chosen yet
+});
+
+test('the tab title names the current page, in the selected language', async () => {
+  const ui = await adminSecuritySimulation({ load: false, useNativeAPI: true });
+  assert.equal(await ui.run('initializeAdminAuth()'), true);
+  // The security/login fixtures do not include the app shell, so stand in for its top-bar title.
+  const pageTitle = { textContent: '' };
+  ui.run('globalThis.__lookup = _; globalThis._ = id => id === "currentPageTitle" ? globalThis.__pageTitle : globalThis.__lookup(id)');
+  ui.context.__pageTitle = pageTitle;
+  pageTitle.textContent = 'Quick Start';
+  ui.run('updateAdminAuthPageTitle()');
+  assert.equal(ui.document.title, 'Quick Start | RouteNest');
+  pageTitle.textContent = '快速开始';
+  ui.run('updateAdminAuthPageTitle()');
+  assert.equal(ui.document.title, '快速开始 | RouteNest');
+});
+
+test('the tab title returns to "Sign in" once the session is gone', async () => {
+  const ui = await adminSecuritySimulation({ load: false, useNativeAPI: true });
+  assert.equal(await ui.run('initializeAdminAuth()'), true);
+  ui.run('renderAdminPrincipal(null)');
+  assert.match(ui.document.title, /Sign in|登录/i);
 });

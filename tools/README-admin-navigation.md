@@ -51,7 +51,7 @@ Coverage:
 - Embedded Inter at 400–800, with no font runtime URL requests.
 - Browser console errors, uncaught errors, and failed requests.
 
-The script emits progress to stderr and a JSON result to stdout. Exit code 0 means all checks passed, 1 means assertions failed, and 2 means browser execution stopped. Diagnostics identify the safe operation label while avoiding page content, credentials, URL queries, and raw browser errors. Optional screenshots cover Overview, Providers, Accounts & Credentials, Network & Egress, Models and Provider Health in each theme and width; the browser closes in a `finally` block.
+The script emits progress to stderr and a JSON result to stdout. Exit code 0 means all checks passed, 1 means assertions failed, and 2 means browser execution stopped. Diagnostics identify the safe operation label while avoiding page content, credentials, URL queries, and raw browser errors. Optional screenshots cover Overview, Providers, Accounts & Credentials, Global Egress Proxy, Models and Provider Health in each theme and width; the browser closes in a `finally` block.
 
 See [README-admin-provider-setup.md](README-admin-provider-setup.md) for native setup, account links and async workflow regression coverage.
 

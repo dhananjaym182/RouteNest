@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import vm from 'node:vm';
 import { adminSecuritySimulation } from './admin_security_devices.test.mjs';
 
-const login = readFileSync(new URL('../internal/admin/ui/html/dialogs/login.html', import.meta.url), 'utf8');
+const login = readFileSync(new URL('../internal/admin/ui/html/pages/login.html', import.meta.url), 'utf8');
 const recovery = readFileSync(new URL('../internal/admin/ui/html/dialogs/password_recovery.html', import.meta.url), 'utf8');
 const shell = readFileSync(new URL('../internal/admin/ui/js/03_shell.js', import.meta.url), 'utf8');
 const replacement = 'A'.repeat(43);
@@ -80,7 +80,9 @@ test('recovery is unavailable before setup or without a configured recovery cred
   const ui = await page({ hash: '#recover', api: (method, path) => path === '/auth/status' ? { success: true, data: { ...status, recoveryCodeAvailable: false } } : { success: false, error: 'authentication_failed' } });
   assert.equal(ui.document.documentElement.dataset.adminAuthView, 'login');
   assert.equal(ui.context.location.hash, '#login');
-  assert.equal(ui.element('forgotPasswordButton').hidden, true);
+  // The link stays (it explains how to recover); no reset page opens and nothing is revealed yet.
+  assert.equal(ui.element('forgotPasswordButton').hidden, false);
+  assert.equal(ui.element('noRecoveryCodeHint').hidden, true);
 });
 
 test('back to sign in clears entered recovery secrets and does not change authority', async () => {

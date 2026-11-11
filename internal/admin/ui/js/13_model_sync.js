@@ -198,10 +198,8 @@ async function loadModels() {
   } catch (e) { _('modelsList').textContent = t('加载失败'); }
 }
 
+// 单来源入口（Cline）。页面上的同步按钮统一走 syncAllModels / syncModelGroup。
 async function syncModels() {
-  const btn = _('syncModelsBtn');
-  const orig = btn ? btn.innerHTML : '';
-  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="loading"></span> ' + t('同步中...'); }
   try {
     const d = await api('POST', '/models/sync');
     const res = d.data || {};
@@ -217,7 +215,6 @@ async function syncModels() {
   } catch (e) {
     toast(t('模型同步失败') + ': ' + (e.message || ''), 'error');
   }
-  if (btn) { btn.disabled = false; btn.innerHTML = orig; }
 }
 
 function showModelSyncModal(res, source, groupKey) {
@@ -273,7 +270,7 @@ function renderModelSyncModal() {
   box.innerHTML =
     '<h2 id="modelSyncTitle" class="sync-title">' + t('模型同步') + '</h2>' +
     '<div class="sync-body">' + body + '</div>' +
-    (_modelSyncRemovalError ? '<div class="model-sync-error" role="alert">' + esc(_modelSyncRemovalError) + '</div>' : '') +
+    (_modelSyncRemovalError ? '<div class="model-sync-error" role="alert">' + esc(tx(_modelSyncRemovalError)) + '</div>' : '') +
     '<div class="modal-foot">' +
     (_modelSyncRemovalTargets.length ? '<button class="btn btn-danger" onclick="removeDelistedModels()"' + (_modelSyncRemoving ? ' disabled' : '') + '>' + t(_modelSyncRemoving ? '移除中...' : '移除全部已下架') + '</button>' : '') +
     '<button class="btn btn-primary" onclick="closeModelSyncModal()"' + (_modelSyncRemoving ? ' disabled' : '') + '>OK</button></div>';
@@ -366,4 +363,145 @@ function closeModelSyncModal() {
   _modelSyncRemovalTargets = [];
   _modelSyncRemovalError = '';
   persistModelSyncSeen();
+}
+
+// ========== 一键同步：Cline、OpenCode Zen 与全部已连接的 Provider ==========
+// Cline / Zen 走各自的同步接口；Provider 走 /providers/recheck（新模型进入待审批次，
+// 下架的会被标记）。逐个顺序执行，一个来源失败不影响其余来源，结果逐项列出。
+let _modelSyncAllBusy = false;
+const MODEL_SYNC_CLINE = { kind: 'cline', id: 'cline', label: 'Cline' };
+const MODEL_SYNC_ZEN = { kind: 'zen', id: 'opencode', label: 'OpenCode Zen' };
+
+function modelGroupSyncable(key) {
+  return key === 'src:cline' || key === 'src:zen' || String(key).indexOf('src:prov:') === 0;
+}
+
+// 已连接 = 实例已启用。Cline 的推荐模型接口无需账号，始终参与。
+async function connectedModelSyncSources() {
+  let instances;
+  try {
+    const d = await api('GET', '/provider-instances');
+    instances = (d.data && d.data.instances) || [];
+  } catch (e) {
+    instances = (typeof _globalData !== 'undefined' && _globalData && _globalData.instances) || [];
+  }
+  const sources = [MODEL_SYNC_CLINE];
+  instances.forEach(p => {
+    if (p.id === 'cline') return;
+    if (p.id === 'opencode') { if (p.enabled) sources.push(MODEL_SYNC_ZEN); return; }
+    if (p.enabled !== false) sources.push({ kind: 'provider', id: p.id, label: p.name || p.id });
+  });
+  return sources;
+}
+
+async function runModelSyncSource(src) {
+  try {
+    if (src.kind === 'cline' || src.kind === 'zen') {
+      const d = await api('POST', src.kind === 'cline' ? '/models/sync' : '/opencode/models/sync');
+      const res = d.data || {};
+      _modelCatalogApplied = ++_modelCatalogRequest;
+      notifyModelSyncResult(res, src.label);
+      return { src: src, ok: true, added: (res.added || []).length, removed: (res.removed || []).length };
+    }
+    const d = await api('POST', '/providers/recheck', { id: src.id });
+    const st = d.data || {};
+    if (st.lastError && !st.lastCheckedMs) return { src: src, ok: false, error: tx(st.lastError) };
+    return { src: src, ok: true, queued: st.newQueued || 0, batchId: st.batchId || '', delisted: st.delistedMarked || 0 };
+  } catch (e) {
+    return { src: src, ok: false, error: (e && e.message) || String(e) };
+  }
+}
+
+function setModelSyncControlsBusy(busy, trigger, done, total) {
+  document.querySelectorAll('[data-model-sync], #syncAllModelsBtn').forEach(b => {
+    if (busy) {
+      if (b._origHTML === undefined) b._origHTML = b.innerHTML;
+      b.disabled = true;
+    } else {
+      b.disabled = false;
+      if (b._origHTML !== undefined) { b.innerHTML = b._origHTML; delete b._origHTML; }
+    }
+  });
+  if (busy && trigger) {
+    trigger.innerHTML = '<span class="loading"></span> ' + esc(t('同步中...')) + (total > 1 ? ' ' + done + '/' + total : '');
+  }
+  const section = _('modelCatalogView');
+  if (section) section.setAttribute('aria-busy', busy ? 'true' : 'false');
+}
+
+function closeModelSyncSummary() {
+  const box = _('modelSyncSummary');
+  if (box) { box.hidden = true; box.innerHTML = ''; }
+}
+
+function renderModelSyncSummary(results) {
+  const box = _('modelSyncSummary');
+  if (!box) return;
+  const chip = r => {
+    const name = esc(r.src.label);
+    if (!r.ok) return '<span class="sync-chip err" title="' + escAttr(r.error) + '">' + uiIcon('close') + name + ': ' + esc(r.error) + '</span>';
+    const bits = [];
+    if (r.added) bits.push('+' + r.added);
+    if (r.removed) bits.push('-' + r.removed);
+    if (r.delisted) bits.push(r.delisted + ' ' + t('已下架'));
+    const text = bits.length ? bits.join(' · ') : (r.queued ? '' : t('无变化'));
+    const body = uiIcon('check') + name + (text ? ': ' + esc(text) : '');
+    const review = r.queued && r.batchId
+      ? '<button type="button" class="sync-chip ok sync-chip-link" onclick="openAutoBatch(' + escAttr(JSON.stringify(r.batchId)) + ')" title="' + escAttr(t('审核待添加的新模型')) + '">' +
+        body + (text ? ' · ' : ': ') + esc(r.queued + ' ' + t('个新模型待审')) + ' ›</button>'
+      : '<span class="sync-chip ok">' + body + (r.queued ? (text ? ' · ' : ': ') + esc(r.queued + ' ' + t('个新模型待审')) : '') + '</span>';
+    return review;
+  };
+  box.innerHTML = '<span class="sync-summary-title">' + esc(t('同步结果')) + '</span>' + results.map(chip).join('') +
+    '<button type="button" class="sync-summary-close" onclick="closeModelSyncSummary()" aria-label="' + escAttr(t('关闭')) + '" title="' + escAttr(t('关闭')) + '">' + uiIcon('close') + '</button>';
+  box.hidden = false;
+}
+
+async function runModelSyncBatch(sources, trigger) {
+  if (_modelSyncAllBusy) return;
+  if (!sources.length) {
+    if (trigger) trigger.disabled = false;
+    toast(t('没有可同步的来源'), 'info');
+    return;
+  }
+  _modelSyncAllBusy = true;
+  const results = [];
+  try {
+    setModelSyncControlsBusy(true, trigger, 0, sources.length);
+    for (let i = 0; i < sources.length; i++) {
+      setModelSyncControlsBusy(true, trigger, i + 1, sources.length);
+      results.push(await runModelSyncSource(sources[i]));
+    }
+    // 提供商同步可能新增 / 下架模型：一并刷新全局授权与模型目录
+    await loadGlobal(false);
+    await loadModels();
+    if (_('settingDefModel')) loadConfig();
+  } finally {
+    _modelSyncAllBusy = false;
+    setModelSyncControlsBusy(false);
+  }
+  renderModelSyncSummary(results);
+  const failed = results.filter(r => !r.ok).length;
+  if (failed) toast(t('部分来源同步失败') + ': ' + failed + '/' + results.length, 'error');
+  else toast(t('同步完成') + ': ' + results.length, 'success');
+}
+
+async function syncAllModels() {
+  if (_modelSyncAllBusy || !modelSyncCanRemove()) return;
+  const btn = _('syncAllModelsBtn');
+  if (btn) btn.disabled = true;
+  const sources = await connectedModelSyncSources();
+  await runModelSyncBatch(sources, btn);
+}
+
+async function syncModelGroup(btn) {
+  if (_modelSyncAllBusy || !modelSyncCanRemove()) return;
+  const head = btn && btn.closest ? btn.closest('.model-group-head') : null;
+  if (!head) return;
+  const key = head.dataset.key || '';
+  let sources = [];
+  if (key === 'src:cline') sources = [MODEL_SYNC_CLINE];
+  else if (key === 'src:zen') sources = [MODEL_SYNC_ZEN];
+  else sources = modelGroupProviders(key).map(p => ({ kind: 'provider', id: p.id, label: p.name || p.id }));
+  await runModelSyncBatch(sources, btn);
 }

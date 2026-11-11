@@ -52,7 +52,7 @@ function createUI({ providerInstances = instances, providerOfferings = offerings
   const context = vm.createContext({
     TextEncoder,
     _: id => elements.get(id) || null,
-    t: value => value, esc: escapeHTML, escAttr: escapeHTML,
+    t: value => value, tx: value => value, esc: escapeHTML, escAttr: escapeHTML,
     uiIcon: () => '', listEmptyState: (_icon, value) => value, ICON_MODELS: '',
     _tierSignals: { 'id-free': 'id contains free segment' },
     formatTokenCount: value => String(value),

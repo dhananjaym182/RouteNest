@@ -29,6 +29,12 @@ let _attentionConnAt = 0;
 async function renderAttention() {
   const box = _('dashAttention');
   if (!box) return;
+  // Account and connection status needs credential.write. Saying "healthy" about data this role
+  // cannot read would be false, so say what is missing instead.
+  if (typeof canManageCredentials === 'function' && !canManageCredentials()) {
+    box.innerHTML = '<div class="attention-empty">' + esc(t('账号与连接状态需要凭据管理权限')) + '</div>';
+    return;
+  }
   const rows = [];
   const row = (tone, icon, label, count, go) => {
     rows.push('<div class="attention-row ' + tone + '">' + icon +
@@ -216,6 +222,16 @@ function renderDashboardOverview(o) {
   if (ec) ec.textContent = formatNumber(err);
   const rl = _('dashRateLabel');
   if (rl) rl.textContent = reqs > 0 ? (rate * 100).toFixed(1) + '%' : '—';
+  // P2: Update accessible description when values change (screen readers)
+  const ratioAria = _('dashRatioAria');
+  if (ratioAria && reqs > 0) {
+    ratioAria.setAttribute('aria-label',
+      (rate * 100).toFixed(1) + '% ' + t('成功率') + ', ' +
+      ((1 - rate) * 100).toFixed(1) + '% ' + t('失败率') + ' (' +
+      ok + ' ' + t('成功') + ', ' + err + ' ' + t('失败') + ')');
+  } else if (ratioAria) {
+    ratioAria.setAttribute('aria-label', t('暂无请求数据'));
+  }
 
   // KPI tiles with tone meters
   const setKpi = (numId, meterId, text, ratio, toneClass) => {

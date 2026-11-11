@@ -11,7 +11,7 @@ const securityHTML = readFileSync(new URL('../internal/admin/ui/html/pages/secur
 const shellSource = readFileSync(new URL('../internal/admin/ui/js/03_shell.js', import.meta.url), 'utf8');
 const authShellSource = shellSource.slice(0, shellSource.indexOf('async function openExternal('));
 const recoverySource = readFileSync(new URL('../internal/admin/ui/js/03_recovery.js', import.meta.url), 'utf8');
-const loginHTML = readFileSync(new URL('../internal/admin/ui/html/dialogs/login.html', import.meta.url), 'utf8');
+const loginHTML = readFileSync(new URL('../internal/admin/ui/html/pages/login.html', import.meta.url), 'utf8');
 const recoveryHTML = readFileSync(new URL('../internal/admin/ui/html/dialogs/password_recovery.html', import.meta.url), 'utf8');
 const dictionarySource = readFileSync(new URL('../internal/admin/ui/js/01_i18n.js', import.meta.url), 'utf8');
 const clone = value => value === undefined ? undefined : JSON.parse(JSON.stringify(value));

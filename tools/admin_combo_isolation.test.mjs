@@ -48,7 +48,7 @@ function createUI({ models = catalog, cleanupState } = {}) {
   let savedCombo;
   const context = vm.createContext({
     _: id => elements.get(id) || null,
-    t: value => value,
+    t: value => value, tx: value => value,
     esc: escapeHTML,
     escAttr: escapeHTML,
     uiIcon: () => '',

@@ -1,7 +1,3 @@
-/* Access settings use the existing console tokens and controls. */
-.access-intro{margin-bottom:var(--sp-6)}
-.access-intro h2{font-size:var(--fs-xl);font-weight:650;line-height:1.35}
-.access-intro p{margin-top:var(--sp-1);color:var(--text2);font-size:var(--fs-base)}
 .access-overview{display:flex;flex-wrap:wrap;align-items:flex-start;gap:var(--sp-6)}
 .access-account-card,.access-side-stack{flex:1 1 400px;min-width:0}
 .access-side-stack{display:grid;gap:var(--sp-6)}
@@ -47,8 +43,9 @@
 #adminSessionsList{max-height:280px;overflow-y:auto;overscroll-behavior:contain}
 #adminSessionsList:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .desktop-signin-status{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--sp-2);margin-bottom:var(--sp-3)}
-.desktop-signin-status>div{display:flex;align-items:center;justify-content:space-between;gap:var(--sp-2);padding:var(--sp-3);border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface2);font-size:var(--fs-xs)}
+.desktop-signin-status>div{display:flex;flex-direction:column;align-items:flex-start;gap:2px;padding:var(--sp-3);border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface2);font-size:var(--fs-xs)}
 .desktop-signin-status>div>span{color:var(--text2)}
+.desktop-signin-status>div>strong{white-space:nowrap;font-weight:500}
 .desktop-device-list{margin-top:var(--sp-4)}
 .desktop-signin-actions{margin-top:var(--sp-4);padding-top:var(--sp-4);border-top:1px solid var(--border2)}
 .access-list-row{display:flex;align-items:center;gap:var(--sp-4);padding:var(--sp-4);border-bottom:1px solid var(--border2)}
@@ -119,4 +116,127 @@
   #tab-logs .log-actions .btn,#tab-logs .log-chip,#tab-logs select{min-height:40px}
   #toolbarMoreBtn,#syncModelsBtn,#syncOcModelsBtn{min-height:40px}
   a.lnk-a,.about-links a{display:inline-flex;align-items:center;min-height:40px}
+}
+
+.access-team-details{margin-top:var(--sp-6)}
+.access-team-details .access-details-body{display:flex;flex-direction:column;gap:var(--sp-5)}
+
+/* ===== Administrator Security tab (scoped to #tab-security) ===== */
+#tab-security .security-tabs{display:flex;flex-wrap:wrap;gap:4px;margin:0 0 var(--sp-5);padding:4px;max-width:100%;border-radius:var(--radius);background:var(--surface2);overflow-x:auto;scrollbar-width:none}
+#tab-security .security-tabs::-webkit-scrollbar{display:none}
+#tab-security .security-tabs .subtab{display:inline-flex;align-items:center;gap:6px;flex:0 0 auto;min-height:36px;padding:6px 14px;white-space:nowrap}
+#tab-security .security-tabs .subtab svg{width:16px;height:16px;flex:none;stroke:currentColor}
+#tab-security .security-tabs .subtab[data-sub="danger"].active{color:var(--red)}
+
+#tab-security .page-subpage{display:grid;gap:var(--sp-5);align-content:start}
+#tab-security .security-card{min-width:0;margin:0;padding:var(--sp-5);background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius);box-shadow:none;overflow:visible}
+#tab-security .security-card .access-card-head{margin-bottom:var(--sp-3)}
+#tab-security .security-card .access-card-head h3{font-size:var(--fs-md);font-weight:600}
+#tab-security .security-card .access-card-desc{margin-bottom:var(--sp-4)}
+#tab-security .security-card .access-footnote{margin-top:var(--sp-3)}
+#tab-security .security-card .access-card-head .access-refresh{width:34px;height:34px;min-height:34px}
+#tab-security .access-card-head .btn{min-height:34px}
+
+#tab-security .security-overview{display:grid;grid-template-columns:minmax(0,1fr) minmax(260px,340px);gap:var(--sp-5);margin-bottom:var(--sp-5)}
+#tab-security .security-overview-left,#tab-security .security-overview-right{display:grid;gap:var(--sp-5);align-content:start}
+#tab-security .security-summary-card,#tab-security .security-quick-actions,#tab-security .security-status-card{padding:var(--sp-5);background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius)}
+#tab-security .security-summary-header,#tab-security .security-card-header{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:var(--sp-3);margin-bottom:var(--sp-4)}
+#tab-security .security-summary-header h3,#tab-security .security-status-card h3{display:flex;align-items:center;gap:var(--sp-2);font-size:var(--fs-md);font-weight:600;margin-bottom:var(--sp-4)}
+#tab-security .security-summary-header h3 svg,#tab-security .security-status-card h3 svg{width:18px;height:18px;flex:none;color:var(--text2)}
+#tab-security .security-summary-actions,#tab-security .security-card-actions{display:flex;gap:var(--sp-2)}
+#tab-security .security-summary-actions .btn,#tab-security .security-status-footer .btn{min-height:34px}
+#tab-security .security-summary-actions svg{width:14px;height:14px;margin-right:4px;vertical-align:-2px}
+#tab-security .security-admin-identity{display:flex;align-items:center;flex-wrap:wrap;gap:var(--sp-3)}
+#tab-security .security-admin-name{font-size:24px;font-weight:650;line-height:1.3}
+#tab-security .security-badge,#tab-security .security-status-pill,#tab-security .access-badge{display:inline-flex;align-items:center;gap:var(--sp-1);padding:2px var(--sp-2);border:1px solid var(--border);border-radius:var(--radius-pill);background:var(--surface2);color:var(--text2);font-size:var(--fs-xs);font-weight:500;line-height:1.5;white-space:nowrap}
+#tab-security .security-role-chips{display:flex;flex-wrap:wrap;gap:var(--sp-2);margin-top:var(--sp-3)}
+#tab-security .security-section-subtitle{margin-bottom:var(--sp-4);font-size:var(--fs-sm);font-weight:600;color:var(--text2)}
+#tab-security .security-action-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--sp-3)}
+#tab-security .security-action-tile{display:flex;flex-direction:column;align-items:center;gap:var(--sp-2);padding:var(--sp-4);border:1px solid var(--border2);border-radius:var(--radius-sm);background:var(--surface);color:var(--text);cursor:pointer;transition:border-color .15s var(--ease),background .15s var(--ease)}
+#tab-security .security-action-tile:hover{border-color:var(--accent);background:var(--accent-soft)}
+#tab-security .security-action-tile:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+#tab-security .security-action-icon{width:38px;height:38px;display:flex;align-items:center;justify-content:center;border-radius:var(--radius-sm);background:var(--surface2)}
+#tab-security .security-action-icon svg{width:18px;height:18px;color:var(--text2)}
+#tab-security .security-action-tile span{font-size:var(--fs-sm);font-weight:500}
+#tab-security .security-status-items{display:grid;gap:var(--sp-2)}
+#tab-security .security-status-item{display:flex;align-items:center;justify-content:space-between;gap:var(--sp-3);padding:var(--sp-3);background:var(--surface2);border-radius:var(--radius-sm)}
+#tab-security .security-status-label{font-size:var(--fs-sm);color:var(--text2)}
+#tab-security .security-status-badge{font-size:var(--fs-sm);font-weight:500;text-align:right}
+#tab-security .security-status-footer{margin-top:var(--sp-4)}
+#tab-security .security-status-footer .btn{width:100%}
+
+#tab-security .security-identity-grid,#tab-security .security-devices-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--sp-5);align-items:start}
+#tab-security .access-overview{display:grid;gap:var(--sp-5);grid-template-columns:minmax(0,1fr)}
+#tab-security .access-side-stack{display:grid;gap:var(--sp-5);min-width:0}
+#tab-security .access-network-addresses{margin-top:var(--sp-4)}
+#tab-security .access-network-addresses .access-role{font-family:var(--font-mono)}
+
+#tab-security .security-form-stack{display:grid;gap:var(--sp-4)}
+#tab-security .security-form-actions{display:flex;flex-wrap:wrap;gap:var(--sp-2);margin-top:var(--sp-4)}
+#tab-security .security-form-actions .btn{min-height:40px}
+#tab-security input:not([type=checkbox],[type=hidden]),#tab-security select{min-height:40px;width:100%}
+#tab-security input[readonly]{background:var(--surface2);color:var(--text2)}
+#tab-security .security-code-input{font-family:var(--font-mono);font-size:var(--fs-sm)}
+#tab-security .security-note{margin-top:var(--sp-3);color:var(--text2);font-size:var(--fs-xs);line-height:1.6}
+#tab-security .security-error:empty,#tab-security .access-form-error:empty{display:none}
+#tab-security .security-error,#tab-security .access-form-error{margin:var(--sp-3) 0;padding:var(--sp-3);border:1px solid var(--red);border-radius:var(--radius-xs);background:var(--red-soft);color:var(--text);font-size:var(--fs-sm);line-height:1.6}
+#tab-security .security-warn,#tab-security .warn-box{margin-top:var(--sp-4);color:var(--text)}
+#tab-security .security-field-label{display:block;margin-bottom:var(--sp-2);color:var(--text2);font-size:var(--fs-sm);font-weight:500}
+#tab-security .security-ip-list{display:flex;flex-wrap:wrap;gap:var(--sp-2);margin-top:var(--sp-2)}
+
+#tab-security .desktop-signin-status{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--sp-2);margin-bottom:var(--sp-3)}
+#tab-security .desktop-signin-status>div{display:flex;flex-direction:column;align-items:flex-start;gap:var(--sp-1);min-width:0;padding:var(--sp-3);border:1px solid var(--border2);border-radius:var(--radius-sm);background:var(--surface2);font-size:var(--fs-xs)}
+#tab-security .desktop-signin-status>div>span{color:var(--text2)}
+#tab-security .desktop-signin-status>div>strong{max-width:100%;font-weight:500}
+#tab-security .desktop-device-list,#tab-security #adminSessionsList,#tab-security #adminUsersList,#tab-security #ssoProvidersList{max-height:320px;overflow-y:auto;overscroll-behavior:contain}
+#tab-security #adminSessionsList:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+#tab-security .desktop-device-list{margin-top:var(--sp-4)}
+#tab-security .desktop-signin-actions{margin-top:var(--sp-4);padding-top:var(--sp-4);border-top:1px solid var(--border2)}
+#tab-security .desktop-signin-actions .access-form-footer{margin-top:0}
+#tab-security .access-list{border:1px solid var(--border2);border-radius:var(--radius-sm);overflow:hidden}
+#tab-security .access-list-row{gap:var(--sp-3);padding:var(--sp-3) var(--sp-4)}
+#tab-security .access-row-meta{margin-top:var(--sp-1)}
+#tab-security .access-empty{padding:var(--sp-5);font-size:var(--fs-sm)}
+#tab-security .access-row-actions .btn{min-height:34px}
+
+#tab-security .access-editor{margin-top:var(--sp-5);padding:var(--sp-5);border:1px solid var(--border2);border-radius:var(--radius-sm);background:var(--surface2)}
+#tab-security .access-form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--sp-4)}
+#tab-security .access-form-grid-three{grid-template-columns:repeat(3,minmax(0,1fr))}
+#tab-security .access-reference-grid{grid-template-columns:minmax(160px,.7fr) minmax(0,1.3fr)}
+#tab-security .access-field-wide{grid-column:1/-1}
+#tab-security .access-form-footer{display:flex;flex-wrap:wrap;gap:var(--sp-2);margin-top:var(--sp-4)}
+#tab-security .access-role-options{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:var(--sp-2)}
+#tab-security .access-role-option{display:flex;align-items:flex-start;gap:var(--sp-2);min-width:0;padding:var(--sp-3);border:1px solid var(--border2);border-radius:var(--radius-sm);background:var(--surface);cursor:pointer}
+#tab-security .access-role-option:has(input:checked){border-color:var(--accent);background:var(--accent-soft)}
+#tab-security .access-role-option strong{display:block;font-size:var(--fs-sm);font-weight:500}
+#tab-security .access-role-option small{display:block;margin-top:var(--sp-1);color:var(--text2);font-size:var(--fs-xs)}
+#tab-security input[type=checkbox]{width:16px;height:16px;min-height:0;flex:none;accent-color:var(--accent)}
+#tab-security .access-form-group{min-width:0;margin:var(--sp-5) 0 0;padding:0;border:0}
+#tab-security .access-form-group legend{margin-bottom:var(--sp-3);font-size:var(--fs-sm);font-weight:600}
+#tab-security .access-details{margin-top:var(--sp-4);border:1px solid var(--border2);border-radius:var(--radius-sm)}
+#tab-security .access-details summary{padding:var(--sp-3) var(--sp-4);color:var(--text2);font-size:var(--fs-sm);font-weight:600;cursor:pointer}
+#tab-security .access-details[open] summary{border-bottom:1px solid var(--border2);color:var(--text)}
+#tab-security .access-details-body{padding:var(--sp-4)}
+#tab-security .access-check-row{display:flex;align-items:center;gap:var(--sp-2);margin-top:var(--sp-4);color:var(--text2);font-size:var(--fs-sm)}
+#tab-security .access-editor-head{display:flex;align-items:center;justify-content:space-between;gap:var(--sp-3);margin-bottom:var(--sp-4)}
+#tab-security .access-editor-head h4{font-size:var(--fs-base);font-weight:600}
+#tab-security .access-toolbar{display:flex;flex-wrap:wrap;gap:var(--sp-2)}
+#tab-security .access-password-area{margin-top:0}
+
+#tab-security .access-danger-details{margin:0;border-color:color-mix(in srgb,var(--red) 45%,var(--border2))}
+#tab-security .access-danger-details>summary{padding:var(--sp-4) var(--sp-5);color:var(--red);font-size:var(--fs-md);font-weight:600;cursor:pointer}
+#tab-security .access-danger-details[open]>summary{border-bottom:1px solid color-mix(in srgb,var(--red) 30%,var(--border2))}
+#tab-security .access-danger-details .danger-zone{padding:var(--sp-5)}
+#tab-security .access-danger-details .danger-zone .access-card-desc{padding:0;max-width:none}
+#tab-security .access-danger-details .action-row{display:flex;flex-wrap:wrap;gap:var(--sp-3);margin-top:var(--sp-4)}
+#tab-security .access-danger-details .action-row .btn{min-height:40px}
+
+@media (max-width:1100px){
+  #tab-security .security-overview,#tab-security .security-identity-grid,#tab-security .security-devices-grid{grid-template-columns:minmax(0,1fr)}
+  #tab-security .access-role-options{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media (max-width:600px){
+  #tab-security .security-card,#tab-security .security-summary-card,#tab-security .security-quick-actions,#tab-security .security-status-card{padding:var(--sp-4)}
+  #tab-security .security-action-grid,#tab-security .access-form-grid,#tab-security .access-form-grid-three,#tab-security .access-reference-grid,#tab-security .access-role-options,#tab-security .desktop-signin-status{grid-template-columns:minmax(0,1fr)}
+  #tab-security .security-tabs .subtab{min-height:40px}
 }

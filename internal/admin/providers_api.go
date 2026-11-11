@@ -94,6 +94,9 @@ func handleProviderTest(w http.ResponseWriter, r *http.Request) {
 		APIKey  string            `json:"apiKey"`
 		Headers map[string]string `json:"headers"`
 		Model   string            `json:"model"`
+		// UpstreamModel is the editor's draft upstream ID for Model. It lets a
+		// model be tested before it is added or before the mapping is saved.
+		UpstreamModel string `json:"upstreamModel"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		httpx.WriteAPI(w, http.StatusBadRequest, httpx.Response{Error: "invalid_json"})
@@ -101,7 +104,7 @@ func handleProviderTest(w http.ResponseWriter, r *http.Request) {
 	}
 	model := strings.TrimSpace(req.Model)
 	if strings.TrimSpace(req.BaseURL) != "" {
-		result, err := providers.ProbeUnsavedProvider(req.BaseURL, req.APIKey, req.Headers, model)
+		result, err := providers.ProbeUnsavedProvider(req.BaseURL, req.APIKey, req.Headers, model, req.UpstreamModel)
 		if err != nil {
 			httpx.WriteAPI(w, http.StatusBadRequest, httpx.Response{Error: err.Error()})
 			return
@@ -109,7 +112,7 @@ func handleProviderTest(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteAPI(w, http.StatusOK, httpx.Response{Success: true, Data: result})
 		return
 	}
-	result, err := providers.ProbeSavedProvider(req.ID, model)
+	result, err := providers.ProbeSavedProvider(req.ID, model, req.UpstreamModel)
 	if err != nil {
 		httpx.WriteAPI(w, http.StatusNotFound, httpx.Response{Error: "provider not found"})
 		return

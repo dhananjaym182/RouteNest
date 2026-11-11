@@ -22,14 +22,15 @@
       <div class="section-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="9" x2="15" y2="9"/><line x1="9" y1="15" x2="15" y2="15"/></svg><span>模型目录</span>
         <span class="title-tools">
           <span><span>上次同步</span>: <span id="modelSyncTime">-</span></span>
+          <button type="button" class="btn btn-sm btn-primary" id="syncAllModelsBtn" onclick="syncAllModels()" title="同步 Cline、OpenCode Zen 与全部已连接的 Provider">同步全部模型</button>
         </span>
       </div>
-      <div class="section-desc">管理模型启停、上下文窗口与计费。模型从 Provider 接入，停用后无法通过 API 请求。</div>
-      <div class="system-note model-name-note">带前缀的模型名固定使用对应 Provider，点击模型名即可复制。</div>
+      <div class="section-desc">管理模型启停、上下文窗口与计费。模型从 Provider 接入，停用后无法通过 API 请求。带前缀的模型名固定使用对应 Provider，点击模型名即可复制。</div>
       <div class="section-body">
+        <div id="modelSyncSummary" class="model-sync-summary" role="status" aria-live="polite" hidden></div>
         <div id="modelStatsBar" class="model-stats-bar"></div>
         <div class="model-toolbar">
-          <input type="text" id="modelSearch" placeholder="搜索模型 ID 或 Provider 模型名…" aria-label="搜索模型" oninput="onModelFilterChange('search', this.value)">
+          <input type="text" id="modelSearch" placeholder="搜索模型…" title="搜索模型 ID 或 Provider 模型名…" aria-label="搜索模型 ID 或 Provider 模型名" oninput="onModelFilterChange('search', this.value)">
           <select id="modelFilterProvider" onchange="onModelFilterChange('provider', this.value)"><option value="">全部来源</option></select>
           <select id="modelFilterCost" onchange="onModelFilterChange('cost', this.value)">
             <option value="">全部计费</option>
@@ -43,6 +44,7 @@
             <option value="failed">测试失败</option>
             <option value="delisted">已下架</option>
           </select>
+          <button type="button" class="btn btn-sm" id="modelClearFilters" onclick="clearModelFilters()" hidden>清除筛选</button>
           <div class="toolbar-more" id="modelBulkMore">
             <button class="btn btn-sm" onclick="toggleToolbarMore(event)" aria-haspopup="true" aria-expanded="false" id="toolbarMoreBtn">更多操作 ▾</button>
             <div class="toolbar-more-menu">
@@ -54,10 +56,6 @@
               <button class="btn btn-sm" id="bulkDisableFilteredBtn" onclick="bulkToggleFiltered(true)">停用当前筛选</button>
             </div>
           </div>
-        </div>
-        <div class="model-sync-actions action-row" aria-label="模型同步">
-          <button class="sync-btn" id="syncModelsBtn" onclick="syncModels()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="ic-sm"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg><span>从 Cline 同步模型</span></button>
-          <button class="sync-btn" id="syncOcModelsBtn" onclick="syncOcModels()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="ic-sm"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg><span>从 OpenCode Zen 同步模型</span></button>
         </div>
         <div id="modelsList" class="model-list"><div class="sk-stack"><span class="skeleton"></span><span class="skeleton w70"></span><span class="skeleton w45"></span><span class="skeleton w70"></span></div></div>
       </div>
@@ -71,8 +69,7 @@
           <button type="button" class="btn btn-sm" id="globalOfferingsToggle" onclick="toggleGlobalOfferings()" aria-expanded="false" aria-controls="globalOfferings">展开全部</button>
         </span>
       </div>
-      <div class="section-desc">同一模型可由多个 Provider 独立提供。访问类别未知时保持未知，不按免费处理。</div>
-      <div class="system-note model-name-note">带前缀的模型名固定使用对应 Provider，点击模型名即可复制。</div>
+      <div class="section-desc">同一模型可由多个 Provider 独立提供。访问类别未知时保持未知，不按免费处理。带前缀的模型名固定使用对应 Provider，点击模型名即可复制。</div>
       <div class="system-toolbar">
         <div class="system-toolbar-grid">
           <div class="field system-filter-field system-search-field">

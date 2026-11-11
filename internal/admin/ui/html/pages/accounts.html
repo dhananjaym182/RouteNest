@@ -4,18 +4,20 @@
     <div>
       <div class="page-kicker">连接管理</div>
       <div class="large-title">账号与凭据</div>
-      <div class="large-subtitle">统一管理已连接账号、Provider 凭据与客户端 API 密钥。</div>
+      <div class="large-subtitle">管理 RouteNest 调用上游服务所用的账号与凭据，以及客户端调用 RouteNest 所用的 API 密钥。</div>
     </div>
     <div class="action-row">
-      <button type="button" class="btn btn-sm" onclick="loadGlobal(true);loadAccounts();loadConnections();loadStats()">刷新</button>
+      <button type="button" class="btn btn-sm" onclick="refreshCredentials()">刷新</button>
       <button type="button" class="btn btn-primary" onclick="openProviderSetup()">连接 Provider</button>
     </div>
   </div>
+  <div id="credentialAccessNote" class="security-note" role="status" hidden>当前角色没有凭据管理权限（credential.write），无法查看账号、登录连接、API 凭据或客户端密钥。如需使用，请联系拥有 credential_admin 角色的管理员。</div>
   <div id="credentialSummary" class="credential-summary" aria-live="polite"></div>
   <div class="subtabs page-subtabs credential-view-tabs" data-page="credentials">
-    <button type="button" class="subtab active" data-sub="conns">OAuth 已连接账号</button>
-    <button type="button" class="subtab" data-sub="inventory">API 凭据</button>
-    <button type="button" class="subtab" data-sub="client-keys" data-admin-permission="credential.write">客户端 API 密钥</button>
+    <button type="button" title="上游：RouteNest 用这些登录账号调用服务" class="subtab active" data-sub="conns">OAuth 已连接账号</button>
+    <button type="button" title="上游：RouteNest 用这些 Cline 账号调用服务" class="subtab" data-sub="cline">Cline 账号池</button>
+    <button type="button" title="上游：RouteNest 用这些 API 凭据调用 Provider" class="subtab" data-sub="inventory">API 凭据</button>
+    <button type="button" title="入站：客户端用这些密钥调用 RouteNest" class="subtab" data-sub="client-keys" data-admin-permission="credential.write">客户端 API 密钥</button>
   </div>
 
   <div class="page-subpage" data-subpage="conns">
@@ -35,6 +37,9 @@
         <div id="connectionsList" class="table-sheet"></div>
       </div>
     </div>
+  </div>
+
+  <div class="page-subpage" data-subpage="cline" style="display:none">
   <div class="section">
     <div class="section-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg><span>Cline 账号</span>
       <span class="title-tools action-row">
@@ -57,7 +62,7 @@
       </div>
       <table class="account-table">
         <thead>
-          <tr><th><input type="checkbox" id="accSelAll" onchange="toggleAllAccountSel(this)" title="全选本页" aria-label="全选本页"></th><th>#</th><th class="th-sort" onclick="onAccSort('email')" title="点击排序">邮箱</th><th class="th-sort" onclick="onAccSort('status')" title="点击排序">状态</th><th class="th-sort" onclick="onAccSort('usage')" title="点击排序">请求</th><th>输入</th><th>输出</th><th class="th-sort" onclick="onAccSort('total')" title="点击排序">总 Token</th><th class="th-sort" onclick="onAccSort('cached')" title="点击排序">缓存</th><th class="th-sort" onclick="onAccSort('lastUsed')" title="点击排序">最后使用</th><th class="th-sort" onclick="onAccSort('createdAt')" title="点击排序">创建时间</th><th>操作</th></tr>
+          <tr><th><input type="checkbox" id="accSelAll" onchange="toggleAllAccountSel(this)" title="全选本页" aria-label="全选本页"></th><th>#</th><th class="th-sort" role="button" tabindex="0" onclick="onAccSort('email')" onkeydown="onAccSortKey(event,'email')" aria-sort="none">邮箱</th><th class="th-sort" role="button" tabindex="0" onclick="onAccSort('status')" onkeydown="onAccSortKey(event,'status')" aria-sort="none">状态</th><th class="th-sort" role="button" tabindex="0" onclick="onAccSort('usage')" onkeydown="onAccSortKey(event,'usage')" aria-sort="none">请求</th><th>输入</th><th>输出</th><th class="th-sort" role="button" tabindex="0" onclick="onAccSort('total')" onkeydown="onAccSortKey(event,'total')" aria-sort="none">总 Token</th><th class="th-sort" role="button" tabindex="0" onclick="onAccSort('cached')" onkeydown="onAccSortKey(event,'cached')" aria-sort="none">缓存</th><th class="th-sort" role="button" tabindex="0" onclick="onAccSort('lastUsed')" onkeydown="onAccSortKey(event,'lastUsed')" aria-sort="none">最后使用</th><th class="th-sort" role="button" tabindex="0" onclick="onAccSort('createdAt')" onkeydown="onAccSortKey(event,'createdAt')" aria-sort="none">创建时间</th><th>操作</th></tr>
         </thead>
         <tbody id="accountTableBody">
           <tr><td colspan="12"><div class="sk-stack"><span class="skeleton"></span><span class="skeleton w70"></span><span class="skeleton w45"></span></div></td></tr>
@@ -136,7 +141,7 @@
       </div>
       <div class="section-desc">用于客户端访问 RouteNest 的 OpenAI 与 Anthropic 兼容 API。可通过 <code>x-api-key</code> 或 <code>Authorization</code> 请求头发送。</div>
       <div class="section-body">
-        <div class="security-note mb-12">已保存密钥默认脱敏。新密钥只在生成后短暂完整显示；当前后端未提供别名、创建时间或最后使用时间。</div>
+        <div class="security-note mb-12">已保存密钥在列表中仅脱敏显示，点击「复制」会复制完整密钥。当前后端未提供别名、创建时间或最后使用时间。</div>
         <div id="keysList"></div>
         <div id="keyGenResult" class="mt-8" aria-live="polite"></div>
       </div>

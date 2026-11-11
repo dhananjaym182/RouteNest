@@ -36,6 +36,12 @@ func cloneProvider(p *CustomProvider) *CustomProvider {
 	cp := *p
 	cp.ModelIDs = append([]string(nil), p.ModelIDs...)
 	cp.ConnectionIDs = append([]string(nil), p.ConnectionIDs...)
+	if p.ModelMap != nil {
+		cp.ModelMap = make(map[string]string, len(p.ModelMap))
+		for name, upstream := range p.ModelMap {
+			cp.ModelMap[name] = upstream
+		}
+	}
 	if p.Headers != nil {
 		cp.Headers = make(map[string]string, len(p.Headers))
 		for key, value := range p.Headers {

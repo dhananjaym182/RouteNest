@@ -1,6 +1,6 @@
 # Provider setup and account verification
 
-Provider setup lives on Providers, including its OAuth setup tab and native Cline/OpenCode configuration drawers. Accounts & Credentials shows connected OAuth accounts and API credentials with links to the original provider editors. Network & Egress owns the existing shared default proxy pool.
+Provider setup lives on Providers, including its OAuth setup tab and native Cline/OpenCode configuration drawers. Accounts & Credentials shows connected OAuth accounts and API credentials with links to the original provider editors. Global Egress Proxy owns the existing shared default proxy pool used by all providers.
 
 The shared pool covers Cline, OAuth sign-in/refresh and custom providers without a proxy override. Native OpenCode keeps its independent pool; explicit custom overrides and direct/local connections keep their existing behavior. This change adds no global inheritance, API, credential store or provider adapter.
 
@@ -72,7 +72,7 @@ internal/admin/ui/html/pages/accounts.html
 internal/admin/ui/html/pages/dashboard.html
 internal/admin/ui/html/pages/models.html
 internal/admin/ui/html/pages/providers.html
-internal/admin/ui/html/pages/upstreams.html
+internal/admin/ui/html/pages/network.html
 internal/admin/ui/js/01_i18n.js
 internal/admin/ui/js/02_nav.js
 internal/admin/ui/js/04_accounts.js

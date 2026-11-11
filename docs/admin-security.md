@@ -17,7 +17,17 @@ writes it only to the controlling terminal. A headless first start without a con
 terminal must provide `ROUTENEST_ADMIN_BOOTSTRAP_PASSWORD`; the value must contain 12 to
 1024 bytes, and the operator is responsible for generating it randomly and delivering it
 privately. Open `/admin/`, enter that secret, and set a permanent password for the
-reserved local administrator `admin`.
+reserved local administrator `admin`. The secret is written to the terminal or console
+window that started RouteNest on Windows, macOS and Linux, and restarting before setup
+completes generates and prints a new one. The setup page tells the user where to find it:
+the terminal, `ROUTENEST_ADMIN_BOOTSTRAP_PASSWORD` for Docker, a service or any start
+without a terminal, or nothing at all for the desktop app.
+
+Browser setup also issues the first recovery code in the same durable mutation as the
+password and shows it once on a save-confirmation page before continuing; the response
+is `no-store`. If persistence needs a restart after the journal is written, the exact
+prepared code is still returned once with `security_restart_required`, and the page
+tells the operator to save it, restart RouteNest, reload and sign in.
 
 The desktop build instead performs guarded native first-run setup and asks for the new
 administrator password directly; no terminal, environment variable, or displayed
@@ -271,11 +281,14 @@ it is not a password reset mechanism.
 
 ### Recovery codes
 
-Normal desktop setup generates a 256-bit recovery credential from `crypto/rand` and
-shows it once. RouteNest stores only an Argon2id verifier. Existing local break-glass
+Normal desktop setup and browser/CLI setup each generate a 256-bit recovery credential
+from `crypto/rand` and show it once. RouteNest stores only an Argon2id verifier. Existing local break-glass
 administrators can issue or rotate a code under **Administrator Security → Recovery Code**
 after current-password reauthentication; a stolen administrator session alone cannot
-mint one. Rotating only the recovery code does not revoke otherwise valid trusted devices;
+mint one. An installation with no recovery code (for example one set up before browser
+setup issued codes) still shows "Forgot password?"; selecting it reveals, only on request,
+that other users should ask a security administrator and that the main administrator
+runs `routenest auth recover` on the server. Rotating only the recovery code does not revoke otherwise valid trusted devices;
 using a code to reset the password does.
 
 The public recovery protocol still requires the recovery credential. It is protected by

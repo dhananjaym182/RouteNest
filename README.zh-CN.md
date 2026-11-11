@@ -4,7 +4,9 @@
 
 # RouteNest
 
-**一个端点，多个服务商，你的模型。**
+### Free-First AI API Routing
+**Multiple Providers · Intelligent Routing · Cost-Aware Choices**
+*(免费优先 AI API 路由 · 多服务商接入 · 智能路由 · 成本感知选择)*
 
 RouteNest 是一个自托管、Go 驱动的 AI 网关，面向编码代理与 AI 应用。通过单一端点，将 OpenAI 与 Anthropic 兼容请求路由到已配置的服务商 API、本地模型运行时以及受支持的账号集成。
 
@@ -31,7 +33,7 @@ RouteNest 是一个自托管、Go 驱动的 AI 网关，面向编码代理与 AI
 - **模型组合** - 定义有序模型列表，在符合条件的上游失败时回退。
 - **模型发现** - 同步受支持的模型目录，配置自定义模型 ID，并选择默认模型。
 - **管理控制台** - 管理账号、连接、服务商、模型、组合、客户端 API 密钥、代理与请求日志。
-- **出口代理池** - 配置共享的 Cline/默认出口池、原生 Zen 出口池与自定义 Provider 覆盖；不宣称提供通用 Profile 绑定界面。
+- **出口代理池** - 配置一个对所有 Provider 生效的默认（全局）出口池、独立的原生 Zen 出口池，以及单个 Provider 的覆盖；不宣称提供通用 Profile 绑定界面。
 - **请求可观测性** - 查看请求日志、延迟、token 用量与可用的服务商统计。
 - **灵活部署** - 运行 Go 二进制、使用桌面应用，或通过 Docker 部署。
 
@@ -104,7 +106,7 @@ docker compose down
 ### 首次运行
 
 1. **桌面版：** 正常打开 RouteNest。受信任的原生设置窗口会确认全新数据目录、创建管理员密码、显示一次性恢复码，并让用户显式选择是否信任此设备以自动登录。
-2. **CLI / 无头服务 / Docker：** 确认使用全新数据目录时，仅在第一次启动设置 `ROUTENEST_INITIALIZE_EMPTY_ACCOUNT_STORE=true`，随后立即移除。CLI 也可使用一次 `-initialize-empty-account-store`。这些控制都不能修复或重置已有安装；一次性管理员引导密钥仍须通过文档规定的受信任本地路径交付。
+2. **CLI / 无头服务 / Docker：** 确认使用全新数据目录时，仅在第一次启动设置 `ROUTENEST_INITIALIZE_EMPTY_ACCOUNT_STORE=true`，随后立即移除。CLI 也可使用一次 `-initialize-empty-account-store`。这些控制都不能修复或重置已有安装；一次性管理员引导密钥仍须通过文档规定的受信任本地路径交付：从终端启动时，密钥会打印在该终端或控制台窗口（Windows、macOS、Linux）；Docker、系统服务以及任何没有终端的启动方式需要设置 `ROUTENEST_ADMIN_BOOTSTRAP_PASSWORD`。浏览器设置完成后会一次性显示恢复码，请先保存再继续。
 3. 按“概览”中的设置清单连接 Cline 账号、原生 OpenCode Zen 或 API Provider，确认模型和客户端访问，然后发送第一条网关请求。
 4. 需要客户端认证时生成 API 密钥。在至少生成一个密钥之前，受密钥包装的模型与推理路由仍按已记录的兼容策略接受匿名请求。
 5. 保存管理员恢复码。“忘记密码？”会消费并轮换恢复码、撤销管理员会话和受信任设备，同时保留 Provider、模型和路由数据。
@@ -259,10 +261,11 @@ Cline 文档说明：Cline API 不支持免费模型，免费模型仅限 Cline 
 
 面向有区域限制或限流的上游：
 
-- **Cline 出口代理池** - 用于对话、登录/令牌刷新与模型同步。
+- **默认出口代理池**（管理台：**全局出口代理**）- 所有没有专属代理的 Provider 都使用它，Cline 与 OAuth 的登录、令牌刷新和模型同步也一样。轮询与随机按新建连接选择；某个代理连接失败时自动改用列表中的下一个，该代理 30 秒内排到最后。
+- **Provider 专属覆盖** - 单个 Provider 设置了自己的出口代理（或填 `-` 直连）时，该 Provider 不再使用默认池。
 - **OpenCode Zen 出口代理池** - 独立代理池，限流出口会自动冷却。
 
-优先级：应用内代理池 → 环境变量代理（`HTTPS_PROXY`）→ 直连。回环与内网目标始终直连。
+优先级：Provider 专属覆盖 → 默认出口代理池 → 环境变量代理（`HTTPS_PROXY`）→ 直连。`localhost` 和内网 IP 地址始终直连。用域名访问的本地服务（例如 `ollama.lan`）仍会经代理池转发，请把该 Provider 的覆盖设为 `-`。
 
 ## 数据与升级
 
@@ -288,7 +291,7 @@ RouteNest 默认把状态存放在操作系统的用户配置目录：
 | `.routenest-providers.json` | 自定义服务商 |
 | `.routenest-providers-cooldowns.json` | 服务商冷却状态 |
 | `.routenest-providers-sync.json` | 服务商目录同步状态 |
-| `.routenest-proxy.json` | Cline 出口代理池 |
+| `.routenest-proxy.json` | 默认（全局）出口代理池 |
 | `.routenest-zen.json` | OpenCode Zen 配置与出口代理池 |
 | `.routenest-request-logs.json` | 请求日志 |
 | `capture-logs/` | 交互式 OAuth 抓包输出，可能包含授权流量 |

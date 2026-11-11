@@ -26,15 +26,21 @@ const adminPasswordGuidance = `Administrator password and recovery:
   Create password: for a confirmed fresh CLI/server data directory only, start once with
     routenest -initialize-empty-account-store. Enter the one-time bootstrap secret from
     the controlling terminal in the browser and set the permanent admin password.
-    Headless first startup requires ROUTENEST_ADMIN_BOOTSTRAP_PASSWORD supplied privately;
+    The secret is printed in the terminal or console window that started RouteNest (Windows,
+    macOS and Linux); restarting before setup completes prints a new one.
+    Headless first startup (Docker, a service, no terminal) requires
+    ROUTENEST_ADMIN_BOOTSTRAP_PASSWORD supplied privately;
     this bootstrap secret does not reset an existing password.
+    Setup also issues the first recovery code, shown once: save it before continuing.
   Native desktop: go build -tags "desktop production" -o routenest-desktop .
     Open routenest-desktop. Confirmed fresh installations show native password setup,
     recovery-code saving, and optional device trust.
     Native setup needs no terminal bootstrap secret or environment variable.
   Change password: sign in, then use Administrator Security -> Change password.
-  Recovery code: use Administrator Security -> Recovery code to generate or rotate a code
+  Recovery code: first-run setup (browser or native desktop) issues one, shown once. Use
+    Administrator Security -> Recovery code to generate or rotate a code
     after current-password reauthentication; save the code when it is shown once.
+    Without a recovery code, "Forgot password?" on the sign-in screen explains how to recover.
   Forgot password: select "Forgot password?" on the sign-in screen and use the saved recovery code
     to reset the local administrator admin password; save the replacement code shown once.
     Other local users should ask a security administrator for a password reset.

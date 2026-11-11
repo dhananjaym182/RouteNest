@@ -10,6 +10,10 @@ let _loginGeneration = 0;
 let _flowLabels = {};
 let _connLoadPromise = null;
 let _connLoadFailed = false;
+// idle: not requested yet · ok · failed · denied (no credential.write). The summary and the list
+// read this so a failed or forbidden load is never presented as "no connections".
+let _connState = 'idle';
+let _connLoadError = '';
 function flowLabel(p) { return t(_flowLabels[p] || p); }
 
 async function loadConnections(fresh) {
@@ -23,15 +27,24 @@ async function loadConnections(fresh) {
 
 async function loadConnectionSnapshot() {
   _connLoadFailed = false;
-  try {
-    const d = await api('GET', '/connections');
-    const r = d.data || {};
-    _connFlows = r.flows || [];
-    _connList = r.connections || [];
-    _flowLabels = r.flowLabels || {};
-  } catch (e) {
-    _connLoadFailed = true;
+  _connLoadError = '';
+  if (typeof canManageCredentials === 'function' && !canManageCredentials()) {
+    _connState = 'denied';
     _connFlows = []; _connList = []; _flowLabels = {};
+  } else {
+    try {
+      const d = await api('GET', '/connections');
+      const r = d.data || {};
+      _connFlows = r.flows || [];
+      _connList = r.connections || [];
+      _flowLabels = r.flowLabels || {};
+      _connState = 'ok';
+    } catch (e) {
+      _connLoadFailed = true;
+      _connLoadError = e && e.message ? e.message : '';
+      _connState = 'failed';
+      _connFlows = []; _connList = []; _flowLabels = {};
+    }
   }
   renderConnectionProviders();
   renderConnectionsList();
@@ -125,11 +138,18 @@ function connExpiryHtml(c) {
   return '<div class="conn-expiry ' + tone + '" title="' + escAttr(new Date(ms).toLocaleString(LC())) + '">' + t('Token 到期 ') + text + '</div>';
 }
 
-// Connection rows live on Accounts & Login → Provider OAuth,
+// Connection rows live on Accounts & Credentials → OAuth 已连接账号,
 // grouped by provider service, each with its own usage + per-model stats.
 function renderConnectionsList() {
   const box = _('connectionsList');
   if (!box) return;
+  if (_connState === 'denied') { box.innerHTML = ''; return; } // the page shows the permission notice instead
+  if (_connState === 'failed') {
+    box.innerHTML = listEmptyState(ICON_LOGINS,
+      esc(t('加载登录连接失败')) + (_connLoadError ? ': ' + esc(_connLoadError) : ''),
+      '<button type="button" class="btn btn-sm" onclick="loadConnections(true)">' + esc(t('重试')) + '</button>');
+    return;
+  }
   if (!_connList.length) { box.innerHTML = listEmptyState(ICON_LOGINS, t('暂无登录连接') + ' · ' + t('用设备码登录或导入已有 Token'), '<button type="button" class="btn btn-sm btn-primary" onclick="showAccountLogin()">' + t('添加账号') + '</button>'); return; }
   const sorted = _connList.slice().sort((a, b) =>
     String(a.provider).localeCompare(String(b.provider)) || String(a.email || '').localeCompare(String(b.email || '')));
@@ -157,7 +177,7 @@ function renderConnectionsList() {
           '</tr>').join('')
       : '<tr class="row-alt"><td colspan="6" class="pl-32 hint-sm">' + t('暂无数据') + '</td></tr>';
     return groupRow + '<tr' + (altIdx++ % 2 ? ' class="alt"' : '') + '>' +
-      '<td><button class="btn btn-sm btn-icon" onclick="toggleConnStats(\'' + escAttr(c.id) + '\', this)" title="' + t('展开') + '" aria-label="' + t('展开') + '">'+uiIcon('caretRight')+'</button></td>' +
+      '<td><button class="btn btn-sm btn-icon" onclick="toggleConnStats(' + jsArg(c.id) + ', this)" title="' + t('展开') + '" aria-label="' + t('展开') + '">'+uiIcon('caretRight')+'</button></td>' +
       '<td class="hint-xs">' + esc(c.authType === 'device_code' ? t('设备码登录') : c.authType === 'import_token' ? t('导入 Token') : (c.authType || '')) + '</td>' +
       '<td class="note-sm">' + esc(c.email || (c.providerSpecificData && c.providerSpecificData.orgId ? 'org ' + c.providerSpecificData.orgId : '—')) + '</td>' +
       '<td>' + (c.status === 'active'
@@ -166,9 +186,9 @@ function renderConnectionsList() {
       '<td class="note-sm">' + (c.usageCount
         ? formatNumber(c.usageCount) + ' ' + t('请求') + ' · ' + formatTokenCount(c.totalTokens || 0) + ' token'
         : '<span class="mut">—</span>') + '</td>' +
-      '<td><button class="btn btn-sm" onclick=\'testConnection("' + c.id + '", this)\'>' + t('测试') + '</button> ' +
+      '<td><button class="btn btn-sm" onclick="testConnection(' + jsArg(c.id) + ', this)">' + t('测试') + '</button> ' +
           '<span class="conn-row-test-out"></span> ' +
-          '<button class="btn btn-sm btn-danger" onclick=\'deleteConnection("' + c.id + '")\' title="' + t('删除') + '" aria-label="' + t('删除') + '">'+uiIcon('close')+'</button></td>' +
+          '<button class="btn btn-sm btn-danger" onclick="deleteConnection(' + jsArg(c.id) + ')" title="' + t('删除') + '" aria-label="' + t('删除') + '">'+uiIcon('close')+'</button></td>' +
       '</tr>' +
       '<tr id="connStatsRow-' + escAttr(c.id) + '" style="display:none"><td colspan="6" class="stats-embed">' +
         '<table class="model-subtable">' +
@@ -176,7 +196,7 @@ function renderConnectionsList() {
           statRows +
         '</table></td></tr>';
   }).join('');
-  box.innerHTML = '<table class="action-table"><thead><tr><th></th><th>' + t('方式') + '</th><th>' + t('账号') + '</th><th>' + t('状态') + '</th><th>' + t('用量') + '</th><th>' + t('操作') + '</th></tr></thead><tbody>' + rows + '</tbody></table>';
+  box.innerHTML = '<table class="action-table"><thead><tr><th aria-label="' + escAttr(t('展开')) + '"></th><th>' + t('方式') + '</th><th>' + t('账号') + '</th><th>' + t('状态') + '</th><th>' + t('用量') + '</th><th>' + t('操作') + '</th></tr></thead><tbody>' + rows + '</tbody></table>';
 }
 
 function toggleConnStats(id, btn) {

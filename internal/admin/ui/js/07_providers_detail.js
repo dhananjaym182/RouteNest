@@ -255,7 +255,7 @@ async function provDetailTest(btn) {
   try {
     const d = await api('POST', '/providers/test', { id });
     const r = d.data || {};
-    const text = r.ok ? (r.durationMs + 'ms') : (r.error || t('失败'));
+    const text = r.ok ? (r.durationMs + 'ms') : (tx(r.error) || t('失败'));
     _provRowResults['test:' + id] = { ok: !!r.ok, text: text };
     if (out) out.innerHTML = renderTestResultHTML(r.ok, text);
   } catch (e) {

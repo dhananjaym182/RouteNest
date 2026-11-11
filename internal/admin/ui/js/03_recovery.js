@@ -3,6 +3,9 @@
 let _passwordRecoveryCompleted = false;
 let _passwordRecoveryRestartRequired = false;
 let _passwordRecoveryBusy = false;
+// The result screen is shared: after a password reset it shows the replacement code; after first-run
+// (or offline-recovery) setup it shows the code issued with the new password.
+let _passwordRecoverySetup = false;
 let _issuedRecoveryCodeRestartRequired = false;
 let _adminAuthReturnTab = 'dashboard';
 const ADMIN_AUTH_DESTINATIONS = new Set(['dashboard', 'providers', 'credentials', 'network', 'models', 'routing', 'combos', 'logs', 'quota', 'health', 'security', 'about', 'quickstart', 'global', 'accounts', 'import', 'upstreams']);
@@ -28,10 +31,19 @@ function restoreAdminAuthDestination() {
 }
 
 function updateAdminAuthPageTitle() {
-  if (_adminPrincipal) return;
+  const appTitle = LANG === 'en' ? 'RouteNest Admin' : 'RouteNest 管理面板';
+  // Signed in: "<page> | RouteNest", following the page name shown in the top bar.
+  if (_adminPrincipal) {
+    const page = _('currentPageTitle');
+    const name = page && page.textContent ? page.textContent.trim() : '';
+    document.title = name ? name + ' | RouteNest' : appTitle;
+    return;
+  }
   const root = document.documentElement;
+  // Still verifying the session: do not claim "Sign in" yet.
+  if (root && root.dataset.adminAuth === 'pending') { document.title = appTitle; return; }
   const view = root && root.dataset.adminAuthView;
-  const heading = view === 'recovery-result' ? '保存新的恢复码' : view === 'recover' ? '重置管理员密码' : _adminAuthMode === 'bootstrap' ? '初始化管理员' : _adminAuthMode === 'recovery' ? '完成离线恢复' : _adminAuthMode === 'legacy' ? '升级管理员密码' : '登录';
+  const heading = view === 'recovery-result' ? (_passwordRecoverySetup ? '保存恢复码' : '保存新的恢复码') : view === 'recover' ? '重置管理员密码' : _adminAuthMode === 'bootstrap' ? '初始化管理员' : _adminAuthMode === 'recovery' ? '完成离线恢复' : _adminAuthMode === 'legacy' ? '升级管理员密码' : '登录';
   document.title = t(heading) + ' | RouteNest';
 }
 
@@ -91,9 +103,55 @@ async function consumeDesktopSessionHandoff() {
   if (!response.ok || !envelope.success) throw new Error(envelope.error || 'desktop_handoff_failed');
 }
 
+// Wording for the shared result screen. Reset and setup differ only in copy and in what
+// "continue" does; the code box, copy button and save confirmation are identical.
+function setRecoveryResultCopy(setup, restartRequired) {
+  const set = (id, key) => { if (_(id)) _(id).textContent = t(key); };
+  set('passwordRecoveryResultTitle', setup ? '保存恢复码' : '保存新的恢复码');
+  set('passwordRecoveryResultIntro', setup ? '管理员密码已设置。此恢复码只显示一次，忘记密码时需要用它重置。' : '旧恢复码已失效。此新恢复码只显示一次。');
+  set('passwordRecoverySavedLabel', setup ? '我已安全保存恢复码。' : '我已安全保存新的恢复码。');
+  set('passwordRecoveryRestartNotice', setup ? '管理员密码已设置，但安全存储需要重启后才能完成。请先保存恢复码，重启 RouteNest，然后重新加载此页面并登录。' : '恢复已持久化，但安全存储需要重启后完成恢复。保存恢复码，然后关闭并重新打开 RouteNest。');
+  set('passwordRecoveryFinish', setup ? (restartRequired ? '我已重启，重新加载页面' : '继续进入控制台') : (restartRequired ? '关闭并重新打开 RouteNest' : '返回登录'));
+}
+
+// First-run (or offline-recovery) setup succeeded: the server issued a recovery code with the
+// password. Show it exactly once and require the user to confirm they saved it.
+function showSetupRecoveryCode(code, restartRequired) {
+  _passwordRecoveryCompleted = true;
+  _passwordRecoverySetup = true;
+  _passwordRecoveryRestartRequired = !!restartRequired;
+  for (const id of ['bootstrapSecret', 'loginNewPassword', 'loginConfirmPassword', 'loginPassword']) if (_(id)) _(id).value = '';
+  _('passwordRecoveryReplacementCode').textContent = code;
+  _('passwordRecoverySaved').checked = false;
+  _('passwordRecoveryRestartNotice').hidden = !restartRequired;
+  setRecoveryResultCopy(true, !!restartRequired);
+  updatePasswordRecoveryFinish();
+  _('passwordRecoveryFormView').hidden = true;
+  _('passwordRecoveryResultView').hidden = false;
+  setAdminAuthRoute('recover');
+  showAdminAuthPage('recovery-result');
+  setTimeout(() => _('passwordRecoveryReplacementCode').focus(), 40);
+}
+
+// "Forgot password?": with a recovery code it opens the reset page. Without one there is nothing to
+// reset with, so it reveals (or hides again) how an administrator can recover, only on request.
+function onForgotPassword() {
+  if (_adminAuthStatus && _adminAuthStatus.recoveryCodeAvailable) { openPasswordRecovery(); return; }
+  const hint = _('noRecoveryCodeHint');
+  if (!hint || _adminAuthMode !== 'login') return;
+  const open = hint.hidden;
+  hint.hidden = !open;
+  hint.textContent = open ? t('此安装尚未设置恢复码。其他用户请联系安全管理员；主管理员请在服务器上停止 RouteNest，并在终端运行 routenest auth recover。') : '';
+  const link = _('forgotPasswordButton');
+  if (link) link.setAttribute('aria-expanded', open ? 'true' : 'false');
+  // The card grows downward; make sure the revealed text is on screen on short viewports.
+  if (open && typeof hint.scrollIntoView === 'function') hint.scrollIntoView({ block: 'nearest' });
+}
+
 function openPasswordRecovery(push = true) {
   if (_adminPrincipal || _adminAuthMode !== 'login' || !(_adminAuthStatus && _adminAuthStatus.recoveryCodeAvailable)) return;
   if (_passwordRecoveryBusy || _passwordRecoveryCompleted) { syncAdminAuthRoute(); return; }
+  _passwordRecoverySetup = false;
   _passwordRecoveryRestartRequired = false;
   _('passwordRecoveryFormView').hidden = false;
   _('passwordRecoveryResultView').hidden = true;
@@ -140,7 +198,8 @@ async function submitPasswordRecovery() {
     _('passwordRecoveryReplacementCode').textContent = result.recoveryCode || '';
     _('passwordRecoverySaved').checked = false;
     _('passwordRecoveryRestartNotice').hidden = !_passwordRecoveryRestartRequired;
-    _('passwordRecoveryFinish').textContent = t(_passwordRecoveryRestartRequired ? '关闭并重新打开 RouteNest' : '返回登录');
+    _passwordRecoverySetup = false;
+    setRecoveryResultCopy(false, _passwordRecoveryRestartRequired);
     updatePasswordRecoveryFinish();
     _('passwordRecoveryFormView').hidden = true;
     _('passwordRecoveryResultView').hidden = false;
@@ -162,6 +221,15 @@ function updatePasswordRecoveryFinish() {
 
 function finishPasswordRecovery() {
   if (!_passwordRecoveryCompleted || !_('passwordRecoverySaved').checked) return;
+  if (_passwordRecoverySetup) {
+    // The code is on screen only until here; the session cookie set by setup (or, after a
+    // restart, a fresh sign-in) takes over on reload.
+    if (_('passwordRecoveryReplacementCode')) _('passwordRecoveryReplacementCode').textContent = '';
+    _passwordRecoveryCompleted = false;
+    _passwordRecoverySetup = false;
+    location.reload();
+    return;
+  }
   if (_passwordRecoveryRestartRequired) {
     if (window.runtime && typeof window.runtime.Quit === 'function') window.runtime.Quit();
     else window.close();

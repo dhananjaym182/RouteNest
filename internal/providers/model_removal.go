@@ -205,6 +205,10 @@ func removeProviderDeclarationStrict(providerID, modelID string) error {
 				}
 			}
 			copy.ModelIDs = ids
+			delete(copy.ModelMap, modelID)
+			if len(copy.ModelMap) == 0 {
+				copy.ModelMap = nil
+			}
 		}
 		next = append(next, copy)
 	}

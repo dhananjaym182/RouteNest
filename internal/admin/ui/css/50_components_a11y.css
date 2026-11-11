@@ -35,17 +35,19 @@ html[data-admin-auth="authenticated"] .auth-page{display:none}
 .auth-header{min-height:64px;padding:10px clamp(20px,4vw,48px);border-bottom:1px solid var(--border);background:var(--surface)}
 .auth-header-content{width:min(100%,1120px);margin:0 auto;display:flex;align-items:center;justify-content:space-between;gap:var(--sp-4)}
 .auth-wordmark{min-height:44px;display:inline-flex;align-items:center;color:var(--text);font-size:var(--fs-lg);font-weight:700;letter-spacing:-.01em;text-decoration:none}
-.auth-preferences{display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:var(--sp-2)}
-.auth-preferences .seg{background:transparent;border-color:var(--border)}
-.auth-preferences .seg button{min-width:44px;min-height:44px;padding:var(--sp-2) var(--sp-3);transition:none;text-transform:none;letter-spacing:0}
-.auth-preferences .seg button.active{box-shadow:none}
-.auth-main{width:100%;max-width:440px;margin:0 auto;padding:clamp(48px,8vh,72px) var(--sp-5) var(--sp-8)}
+.auth-preferences{display:flex;align-items:center;justify-content:flex-end;gap:var(--sp-2)}
+.auth-main{width:100%;max-width:480px;margin:0 auto;padding:clamp(48px,8vh,72px) var(--sp-5) var(--sp-8)}
 .auth-view{width:100%;position:static;background:transparent}
 #loginOverlay{background:var(--bg);display:flex}
 .login-card,.recovery-dialog{width:100%;max-width:none;max-height:none;overflow:visible;padding:0;background:transparent;border:0;border-radius:0;box-shadow:none;text-align:left}
 .login-card h1,.recovery-dialog h1{margin:0;color:var(--text);font-family:var(--font-display);font-size:var(--fs-2xl);font-weight:700;line-height:1.3;letter-spacing:-.02em}
 .login-card #loginHelp,.recovery-dialog>div>p{margin:var(--sp-2) 0 var(--sp-6);color:var(--text2);font-size:var(--fs-base);line-height:1.65}
 #loginStatus{display:none;margin:0;color:var(--text2);font-size:var(--fs-sm);line-height:1.6}
+/* A reload with a valid session verifies in well under a second. Keep the sign-in shell
+   invisible for that window so it does not flash before the dashboard; if the check is
+   slow, the "Loading..." landing appears after the delay. */
+html[data-admin-auth="pending"] .auth-page{visibility:hidden;animation:auth-pending-reveal 1ms linear .45s forwards}
+@keyframes auth-pending-reveal{to{visibility:visible}}
 html[data-admin-auth="pending"] #loginForm{display:none !important}
 html[data-admin-auth="pending"] #loginSSOProviders{display:none !important}
 html[data-admin-auth="pending"] #loginStatus{display:block}
@@ -78,9 +80,7 @@ html[data-admin-auth="pending"] #loginStatus{display:block}
   .auth-header{padding:10px var(--sp-4)}
   .auth-header-content{align-items:flex-start;gap:var(--sp-2)}
   .auth-wordmark{font-size:var(--fs-base)}
-  .auth-preferences{gap:var(--sp-1)}
-  .auth-preferences .seg{padding:2px}
-  .auth-preferences .seg button{min-width:40px;padding:var(--sp-2) 6px}
+  .auth-preferences{gap:var(--sp-2)}
   .auth-main{padding:48px var(--sp-4) var(--sp-8)}
 }
 @media (max-width:380px){
@@ -109,8 +109,8 @@ html[data-admin-auth="pending"] #loginStatus{display:block}
 ::-webkit-scrollbar-thumb:hover{background:var(--text3);background-clip:content-box}
 *{scrollbar-width:thin;scrollbar-color:var(--border) transparent}
 ::selection{background:var(--accent-soft);color:var(--text)}
-.app-logo-lg{width:56px;height:56px;border-radius:14px;background:linear-gradient(135deg,var(--accent),var(--accent2));display:flex;align-items:center;justify-content:center;flex-shrink:0;color:var(--on-accent)}
-.app-logo-lg svg{width:28px;height:28px}
+.app-logo-lg{width:56px;height:56px;display:flex;align-items:center;justify-content:center;flex-shrink:0;background:transparent}
+.app-logo-lg svg{width:100%;height:100%;display:block}
 /* 危险操作区：红描边 + 说明，与普通设置区一眼区分 */
 .section.danger-zone{border-color:var(--red)}
 /* 空 / 加载状态统一由 .empty / .empty-state 定义（见 Misc / 空态区块） */
@@ -125,6 +125,7 @@ html[data-admin-auth="pending"] #loginStatus{display:block}
   .model-row{display:flex;flex-wrap:wrap;gap:8px;padding:10px 12px}
   .model-row-main{flex-basis:calc(100% - 44px)}
   .model-row-test,.model-row-cell{order:3}
+  .model-row-cell{text-align:left} /* 卡片流中不保留桌面端数字右对齐 */
   .model-col-head{display:none} /* 窄屏行回落为卡片流，表头与列对不上，隐藏 */
   .model-toolbar input[type="text"]{flex-basis:100%}
   .model-toolbar select{flex:1 1 40%}

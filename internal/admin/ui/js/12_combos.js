@@ -4,6 +4,13 @@ var _comboCatalog = [];
 var _comboReserved = [];
 var _comboEntries = [];
 var _editingComboId = '';
+var _comboOrigin = null;      // 打开编辑器时的组合（新建为 null），「放弃更改」据此还原
+var _comboBaseJson = '';      // 打开时的表单基线；与当前表单比较得到「未保存」
+var _comboSaving = false;
+var _comboShowErrors = false; // 保存失败过一次后，校验提示随输入实时更新
+const COMBO_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._-]*$/; // 与服务端 combos_validation.go 一致
+const COMBO_ID_MAX = 64;
+const COMBO_MAX_ENTRIES = 64;
 
 // loadCombos 拉取组合列表 + 模型目录 + 保留别名；可安全地重复调用
 async function loadCombos() {
@@ -42,9 +49,13 @@ function renderCombosList() {
     box.innerHTML = listEmptyState(ICON_COMBOS, t('暂无模型组合'), '<button type="button" class="btn btn-sm btn-primary" onclick="showComboEditor()">' + t('新建组合') + '</button>');
     return;
   }
-  box.innerHTML = '<div class="combos-list"><table class="action-table"><thead><tr>' +
-    '<th>' + t('组合 ID') + '</th><th>' + t('名称') + '</th><th>' + t('分类') + '</th>' +
-    '<th class="num-col">' + t('条目') + '</th><th>' + t('状态') + '</th><th>' + t('操作') + '</th>' +
+  // 与 Provider / 凭据表同一套 mgmt-table：列宽按内容自适应。全局 table-layout:fixed 会把
+  // 剩余宽度平均分给 ID / 名称 / 分类 / 条目 / 状态：短列被撑得过宽，长 ID 与名称反而被挤。
+  // 内联 handler 里的 ID：先 JSON 字符串化（在 JS 层合法），再做属性转义（在 HTML 层合法）
+  const q = id => escAttr(JSON.stringify(String(id)));
+  box.innerHTML = '<div class="mgmt-table-wrap combos-list"><table class="mgmt-table combos-table"><thead><tr>' +
+    '<th>' + t('组合 ID') + '</th><th>' + t('名称') + '</th><th class="combo-col-fit">' + t('分类') + '</th>' +
+    '<th class="mgmt-num combo-col-fit">' + t('条目') + '</th><th class="combo-col-fit">' + t('状态') + '</th><th class="combo-col-actions">' + t('操作') + '</th>' +
     '</tr></thead><tbody>' +
     _comboList.map(c => {
       const entries = c.entries || [];
@@ -56,23 +67,45 @@ function renderCombosList() {
         ? ' <span class="model-source-badge provider" title="' + t('允许跳出组合回退') + '">' + t('紧急回退') + '</span>'
         : '';
       return '<tr>' +
-        '<td class="mono note-sm">' + esc(c.id) + '</td>' +
-        '<td>' + esc(c.name || '') + fb + '</td>' +
-        '<td>' + (c.category ? esc(c.category) : '<span style="color:var(--text3)">-</span>') + '</td>' +
-        '<td class="row-count num-col">' + enabledEntries + ' / ' + entries.length + '</td>' +
-        '<td>' + badge + '</td>' +
-        '<td><button class="btn btn-sm" onclick="testCombo(\'' + escAttr(c.id) + '\', this)">' + t('测试') + '</button> ' +
-            '<button class="btn btn-sm" onclick="editCombo(\'' + escAttr(c.id) + '\')">' + t('编辑') + '</button> ' +
-            '<button class="btn btn-sm" onclick="cloneCombo(\'' + escAttr(c.id) + '\', this)">' + t('克隆') + '</button> ' +
-            '<button class="btn btn-sm" onclick="toggleCombo(\'' + escAttr(c.id) + '\', ' + !c.enabled + ', this)">' + t(c.enabled ? '停用' : '启用') + '</button> ' +
-            '<button class="btn btn-sm btn-danger" onclick="deleteCombo(\'' + escAttr(c.id) + '\', this)" title="' + t('删除') + '" aria-label="' + t('删除') + '">'+uiIcon('close')+'</button></td>' +
+        '<td class="combo-col-id"><button type="button" class="combo-id-copy" onclick="copyComboId(' + q(c.id) + ', this)" title="' + escAttr(c.id + ' · ' + t('点击复制组合 ID')) + '" aria-label="' + escAttr(t('复制组合 ID') + ': ' + c.id) + '"><span class="combo-id-text">' + esc(c.id) + '</span>' + uiIcon('copy', 'ic-copy') + uiIcon('check', 'ic-done') + '</button></td>' +
+        '<td class="combo-col-name"><span class="combo-name-text" title="' + escAttr(c.name || '') + '">' + esc(c.name || '') + '</span>' + fb + '</td>' +
+        '<td class="combo-col-fit">' + (c.category ? '<span class="combo-category" title="' + escAttr(c.category) + '">' + esc(c.category) + '</span>' : '<span class="mgmt-muted">-</span>') + '</td>' +
+        '<td class="mgmt-num combo-col-fit">' + enabledEntries + ' / ' + entries.length + '</td>' +
+        '<td class="combo-col-fit">' + badge + '</td>' +
+        '<td class="combo-col-actions"><div class="mgmt-actions">' +
+          '<button class="btn btn-sm" onclick="testCombo(' + q(c.id) + ', this)">' + t('测试') + '</button>' +
+          '<button class="btn btn-sm" onclick="editCombo(' + q(c.id) + ')">' + t('编辑') + '</button>' +
+          '<button class="btn btn-sm" onclick="cloneCombo(' + q(c.id) + ', this)">' + t('克隆') + '</button>' +
+          '<button class="btn btn-sm" onclick="toggleCombo(' + q(c.id) + ', ' + !c.enabled + ', this)">' + t(c.enabled ? '停用' : '启用') + '</button>' +
+          '<button class="btn btn-sm btn-danger" onclick="deleteCombo(' + q(c.id) + ', this)" title="' + t('删除') + '" aria-label="' + t('删除') + '">' + uiIcon('close') + '</button>' +
+        '</div></td>' +
       '</tr>';
     }).join('') +
     '</tbody></table></div>';
 }
 
+// 一键复制组合 ID（列表与编辑器共用）
+function copyComboId(id, btn) {
+  const value = String(id || '').trim();
+  if (!value) return;
+  copyText(value);
+  if (!btn || !btn.classList) return;
+  btn.classList.add('copied');
+  clearTimeout(btn._copiedTimer);
+  btn._copiedTimer = setTimeout(() => btn.classList.remove('copied'), 1600);
+}
+
+function copyComboIdFromEditor(btn) {
+  const value = (_('comboId').value || '').trim();
+  if (!value) { toast(t('请先填写组合 ID'), 'error'); return; }
+  copyComboId(value, btn);
+}
+
 function showComboEditor(c) {
   _editingComboId = c ? c.id : '';
+  _comboOrigin = c || null;
+  _comboShowErrors = false;
+  _comboSaving = false;
   const title = _('comboEditorTitle');
   if (title) title.textContent = c ? t('编辑组合') : t('新建组合');
   _('comboId').value = c ? c.id : '';
@@ -84,15 +117,196 @@ function showComboEditor(c) {
   _('comboEmergency').checked = c ? !!c.emergencyFallback : false;
   _comboEntries = c ? (c.entries || []).map(e => ({ model: e.model || '', disabled: !!e.disabled, source: e.source || '', provider: e.provider || '' })) : [];
   _('comboSaveResult').textContent = '';
+  showComboErrors([]);
+  _comboBaseJson = JSON.stringify(comboPayload());
+  // 关闭守卫覆盖 Esc / 遮罩 / 取消 / ✕；悬浮保存条提供「查看更改」与「放弃」
+  if (typeof setDrawerGuard === 'function') setDrawerGuard('comboEditor', async () => !comboEditorDirty() || (await showConfirm(t('有未保存的修改，确定放弃？'))));
+  if (typeof setSaveBarCtx === 'function') setSaveBarCtx('combo', {
+    host: () => { const d = _('comboEditor'); return !!d && d.classList.contains('open'); },
+    dirty: comboEditorDirty,
+    diff: comboChanges,
+    discard: () => showComboEditor(_comboOrigin),
+    save: () => saveCombo(),
+  });
   renderComboEntries();
   openDrawer('comboEditor');
+  try { _(c ? 'comboName' : 'comboId').focus(); } catch (e) {}
 }
 
-function hideComboEditor() {
-  closeDrawer('comboEditor');
+// Link in the combo editor: leave the editor (unless the user cancels discarding edits), then open
+// the global fallback chain. Kept out of the markup so the HTML carries no inline logic.
+function openRoutingPolicyFromComboEditor() {
+  return hideComboEditor().then(closed => { if (closed) showPageSubTab('routing', 'config'); });
+}
+
+// 返回 true 表示编辑器确实关闭了（守卫可能因未保存的修改而被用户拒绝）
+async function hideComboEditor(force) {
+  if (force) _comboBaseJson = JSON.stringify(comboPayload()); // 刚保存/刚删除：没有需要保留的修改
+  await closeDrawer('comboEditor');
+  const drawer = _('comboEditor');
+  if (drawer && drawer.classList && drawer.classList.contains('open')) return false;
   _editingComboId = '';
   _comboEntries = [];
+  _comboOrigin = null;
+  _comboBaseJson = '';
+  if (typeof setDrawerGuard === 'function') setDrawerGuard('comboEditor', null);
+  if (typeof setSaveBarCtx === 'function') setSaveBarCtx('combo', null);
+  return true;
 }
+
+// 与保存请求体同形：脏检查、差异预览、保存共用同一份数据
+function comboPayload() {
+  return {
+    id: _('comboId').value.trim(),
+    name: _('comboName').value.trim(),
+    description: _('comboDesc').value.trim(),
+    category: _('comboCategory').value.trim(),
+    enabled: _('comboEnabled').value === 'true',
+    emergencyFallback: _('comboEmergency').checked,
+    entries: _comboEntries.filter(e => e.model).map(e => {
+      const out = { model: e.model, disabled: !!e.disabled };
+      if (e.source) {
+        out.source = e.source;
+        if (e.source === 'provider' && e.provider) out.provider = e.provider;
+      }
+      return out;
+    }),
+  };
+}
+
+function comboEditorDirty() {
+  const drawer = _('comboEditor');
+  if (!drawer || !drawer.classList || !drawer.classList.contains('open') || !_comboBaseJson) return false;
+  return JSON.stringify(comboPayload()) !== _comboBaseJson;
+}
+
+// 字段或条目变化后统一刷新：未保存标记、保存按钮、条目摘要、悬浮保存条
+function comboEditorSync() {
+  const dirty = comboEditorDirty();
+  const tag = _('comboDirtyTag');
+  if (tag) tag.hidden = !dirty;
+  const btn = _('comboSaveBtn');
+  if (btn) {
+    btn.disabled = _comboSaving || (!!_editingComboId && !dirty);
+    if (!_comboSaving) btn.textContent = _editingComboId ? t('保存更改') : t('创建组合');
+  }
+  renderComboEntriesSummary();
+  if (_comboShowErrors) showComboErrors(comboValidate());
+  if (typeof refreshSaveBar === 'function') refreshSaveBar();
+}
+
+function renderComboEntriesSummary() {
+  const box = _('comboEntriesSummary');
+  if (!box) return;
+  const filled = _comboEntries.filter(e => e.model).length;
+  const empty = _comboEntries.length - filled;
+  if (!_comboEntries.length) { box.innerHTML = ''; return; }
+  const enabled = _comboEntries.filter(e => e.model && !e.disabled).length;
+  box.innerHTML = '<span><b>' + filled + '</b> ' + t('个条目') + '</span>' +
+    '<span><span class="dot g"></span><b>' + enabled + '</b> ' + t('已启用') + '</span>' +
+    (empty ? '<span class="combo-summary-warn">' + empty + ' ' + t('个空条目，保存时会被忽略') +
+      ' <button type="button" class="btn btn-sm" onclick="clearEmptyComboEntries()">' + t('清理空条目') + '</button></span>' : '');
+}
+
+function clearEmptyComboEntries() {
+  _comboEntries = _comboEntries.filter(e => e.model);
+  renderComboEntries();
+}
+
+// 与服务端 ValidateCombo 同一套规则：提前在对应字段下提示，而不是点保存后才失败
+function comboValidate() {
+  const errors = [];
+  const add = (field, msg) => errors.push({ field: field, msg: msg });
+  const editing = !!_editingComboId;
+  const id = _('comboId').value.trim();
+  const name = _('comboName').value.trim();
+  if (!id) add('id', t('请填写组合 ID'));
+  else if (!editing) {
+    if (id.length > COMBO_ID_MAX) add('id', t('组合 ID 最长 64 个字符'));
+    else if (!COMBO_ID_RE.test(id)) add('id', t('只能使用字母、数字、点、下划线和连字符，且须以字母或数字开头'));
+    else if (_comboReserved.indexOf(id) !== -1) add('id', t('该 ID 为保留别名，请更换'));
+    else if (_comboList.some(c => c.id === id)) add('id', t('该组合 ID 已存在'));
+  }
+  if (!name) add('name', t('请填写名称'));
+  else if (_comboList.some(c => c.id !== _editingComboId && String(c.name || '').trim().toLowerCase() === name.toLowerCase())) add('name', t('该名称已被其他组合使用'));
+  const filled = _comboEntries.filter(e => e.model);
+  const seen = {};
+  let duplicate = '';
+  for (const e of filled) {
+    const key = comboEntryKey(e);
+    if (seen[key] && !duplicate) duplicate = e.model;
+    seen[key] = true;
+  }
+  if (filled.some(e => e.model === 'free')) add('entries', t('「free」是保留别名，不能作为条目；请添加具体模型'));
+  else if (duplicate) add('entries', t('条目中存在重复模型: ') + duplicate);
+  else if (!filled.length) add('entries', t('至少需要一个模型条目'));
+  else if (filled.length > COMBO_MAX_ENTRIES) add('entries', t('条目过多（最多 64 个）'));
+  else if (_('comboEnabled').value === 'true' && !filled.some(e => !e.disabled)) add('entries', t('启用的组合至少需要一个启用的条目；也可以先把组合设为停用'));
+  return errors;
+}
+
+function showComboErrors(errors) {
+  const first = {};
+  errors.forEach(e => { if (!first[e.field]) first[e.field] = e.msg; });
+  [['id', 'comboIdError', 'comboId'], ['name', 'comboNameError', 'comboName'], ['entries', 'comboEntriesError', '']].forEach(row => {
+    const box = _(row[1]);
+    if (box) { box.hidden = !first[row[0]]; box.textContent = first[row[0]] || ''; }
+    const input = row[2] ? _(row[2]) : null;
+    if (input && typeof input.setAttribute === 'function') {
+      if (first[row[0]]) input.setAttribute('aria-invalid', 'true'); else input.removeAttribute('aria-invalid');
+    }
+  });
+}
+
+function focusComboError(error) {
+  try {
+    if (error.field === 'entries') {
+      const target = document.querySelector('#comboEntries .combo-entry-dup select, #comboEntries .combo-entry-empty select') || document.querySelector('#comboEntries select');
+      if (target) { target.focus(); return; }
+      const add = document.querySelector('#comboEditor .form-actions .btn-primary');
+      if (add) add.focus();
+      return;
+    }
+    _(error.field === 'id' ? 'comboId' : 'comboName').focus();
+  } catch (e) {}
+}
+
+// 悬浮保存条的「查看更改」：标量字段 + 条目的增删、启停与顺序
+function comboChanges() {
+  const base = JSON.parse(_comboBaseJson || '{}');
+  const cur = comboPayload();
+  const scalars = p => ({
+    [t('组合 ID')]: p.id, [t('名称')]: p.name, [t('描述')]: p.description, [t('分类')]: p.category,
+    [t('启用')]: t(p.enabled ? '启用' : '停用'), [t('紧急回退')]: t(p.emergencyFallback ? '开启' : '关闭'),
+  });
+  const out = diffFlat(scalars(base), scalars(cur));
+  const label = e => comboEntryLabel(e) || e.model;
+  const baseEntries = base.entries || [], curEntries = cur.entries || [];
+  const baseMap = {}, curMap = {};
+  baseEntries.forEach(e => { baseMap[comboEntryKey(e)] = e; });
+  curEntries.forEach(e => { curMap[comboEntryKey(e)] = e; });
+  baseEntries.forEach(e => { if (!curMap[comboEntryKey(e)]) out.push({ label: t('移除条目'), from: label(e), to: '' }); });
+  curEntries.forEach(e => { if (!baseMap[comboEntryKey(e)]) out.push({ label: t('添加条目'), from: '', to: label(e) }); });
+  curEntries.forEach(e => {
+    const before = baseMap[comboEntryKey(e)];
+    if (before && !!before.disabled !== !!e.disabled) out.push({ label: label(e), from: t(before.disabled ? '停用' : '启用'), to: t(e.disabled ? '停用' : '启用') });
+  });
+  const common = list => list.map(comboEntryKey).filter(k => baseMap[k] && curMap[k]);
+  const before = common(baseEntries), after = common(curEntries);
+  if (before.join('\n') !== after.join('\n')) {
+    out.push({ label: t('优先级顺序'), from: before.map(k => label(baseMap[k])).join(' → '), to: after.map(k => label(curMap[k])).join(' → ') });
+  }
+  return out;
+}
+
+document.addEventListener('keydown', e => {
+  if (!(e.ctrlKey || e.metaKey) || String(e.key).toLowerCase() !== 's') return;
+  const drawer = _('comboEditor');
+  if (!drawer || !drawer.classList.contains('open') || _modalLayerOpen()) return;
+  e.preventDefault();
+  if (_editingComboId && !comboEditorDirty()) return; // 没有改动，无需保存（保存按钮此时也是禁用的）
+  saveCombo();
+});
 
 // 条目编辑器渲染 + 优先级预览
 // 行结构：拖拽手柄 / 优先级序号 / 模型下拉 / 上游钉选 / 徽章 / 启停与排序操作
@@ -102,21 +316,23 @@ function renderComboEntries() {
   const box = _('comboEntries');
   if (!box) return;
   if (!_comboEntries.length) {
-    box.innerHTML = '<div class="combo-empty-entries">' + t('尚未添加条目，点击下方「添加条目」开始。') + '</div>';
+    box.innerHTML = '<div class="combo-empty-entries">' + t('尚未添加条目，点击下方「多选添加模型」或「添加条目」开始。') + '</div>';
     renderComboPreview();
+    comboEditorSync();
     return;
   }
-  const chosen = {};
-  _comboEntries.forEach(e => { if (e.model) chosen[comboEntryKey(e)] = true; });
+  const chosen = {}, counts = {};
+  _comboEntries.forEach(e => { if (e.model) { const k = comboEntryKey(e); chosen[k] = true; counts[k] = (counts[k] || 0) + 1; } });
   box.innerHTML = _comboEntries.map((e, i) => {
     const opts = buildComboModelOptions(e, chosen);
-    const dis = e.disabled ? ' disabled-entry' : '';
+    const dup = e.model && counts[comboEntryKey(e)] > 1;
+    const dis = (e.disabled ? ' disabled-entry' : '') + (dup ? ' combo-entry-dup' : '') + (e.model ? '' : ' combo-entry-empty');
     return '<div class="combo-entry' + dis + '" data-entry-idx="' + i + '" ondragover="comboDragOver(event, ' + i + ')" ondrop="comboDrop(event, ' + i + ')">' +
       '<span class="combo-entry-grip" draggable="true" ondragstart="comboDragStart(event, ' + i + ')" ondragend="comboDragEnd(event)" title="' + t('拖动调整顺序') + '" role="button" tabindex="0" aria-label="' + t('拖动调整顺序') + '">⠿</span>' +
       '<span class="combo-entry-idx">' + (i + 1) + '</span>' +
-      '<span class="combo-entry-select"><select onchange="onComboEntryModelChange(' + i + ', this.value)">' + opts + '</select></span>' +
+      '<span class="combo-entry-select"><select aria-label="' + escAttr(t('模型') + ' ' + (i + 1)) + '" onchange="onComboEntryModelChange(' + i + ', this.value)">' + opts + '</select></span>' +
       comboSourceSelectHtml(i, e) +
-      '<span class="combo-entry-badges">' + comboEntryBadges(e) + '</span>' +
+      '<span class="combo-entry-badges">' + comboEntryBadges(e) + (dup ? '<span class="delisted-badge">' + t('重复') + '</span>' : '') + '</span>' +
       '<span class="combo-entry-actions">' +
         '<label class="switch" title="' + t('启用/停用该条目') + '"><input type="checkbox"' + (e.disabled ? '' : ' checked') + ' onchange="onComboEntryDisabled(' + i + ', !this.checked)"><span class="slider"></span></label>' +
         '<button class="btn btn-sm" onclick="moveComboEntry(' + i + ', -1)"' + (i === 0 ? ' disabled' : '') + ' title="' + t('上移') + '" aria-label="' + t('上移') + '">↑</button>' +
@@ -126,6 +342,7 @@ function renderComboEntries() {
     '</div>';
   }).join('');
   renderComboPreview();
+  comboEditorSync();
 }
 
 // 优先级预览：order 传入原下标数组时显示"模拟落位"后的顺序（拖拽 live preview 用）
@@ -146,6 +363,9 @@ function renderComboPreview(order) {
 function addComboEntry() {
   _comboEntries.push({ model: '', disabled: false, source: '', provider: '' });
   renderComboEntries();
+  const box = _('comboEntries');
+  const selects = box && typeof box.querySelectorAll === 'function' ? box.querySelectorAll('.combo-entry-select select') : [];
+  if (selects.length) selects[selects.length - 1].focus();
 }
 
 function removeComboEntry(i) {
@@ -294,6 +514,40 @@ function comboDragEnd() {
 
 // ========== 组合：多选模型选择器（从 /admin/api/combos 的 modelCatalog 取数） ==========
 var _pickerOrder = []; // Offering keys in selection order.
+var _comboPickerTier = '';  // '' | 'free' | 'paid'
+var _comboPickerShown = 0, _comboPickerTotal = 0;
+
+function setComboPickerTier(tier) {
+  _comboPickerTier = tier === 'free' || tier === 'paid' ? tier : '';
+  syncComboPickerTierChips();
+  renderComboPickerList();
+}
+
+function syncComboPickerTierChips() {
+  document.querySelectorAll('.combo-pick-tiers [data-tier]').forEach(btn => {
+    const on = btn.dataset.tier === _comboPickerTier;
+    btn.classList.toggle('active', on);
+    btn.setAttribute('aria-pressed', String(on));
+  });
+}
+
+// 来源筛选的选项取自当前目录（与分组标题同一套名称）
+function fillComboPickerSources() {
+  const sel = _('comboPickerSource');
+  if (!sel) return;
+  const groups = new Map();
+  _comboCatalog.forEach(m => { if (!m.disabled && !groups.has(comboOptgroupKey(m))) groups.set(comboOptgroupKey(m), comboGroupLabel(m)); });
+  sel.innerHTML = '<option value="">' + esc(t('全部来源')) + '</option>' +
+    Array.from(groups.keys()).sort(comboGroupSortKey).map(k => '<option value="' + escAttr(k) + '">' + esc(groups.get(k)) + '</option>').join('');
+  sel.value = '';
+}
+
+// 已在组合里的模型（选择器里标记「已添加」且不可再选）
+function comboKeysInUse() {
+  const used = {};
+  _comboEntries.forEach(e => { if (e.model) used[comboEntryKey(e)] = true; });
+  return used;
+}
 
 function openComboModelPicker() {
   if (!_comboCatalog || !_comboCatalog.length) {
@@ -301,7 +555,10 @@ function openComboModelPicker() {
     return;
   }
   _pickerOrder = [];
+  _comboPickerTier = '';
   _('comboPickerSearch').value = '';
+  syncComboPickerTierChips();
+  fillComboPickerSources();
   const editing = _comboEntries.some(e => e.model);
   _('comboPickerReplaceBtn').style.display = editing ? '' : 'none';
   renderComboPickerList();
@@ -324,7 +581,8 @@ function comboPickerToggle(model, checked) {
 
 // 工具条「全选」：把当前筛选结果里所有可选模型按显示顺序补进勾选序列
 function comboPickerSelectAllShown() {
-  pickerMergeIds(_pickerOrder, comboPickerVisibleModels().map(comboOfferingKey));
+  const used = comboKeysInUse();
+  pickerMergeIds(_pickerOrder, comboPickerVisibleModels().map(comboOfferingKey).filter(key => !used[key]));
   renderComboPickerList();
 }
 
@@ -337,7 +595,11 @@ function comboPickerClear() {
 function comboPickerVisibleModels() {
   const q = (_('comboPickerSearch').value || '').trim().toLowerCase();
   const rx = q.replace(/[.*+\-?^${}()|[\]\\]/g, '\\$&');
-  return _comboCatalog.filter(m => !m.disabled && (!rx || (m.id + ' ' + (m.qualifiedId || '') + ' ' + comboSourceName(m)).toLowerCase().search(rx) !== -1));
+  const sourceEl = _('comboPickerSource'), source = sourceEl ? sourceEl.value : '';
+  return _comboCatalog.filter(m => !m.disabled &&
+    (!_comboPickerTier || (_comboPickerTier === 'free') === (m.cost === 'free')) &&
+    (!source || comboOptgroupKey(m) === source) &&
+    (!rx || (m.id + ' ' + (m.qualifiedId || '') + ' ' + comboSourceName(m)).toLowerCase().search(rx) !== -1));
 }
 
 // 已在组合中的模型不允许重复勾选（标记「已添加」且复选框禁用）
@@ -345,9 +607,10 @@ function renderComboPickerList() {
   const box = _('comboPickerList');
   if (!box) return;
   const scrollTop = box.scrollTop;
-  const inCombo = {};
-  _comboEntries.forEach(e => { if (e.model) inCombo[comboEntryKey(e)] = true; });
+  const inCombo = comboKeysInUse();
   const visible = comboPickerVisibleModels();
+  _comboPickerTotal = new Set(_comboCatalog.filter(m => !m.disabled).map(comboOfferingKey)).size;
+  _comboPickerShown = 0;
   if (!visible.length) {
     box.innerHTML = '<div class="empty">' + t('没有符合条件的模型') + '</div>';
     renderComboPickerCount();
@@ -363,6 +626,7 @@ function renderComboPickerList() {
     const key = comboOfferingKey(m);
     if (!seenSrc[key]) {
       seenSrc[key] = true;
+      _comboPickerShown++;
       g.items.push(m);
     }
   }
@@ -396,7 +660,8 @@ function renderComboPickerCount() {
   const el = _('comboPickerCount');
   if (!el) return;
   const n = _pickerOrder.length;
-  el.textContent = t('已选 ') + n + ' ' + t('个模型');
+  el.textContent = t('已选 ') + n + ' ' + t('个模型') +
+    (_comboPickerShown !== _comboPickerTotal ? '  ·  ' + t('显示 ') + _comboPickerShown + ' / ' + _comboPickerTotal : '');
 }
 
 // 确认：append=false 追加到现有条目之后；append=true（替换整表）用勾选顺序重构全部条目
@@ -417,44 +682,33 @@ function comboPickerConfirm(replace) {
 }
 
 async function saveCombo() {
-  const id = _('comboId').value.trim();
-  const name = _('comboName').value.trim();
+  if (_comboSaving) return;
   const res = _('comboSaveResult');
-  res.textContent = '';
-  if (!id) { toast(t('请填写组合 ID'), 'error'); return; }
-  if (!name) { toast(t('请填写名称'), 'error'); return; }
-  if (!_editingComboId && _comboReserved.indexOf(id) !== -1) { toast(t('该 ID 为保留别名，请更换'), 'error'); return; }
-  const entries = _comboEntries.filter(e => e.model).map(e => {
-    const out = { model: e.model, disabled: !!e.disabled };
-    if (e.source) {
-      out.source = e.source;
-      if (e.source === 'provider' && e.provider) out.provider = e.provider;
-    }
-    return out;
-  });
-  const seen = {};
-  for (const e of entries) {
-    const key = comboEntryKey(e);
-    if (seen[key]) { toast(t('条目中存在重复模型: ') + e.model, 'error'); return; }
-    seen[key] = true;
+  if (res) res.textContent = '';
+  const errors = comboValidate();
+  _comboShowErrors = errors.length > 0;
+  showComboErrors(errors);
+  if (errors.length) {
+    toast(errors[0].msg, 'error');
+    focusComboError(errors[0]);
+    return;
   }
-  const payload = {
-    id: id,
-    name: name,
-    description: _('comboDesc').value.trim(),
-    category: _('comboCategory').value.trim(),
-    enabled: _('comboEnabled').value === 'true',
-    emergencyFallback: _('comboEmergency').checked,
-    entries: entries,
-  };
+  const payload = comboPayload();
+  _comboSaving = true;
+  const btn = _('comboSaveBtn');
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="loading"></span> ' + t('保存中...'); }
   try {
     await api('POST', '/combos/save', payload);
     toast(t('组合已保存'), 'success');
-    hideComboEditor();
+    _comboSaving = false;
+    await hideComboEditor(true);
     await loadCombos();
   } catch (e) {
-    res.innerHTML = '<span class="save-result err">' + esc(e.message) + '</span>';
+    if (res) res.innerHTML = '<span class="save-result err">' + esc(e.message) + '</span>';
     toast(t('保存失败: ') + e.message, 'error');
+  } finally {
+    _comboSaving = false;
+    comboEditorSync();
   }
 }
 
@@ -481,7 +735,7 @@ async function deleteCombo(id, btn) {
   try {
     await api('POST', '/combos/delete', { id: id });
     toast(t('已删除'), 'success');
-    if (_editingComboId === id) hideComboEditor();
+    if (_editingComboId === id) await hideComboEditor(true);
     await loadCombos();
   } catch (e) { toast(t('删除失败: ') + e.message, 'error'); }
   finally { if (btn) { btn.disabled = false; btn.innerHTML = orig; } }

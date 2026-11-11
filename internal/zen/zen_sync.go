@@ -39,7 +39,7 @@ func SyncModels() SyncResult {
 		if strings.Contains(msg, "timeout") || strings.Contains(msg, "handshake") ||
 			strings.Contains(msg, "connection refused") || strings.Contains(msg, "unreachable") ||
 			strings.Contains(msg, "connectex") {
-			msg += "（opencode.ai 当前网络不可达，可在管理页「上游服务 → opencode 出口代理」配置代理后重试）"
+			msg += "（opencode.ai 当前网络不可达，可在管理页「Providers → OpenCode Zen → 出口代理」配置代理后重试）"
 		}
 		log.Printf("zen models sync failed: %v", msg)
 		res.Error = msg

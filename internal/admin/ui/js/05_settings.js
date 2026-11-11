@@ -24,14 +24,17 @@ async function loadKeys() {
     el.textContent = '';
     keys.forEach(k => {
       const row = document.createElement('div'); row.className = 'key-row';
-      const masked = document.createElement('span'); masked.className = 'key-mask'; masked.textContent = maskAPIKey(k); masked.title = t('完整密钥已隐藏');
+      const masked = document.createElement('span'); masked.className = 'key-mask'; masked.textContent = maskAPIKey(k); masked.title = t('列表中已脱敏；点击「复制」获取完整密钥');
       const copy = document.createElement('button'); copy.type = 'button'; copy.className = 'btn btn-sm'; copy.textContent = t('复制');
       copy.addEventListener('click', () => copyText(k));
       const del = document.createElement('button'); del.type = 'button'; del.className = 'btn btn-sm btn-danger'; del.innerHTML = uiIcon('close'); del.title = t('撤销'); del.setAttribute('aria-label', t('撤销'));
       del.addEventListener('click', () => deleteKey(k, del));
       row.appendChild(masked); row.appendChild(copy); row.appendChild(del); el.appendChild(row);
     });
-  } catch (e) { _('keysList').innerHTML = '<div class="empty">' + t('加载失败') + '</div>'; }
+  } catch (e) {
+    _('keysList').innerHTML = '<div class="empty">' + esc(t('加载失败')) + (e && e.message ? ': ' + esc(e.message) : '') +
+      ' <button type="button" class="btn btn-sm" onclick="loadKeys()">' + esc(t('重试')) + '</button></div>';
+  }
 }
 
 function maskAPIKey(key) {
@@ -39,6 +42,9 @@ function maskAPIKey(key) {
   if (value.length <= 8) return '••••' + value.slice(-2);
   return value.slice(0, 4) + '••••••••' + value.slice(-4);
 }
+
+// The generated-key banner clears itself; a newer key must not be wiped by the previous key's timer.
+let _keyGenTimer = null;
 
 async function generateKey(btn) {
   const orig = btn ? btn.innerHTML : '';
@@ -49,12 +55,13 @@ async function generateKey(btn) {
     const result = _('keyGenResult');
     result.textContent = '';
     const banner = document.createElement('div'); banner.className = 'save-banner';
-    const note = document.createElement('div'); note.className = 'save-result ok mb-8'; note.textContent = t('新密钥仅在此处完整显示，请立即复制');
+    const note = document.createElement('div'); note.className = 'save-result ok mb-8'; note.textContent = t('新密钥已生成，请立即复制并妥善保存');
     const display = document.createElement('button'); display.type = 'button'; display.className = 'key-display w-full'; display.textContent = key; display.addEventListener('click', () => copyText(key));
     banner.appendChild(note); banner.appendChild(display); result.appendChild(banner);
     loadKeys();
     toast(t('密钥已生成'), 'success');
-    setTimeout(() => _('keyGenResult').innerHTML = '', 8000);
+    clearTimeout(_keyGenTimer);
+    _keyGenTimer = setTimeout(() => { _keyGenTimer = null; _('keyGenResult').innerHTML = ''; }, 8000);
   } catch (e) { toast(t('生成失败: ') + keyErrorMessage(e.message), 'error'); }
   finally { if (btn) { btn.disabled = false; btn.innerHTML = orig; } }
 }
@@ -112,12 +119,15 @@ async function updateConfig() {
   try {
     await api('POST', '/config/update', { strategy, defaultModel, modelChain, onlyFree });
     delete chainField.dataset.dirty;
-    await Promise.all([
-      loadConfig({ preserveEdits: true }),
-      typeof loadRouteInspector === 'function' ? loadRouteInspector(true) : Promise.resolve(),
-    ]);
+    // 只重读配置；检查器沿用已加载的候选/请求数据，仅更新其中的配置部分（不闪骨架屏）
+    const config = await loadConfig({ preserveEdits: true });
+    if (config && typeof refreshRouteInspectorConfig === 'function') refreshRouteInspectorConfig(config);
     toast(t('配置已更新'), 'success');
-  } catch (e) { toast(t('更新失败: ') + e.message, 'error'); }
+  } catch (e) {
+    // 没保存成功：下拉框回到服务端当前值，与上方流程图一致；回退链文本是正在编辑的草稿，保留
+    if (typeof restoreRouteSelects === 'function') restoreRouteSelects();
+    toast(t('更新失败: ') + e.message, 'error');
+  }
 }
 
 // ========== 调优参数（retry/stream/affinity/wire/模型策略） ==========
@@ -160,6 +170,7 @@ function seInput(cls, placeholder, value, listId) {
   inp.type = 'text';
   inp.className = cls;
   inp.placeholder = placeholder;
+  inp.setAttribute('aria-label', placeholder);
   inp.value = value || '';
   if (listId) inp.setAttribute('list', listId);
   return inp;
@@ -179,16 +190,27 @@ function addAliasRow(alias, target, provider) {
   rem.className = 'btn btn-sm btn-danger se-remove';
   rem.innerHTML = uiIcon('close');
   rem.title = t('移除');
+  rem.setAttribute('aria-label', t('移除别名'));
   rem.addEventListener('click', () => { row.remove(); checkAliasDupes(); refreshSaveBar(); });
   a.addEventListener('input', checkAliasDupes);
+  const preview = document.createElement('span');
+  preview.className = 'se-preview';
+  preview.setAttribute('aria-live', 'polite');
   row.appendChild(a);
   row.appendChild(document.createTextNode(' → '));
   row.appendChild(tgt);
   row.appendChild(document.createTextNode(' @ '));
   row.appendChild(prov);
   row.appendChild(rem);
+  row.appendChild(preview);
   box.appendChild(row);
   checkAliasDupes();
+  if (typeof refreshAliasPreviews === 'function') {
+    tgt.addEventListener('input', refreshAliasPreviews);
+    prov.addEventListener('input', refreshAliasPreviews);
+    refreshAliasPreviews();
+    ensureAliasPreviewData();
+  }
   return row;
 }
 
@@ -231,6 +253,7 @@ function addErrorRuleRow(codes, match, action, regex) {
   matchInp.value = match || '';
   const actSel = document.createElement('select');
   actSel.className = 'se-action';
+  actSel.setAttribute('aria-label', t('错误规则动作'));
   ERROR_RULE_ACTIONS.forEach(a => {
     const opt = document.createElement('option');
     opt.value = a; opt.textContent = a;
@@ -242,19 +265,23 @@ function addErrorRuleRow(codes, match, action, regex) {
   const regexInp = document.createElement('input');
   regexInp.type = 'checkbox';
   regexInp.checked = !!regex;
+  regexInp.setAttribute('aria-label', t('按正则匹配'));
   regexWrap.appendChild(regexInp);
   regexWrap.appendChild(document.createTextNode(' regex'));
   const up = document.createElement('button');
   up.type = 'button'; up.className = 'btn btn-sm se-move'; up.textContent = '↑';
   up.title = t('上移');
+  up.setAttribute('aria-label', t('上移规则'));
   up.addEventListener('click', () => { const prev = row.previousElementSibling; if (prev) { row.parentNode.insertBefore(row, prev); refreshSaveBar(); } });
   const down = document.createElement('button');
   down.type = 'button'; down.className = 'btn btn-sm se-move'; down.textContent = '↓';
   down.title = t('下移');
+  down.setAttribute('aria-label', t('下移规则'));
   down.addEventListener('click', () => { const next = row.nextElementSibling; if (next) { row.parentNode.insertBefore(next, row); refreshSaveBar(); } });
   const rem = document.createElement('button');
   rem.type = 'button'; rem.className = 'btn btn-sm btn-danger se-remove'; rem.innerHTML = uiIcon('close');
   rem.title = t('移除');
+  rem.setAttribute('aria-label', t('移除规则'));
   rem.addEventListener('click', () => { row.remove(); refreshSaveBar(); });
   row.appendChild(codesInp);
   row.appendChild(matchInp);
@@ -578,6 +605,8 @@ async function loadAdminSessions() {
   try {
     const response = await api('GET', '/auth/sessions');
     const sessions = (response.data && response.data.sessions) || [];
+    const sessionCount = _('activeSessionsCount');
+    if (sessionCount) sessionCount.textContent = String(sessions.length);
     host.textContent = '';
     if (!sessions.length) {
       const empty = document.createElement('div'); empty.className = 'access-empty'; empty.textContent = t('没有活动会话'); host.appendChild(empty); return;

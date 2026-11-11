@@ -83,10 +83,17 @@ function copyGatewayUrl(btn) {
   const url = gatewayV1URL();
   const done = () => {
     if (!btn) return;
-    const prev = btn.innerHTML;
-    btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="var(--green)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>';
+    // Only swap the icon SVG — the label <span> must stay intact
+    const icon = btn.querySelector('svg[aria-hidden]');
+    const tickSVG = '<svg viewBox="0 0 24 24" fill="none" stroke="var(--green)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>';
+    const prevSVG = icon ? icon.outerHTML : '';
+    if (icon) icon.outerHTML = tickSVG;
     btn.classList.add('is-copied');
-    setTimeout(() => { btn.innerHTML = prev; btn.classList.remove('is-copied'); }, 1200);
+    setTimeout(() => {
+      const tick = btn.querySelector('svg[aria-hidden]');
+      if (tick && prevSVG) tick.outerHTML = prevSVG;
+      btn.classList.remove('is-copied');
+    }, 1200);
   };
   if (navigator.clipboard && navigator.clipboard.writeText) {
     navigator.clipboard.writeText(url).then(done).catch(() => { fallbackCopy(url); done(); });
@@ -131,9 +138,21 @@ function setAdminAuthMode(mode) {
   if (_('loginNewPassword')) _('loginNewPassword').disabled = !bootstrap && !legacy;
   if (_('loginConfirmPassword')) _('loginConfirmPassword').disabled = !bootstrap && !legacy;
   if (_('loginPasswordLabel')) _('loginPasswordLabel').textContent = t(legacy ? '当前密码' : '密码');
-  if (_('loginLocalHelp')) _('loginLocalHelp').style.display = bootstrap ? 'none' : '';
+  const ssoProviders = (_adminAuthStatus && _adminAuthStatus.ssoProviders) || [];
+  const hasSSO = Array.isArray(ssoProviders) && ssoProviders.some(p => p.enabled && p.ready && (p.type === 'oidc' || p.type === 'saml'));
+  if (_('loginLocalHelp')) _('loginLocalHelp').style.display = (!bootstrap && hasSSO) ? '' : 'none';
   const forgot = _('forgotPasswordButton');
-  if (forgot) forgot.hidden = _adminAuthMode !== 'login' || !(_adminAuthStatus && _adminAuthStatus.recoveryCodeAvailable);
+  const hasRecoveryCode = !!(_adminAuthStatus && _adminAuthStatus.recoveryCodeAvailable);
+  if (forgot) {
+    forgot.hidden = _adminAuthMode !== 'login';
+    // Without a recovery code the link is a disclosure for the reset guidance, not a page link.
+    if (hasRecoveryCode) forgot.removeAttribute('aria-expanded');
+    else forgot.setAttribute('aria-expanded', 'false');
+  }
+  // The reset guidance stays out of the page until the user asks for it via "Forgot password?".
+  const resetHint = _('noRecoveryCodeHint');
+  if (resetHint) { resetHint.hidden = true; resetHint.textContent = ''; }
+  renderBootstrapSecretHelp(bootstrap);
   const desktopTrust = _('desktopTrustLoginRow');
   if (desktopTrust) desktopTrust.hidden = _adminAuthMode !== 'login' || !nativeDesktopAvailable();
   const browserNotice = _('browserLoginNotice');
@@ -141,7 +160,7 @@ function setAdminAuthMode(mode) {
   const title = _('loginTitle'), help = _('loginHelp'), button = _('loginSubmit');
   if (_adminAuthMode === 'bootstrap') {
     if (title) title.textContent = t('初始化管理员');
-    if (help) help.textContent = t('输入本机终端或桌面弹窗中显示的一次性密钥，并设置永久密码。');
+    if (help) help.textContent = t('输入启动 RouteNest 时显示的一次性密钥，并设置永久密码。');
     if (button) button.textContent = t('完成初始化');
   } else if (_adminAuthMode === 'recovery') {
     if (title) title.textContent = t('完成离线恢复');
@@ -158,6 +177,29 @@ function setAdminAuthMode(mode) {
   }
   renderSSOLoginProviders();
   if (typeof updateAdminAuthPageTitle === 'function') updateAdminAuthPageTitle();
+}
+
+// Where the one-time key comes from depends on how RouteNest was started, so say so per platform.
+function renderBootstrapSecretHelp(visible) {
+  const box = _('bootstrapSecretHelp');
+  if (!box) return;
+  box.textContent = '';
+  box.hidden = !visible;
+  if (!visible) return;
+  const title = document.createElement('strong');
+  title.textContent = t('到哪里找这个密钥？');
+  const list = document.createElement('ul');
+  for (const line of [
+    '在终端运行 RouteNest（Windows、macOS、Linux）：密钥已打印在启动它的终端或控制台窗口中。重新启动 RouteNest 会生成并打印新的密钥。',
+    'Docker、系统服务或没有终端时：使用首次启动前设置的 ROUTENEST_ADMIN_BOOTSTRAP_PASSWORD 的值。',
+    '桌面应用不需要此密钥：请在应用自带的设置窗口中创建密码。',
+  ]) {
+    const item = document.createElement('li');
+    item.textContent = t(line);
+    list.appendChild(item);
+  }
+  box.appendChild(title);
+  box.appendChild(list);
 }
 
 function showLogin(mode) {
@@ -183,6 +225,7 @@ function renderSSOLoginProviders() {
     provider.enabled === true && provider.ready === true && (provider.type === 'oidc' || provider.type === 'saml')
   ) : [];
   host.style.display = available.length ? '' : 'none';
+  if (_('loginLocalHelp')) _('loginLocalHelp').style.display = available.length ? '' : 'none';
   available.forEach(provider => {
     const button = document.createElement('button');
     button.type = 'button'; button.className = 'btn btn-block';
@@ -247,6 +290,12 @@ async function submitLogin() {
     }
     const res = await adminFetch('POST', path, body);
     const data = await res.json().catch(() => ({}));
+    const issued = (data && data.data) || {};
+    const restartRequired = data.error === 'security_restart_required' || issued.restartRequired === true;
+    if (bootstrap && typeof issued.recoveryCode === 'string' && issued.recoveryCode && ((res.ok && data.success) || restartRequired)) {
+      showSetupRecoveryCode(issued.recoveryCode, restartRequired);
+      return;
+    }
     if (res.ok && data.success) {
       location.reload();
     } else if (data.error === 'password_rotation_required') {
@@ -288,6 +337,7 @@ function renderAdminPrincipal(principal) {
   _adminPrincipal = principal || null;
   const root = document.documentElement;
   if (root) root.dataset.adminAuth = _adminPrincipal ? 'authenticated' : 'signed-out';
+  if (_adminPrincipal && typeof updateAdminAuthPageTitle === 'function') updateAdminAuthPageTitle();
   const authPage = _('adminAuthPage');
   if (authPage) authPage.hidden = !!_adminPrincipal;
   const login = _('loginOverlay');
@@ -331,6 +381,8 @@ function applyAdminPermissionVisibility() {
     const required = String(element.dataset.adminPermission || '').split(/\s+/).filter(Boolean);
     element.hidden = !required.every(adminHasPermission);
   });
+  if (typeof applyCredentialAccess === 'function') applyCredentialAccess();
+  if (typeof applyRoutingAccess === 'function') applyRoutingAccess();
   document.querySelectorAll('.page-subtabs').forEach(nav => {
     const active = nav.querySelector('.subtab.active');
     if (!active || !active.hidden || typeof switchPageSubTab !== 'function') return;
@@ -402,7 +454,7 @@ const THEME_KEY = 'cline_admin_theme';
 function applyTheme(theme) {
   document.documentElement.dataset.theme = theme;
   const themeMeta = document.querySelector('meta[name="theme-color"]');
-  if (themeMeta) themeMeta.setAttribute('content', theme === 'dark' ? '#0B1020' : '#F7F8FC');
+  if (themeMeta) themeMeta.setAttribute('content', theme === 'dark' ? '#0C111D' : '#F7F8FA');
   document.querySelectorAll('[data-theme-opt]').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.themeOpt === theme);
     btn.setAttribute('aria-pressed', btn.dataset.themeOpt === theme ? 'true' : 'false');
@@ -614,7 +666,7 @@ document.addEventListener('keydown', event => {
 var _verCheckDone = false; // 「关于」页更新检查只自动跑一次（checkForUpdate 在 05_settings 定义）
 // 每个面（provider 抽屉 / 路由页调优卡）注册一个 ctx；同一时刻只展示优先级最高且脏的那个。
 const _saveBarCtxs = {};
-const _SAVE_BAR_ORDER = ['provider', 'tuning'];
+const _SAVE_BAR_ORDER = ['provider', 'combo', 'tuning'];
 function setSaveBarCtx(surface, ctx) {
   if (ctx) _saveBarCtxs[surface] = ctx; else delete _saveBarCtxs[surface];
   refreshSaveBar();

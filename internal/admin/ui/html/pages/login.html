@@ -1,0 +1,197 @@
+<div id="adminAuthPage" class="auth-page">
+  <aside class="auth-brand-panel">
+    <div class="auth-brand-content">
+      <div class="auth-brand-lockup">
+        <div style="width:42px;height:42px;aspect-ratio:1/1;flex-shrink:0">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="42" height="42" style="width:42px;height:42px;aspect-ratio:1/1;display:block;filter:drop-shadow(0 6px 16px rgba(91,140,255,0.3))" fill="none">
+            <defs>
+              <linearGradient id="rnHexBgPanel" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stop-color="#182238"/>
+                <stop offset="100%" stop-color="#0B1020"/>
+              </linearGradient>
+              <linearGradient id="rnAccentGradPanel" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stop-color="#5B8CFF"/>
+                <stop offset="50%" stop-color="#7968F8"/>
+                <stop offset="100%" stop-color="#C084FC"/>
+              </linearGradient>
+              <linearGradient id="rnGlowPanel" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stop-color="#4778E8" stop-opacity="0.3"/>
+                <stop offset="100%" stop-color="#7968F8" stop-opacity="0"/>
+              </linearGradient>
+            </defs>
+
+            <!-- Squircle Base for App Icon -->
+            <rect x="6" y="6" width="116" height="116" rx="28" fill="url(#rnHexBgPanel)" stroke="#2A3854" stroke-width="2"/>
+            <rect x="6" y="6" width="116" height="116" rx="28" fill="url(#rnGlowPanel)"/>
+
+            <!-- Outer Hexagonal Nest Frame -->
+            <path d="M64 22 L98 41.5 V80.5 L64 100 L30 80.5 V41.5 Z" 
+                  stroke="url(#rnAccentGradPanel)" stroke-width="5" stroke-linejoin="round" fill="none" opacity="0.45"/>
+
+            <!-- Routing Pathways -->
+            <!-- Main Ingress -->
+            <path d="M30 64 H 56" stroke="url(#rnAccentGradPanel)" stroke-width="5" stroke-linecap="round"/>
+            <!-- Branch to Upper Provider -->
+            <path d="M56 64 C64 64, 68 46, 84 46 H92" stroke="url(#rnAccentGradPanel)" stroke-width="4.5" stroke-linecap="round" fill="none"/>
+            <!-- Center Direct Route -->
+            <path d="M56 64 H92" stroke="url(#rnAccentGradPanel)" stroke-width="4.5" stroke-linecap="round"/>
+            <!-- Branch to Lower Provider -->
+            <path d="M56 64 C64 64, 68 82, 84 82 H92" stroke="url(#rnAccentGradPanel)" stroke-width="4.5" stroke-linecap="round" fill="none"/>
+
+            <!-- Core Gateway Node (The Nest Hub) -->
+            <circle cx="56" cy="64" r="7" fill="#FFFFFF"/>
+            <circle cx="56" cy="64" r="10" stroke="url(#rnAccentGradPanel)" stroke-width="2.5" fill="none"/>
+
+            <!-- Output Provider Endpoints -->
+            <circle cx="92" cy="46" r="4.5" fill="#38BDF8"/>
+            <circle cx="92" cy="64" r="4.5" fill="#7968F8"/>
+            <circle cx="92" cy="82" r="4.5" fill="#43C995"/>
+          </svg>
+        </div>
+        <span class="auth-brand-name">RouteNest</span>
+      </div>
+      <div class="auth-brand-tagline">
+        <h2>Free-First AI API Routing</h2>
+        <p>Multiple Providers · Intelligent Routing · Cost-Aware Choices</p>
+      </div>
+      <ul class="auth-brand-features">
+        <li class="brand-feature">
+          <div class="brand-feature-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2 2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+          </div>
+          <div class="brand-feature-text">
+            <strong>Free-First Routing</strong>
+            <span>Prioritize free and generous tier models before falling back</span>
+          </div>
+        </li>
+        <li class="brand-feature">
+          <div class="brand-feature-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+          </div>
+          <div class="brand-feature-text">
+            <strong>Multiple Providers</strong>
+            <span>100+ built-in provider definitions, multi-account rotation &amp; combos</span>
+          </div>
+        </li>
+        <li class="brand-feature">
+          <div class="brand-feature-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+          </div>
+          <div class="brand-feature-text">
+            <strong>Intelligent &amp; Cost-Aware</strong>
+            <span>Automated failover, health monitoring, and cost-optimized routing</span>
+          </div>
+        </li>
+      </ul>
+    </div>
+  </aside>
+  <header class="auth-header">
+    <div class="auth-header-content">
+      <a class="auth-wordmark" href="#login" aria-label="RouteNest">
+        <div style="width:30px;height:30px;aspect-ratio:1/1;flex-shrink:0">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="30" height="30" style="width:30px;height:30px;aspect-ratio:1/1;display:block;flex-shrink:0" fill="none">
+            <defs>
+              <linearGradient id="rnHexBgHeader" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stop-color="#182238"/>
+                <stop offset="100%" stop-color="#0B1020"/>
+              </linearGradient>
+              <linearGradient id="rnAccentGradHeader" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stop-color="#5B8CFF"/>
+                <stop offset="50%" stop-color="#7968F8"/>
+                <stop offset="100%" stop-color="#C084FC"/>
+              </linearGradient>
+              <linearGradient id="rnGlowHeader" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stop-color="#4778E8" stop-opacity="0.3"/>
+                <stop offset="100%" stop-color="#7968F8" stop-opacity="0"/>
+              </linearGradient>
+            </defs>
+
+            <!-- Squircle Base for App Icon -->
+            <rect x="6" y="6" width="116" height="116" rx="28" fill="url(#rnHexBgHeader)" stroke="#2A3854" stroke-width="2"/>
+            <rect x="6" y="6" width="116" height="116" rx="28" fill="url(#rnGlowHeader)"/>
+
+            <!-- Outer Hexagonal Nest Frame -->
+            <path d="M64 22 L98 41.5 V80.5 L64 100 L30 80.5 V41.5 Z" 
+                  stroke="url(#rnAccentGradHeader)" stroke-width="5" stroke-linejoin="round" fill="none" opacity="0.45"/>
+
+            <!-- Routing Pathways -->
+            <!-- Main Ingress -->
+            <path d="M30 64 H 56" stroke="url(#rnAccentGradHeader)" stroke-width="5" stroke-linecap="round"/>
+            <!-- Branch to Upper Provider -->
+            <path d="M56 64 C64 64, 68 46, 84 46 H92" stroke="url(#rnAccentGradHeader)" stroke-width="4.5" stroke-linecap="round" fill="none"/>
+            <!-- Center Direct Route -->
+            <path d="M56 64 H92" stroke="url(#rnAccentGradHeader)" stroke-width="4.5" stroke-linecap="round"/>
+            <!-- Branch to Lower Provider -->
+            <path d="M56 64 C64 64, 68 82, 84 82 H92" stroke="url(#rnAccentGradHeader)" stroke-width="4.5" stroke-linecap="round" fill="none"/>
+
+            <!-- Core Gateway Node (The Nest Hub) -->
+            <circle cx="56" cy="64" r="7" fill="#FFFFFF"/>
+            <circle cx="56" cy="64" r="10" stroke="url(#rnAccentGradHeader)" stroke-width="2.5" fill="none"/>
+
+            <!-- Output Provider Endpoints -->
+            <circle cx="92" cy="46" r="4.5" fill="#38BDF8"/>
+            <circle cx="92" cy="64" r="4.5" fill="#7968F8"/>
+            <circle cx="92" cy="82" r="4.5" fill="#43C995"/>
+          </svg>
+        </div>
+        <span>RouteNest</span>
+      </a>
+      <div class="auth-preferences">
+        <div class="seg theme-switch" role="group" aria-label="Theme">
+          <button type="button" data-theme-opt="light" onclick="setTheme('light')" title="Light" aria-label="Light">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+          </button>
+          <button type="button" data-theme-opt="dark" onclick="setTheme('dark')" title="Dark" aria-label="Dark">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+          </button>
+        </div>
+        <div class="seg lang-switch" role="group" aria-label="Language">
+          <button type="button" data-lang-opt="en" onclick="setLang('en')" aria-pressed="true" class="active">English</button>
+          <button type="button" data-lang-opt="zh" onclick="setLang('zh')" aria-pressed="false">中文</button>
+        </div>
+      </div>
+    </div>
+  </header>
+  <main id="adminAuthContent" class="auth-main">
+    <section id="loginOverlay" class="auth-view" aria-labelledby="loginTitle" aria-describedby="loginHelp">
+      <div class="login-card">
+        <h1 id="loginTitle">Sign in</h1>
+        <p id="loginHelp">Enter your administrator username and password.</p>
+        <p id="loginStatus" role="status" aria-live="polite">Loading...</p>
+        <div id="loginSSOProviders" style="display:none" aria-label="Single Sign-On">
+          <div id="loginSSOButtons"></div>
+        </div>
+        <form id="loginForm" class="login-form" novalidate onsubmit="event.preventDefault();submitLogin()">
+          <div id="loginLocalHelp" style="display:none">Local Emergency Administrator Login</div>
+          <div id="loginUsernameRow" class="login-field">
+            <label for="loginUsername">Username</label>
+            <input type="text" id="loginUsername" value="admin" placeholder="Administrator username" autocomplete="username" required aria-describedby="loginError">
+          </div>
+          <div id="bootstrapSecretRow" class="login-field" style="display:none">
+            <label for="bootstrapSecret">One-time Local Key</label>
+            <input type="password" id="bootstrapSecret" autocomplete="off" required disabled aria-describedby="bootstrapSecretHelp loginError">
+            <div id="bootstrapSecretHelp" class="login-setup-help" hidden></div>
+          </div>
+          <div id="loginPasswordRow" class="login-field">
+            <label id="loginPasswordLabel" for="loginPassword">Password</label>
+            <input type="password" id="loginPassword" autocomplete="current-password" placeholder="Enter password" required aria-describedby="browserLoginNotice loginError">
+          </div>
+          <label id="desktopTrustLoginRow" class="login-trust-row" hidden><input id="desktopTrustLoginCheck" type="checkbox"><span>Trust this device and stay signed in</span></label>
+          <p id="browserLoginNotice" class="login-security-note">Standard browsers require independent sign-in and will not use desktop credentials.</p>
+          <div id="loginNewPasswordRow" class="login-password-fields" style="display:none">
+            <div class="login-field">
+              <label for="loginNewPassword">New Permanent Password (min 8 chars)</label>
+              <input type="password" id="loginNewPassword" minlength="8" autocomplete="new-password" required disabled aria-describedby="loginError">
+            </div>
+            <div class="login-field">
+              <label for="loginConfirmPassword">Confirm New Password</label>
+              <input type="password" id="loginConfirmPassword" autocomplete="new-password" minlength="8" required disabled aria-describedby="loginError">
+            </div>
+          </div>
+          <button type="submit" id="loginSubmit" class="btn btn-primary btn-block">Sign in</button>
+          <a href="#recover" id="forgotPasswordButton" class="login-link" aria-controls="noRecoveryCodeHint" onclick="event.preventDefault();onForgotPassword()" hidden>Forgot password?</a>
+          <p id="noRecoveryCodeHint" class="login-reset-hint" hidden></p>
+          <div id="loginError" class="login-err" role="alert" aria-live="polite"></div>
+        </form>
+      </div>
+    </section>

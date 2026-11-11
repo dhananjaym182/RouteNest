@@ -30,7 +30,7 @@ async function recheckProvider(id, btn) {
   try {
     const d = await api('POST', '/providers/recheck', { id: id });
     const st = d.data || {};
-    const host = btn ? btn.closest('.prov-card, tr, .drawer-group') : null;
+    const host = btn ? btn.closest('[data-prov], .drawer-group') : null;
     const out = host ? host.querySelector('.prov-row-recheck-out') : null;
     if (st.lastError && !st.lastCheckedMs) {
       _provRowResults['recheck:' + id] = { ok: false, text: friendlyTestError(new Error(st.lastError)) };
@@ -187,6 +187,11 @@ function applyProviderForm(p) {
   _('provProxyUrl').value = p ? (p.proxyUrl || '') : '';
   _('provWeight').value = p ? (p.weight || 0) : 0;
   _('provModels').value = p ? (p.modelIds || []).join(', ') : '';
+  _provModelMap = Object.assign({}, p && p.modelMap);
+  _provRowTests = {};
+  _provAddTest = null;
+  if (_('provAddName')) { _('provAddName').value = ''; _('provAddUpstream').value = ''; }
+  if (_('provAddResult')) _('provAddResult').innerHTML = '';
   _('provHeaders').value = p ? Object.entries(p.headers || {}).map(([k, v]) => k + ': ' + v).join('\n') : '';
   _('provEnabled').value = p ? String(p.enabled !== false) : 'true';
   // 手动新建默认付费：整源标 free 会把付费模型误标为免费（审计 §9.2）；free 来源应由预设/导入按模型判定
@@ -200,7 +205,7 @@ function applyProviderForm(p) {
 const PROV_FIELD_LABELS = {
   name: '名称', baseURL: 'Base URL', apiKey: 'API Key', priority: '优先级', timeoutSec: '超时(秒)',
   rpmLimit: '分钟请求上限', dailyLimit: '每日请求上限', tokenLimit: 'Token 配额/月', tokenWindow: '重置周期', proxyUrl: '出口代理', weight: '权重',
-  models: '模型', headers: '自定义请求头', enabled: '启用', free: '免费来源', connections: '连接池',
+  models: '模型', modelMap: '上游模型 ID', headers: '自定义请求头', enabled: '启用', free: '免费来源', connections: '连接池',
 };
 function serializeProvForm() {
   return {
@@ -216,6 +221,7 @@ function serializeProvForm() {
     proxyUrl: _('provProxyUrl').value.trim(),
     weight: _('provWeight').value,
     models: _('provModels').value.split(',').map(s => s.trim()).filter(Boolean).join(', '),
+    modelMap: (m => Object.keys(m).sort().map(k => k + ' → ' + m[k]).join('; '))(provModelMapForSave()),
     headers: _('provHeaders').value.trim(),
     enabled: _('provEnabled').value,
     free: _('provFree').value,
@@ -244,25 +250,141 @@ function discardProviderForm() {
 function hideProviderEditor() { _provEditorRevision++; closeDrawer('providerEditor'); }
 
 // 模型 ID 输入实时回显为芯片（真值仍是输入框文本，保存逻辑不变）
+// 模型名称（客户端使用）→ 上游模型 ID。只保存与名称不同的条目；缺省表示按名称原样发送。
+let _provModelMap = {};
+// 行内测试结果（名称 → { running } | { ok, text }）：编辑器内的行、选择器和导入预览共用同一形态。
+let _provRowTests = {};
+function provModelNames() {
+  return _('provModels').value.split(',').map(s => s.trim()).filter(Boolean);
+}
+// 仅保留仍在列表中的名称且与名称不同的映射（移除模型后其映射随之丢弃）
+function provModelMapForSave() {
+  const out = {};
+  provModelNames().forEach(name => {
+    const up = String(_provModelMap[name] || '').trim();
+    if (up && up !== name) out[name] = up;
+  });
+  return out;
+}
+function modelTestResultHTML(state) {
+  if (!state) return '';
+  if (state.running) return '<span class="mut"><span class="loading"></span> ' + t('测试中...') + '</span>';
+  return renderTestResultHTML(state.ok, state.text);
+}
+// 就地刷新所有展示该模型测试结果的单元格（不整体重绘，避免丢失输入焦点和筛选状态）
+function paintModelTestResult(selector, model, state) {
+  document.querySelectorAll(selector).forEach(el => {
+    if (el.dataset && el.dataset.model === model) el.innerHTML = modelTestResultHTML(state);
+  });
+}
+// 用表单当前内容（未保存也可）测试一个模型。upstream 为该行的上游模型 ID 草稿；
+// 始终显式发送，使「清空草稿」也能覆盖已保存的映射。
+async function provTestModel(base, model, upstream) {
+  if (!base || (!base.id && !base.baseURL)) return { ok: false, text: t('请先填写 Base URL') };
+  const body = Object.assign({}, base, { model: model, upstreamModel: upstream || model });
+  try {
+    const d = await api('POST', '/providers/test', body);
+    const r = d.data || {};
+    if (!r.ok) return { ok: false, text: r.error || t('失败') };
+    const sent = r.upstreamModel && r.upstreamModel !== model ? ' · ' + t('实际发送: ') + r.upstreamModel : '';
+    return { ok: true, text: r.durationMs + 'ms' + sent };
+  } catch (e) {
+    return { ok: false, text: friendlyTestError(e) };
+  }
+}
+function provModelRowHTML(name, index) {
+  const up = _provModelMap[name] || '';
+  const attr = ' data-model="' + escAttr(name) + '" data-idx="' + index + '"';
+  return '<div class="prov-model-row"' + attr + '>' +
+    '<span class="prov-model-name mono" title="' + escAttr(name) + '">' + esc(name) + '</span>' +
+    '<input type="text" class="mono-plain prov-model-up"' + attr + ' value="' + escAttr(up) + '" placeholder="' + escAttr(t('与名称相同')) + '"' +
+      ' aria-label="' + escAttr(t('上游模型 ID') + ': ' + name) + '" oninput="onProvModelUpstreamInput(this)">' +
+    '<button type="button" class="btn btn-sm"' + attr + ' onclick="testProvModelRow(this)" title="' + escAttr(t('测试此模型')) + '">' + t('测试') + '</button>' +
+    '<a href="javascript:void(0)"' + attr + ' onclick="removeProvModel(this.dataset.model)" title="' + t('移除') + '" aria-label="' + t('移除') + '" class="mut prov-model-remove">' + uiIcon('close') + '</a>' +
+    '<div class="prov-model-result"' + attr + '>' + modelTestResultHTML(_provRowTests[name]) + '</div>' +
+  '</div>';
+}
 function renderProvModelChips() {
   const box = _('provModelsChips');
-  const ids = _('provModels').value.split(',').map(s => s.trim()).filter(Boolean);
+  const ids = provModelNames();
   refreshSaveBar(); // 覆盖程序化改值的路径（移除芯片 / 勾选模型回填），input 路径由委托触发
   const cnt = _('provModelsCount');
   if (cnt) cnt.textContent = ' · ' + (ids.length ? ids.length + t(' 个模型') : t('未选择'));
   if (!box) return;
   if (!ids.length) { box.style.display = 'none'; box.innerHTML = ''; return; }
   box.style.display = '';
-  box.innerHTML = ids.map(id => '<span class="model-tag mono">' + esc(id) +
-    ' <a href="javascript:void(0)" onclick="removeProvModel(\'' + escAttr(id) + '\')" title="' + t('移除') + '" aria-label="' + t('移除') + '" class="mut">' + uiIcon('close') + '</a></span>').join('');
+  box.className = 'chip-row prov-model-rows';
+  box.innerHTML = ids.map(provModelRowHTML).join('');
 }
-
 function removeProvModel(id) {
-  const kept = _('provModels').value.split(',').map(s => s.trim()).filter(Boolean).filter(x => x !== id);
+  const kept = provModelNames().filter(x => x !== id);
   _('provModels').value = kept.join(', ');
+  delete _provModelMap[id];
+  delete _provRowTests[id];
   renderProvModelChips();
 }
-
+// 编辑某行的上游模型 ID：只更新草稿和脏检查，不重绘（保持输入焦点）；旧测试结果随草稿失效。
+function onProvModelUpstreamInput(input) {
+  const name = input.dataset.model;
+  const value = String(input.value || '').trim();
+  if (value && value !== name) _provModelMap[name] = value; else delete _provModelMap[name];
+  delete _provRowTests[name];
+  paintModelTestResult('#provModelsChips .prov-model-result', name, null);
+  refreshSaveBar();
+}
+async function testProvModelRow(btn) {
+  const name = btn.dataset.model;
+  const upstream = String(_provModelMap[name] || '');
+  const revision = _provEditorRevision;
+  _provRowTests[name] = { running: true };
+  paintModelTestResult('#provModelsChips .prov-model-result', name, _provRowTests[name]);
+  btn.disabled = true;
+  const result = await provTestModel(provEditorPayload(), name, upstream);
+  btn.disabled = false;
+  // 编辑器已切换对象，或这一行的草稿在测试期间被改动：结果已过期，丢弃
+  if (revision !== _provEditorRevision || String(_provModelMap[name] || '') !== upstream) return;
+  _provRowTests[name] = result;
+  paintModelTestResult('#provModelsChips .prov-model-result', name, result);
+}
+// 「添加单个模型」：先测试、再添加。测试用的就是将要保存的名称与上游 ID。
+let _provAddTest = null; // { name, upstream, result }，仅当名称与上游 ID 都未再改动时才随模型带入列表
+function provAddDraft() {
+  const name = (_('provAddName').value || '').trim();
+  const upstream = (_('provAddUpstream').value || '').trim();
+  return { name: name, upstream: upstream && upstream !== name ? upstream : '' };
+}
+async function testNewProvModel(btn) {
+  const out = _('provAddResult');
+  const draft = provAddDraft();
+  if (!draft.name) { if (out) out.innerHTML = renderTestResultHTML(false, t('请先填写模型名称')); return; }
+  const revision = _provEditorRevision;
+  if (out) out.innerHTML = modelTestResultHTML({ running: true });
+  if (btn) btn.disabled = true;
+  const result = await provTestModel(provEditorPayload(), draft.name, draft.upstream);
+  if (btn) btn.disabled = false;
+  const now = provAddDraft();
+  if (revision !== _provEditorRevision || now.name !== draft.name || now.upstream !== draft.upstream) return;
+  _provAddTest = { name: draft.name, upstream: draft.upstream, result: result };
+  if (out) out.innerHTML = modelTestResultHTML(result);
+}
+function addProvModel() {
+  const draft = provAddDraft();
+  const out = _('provAddResult');
+  if (!draft.name) { if (out) out.innerHTML = renderTestResultHTML(false, t('请先填写模型名称')); return; }
+  if (draft.name.indexOf(',') !== -1) { if (out) out.innerHTML = renderTestResultHTML(false, t('模型名称不能包含逗号')); return; }
+  const names = provModelNames();
+  if (names.indexOf(draft.name) !== -1) { if (out) out.innerHTML = renderTestResultHTML(false, t('模型已在列表中')); return; }
+  names.push(draft.name);
+  _('provModels').value = names.join(', ');
+  if (draft.upstream) _provModelMap[draft.name] = draft.upstream; else delete _provModelMap[draft.name];
+  const tested = _provAddTest && _provAddTest.name === draft.name && _provAddTest.upstream === draft.upstream;
+  if (tested) _provRowTests[draft.name] = _provAddTest.result; else delete _provRowTests[draft.name];
+  _('provAddName').value = '';
+  _('provAddUpstream').value = '';
+  _provAddTest = null;
+  if (out) out.innerHTML = '';
+  renderProvModelChips();
+}
 function toggleProvModelsAdv() {
   const d = _('provModelsAdv');
   if (!d) return;
@@ -295,6 +417,7 @@ async function saveProvider(btn) {
     proxyUrl: _('provProxyUrl').value.trim(),
     weight: parseInt(_('provWeight').value, 10) || 0,
     modelIds: _('provModels').value.split(',').map(s => s.trim()).filter(Boolean),
+    modelMap: provModelMapForSave(),
     headers: parseHeaderText(_('provHeaders').value),
     enabled: _('provEnabled').value === 'true',
     free: _('provFree').value === 'true',
@@ -371,7 +494,7 @@ async function deleteProvider(id) {
 function renderTestResultHTML(ok, text) {
   // 与全站保存反馈同款：showSaveResult / .save-result（✓/✗ + SVG 图标 + 状态色）
   return '<span class="save-result ' + (ok ? 'ok' : 'err') + '">' +
-    uiIcon(ok ? 'check' : 'close') + esc(text) + '</span>';
+    uiIcon(ok ? 'check' : 'close') + esc(tx(text)) + '</span>';
 }
 
 // 老接口/网关异常的降级文案：404「page not found」/ 非 JSON 响应（旧版本进程）→ 提示重启代理；
@@ -384,9 +507,9 @@ function friendlyTestError(e) {
   return t('测试失败: ') + msg;
 }
 
-// 列/卡片「测试」：结果写入所在容器（卡片或表格 td）的 .prov-row-test-out（此前写到编辑器内的结果位，编辑器关闭时不可见）
+// 行内「测试」：结果写入所在行（表格 tbody / 移动端条目 / 抽屉分组）的 .prov-row-test-out（此前写到编辑器内的结果位，编辑器关闭时不可见）
 async function testProviderById(id, cell) {
-  const host = cell && cell.closest ? cell.closest('.prov-card, td, .drawer-group') : null;
+  const host = cell && cell.closest ? cell.closest('[data-prov], .drawer-group') : null;
   const out = host ? host.querySelector('.prov-row-test-out') : null;
   const orig = cell ? cell.innerHTML : '';
   if (cell) { cell.disabled = true; cell.innerHTML = '<span class="loading"></span> ' + t('测试中...'); }

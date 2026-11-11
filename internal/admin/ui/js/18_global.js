@@ -4,6 +4,7 @@
 let _globalData = null;
 let _globalLoadGeneration = 0;
 let _globalFilter = '';
+let _globalLoadFailed = false; // the last loadGlobal failed and left no data: summaries must not read it as empty
 let _globalProviderSearch = '';
 let _globalProviderKind = '';
 let _globalProviderStatus = '';
@@ -14,6 +15,9 @@ let _globalOfferingAccess = '';
 let _globalOfferingSort = 'model';
 let _globalOfferingsExpanded = false;
 const _globalOfferingsPreviewCount = 12;
+const GLOBAL_OFFERINGS_PAGE = 200;       // 展开后一次最多渲染的行数，其余点「显示更多」
+let _globalOfferingsLimit = GLOBAL_OFFERINGS_PAGE;
+let _globalOfferingSearchTimer = 0;
 
 const _globalFilterIDs = [
   'globalProviderFilter',
@@ -174,110 +178,6 @@ function capabilityHTML(capabilities) {
 
 // Derived, display-only row model. Every value comes from the existing
 // /provider-instances, /credentials and /model-offerings projections.
-function globalProviderRow(instance, data) {
-  const id = String(instance.id);
-  const name = instance.name || id;
-  const initial = Array.from(name || '?')[0] || '?';
-  const credentials = (data.credentials || []).filter(c => (c.providerIds || []).some(pid => String(pid) === id));
-  const offerings = (data.offerings || []).filter(o => String(o.providerId || '') === id);
-  const authMethods = [...new Set(credentials.map(c => c.authFlow || t(_globalCredentialKinds[c.kind] || c.kind)).filter(Boolean))];
-  return {
-    instance: instance,
-    id: id,
-    name: name,
-    initial: initial.toUpperCase(),
-    kindLabel: instance.runtimeBuiltin ? '内置' : '自定义',
-    isCustom: instance.deletable === true,
-    enabled: !!instance.enabled,
-    authMethods: authMethods,
-    authText: authMethods.length ? authMethods.join(' · ') : t('未配置'),
-    credentialsCount: credentials.length,
-    offeringsCount: offerings.length,
-    baseURL: instance.baseURL || '',
-  };
-}
-
-function globalProviderSortValue(row, key) {
-  if (key === 'status') return row.enabled ? 1 : 0;
-  if (key === 'type') return t(row.kindLabel);
-  if (key === 'auth') return row.authText;
-  if (key === 'credentials') return row.credentialsCount;
-  if (key === 'offerings') return row.offeringsCount;
-  if (key === 'baseURL') return row.baseURL;
-  return row.name;
-}
-
-function globalProviderSortRows(rows) {
-  const key = _globalProviderSort || 'name';
-  const numeric = key === 'status' || key === 'credentials' || key === 'offerings';
-  const direction = _globalProviderSortDir === 'desc' ? -1 : 1;
-  return rows.slice().sort((a, b) => {
-    const av = globalProviderSortValue(a, key);
-    const bv = globalProviderSortValue(b, key);
-    let cmp;
-    if (numeric) cmp = (Number(av) || 0) - (Number(bv) || 0);
-    else cmp = String(av == null ? '' : av).localeCompare(String(bv == null ? '' : bv), LC(), { sensitivity: 'base', numeric: true });
-    if (cmp === 0) cmp = a.name.localeCompare(b.name, LC(), { sensitivity: 'base' });
-    return cmp * direction;
-  });
-}
-
-function globalProviderSortHeader(key, label) {
-  const active = _globalProviderSort === key;
-  const dir = active ? _globalProviderSortDir : '';
-  const cue = active ? (dir === 'desc' ? ' ▼' : ' ▲') : '';
-  return '<th scope="col" aria-sort="' + (active ? (dir === 'desc' ? 'descending' : 'ascending') : 'none') + '">' +
-    '<button type="button" class="mgmt-sort" onclick="setGlobalProviderSort(' + globalJS(key) + ')">' +
-    esc(t(label)) + '<span class="mgmt-sort-cue" aria-hidden="true">' + cue + '</span></button></th>';
-}
-
-function renderGlobalInstances(data) {
-  const el = _('globalInstances');
-  if (!el) return;
-  const instances = (data.instances || []).filter(globalProviderMatches);
-  if (!instances.length) { el.innerHTML = globalEmpty(_globalProviderSearch || _globalProviderKind || _globalProviderStatus ? '暂无匹配 Provider' : '暂无 Provider'); return; }
-  const rows = globalProviderSortRows(instances.map(i => globalProviderRow(i, data)));
-  const headers =
-    globalProviderSortHeader('name', 'Provider') +
-    globalProviderSortHeader('status', '状态') +
-    globalProviderSortHeader('type', '类型') +
-    globalProviderSortHeader('auth', '认证方式') +
-    globalProviderSortHeader('credentials', '凭据') +
-    globalProviderSortHeader('offerings', '模型授权') +
-    globalProviderSortHeader('baseURL', 'Base URL') +
-    '<th scope="col">' + esc(t('操作')) + '</th>';
-  const primaryAction = row => row.isCustom
-    ? '<button type="button" class="btn btn-sm" onclick="editProvider(' + globalJS(row.id) + ')">' + esc(t('编辑')) + '</button>'
-    : '<button type="button" class="btn btn-sm" onclick="setupProviderInstance(' + globalJS(row.id) + ')">' + esc(t('连接设置')) + '</button>';
-  const tableRows = rows.map(row => {
-    return '<tr>' +
-      '<td><div class="mgmt-provider-cell"><span class="provider-monogram mgmt-monogram" aria-hidden="true">' + esc(row.initial) + '</span><div class="mgmt-primary"><span class="mgmt-name" title="' + escAttr(row.name) + '">' + esc(row.name) + '</span><code class="mgmt-id" title="' + escAttr(row.id) + '">' + esc(row.id) + '</code></div></div></td>' +
-      '<td>' + globalBadge(row.enabled ? '已启用' : '已停用', row.enabled ? 'positive' : 'negative') + '</td>' +
-      '<td class="mgmt-muted">' + esc(t(row.kindLabel)) + '</td>' +
-      '<td class="mgmt-auth" title="' + escAttr(row.authText) + '">' + esc(row.authText) + '</td>' +
-      '<td class="mgmt-num">' + formatNumber(row.credentialsCount) + '</td>' +
-      '<td class="mgmt-num">' + formatNumber(row.offeringsCount) + '</td>' +
-      '<td><span class="mgmt-url mgmt-mono" title="' + escAttr(row.baseURL) + '">' + esc(row.baseURL || '—') + '</span></td>' +
-      '<td><div class="mgmt-actions">' +
-        '<button type="button" class="btn btn-sm btn-primary" onclick="openGlobalProviderDetail(' + globalJS(row.id) + ')">' + esc(t('详情')) + '</button>' +
-        primaryAction(row) +
-      '</div></td>' +
-      '</tr>';
-  }).join('');
-  const compactRows = rows.map(row => {
-    return '<article class="provider-compact-item">' +
-      '<div class="pc-line1"><span class="provider-monogram mgmt-monogram" aria-hidden="true">' + esc(row.initial) + '</span><strong title="' + escAttr(row.name) + '">' + esc(row.name) + '</strong>' + globalBadge(row.enabled ? '已启用' : '已停用', row.enabled ? 'positive' : 'negative') + '</div>' +
-      '<div class="pc-line2"><span title="' + escAttr(row.authText) + '">' + esc(t(row.kindLabel)) + ' · ' + esc(row.authText) + '</span><span>' + esc(t('凭据')) + ' ' + formatNumber(row.credentialsCount) + ' · ' + esc(t('模型授权')) + ' ' + formatNumber(row.offeringsCount) + '</span></div>' +
-      '<div class="pc-actions">' +
-        '<button type="button" class="btn btn-sm btn-primary" onclick="openGlobalProviderDetail(' + globalJS(row.id) + ')">' + esc(t('详情')) + '</button>' +
-        primaryAction(row) +
-      '</div></article>';
-  }).join('');
-  el.innerHTML = '<div class="mgmt-table-wrap provider-table-wrap"><table class="mgmt-table provider-table">' +
-    '<thead><tr>' + headers + '</tr></thead><tbody>' + tableRows + '</tbody></table></div>' +
-    '<div class="provider-compact-list">' + compactRows + '</div>';
-}
-
 function openGlobalProviderDetail(id) {
   const instance = ((_globalData && _globalData.instances) || []).find(p => String(p.id) === String(id));
   if (!instance) return;
@@ -357,9 +257,10 @@ function renderGlobalCredentials(data) {
     const providers = globalCredentialProviders(c);
     const auth = globalCredentialAuthLabel(c);
     const cooldown = globalTime(c.cooldownUntil);
+    const providerText = providers.join(' · ') || '—';
     return '<tr>' +
+      '<td><div class="mgmt-primary"><span class="mgmt-name" title="' + escAttr(providerText) + '">' + esc(providerText) + '</span></div></td>' +
       '<td><div class="mgmt-primary"><span class="mgmt-name" title="' + escAttr(c.subject || c.id) + '">' + esc(c.subject || c.id) + '</span><code class="mgmt-id" title="' + escAttr(c.id) + '">' + esc(c.id) + '</code></div></td>' +
-      '<td class="mgmt-muted" title="' + escAttr(providers.join(' · ') || '—') + '">' + esc(providers.join(' · ') || '—') + '</td>' +
       '<td class="mgmt-auth" title="' + escAttr(auth) + '">' + esc(auth) + '</td>' +
       '<td>' + globalBadge(status.label, status.tone) + '</td>' +
       '<td class="mgmt-expiry">' +
@@ -376,14 +277,14 @@ function renderGlobalCredentials(data) {
     const providers = globalCredentialProviders(c);
     const auth = globalCredentialAuthLabel(c);
     return '<article class="credential-compact-item">' +
-      '<div class="pc-line1"><strong>' + esc(c.subject || c.id) + '</strong>' + globalBadge(status.label, status.tone) + '</div>' +
-      '<div class="pc-line2"><span>' + esc(providers.join(' · ') || '—') + '</span><span>' + esc(auth) + '</span><span>' + esc(t('请求')) + ' ' + globalCredentialCount(c.usageCount) + ' · ' + esc(t('总 Token')) + ' ' + globalCredentialCount(c.totalTokens, formatTokenCount) + '</span></div>' +
+      '<div class="pc-line1"><strong>' + esc(providers.join(' · ') || '—') + '</strong>' + globalBadge(status.label, status.tone) + '</div>' +
+      '<div class="pc-line2"><span>' + esc(c.subject || c.id) + '</span><span>' + esc(auth) + '</span><span>' + esc(t('请求')) + ' ' + globalCredentialCount(c.usageCount) + ' · ' + esc(t('总 Token')) + ' ' + globalCredentialCount(c.totalTokens, formatTokenCount) + '</span></div>' +
       '<div class="pc-actions">' + credentialActions(c) + '</div></article>';
   }).join('');
   el.innerHTML = '<div class="mgmt-table-wrap credential-table-wrap"><table class="mgmt-table credential-table">' +
     '<thead><tr>' +
-      '<th scope="col">' + esc(t('凭据')) + '</th>' +
       '<th scope="col">Provider</th>' +
+      '<th scope="col">' + esc(t('凭据')) + '</th>' +
       '<th scope="col">' + esc(t('认证方式')) + '</th>' +
       '<th scope="col">' + esc(t('状态')) + '</th>' +
       '<th scope="col">' + esc(t('到期')) + ' / ' + esc(t('冷却至')) + '</th>' +
@@ -478,12 +379,13 @@ function renderGlobalOfferings(data) {
     return String(a.modelId).localeCompare(String(b.modelId));
   });
   if (!offerings.length) { el.innerHTML = globalEmpty('暂无匹配模型授权'); return; }
-  const shown = _globalOfferingsExpanded ? offerings : offerings.slice(0, _globalOfferingsPreviewCount);
+  const shown = offerings.slice(0, _globalOfferingsExpanded ? _globalOfferingsLimit : _globalOfferingsPreviewCount);
   const hiddenCount = Math.max(0, offerings.length - shown.length);
-  const previewNote = hiddenCount
+  const previewNote = hiddenCount && !_globalOfferingsExpanded
     ? '<div class="system-note offering-preview-note">' + esc(t('仅预览前 12 条，共 N 条').replace('N', offerings.length)) + '</div>'
     : '';
-  el.innerHTML = previewNote + '<div class="offerings-table-wrap"><table class="offerings-table"><thead><tr>' +
+  // 展开后按页渲染；表格区域可聚焦滚动，表头固定
+  el.innerHTML = previewNote + '<div class="offerings-table-wrap" tabindex="0" role="region" aria-label="' + escAttr(t('Provider 模型授权')) + '"><table class="offerings-table"><thead><tr>' +
     '<th>' + esc(t('客户端模型名')) + '</th><th>Provider</th><th>' + esc(t('上游模型')) + '</th><th>' + esc(t('访问类别')) + '</th><th>' + esc(t('授权')) + '</th><th>' + esc(t('上下文')) + '</th><th>' + esc(t('状态')) + '</th></tr></thead><tbody>' + shown.map(o => {
     const signal = o.tierSignal ? (_tierSignals[o.tierSignal] || o.tierSignal) : '';
     const rawStatus = o.status || 'active';
@@ -495,7 +397,11 @@ function renderGlobalOfferings(data) {
       '<td>' + globalBadge(_globalAccess[o.access] || '未知', accessTone(o.access || 'unknown')) + (signal ? '<div class="hint-xs mt-4">' + esc(t(signal)) + '</div>' : '') + '</td>' +
       '<td>' + globalBadge(o.allowanceVerified ? '授权已验证' : '授权未验证', o.allowanceVerified ? 'positive' : 'unknown') + '</td>' +
       '<td>' + (o.context ? formatNumber(o.context) : '—') + '</td><td class="offering-status-cell">' + globalBadge(state, stateTone) + '</td></tr>';
-  }).join('') + '</tbody></table></div>';
+  }).join('') + '</tbody></table></div>' +
+    (hiddenCount && _globalOfferingsExpanded
+      ? '<div class="offerings-more"><span class="hint-xs">' + esc(t('已显示')) + ' ' + shown.length + ' / ' + offerings.length + '</span>' +
+        '<button type="button" class="btn btn-sm" onclick="showMoreGlobalOfferings()">' + esc(t('显示更多')) + '</button></div>'
+      : '');
   const toggle = _('globalOfferingsToggle');
   if (toggle) {
     toggle.textContent = t(offerings.length > _globalOfferingsPreviewCount && !_globalOfferingsExpanded ? '展开全部' : '收起');
@@ -516,8 +422,28 @@ function renderGlobalHealthSummary(data) {
     stat(view.state.length, '可用性观察', attentionObservations ? 'has-warning' : '');
 }
 
+function showMoreGlobalOfferings() {
+  _globalOfferingsLimit += GLOBAL_OFFERINGS_PAGE;
+  if (_globalData) renderGlobalOfferings(_globalData);
+}
+
+// 目录页的「查看授权」：带着模型 ID 跳到授权页并预填搜索
+function showModelOfferings(modelId) {
+  _globalOfferingSearch = String(modelId || '');
+  _globalOfferingAccess = '';
+  _globalOfferingsExpanded = false;
+  _globalOfferingsLimit = GLOBAL_OFFERINGS_PAGE;
+  const input = _('globalOfferingSearch');
+  if (input) input.value = _globalOfferingSearch;
+  const access = _('globalOfferingAccessFilter');
+  if (access) access.value = '';
+  switchPageSubTab('modelviews', 'offerings');
+  if (_globalData) renderGlobalOfferings(_globalData);
+}
+
 function toggleGlobalOfferings() {
   _globalOfferingsExpanded = !_globalOfferingsExpanded;
+  _globalOfferingsLimit = GLOBAL_OFFERINGS_PAGE;
   if (_globalData) renderGlobalOfferings(_globalData);
 }
 
@@ -583,7 +509,7 @@ function renderGlobalEgress(data) {
   const context = _('globalNetworkContext');
   if (context) {
     context.innerHTML = _globalFilter
-      ? '<strong>' + esc(t('当前 Provider')) + '</strong><span>' + esc(globalProviderName(_globalFilter) || _globalFilter) + '</span><small>' + esc(t('当前接口未提供 Provider 到出口配置的绑定关系；下方仍显示全局清单。')) + '</small>'
+      ? '<strong>' + esc(t('当前 Provider')) + '</strong><span>' + esc(globalProviderName(_globalFilter) || _globalFilter) + '</span><small>' + esc(t('未设置专属代理的 Provider 使用默认出口代理；当前接口不提供各 Provider 的绑定，下方显示全局清单。')) + '</small>'
       : '<span>' + esc(t('出口配置按全局范围展示。')) + '</span>';
   }
 }
@@ -635,12 +561,16 @@ function setGlobalProviderSort(key) {
 function setGlobalOfferingSearch(value) {
   _globalOfferingSearch = String(value || '').trim();
   _globalOfferingsExpanded = false;
-  if (_globalData) renderGlobalOfferings(_globalData);
+  _globalOfferingsLimit = GLOBAL_OFFERINGS_PAGE;
+  clearTimeout(_globalOfferingSearchTimer);
+  // 逐字输入不立刻重绘整张表
+  _globalOfferingSearchTimer = setTimeout(() => { if (_globalData) renderGlobalOfferings(_globalData); }, 160);
 }
 
 function setGlobalOfferingAccess(value) {
   _globalOfferingAccess = value || '';
   _globalOfferingsExpanded = false;
+  _globalOfferingsLimit = GLOBAL_OFFERINGS_PAGE;
   if (_globalData) renderGlobalOfferings(_globalData);
 }
 
@@ -663,6 +593,7 @@ function openGlobalProviderView(tab, providerID) {
 
 async function loadGlobal(showSkeleton) {
   const generation = ++_globalLoadGeneration;
+  _globalLoadFailed = false;
   const ids = ['globalInstances', 'globalCredentials', 'globalOfferings', 'globalState', 'globalEgress', 'globalHealthSummary'];
   if (showSkeleton !== false) {
     ids.forEach(id => {
@@ -695,6 +626,8 @@ async function loadGlobal(showSkeleton) {
   } catch (e) {
     if (generation !== _globalLoadGeneration) return;
     _globalData = null;
+    _globalLoadFailed = true;
+    if (typeof renderCredentialSummary === 'function') renderCredentialSummary();
     const message = '<div class="system-empty"><span>' + esc(t('加载失败')) + ': ' + esc(e.message) + '</span></div>';
     ids.forEach(id => {
       const el = _(id);

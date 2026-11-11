@@ -6,10 +6,53 @@
 <aside class="sidebar" id="appSidebar" aria-label="RouteNest 导航">
   <div class="sidebar-header">
     <div class="brand">
-      <div class="logo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2.5 L20 7 v10 l-8 4.5 L4 17 V7 Z" opacity="0.45"/><path d="M4 12 h6.5"/><path d="M10.5 12 C12.5 12 14 8 18 8"/><path d="M10.5 12 h7.5"/><path d="M10.5 12 C12.5 12 14 16 18 16"/><circle cx="10.5" cy="12" r="1.5" fill="currentColor"/><circle cx="18" cy="8" r="1.2" fill="currentColor"/><circle cx="18" cy="12" r="1.2" fill="currentColor"/><circle cx="18" cy="16" r="1.2" fill="currentColor"/></svg></div>
+      <div class="logo"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128" fill="none">
+  <defs>
+    <linearGradient id="rnHexBg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#182238"/>
+      <stop offset="100%" stop-color="#0B1020"/>
+    </linearGradient>
+    <linearGradient id="rnAccentGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#5B8CFF"/>
+      <stop offset="50%" stop-color="#7968F8"/>
+      <stop offset="100%" stop-color="#C084FC"/>
+    </linearGradient>
+    <linearGradient id="rnGlow" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#4778E8" stop-opacity="0.3"/>
+      <stop offset="100%" stop-color="#7968F8" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Squircle Base for App Icon -->
+  <rect x="6" y="6" width="116" height="116" rx="28" fill="url(#rnHexBg)" stroke="#2A3854" stroke-width="2"/>
+  <rect x="6" y="6" width="116" height="116" rx="28" fill="url(#rnGlow)"/>
+
+  <!-- Outer Hexagonal Nest Frame -->
+  <path d="M64 22 L98 41.5 V80.5 L64 100 L30 80.5 V41.5 Z" 
+        stroke="url(#rnAccentGrad)" stroke-width="5" stroke-linejoin="round" fill="none" opacity="0.45"/>
+
+  <!-- Routing Pathways -->
+  <!-- Main Ingress -->
+  <path d="M30 64 H 56" stroke="url(#rnAccentGrad)" stroke-width="5" stroke-linecap="round"/>
+  <!-- Branch to Upper Provider -->
+  <path d="M56 64 C64 64, 68 46, 84 46 H92" stroke="url(#rnAccentGrad)" stroke-width="4.5" stroke-linecap="round" fill="none"/>
+  <!-- Center Direct Route -->
+  <path d="M56 64 H92" stroke="url(#rnAccentGrad)" stroke-width="4.5" stroke-linecap="round"/>
+  <!-- Branch to Lower Provider -->
+  <path d="M56 64 C64 64, 68 82, 84 82 H92" stroke="url(#rnAccentGrad)" stroke-width="4.5" stroke-linecap="round" fill="none"/>
+
+  <!-- Core Gateway Node (The Nest Hub) -->
+  <circle cx="56" cy="64" r="7" fill="#FFFFFF"/>
+  <circle cx="56" cy="64" r="10" stroke="url(#rnAccentGrad)" stroke-width="2.5" fill="none"/>
+
+  <!-- Output Provider Endpoints -->
+  <circle cx="92" cy="46" r="4.5" fill="#38BDF8"/>
+  <circle cx="92" cy="64" r="4.5" fill="#7968F8"/>
+  <circle cx="92" cy="82" r="4.5" fill="#43C995"/>
+</svg></div>
       <div class="brand-text">
         <div class="brand-name">RouteNest</div>
-        <div class="brand-sub">AI 网关控制平面</div>
+        <div class="brand-sub">Free-First AI API Routing</div>
       </div>
     </div>
     <button type="button" class="nav-collapse-btn" onclick="toggleNav()" title="收起侧栏" aria-label="收起侧栏"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="11 17 6 12 11 7"/><polyline points="18 17 13 12 18 7"/></svg></button>
@@ -34,7 +77,7 @@
       </button>
       <button type="button" class="nav-item" data-tab="network">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
-        <span class="nav-label">网络与出口</span>
+        <span class="nav-label">全局出口代理</span>
       </button>
     </div>
     <div class="nav-section">
@@ -95,9 +138,13 @@
       <div class="mobile-sidebar-tool-row">
         <span>语言</span>
         <div class="seg mobile-lang-switch" role="group" aria-label="语言">
-          <button type="button" data-lang-opt="zh" onclick="setLang('zh')" aria-pressed="true">中文</button>
-          <button type="button" data-lang-opt="en" onclick="setLang('en')" aria-pressed="false">English</button>
+          <button type="button" data-lang-opt="en" onclick="setLang('en')" aria-pressed="true" class="active">English</button>
+          <button type="button" data-lang-opt="zh" onclick="setLang('zh')" aria-pressed="false">中文</button>
         </div>
+      </div>
+      <div class="mobile-sidebar-tool-row">
+        <span>会话</span>
+        <button type="button" class="btn btn-sm mobile-signout-btn" onclick="logoutAdmin()">退出登录</button>
       </div>
     </div>
   </div>
@@ -121,9 +168,10 @@
       <button type="button" data-theme-opt="dark" onclick="setTheme('dark')" title="深色" aria-label="深色"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg></button>
     </div>
     <div class="seg lang-switch" role="group" aria-label="语言">
-      <button type="button" id="langZh" data-lang-opt="zh" onclick="setLang('zh')" aria-pressed="true">中文</button>
-      <button type="button" id="langEn" data-lang-opt="en" onclick="setLang('en')" aria-pressed="false">English</button>
+      <button type="button" id="langEn" data-lang-opt="en" onclick="setLang('en')" aria-pressed="true" class="active">English</button>
+      <button type="button" id="langZh" data-lang-opt="zh" onclick="setLang('zh')" aria-pressed="false">中文</button>
     </div>
+    <button type="button" class="tool-btn tool-btn-signout" id="signOutBtn" onclick="logoutAdmin()" title="退出登录" aria-label="退出登录"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></button>
   </div>
 </div>
 <div class="content-shell">

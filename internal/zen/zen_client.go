@@ -213,7 +213,7 @@ func Call(params map[string]any, stream bool) (*http.Response, error) {
 			if strings.Contains(err.Error(), "timeout") || strings.Contains(err.Error(), "handshake") ||
 				strings.Contains(err.Error(), "connection refused") || strings.Contains(err.Error(), "unreachable") ||
 				strings.Contains(err.Error(), "context canceled") {
-				return nil, fmt.Errorf("%w（opencode.ai 网络不可达，可在管理页「上游服务 → opencode 出口代理」配置代理）", msg)
+				return nil, fmt.Errorf("%w（opencode.ai 网络不可达，可在管理页「Providers → OpenCode Zen → 出口代理」配置代理）", msg)
 			}
 			return nil, msg
 		}

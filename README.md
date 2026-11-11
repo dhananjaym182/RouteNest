@@ -4,7 +4,8 @@
 
 # RouteNest
 
-**One endpoint. Multiple providers. Your models.**
+### Free-First AI API Routing
+**Multiple Providers · Intelligent Routing · Cost-Aware Choices**
 
 RouteNest is a self-hosted, Go-powered AI gateway for coding agents and AI applications. Route OpenAI- and Anthropic-compatible requests through configured provider APIs, local model runtimes, and supported account integrations from a single endpoint.
 
@@ -33,7 +34,7 @@ reports are dated evidence, not current test results.
 - **Model combos** - define ordered model lists with fallback on eligible upstream failures.
 - **Model discovery** - synchronize supported model catalogs, configure custom model IDs, and select a default model.
 - **Admin console** - manage accounts, connections, providers, models, combos, client API keys, proxies and request logs.
-- **Egress proxy pools** - configure the shared Cline/default and native Zen pools plus custom-provider overrides; no generic profile-binding UI is claimed.
+- **Egress proxy pools** - configure one default (global) egress pool that applies to all providers, a separate native Zen pool, and per-provider overrides; no generic profile-binding UI is claimed.
 - **Request observability** - inspect request logs, latency, token usage and available provider statistics.
 - **Flexible deployment** - run the Go binary, use the desktop application, or deploy with Docker.
 
@@ -122,7 +123,10 @@ The container listens on `0.0.0.0:3457`, while the sample compose file publishes
    `ROUTENEST_INITIALIZE_EMPTY_ACCOUNT_STORE=true` for the first startup only, then remove
    it. The CLI may instead use `-initialize-empty-account-store`. Neither control repairs
    or resets an established installation; deliver the one-time administrator bootstrap
-   secret through the documented trusted local path.
+   secret through the documented trusted local path. When started from a terminal the
+   secret is printed in that terminal or console window (Windows, macOS, Linux); Docker,
+   services and any start without a terminal need `ROUTENEST_ADMIN_BOOTSTRAP_PASSWORD`.
+   Browser setup then shows your recovery code once; save it before continuing.
 3. Follow the Overview checklist to connect a Cline account, native OpenCode Zen, or a
    provider API key; verify models and client access; then send the first gateway request.
 4. Generate a client API key when authenticated client access is required. Until at least
@@ -282,10 +286,11 @@ The UI is bilingual (English/Chinese), follows the browser language, and can be 
 
 For upstreams that are region-restricted or rate-limited:
 
-- **Cline egress pool** - used for chat, login/token refresh and model sync.
+- **Default egress pool** (admin console: **Global Egress Proxy**) - used by every provider that has no proxy of its own, and by Cline and OAuth sign-in, token refresh and model sync. Round-robin and random choose per new connection. If a proxy fails to connect, the next one in the list is used and the failed one goes last for 30 seconds.
+- **Per-provider override** - a provider's own egress proxy (or `-` for a direct connection) replaces the default pool for that provider.
 - **OpenCode Zen egress pool** - separate pool with cooldown for rate-limited exits.
 
-Priority is application proxy pool → environment proxy (`HTTPS_PROXY`) → direct. Loopback and private-network targets always connect directly.
+Priority is provider override → default egress pool → environment proxy (`HTTPS_PROXY`) → direct. `localhost` and private-network IP addresses always connect directly. A local service reached by hostname (for example `ollama.lan`) is still sent through the pool, so set that provider's override to `-`.
 
 ## Data and upgrades
 
@@ -313,7 +318,7 @@ compatibility override.
 | `.routenest-providers.json` | Custom providers |
 | `.routenest-providers-cooldowns.json` | Provider cooldown state |
 | `.routenest-providers-sync.json` | Provider catalog sync state |
-| `.routenest-proxy.json` | Cline egress proxy pool |
+| `.routenest-proxy.json` | Default (global) egress proxy pool |
 | `.routenest-zen.json` | OpenCode Zen configuration and egress pool |
 | `.routenest-request-logs.json` | Request logs |
 | `capture-logs/` | Interactive OAuth capture output; may contain authorization traffic |

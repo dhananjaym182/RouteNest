@@ -134,6 +134,11 @@ func recheckProviderModels(p CustomProvider) providerRecheckState {
 			declared[id] = true
 		}
 	}
+	// A mapped name is served by its upstream ID, so that ID is already declared.
+	for id := range mappedUpstreamIDs(p) {
+		declared[id] = true
+	}
+	present := upstreamPresence(p, upstream)
 
 	records := models.Snapshot()
 	offeringStates := providerOfferingStates(p, records)
@@ -151,7 +156,7 @@ func recheckProviderModels(p CustomProvider) providerRecheckState {
 		miss = map[string]int{}
 		provRecheckMiss[p.ID] = miss
 	}
-	presence, reconcileErr := models.ReconcilePresence(p.ModelIDs, upstream, current, miss, models.ReconcilePolicy{
+	presence, reconcileErr := models.ReconcilePresence(p.ModelIDs, present, current, miss, models.ReconcilePolicy{
 		ProviderID:       domain.ProviderInstanceID(p.ID),
 		MissingThreshold: providerRecheckMissLimit,
 		Authoritative:    true,
@@ -164,7 +169,7 @@ func recheckProviderModels(p CustomProvider) providerRecheckState {
 	}
 
 	// 2) 写 provider-scoped offering：同 ID 的其他 provider 不受影响。
-	marked, _ := applyProviderOfferingDelisting(p, presence.ToDelist, upstream)
+	marked, _ := applyProviderOfferingDelisting(p, presence.ToDelist, present)
 	syncProviderDelistedProjection(providersIncluding(p))
 
 	// 3) 新上游模型 → Auto 预览批次（不在声明里也不在池里；每 provider 至多一个待审批次）

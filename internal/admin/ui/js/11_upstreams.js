@@ -1,10 +1,8 @@
 // ========== 内建上游配置：OpenCode Zen 与 Cline 出口 ==========
-// 这些控件在「上游连接」页（ui/html/pages/upstreams.html）。归属此文件，
-// 而不是模型页，保证页面与控制器一一对应。
+// OpenCode Zen 配置在 Providers 页的原生配置抽屉；默认（全局）出口代理在
+// 「全局出口代理」页（#network，ui/html/pages/network.html）。两者共用此文件。
+// 单来源入口（OpenCode Zen）。页面上的同步按钮统一走 syncAllModels / syncModelGroup。
 async function syncOcModels() {
-  const btn = _('syncOcModelsBtn');
-  const orig = btn ? btn.innerHTML : '';
-  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="loading"></span> ' + t('同步中...'); }
   try {
     const d = await api('POST', '/opencode/models/sync');
     const res = d.data || {};
@@ -19,7 +17,6 @@ async function syncOcModels() {
   } catch (e) {
     toast(t('模型同步失败') + ': ' + (e.message || ''), 'error');
   }
-  if (btn) { btn.disabled = false; btn.innerHTML = orig; }
 }
 
 // ========== OpenCode Zen 免费模型配置 ==========

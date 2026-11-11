@@ -22,6 +22,16 @@
         <span class="hint-xs ml-8">从上游目录勾选（免费 / 付费分组），确认前不写入</span>
       </div>
       <div id="provModelsChips" class="chip-row mt-10" style="display:none"></div>
+      <div class="prov-model-add" id="provModelAdd">
+        <div class="hint-xs">添加单个模型（先测试再添加）</div>
+        <div class="prov-model-add-row">
+          <input type="text" id="provAddName" class="mono-plain" placeholder="模型名称（客户端使用）" aria-label="模型名称（客户端使用）" autocomplete="off">
+          <input type="text" id="provAddUpstream" class="mono-plain" placeholder="上游模型 ID（可选，默认同名称）" aria-label="上游模型 ID" autocomplete="off">
+          <button type="button" class="btn btn-sm" onclick="testNewProvModel(this)">测试</button>
+          <button type="button" class="btn btn-sm btn-primary" onclick="addProvModel()">添加</button>
+        </div>
+        <div id="provAddResult" class="prov-model-result" role="status" aria-live="polite"></div>
+      </div>
       <div class="adv-wrap">
         <a href="javascript:void(0)" onclick="toggleProvModelsAdv()" class="adv-lnk">手动输入模型 ID（高级）</a>
         <div id="provModelsAdv" class="adv-body" style="display:none">

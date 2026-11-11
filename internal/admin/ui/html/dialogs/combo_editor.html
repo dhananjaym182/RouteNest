@@ -8,30 +8,32 @@
     <div class="drawer-group">
       <div class="form-group-label">基本信息</div>
       <div class="form-row">
-        <div class="field"><label for="comboId">组合 ID *</label><input type="text" id="comboId" placeholder="premium-coding" class="mono-plain"></div>
-        <div class="field"><label for="comboName">名称 *</label><input type="text" id="comboName" placeholder="Premium Coding"></div>
+        <div class="field"><label for="comboId">组合 ID *</label><div class="combo-id-field"><input type="text" id="comboId" placeholder="premium-coding" class="mono-plain" maxlength="64" autocomplete="off" spellcheck="false" oninput="comboEditorSync()" aria-describedby="comboIdError"><button type="button" class="btn btn-sm combo-id-copy-btn" onclick="copyComboIdFromEditor(this)" title="复制组合 ID" aria-label="复制组合 ID"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-ic"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button></div><div class="field-error" id="comboIdError" role="alert" hidden></div></div>
+        <div class="field"><label for="comboName">名称 *</label><input type="text" id="comboName" placeholder="Premium Coding" oninput="comboEditorSync()" aria-describedby="comboNameError"><div class="field-error" id="comboNameError" role="alert" hidden></div></div>
       </div>
       <div class="form-row">
-        <div class="field f2"><label for="comboDesc">描述</label><input type="text" id="comboDesc" placeholder="可选"></div>
-        <div class="field"><label for="comboCategory">分类</label><input type="text" id="comboCategory" placeholder="coding（可选）"></div>
+        <div class="field f2"><label for="comboDesc">描述</label><input type="text" id="comboDesc" placeholder="可选" oninput="comboEditorSync()"></div>
+        <div class="field"><label for="comboCategory">分类</label><input type="text" id="comboCategory" placeholder="coding（可选）" oninput="comboEditorSync()"></div>
       </div>
       <div class="form-row">
         <div class="field">
           <label for="comboEnabled">启用</label>
-          <select id="comboEnabled"><option value="true">启用</option><option value="false">停用</option></select>
+          <select id="comboEnabled" onchange="comboEditorSync()"><option value="true">启用</option><option value="false">停用</option></select>
         </div>
         <div class="field row-end">
           <label>紧急回退</label>
-          <label class="combo-check"><input type="checkbox" id="comboEmergency" > <span>允许跳出组合回退</span></label>
+          <label class="combo-check"><input type="checkbox" id="comboEmergency" onchange="comboEditorSync()"> <span>允许跳出组合回退</span></label>
         </div>
       </div>
       <div class="field-hint">开启「紧急回退」后，仅当组合内所有条目都失败时，才允许继续回退到配置的全局回退链 / 内置免费链；关闭则组合内失败即结束。</div>
-      <div class="field-hint"><a href="#" onclick="hideComboEditor();showPageSubTab('routing', 'config');return false" class="lnk-a">全局回退链与账号轮询策略在「路由 → 路由策略」中管理 →</a></div>
+      <div class="field-hint"><a href="#" onclick="openRoutingPolicyFromComboEditor();return false" class="lnk-a">全局回退链与账号轮询策略在「路由 → 路由策略」中管理 →</a></div>
     </div>
     <div class="drawer-group">
       <div class="form-group-label">模型条目（按优先级从上到下）</div>
       <div class="field-hint">顺序即优先级：第 1 个最优先尝试（1st tried → 2nd → …），拖动行首 ⠿ 手柄或用 ↑↓ 按钮调整顺序。</div>
+      <div id="comboEntriesSummary" class="combo-entries-summary" aria-live="polite"></div>
       <div id="comboEntries"></div>
+      <div class="field-error" id="comboEntriesError" role="alert" hidden></div>
       <div class="form-actions">
         <button class="btn btn-sm btn-primary" onclick="openComboModelPicker()">⊕ 多选添加模型</button>
         <button class="btn btn-sm" onclick="addComboEntry()">＋ 添加条目</button>
@@ -47,8 +49,9 @@
     </div>
   </div>
   <div class="drawer-footer">
-    <button class="btn btn-sm btn-primary" onclick="saveCombo()">保存组合</button>
+    <button id="comboSaveBtn" class="btn btn-sm btn-primary" onclick="saveCombo()">保存组合</button>
     <button class="btn btn-sm" onclick="hideComboEditor()">取消</button>
+    <span id="comboDirtyTag" class="combo-dirty-tag" hidden>● 未保存的更改</span>
     <span id="comboSaveResult" class="note-sm ml-8"></span>
   </div>
 </aside>

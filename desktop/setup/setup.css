@@ -34,7 +34,9 @@ fieldset:disabled { opacity: .72; }
 .brand-row { width: 100%; min-height: 64px; display: flex; align-items: center; gap: 12px; margin: 0; padding: 10px clamp(20px, 4vw, 48px); border-bottom: 1px solid var(--border); background: var(--surface); color: var(--text2); }
 .brand-row > div:nth-child(2) { display: flex; min-width: 0; align-items: center; }
 .brand-row strong { color: var(--text); font-size: 15px; font-weight: 700; letter-spacing: -.01em; }
-.brand-row span, .brand-mark { display: none; }
+.brand-mark { display: flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 8px; background: linear-gradient(135deg, var(--accent), #4778e8); color: #fff; flex-shrink: 0; }
+.brand-mark svg { width: 18px; height: 18px; display: block; }
+.brand-row span { display: none; }
 .quiet-button { min-height: 44px; margin-left: auto; border: 1px solid transparent; background: transparent; color: var(--text2); padding: 8px 10px; border-radius: var(--radius-sm); cursor: pointer; }
 .quiet-button:hover { color: var(--text); text-decoration: underline; }
 .login-forgot { display: block; width: max-content; max-width: 100%; margin: 12px auto 0; color: var(--accent); }
