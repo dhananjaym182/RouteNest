@@ -45,6 +45,39 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
+## Provider and tool logos
+
+The 38 images in [`docs/assets/providers/`](docs/assets/providers/) were copied unmodified from the `public/providers/` directory of [9Router](https://github.com/decolua/9router) and are used only in the README to illustrate supported providers and clients.
+
+- License: MIT
+- Copyright (c) 2024-2026 decolua and contributors
+
+```text
+MIT License
+
+Copyright (c) 2024-2026 decolua and contributors
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
+
+The MIT license covers the files as distributed in that repository. The marks they depict belong to their respective owners, who do not endorse RouteNest.
+
 ## Admin UI fonts
 
 Inter is embedded as an unmodified Latin WOFF2 font, and a Noto Sans SC variable TrueType subset supplies most CJK glyphs used by the shipped admin UI; the configured system sans-serif fallbacks render uncovered characters. [01_fonts.css](internal/admin/ui/css/01_fonts.css) also retains IBM Plex Mono payloads and notices inside an unclosed historical CSS comment; those declarations are not active `@font-face` rules. The complete SIL Open Font License 1.1 text, copyright, source URLs and SHA-256 hashes retained in that stylesheet ship with the standalone application. No external font service is contacted at runtime. System monospace fallbacks render technical identifiers until the font-delivery contract is resolved.
