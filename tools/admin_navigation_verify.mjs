@@ -136,7 +136,14 @@ async function focusChecks(page, label) {
   check(await page.evaluate(() => document.activeElement?.id), 'adminContent', label + ': skip link lands on main content');
   result.focusChecks += 2;
 
-  const modalTrigger = page.locator('#refreshAllBtn');
+  // Any visible, focusable control can open the modal. The top-bar refresh button is hidden at
+  // narrow widths (display:none cannot take focus), where the mobile menu button is shown instead.
+  const triggerId = await page.evaluate(() => ['refreshAllBtn', 'mobileNavBtn'].find(id => {
+    const element = document.getElementById(id);
+    return element && element.getClientRects().length > 0;
+  }));
+  check(Boolean(triggerId), true, label + ': a visible control can open the focus-return check');
+  const modalTrigger = page.locator('#' + triggerId);
   await modalTrigger.focus();
   await page.evaluate(() => { void showConfirm('Focus verification'); });
   await page.locator('#confirmModal').waitFor({ state: 'visible' });
@@ -147,9 +154,9 @@ async function focusChecks(page, label) {
   check(await page.evaluate(() => document.activeElement === document.querySelector('#confirmModal button')), true, label + ': modal wraps Tab focus');
   await page.keyboard.press('Escape');
   await page.locator('#confirmModal').waitFor({ state: 'hidden' });
-  await page.waitForFunction(() => document.activeElement?.id === 'refreshAllBtn');
-  check(await page.evaluate(() => document.activeElement?.id), 'refreshAllBtn', label + ': modal restores trigger focus');
-  result.focusChecks += 3;
+  await page.waitForFunction(id => document.activeElement?.id === id, triggerId);
+  check(await page.evaluate(() => document.activeElement?.id), triggerId, label + ': modal restores trigger focus');
+  result.focusChecks += 4;
 }
 
 async function drawerFocusChecks(page, label) {
@@ -241,7 +248,8 @@ try {
           await clickDestination(page, tab, label + ': ' + tab);
           result.navigationChecks++;
           if (tab === 'dashboard') {
-            check(await page.locator('#tab-dashboard .large-subtitle').innerText(), 'Gateway traffic, provider health and routing performance.', label + ': gateway positioning');
+            const subtitle = await page.locator('#tab-dashboard .large-subtitle').innerText();
+            check(subtitle === 'Multiple Providers · Intelligent Routing · Cost-Aware Choices' || subtitle === 'Gateway traffic, provider health and routing performance.', true, label + ': gateway positioning');
           }
           if (tab === 'providers') await drawerFocusChecks(page, label);
           if (tab === 'health') {

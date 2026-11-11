@@ -44,9 +44,21 @@ cat > "$WORK/data/.cline-accounts.json" <<'EOF'
 }
 EOF
 
+# 容器监听 0.0.0.0（非回环），管理端要求显式的受信代理模式：规范 URL + 受信代理 CIDR。
+# 宿主机经发布端口访问时，容器看到的对端是 docker 网桥网关，因此只信任这个单一地址（/32）。
+BRIDGE_GW=$(docker network inspect bridge --format '{{(index .IPAM.Config 0).Gateway}}' 2>/dev/null || true)
+BRIDGE_GW=${BRIDGE_GW:-172.17.0.1}
+say "受信代理（docker 网桥网关）：$BRIDGE_GW/32，规范 URL：http://127.0.0.1:$PORT"
+ADMIN_ENV=(
+  -e ROUTENEST_ADMIN_BOOTSTRAP_PASSWORD="$ADMIN_BOOTSTRAP"
+  -e ROUTENEST_ADMIN_CANONICAL_URL="http://127.0.0.1:$PORT"
+  -e ROUTENEST_ADMIN_PROXY_MODE=true
+  -e ROUTENEST_ADMIN_TRUSTED_PROXY_CIDRS="$BRIDGE_GW/32"
+)
+
 say "3/6 启动容器（卷挂载 $WORK/data:/app/data，端口 $PORT）"
 docker run -d --name "$NAME" -p "$PORT:3457" \
-  -e ROUTENEST_ADMIN_BOOTSTRAP_PASSWORD="$ADMIN_BOOTSTRAP" \
+  "${ADMIN_ENV[@]}" \
   -v "$WORK/data:/app/data" \
   "$IMAGE" >/dev/null
 
@@ -79,7 +91,7 @@ NEW_KEY=$(printf '%s' "$GENERATED" | sed -n 's/.*"key":"\([^"]*\)".*/\1/p')
 say "5/6 强制删除容器（模拟重建容器，保留存储卷）"
 docker rm -f "$NAME" >/dev/null
 docker run -d --name "$NAME" -p "$PORT:3457" \
-  -e ROUTENEST_ADMIN_BOOTSTRAP_PASSWORD="$ADMIN_BOOTSTRAP" \
+  "${ADMIN_ENV[@]}" \
   -v "$WORK/data:/app/data" \
   "$IMAGE" >/dev/null
 wait_ready || { docker logs "$NAME"; fail "容器 2（重建后）就绪检查超时"; }

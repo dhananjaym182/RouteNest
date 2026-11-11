@@ -386,6 +386,19 @@ func TestUnifiedDispatchEnforceZenChat(t *testing.T) {
 		zen.TransportMu.Unlock()
 	})
 
+	t.Cleanup(func() {
+		if !t.Failed() {
+			return
+		}
+		// This test failed on hosted Linux runners but not locally. Record why the planner found
+		// no candidate so the next failure explains itself instead of only reporting a 503.
+		_, diagnostics, err := routing.SnapshotAndPlan(routing.SnapshotOptions{ModelID: modelID}, routing.ModelFallbackChain(modelID))
+		cfg := zen.GetConfig()
+		t.Logf("planner diagnostics: err=%v candidates=%v exclusions=%+v", err, diagnostics.Candidates, diagnostics.Exclusions)
+		t.Logf("zen state: enabled=%v key=%q sessions=%d routeModel=%q remoteActive=%v currentModels=%d",
+			cfg.Enabled, cfg.Key, len(cfg.SessionIDs), zen.RouteModel(modelID), zen.RemoteActive(), len(zen.CurrentModels()))
+	})
+
 	assertProtocolResponse(t, baseURL, "/v1/chat/completions",
 		`{"model":"deepseek-v4-flash-free","messages":[{"role":"user","content":"hi"}]}`, "zen-ok")
 }

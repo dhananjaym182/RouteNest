@@ -62,11 +62,22 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          $gccDirectory = 'C:\msys64\mingw64\bin'
-          if (-not (Test-Path "$gccDirectory\gcc.exe")) {
-            throw "The Windows race runner does not provide the expected MinGW compiler."
+          # The race detector needs cgo and a C compiler. Runner images move the compiler between
+          # releases, so use the one on PATH if there is one, then look in the known locations.
+          $searched = @('C:\msys64\mingw64\bin', 'C:\msys64\ucrt64\bin', 'C:\mingw64\bin', 'C:\ProgramData\mingw64\mingw64\bin')
+          $onPath = Get-Command gcc.exe -ErrorAction SilentlyContinue
+          if ($onPath) {
+            $gccDirectory = Split-Path -Parent $onPath.Source
+          } else {
+            $gccDirectory = $searched | Where-Object { Test-Path "$_\gcc.exe" } | Select-Object -First 1
           }
+          if (-not $gccDirectory) {
+            Write-Host "gcc.exe is not on PATH and was not found in: $($searched -join ', ')"
+            throw "The Windows race runner does not provide a C compiler (gcc.exe)."
+          }
+          Write-Host "Using C compiler from $gccDirectory"
           $gccDirectory | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          & "$gccDirectory\gcc.exe" --version
       - name: Run race detector
         run: go test -race -count=1 ./...
       - name: Run desktop authentication race checks

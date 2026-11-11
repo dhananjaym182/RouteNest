@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"golang.org/x/sys/windows"
 	"os"
+	"routenest/internal/platform"
 	"unsafe"
 )
 
@@ -41,7 +42,10 @@ func checkSecurePath(path string, directory bool) error {
 	if e != nil {
 		return e
 	}
-	if !owner.Equals(user.User.Sid) {
+	// Elevated processes (CI runners) own new files as BUILTIN\Administrators, not as the user SID.
+	if ok, e := platform.OwnerIsCurrentPrincipal(owner); e != nil {
+		return e
+	} else if !ok {
 		return fmt.Errorf("administrator authority owner mismatch")
 	}
 	acl, _, e := sd.DACL()
