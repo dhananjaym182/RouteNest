@@ -261,25 +261,15 @@ func ResolveNamedForModel(model, name string) []*CustomProvider {
 	now := time.Now()
 	legacyOwners := providerLegacyOwnerCountsLocked()
 	for _, p := range CustomProviders {
-		if !p.Enabled || !providerPinMatches(*p, name, idPin) {
+		if !providerPinMatches(*p, name, idPin) {
 			continue
 		}
-		for _, m := range p.ModelIDs {
-			if m != model {
-				continue
-			}
-			if !providerOfferingEligibleScoped(*p, model, providerMayInheritLegacy(*p, model, legacyOwners)) {
-				break
-			}
-			if until, cool := Cooldowns[p.ID+":"+model]; cool && now.Before(until) {
-				break // 该 provider 的该模型冷却中
-			}
-			if providerBudgetExceeded(p.ID, model, p.RpmLimit, p.DailyLimit, p.TokenLimit, p.TokenWindow) {
-				break
-			}
-			cs = append(cs, providerCand{p: *cloneProvider(p)})
-			break
+		// 禁用、不提供该模型、被下架、冷却中或预算用尽都排除；原因见 pinBlockLocked，
+		// PinUnavailableReason 用同一判断向调用方解释。
+		if pinBlockLocked(p, model, now, legacyOwners) != "" {
+			continue
 		}
+		cs = append(cs, providerCand{p: *cloneProvider(p)})
 	}
 	cs = orderProviderCands(cs, model)
 	out := make([]*CustomProvider, 0, len(cs))
@@ -287,4 +277,19 @@ func ResolveNamedForModel(model, name string) []*CustomProvider {
 		out = append(out, &cs[i].p)
 	}
 	return out
+}
+
+// AnyAccessPolicyGrant reports whether any enabled provider is set to let its
+// models through Free-only routing. Routing checks it first so that the
+// default, where no provider is, costs nothing extra.
+func AnyAccessPolicyGrant() bool {
+	Load()
+	Mu.Lock()
+	defer Mu.Unlock()
+	for _, p := range CustomProviders {
+		if p != nil && p.Enabled && p.AccessPolicy.Effective().Grants() {
+			return true
+		}
+	}
+	return false
 }

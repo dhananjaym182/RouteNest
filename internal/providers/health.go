@@ -17,11 +17,23 @@ type modelCooldown struct {
 	Until time.Time `json:"until"`
 }
 
+// providerBlock is one configured limit that is refusing requests right now.
+// Model is empty when the limit covers the whole provider (daily requests and
+// tokens); the per-minute limit is counted per model, so it names its model.
+type providerBlock struct {
+	Model   string    `json:"model,omitempty"`
+	Kind    string    `json:"kind"` // rpm | daily_requests | daily_tokens | monthly_tokens
+	Limit   int64     `json:"limit"`
+	Usage   int64     `json:"usage"`
+	ResetAt time.Time `json:"resetAt"`
+}
+
 type providerHealth struct {
 	Daily        int64           `json:"daily"`
 	Rpm          int             `json:"rpm"`
 	Tokens       int64           `json:"tokens"` // 本配额窗口（月/日）已归集 token 数
 	Cooldowns    []modelCooldown `json:"cooldowns"`
+	Blocks       []providerBlock `json:"blocks"`               // 已用尽的配置上限；与冷却不同，由额度窗口重置解除
 	RecoveryAt   string          `json:"recoveryAt,omitempty"` // 最早恢复（排序用）
 	Rate         float64         `json:"rate"`
 	Samples      int             `json:"samples"`
@@ -40,6 +52,7 @@ func providerHealthSnapshot() map[string]*providerHealth {
 	ids := make([]string, 0, len(CustomProviders))
 	limits := map[string]map[string]any{}
 	windows := map[string]string{} // providerID → token 配额窗口（"monthly"/"daily"）
+	policies := map[string]budget.Policy{}
 	cooldowns := map[string]time.Time{}
 	for k, v := range Cooldowns {
 		cooldowns[k] = v
@@ -51,13 +64,14 @@ func providerHealthSnapshot() map[string]*providerHealth {
 			window = "monthly" // 空/未知统一按月窗展示
 		}
 		windows[p.ID] = window
+		policies[p.ID] = providerBudgetPolicy(*p)
 		limits[p.ID] = map[string]any{"rpm": p.RpmLimit, "daily": p.DailyLimit, "tokens": p.TokenLimit, "tokenWindow": window}
 	}
 	Mu.Unlock()
 
 	out := map[string]*providerHealth{}
 	for _, id := range ids {
-		out[id] = &providerHealth{Cooldowns: []modelCooldown{}, Recent: []int{}, Limits: limits[id]}
+		out[id] = &providerHealth{Cooldowns: []modelCooldown{}, Blocks: []providerBlock{}, Recent: []int{}, Limits: limits[id]}
 	}
 	health := func(id string) *providerHealth {
 		if h := out[id]; h != nil {
@@ -82,6 +96,7 @@ func providerHealthSnapshot() map[string]*providerHealth {
 				tokenKey = today
 			}
 			h.Tokens = state.Tokens[tokenKey]
+			h.Blocks = budgetBlocks(state, id, policies[id], now)
 		}
 	}
 
@@ -99,8 +114,15 @@ func providerHealthSnapshot() map[string]*providerHealth {
 	}
 	for _, h := range out {
 		sort.Slice(h.Cooldowns, func(i, j int) bool { return h.Cooldowns[i].Until.Before(h.Cooldowns[j].Until) })
+		var earliest time.Time
 		if len(h.Cooldowns) > 0 {
-			h.RecoveryAt = h.Cooldowns[0].Until.UTC().Format(time.RFC3339)
+			earliest = h.Cooldowns[0].Until
+		}
+		if len(h.Blocks) > 0 && (earliest.IsZero() || h.Blocks[0].ResetAt.Before(earliest)) {
+			earliest = h.Blocks[0].ResetAt
+		}
+		if !earliest.IsZero() {
+			h.RecoveryAt = earliest.UTC().Format(time.RFC3339)
 		}
 	}
 
@@ -163,6 +185,35 @@ func providerHealthSnapshot() map[string]*providerHealth {
 			h.Recent = append(h.Recent, v)
 		}
 	}
+	return out
+}
+
+// budgetBlocks lists the configured limits that are refusing requests for one
+// provider, soonest reset first. It asks budget.Exhaustion, the same function
+// that decides admission, so the dashboard cannot disagree with the router.
+func budgetBlocks(state budget.State, providerID string, policy budget.Policy, now time.Time) []providerBlock {
+	out := []providerBlock{}
+	add := func(model string, e *budget.ExhaustionError) {
+		out = append(out, providerBlock{Model: model, Kind: e.Kind, Limit: e.Limit, Usage: e.Usage, ResetAt: e.ResetAt})
+	}
+	// With no model, the per-minute limit (counted per model) is skipped, so
+	// what remains is the provider-wide request and token limits.
+	if e := budget.Exhaustion(state, providerID, "", policy, now); e != nil {
+		add("", e)
+	}
+	if policy.RPMLimit > 0 {
+		for model := range state.RPM {
+			if e := budget.Exhaustion(state, providerID, model, policy, now); e != nil && e.Kind == "rpm" {
+				add(model, e)
+			}
+		}
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if !out[i].ResetAt.Equal(out[j].ResetAt) {
+			return out[i].ResetAt.Before(out[j].ResetAt)
+		}
+		return out[i].Model < out[j].Model
+	})
 	return out
 }
 

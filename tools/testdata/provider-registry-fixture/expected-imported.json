@@ -8,11 +8,8 @@
     },
     "notes": "alpha (from extremerouter registry)",
     "freeTier": true,
-    "modelIds": [
-      "alpha-free",
-      "zeta-model"
-    ],
-    "kind": "free"
+    "kind": "free",
+    "logo": "/admin/assets/providers/alpha.png"
   },
   "beta": {
     "id": "beta",
@@ -20,9 +17,6 @@
     "baseURL": "https://beta.example/v1",
     "notes": "beta (from extremerouter registry)",
     "freeTier": true,
-    "modelIds": [
-      "beta-chat"
-    ],
     "kind": "hasFree"
   },
   "gamma": {
@@ -31,9 +25,6 @@
     "baseURL": "http://localhost:9000/v1",
     "notes": "gamma (from extremerouter registry)",
     "freeTier": false,
-    "modelIds": [
-      "gamma-7b"
-    ],
     "kind": "local"
   }
 }

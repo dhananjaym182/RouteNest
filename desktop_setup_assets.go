@@ -53,9 +53,11 @@ func desktopAssetMiddleware(next http.Handler) http.Handler {
 			http.Error(response, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
 			return
 		}
-		switch request.URL.Path {
-		case "/admin/":
-		case "/", "/index.html", "/setup.js", "/setup.css":
+		path := request.URL.Path
+		switch {
+		case path == "/admin/":
+		case strings.HasPrefix(path, "/admin/assets/providers/"):
+		case path == "/" || path == "/index.html" || path == "/setup.js" || path == "/setup.css" || path == "/icon.svg":
 			response.Header().Set("Content-Security-Policy", "default-src 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'; connect-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; form-action 'none'")
 		default:
 			http.NotFound(response, request)

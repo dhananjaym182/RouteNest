@@ -3,5 +3,16 @@
     "reason": "Manual correction from commit cc24c2f: the upstream chat base is /openai (the source includes /chat), and the tier is freeTier rather than free.",
     "baseURL": "https://api.xiaomimimo.com/api/free-ai/openai",
     "kind": "freeTier"
+  },
+  "free-ai": {
+    "reason": "The chat base ends in /v1/chat/, so the generic base+/models probe misses the catalogue; it lives at /v1/models.",
+    "modelsFetcher": {
+      "url": "https://api.free.ai/v1/models",
+      "type": "openai"
+    }
+  },
+  "ollama-cloud": {
+    "reason": "Use the established Ollama brand icon shared with the manual local Ollama definition.",
+    "logo": "/admin/assets/providers/ollama.png"
   }
 }

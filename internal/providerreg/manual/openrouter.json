@@ -7,5 +7,6 @@
     "X-Title": "RouteNest"
   },
   "notes": "300+ models; many :free variants. Key: openrouter.ai/keys",
-  "freeTier": true
+  "freeTier": true,
+  "logo": "/admin/assets/providers/openrouter.png"
 }

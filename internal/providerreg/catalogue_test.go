@@ -20,6 +20,59 @@ func TestCatalogueCountsByProvenance(t *testing.T) {
 	}
 }
 
+// Presets must not ship a model catalogue: the model list is fetched live
+// while the provider is configured (the provider editor's model picker). The
+// only exceptions are the upstreams that expose no catalogue endpoint at all,
+// so their model list can only be declared statically.
+var staticCatalogProviders = map[string]string{
+	"qwen-chat":      "portal.qwen.ai exposes no /models route (verified 404)",
+	"codebuddy-cn":   "copilot.tencent.com exposes no /v2/models route (verified 404)",
+	"codebuddy-intl": "codebuddy.ai exposes no /v2/models route (same surface as codebuddy-cn)",
+	"workbuddy":      "workbuddy.ai exposes no /v2/models route (same surface as codebuddy-cn)",
+}
+
+func TestPresetsCarryNoStaleModelCatalogue(t *testing.T) {
+	for id, p := range Builtin().All() {
+		if len(p.ModelIDs) == 0 {
+			continue
+		}
+		reason, ok := staticCatalogProviders[id]
+		if !ok {
+			t.Errorf("preset %q seeds %d model ids; presets without a live catalogue endpoint must be listed in staticCatalogProviders", id, len(p.ModelIDs))
+			continue
+		}
+		if reason == "" {
+			t.Errorf("preset %q: static catalogue reason is empty", id)
+		}
+	}
+	// Every listed static provider must still exist, and must still be static.
+	for id := range staticCatalogProviders {
+		p, ok := Builtin().Get(id)
+		if !ok {
+			t.Errorf("static catalogue provider %q is not in the catalogue", id)
+			continue
+		}
+		if len(p.ModelIDs) == 0 {
+			t.Errorf("static catalogue provider %q has no model ids", id)
+		}
+	}
+}
+
+func TestEveryProviderDefinitionHasEmbeddedLogoPath(t *testing.T) {
+	for id, preset := range Builtin().All() {
+		if preset.Logo == "" {
+			t.Errorf("provider %q has no logo", id)
+			continue
+		}
+		if !strings.HasPrefix(preset.Logo, "/admin/assets/providers/") {
+			t.Errorf("provider %q logo %q is outside embedded provider assets", id, preset.Logo)
+		}
+		if !strings.HasSuffix(preset.Logo, ".png") && !strings.HasSuffix(preset.Logo, ".jpg") {
+			t.Errorf("provider %q logo %q is not a WebView-safe raster image", id, preset.Logo)
+		}
+	}
+}
+
 func TestGlobalBuiltInDefinitions(t *testing.T) {
 	reg := Builtin()
 	tests := []struct {
@@ -127,7 +180,9 @@ func TestAuthFlowCrossReferences(t *testing.T) {
 // AuthFlowLabels gives the UI the canonical display name for each flow, so the
 // console does not keep a parallel hardcoded table.
 func TestAuthFlowLabels(t *testing.T) {
-	labels := Builtin().AuthFlowLabels()
+	registry := Builtin()
+	labels := registry.AuthFlowLabels()
+	logos := registry.AuthFlowLogos()
 	want := map[string]string{"github": "GitHub Copilot (Free plan)", "qwen": "Qwen Chat (Free)"}
 	for flow, name := range want {
 		if labels[flow] != name {
@@ -137,6 +192,9 @@ func TestAuthFlowLabels(t *testing.T) {
 	for _, flow := range ConnectionFlowKeys() {
 		if labels[flow] == "" {
 			t.Errorf("flow %q has no catalogue label", flow)
+		}
+		if logos[flow] == "" {
+			t.Errorf("flow %q has no catalogue logo", flow)
 		}
 	}
 }

@@ -64,6 +64,41 @@ func adminUIAsset(t *testing.T, name string) string {
 	return string(b)
 }
 
+func TestAdminUIEmbedsProviderLogos(t *testing.T) {
+	entries, err := adminUIFS.ReadDir("ui/assets/providers")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) < 100 {
+		t.Fatalf("embedded provider logo count = %d, want complete provider catalogue", len(entries))
+	}
+	for _, name := range []string{"openai.png", "github.png", "cline.png", "reka.jpg", "ai21.png", "deepinfra.png", "vllm-local.png", "electronhub.png", "friendliai.png"} {
+		data, err := adminUIFS.ReadFile("ui/assets/providers/" + name)
+		if err != nil || len(data) == 0 {
+			t.Fatalf("provider logo %s is not embedded: %v", name, err)
+		}
+	}
+}
+
+func TestAdminUIRendersProviderLogosAcrossConnectSurfaces(t *testing.T) {
+	connections := adminUIAsset(t, "ui/js/11_connections.js")
+	setup := adminUIAsset(t, "ui/js/19_provider_setup.js")
+	table := adminUIAsset(t, "ui/js/18_provider_table.js")
+	providersPage := adminUIAsset(t, "ui/html/pages/providers.html")
+	if !strings.Contains(connections, "_flowLogos[provider]") || !strings.Contains(connections, "conn-tile-logo") {
+		t.Fatal("OAuth provider tiles do not render catalogue logos")
+	}
+	if !strings.Contains(setup, "logo: p.logo || ''") || !strings.Contains(setup, "connect-provider-icon") {
+		t.Fatal("Connect Provider directory does not render preset logos")
+	}
+	if !strings.Contains(table, "logo: instance.logo || ''") || !strings.Contains(table, "globalProviderIdentityHTML") {
+		t.Fatal("configured provider table does not render instance logos")
+	}
+	if !strings.Contains(providersPage, `/admin/assets/providers/cline.png`) {
+		t.Fatal("native Cline OAuth entry has no logo")
+	}
+}
+
 func TestAdminUIMarkupHasRequiredIDs(t *testing.T) {
 	have := map[string]bool{}
 	for _, m := range markupIDRe.FindAllStringSubmatch(adminHTML, -1) {

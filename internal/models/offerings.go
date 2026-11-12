@@ -54,6 +54,7 @@ func makeOffering(model domain.Model, instance domain.ProviderInstance, state do
 		ThinkingLevels:   append([]string(nil), model.ThinkingLevels...),
 		InputModalities:  append([]string(nil), model.InputModalities...),
 		OutputModalities: append([]string(nil), model.OutputModalities...),
+		ProviderPolicy:   instance.AccessPolicy.Effective(),
 	}
 	if !hasState || !state.Valid() {
 		return offering

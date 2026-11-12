@@ -54,6 +54,7 @@
 .preset-row{display:flex;align-items:center;gap:8px;padding:8px 10px;border-bottom:1px solid var(--border2);cursor:pointer;font-size:13px}
 .preset-row:last-child{border-bottom:none}
 .preset-row:hover{background:var(--surface2)}
+.preset-logo{width:26px;height:26px;min-width:26px;border-radius:6px;object-fit:contain;background:var(--surface2);border:1px solid var(--border2);flex-shrink:0}
 .preset-name{font-weight:600;color:var(--text);white-space:nowrap}
 .preset-key{font-family:ui-monospace,'SF Mono','Cascadia Code','Consolas',monospace;font-size:11px;color:var(--text3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1 1 auto;min-width:0}
 /* 组合测试结果行：优先级序号 / 模型 / 上游徽章 / 测试结论 / 行内操作 */

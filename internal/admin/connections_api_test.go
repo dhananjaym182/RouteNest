@@ -425,6 +425,7 @@ func TestConnectionListEndpointIncludesFlowLabels(t *testing.T) {
 			Data struct {
 				Flows      []string          `json:"flows"`
 				FlowLabels map[string]string `json:"flowLabels"`
+				FlowLogos  map[string]string `json:"flowLogos"`
 			} `json:"data"`
 		}
 		if err := json.Unmarshal(rec.Body.Bytes(), &env); err != nil {
@@ -437,9 +438,15 @@ func TestConnectionListEndpointIncludesFlowLabels(t *testing.T) {
 			if env.Data.FlowLabels[flow] == "" {
 				t.Errorf("flow %q has no label", flow)
 			}
+			if env.Data.FlowLogos[flow] == "" {
+				t.Errorf("flow %q has no logo", flow)
+			}
 		}
 		if got := env.Data.FlowLabels["github"]; got != "GitHub Copilot (Free plan)" {
 			t.Errorf("github label = %q", got)
+		}
+		if got := env.Data.FlowLogos["github"]; got != "/admin/assets/providers/github.png" {
+			t.Errorf("github logo = %q", got)
 		}
 	})
 }

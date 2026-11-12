@@ -150,7 +150,11 @@ input,select,textarea{font-size:14px}
 #providerSetupChoices .connect-provider-group{margin-top:24px}
 #providerSetupChoices .connect-provider-group:first-child{margin-top:0}
 #providerSetupChoices .connect-provider-group-title{margin:0 0 12px;color:var(--text2);font-size:13px;font-weight:600}
-#providerSetupChoices .connect-provider-icon{display:grid;place-items:center;flex:0 0 36px;width:36px;height:36px;border:1px solid var(--border2);border-radius:9px;background:var(--surface2);color:var(--text2);font-size:16px;font-weight:650}
+#providerSetupChoices .connect-provider-icon{display:grid;place-items:center;flex:0 0 36px;width:36px;height:36px;border:1px solid var(--border2);border-radius:9px;background:var(--surface2);color:var(--text2);font-size:16px;font-weight:650;overflow:hidden}
+#providerSetupChoices .connect-provider-icon>img,#providerSetupChoices .connect-provider-monogram{grid-area:1/1;width:36px;height:36px}
+#providerSetupChoices .connect-provider-icon>img{position:relative;z-index:1;object-fit:contain;background:var(--surface)}
+#providerSetupChoices .connect-provider-icon.logo-error>img{display:none}
+#providerSetupChoices .connect-provider-monogram{display:grid;place-items:center}
 #providerSetupChoices .connect-provider-choice>span:nth-child(2){flex:1}
 #providerSetupChoices .connect-provider-choice>span:last-child{align-self:center;color:var(--text3)}
 #providerSetup .setup-footer-note{flex:1;min-width:180px}
@@ -175,15 +179,17 @@ input,select,textarea{font-size:14px}
 #providerSetupContent pre,#providerSetupContent code{font-family:var(--font-mono);overflow-wrap:anywhere}
 
 /* Native OAuth setup follows the same service-and-action rows as other flows. */
-.oauth-native-entry{display:grid;grid-template-columns:minmax(80px,.5fr) minmax(160px,1.5fr) auto auto;align-items:center;gap:12px;padding:16px;border:1px solid var(--border);border-radius:10px;background:var(--surface);margin-bottom:20px}
+.oauth-native-entry{display:grid;grid-template-columns:34px minmax(80px,.5fr) minmax(160px,1.5fr) auto auto;align-items:center;gap:12px;padding:16px;border:1px solid var(--border);border-radius:10px;background:var(--surface);margin-bottom:20px}
+.oauth-native-logo{width:34px;height:34px;border-radius:7px;object-fit:contain;background:var(--surface);border:1px solid var(--border2)}
 .oauth-native-entry>strong{font-size:15px;font-weight:650}
 .oauth-native-entry>span{font-size:13px;line-height:1.6;color:var(--text2)}
 #tab-providers [data-subpage="oauth"]>.section>.section-title{flex-wrap:wrap;gap:10px}
 #tab-providers [data-subpage="oauth"] .title-tools{display:flex;flex-wrap:wrap;gap:8px}
 
 @media (max-width:760px){
-  .oauth-native-entry{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;padding:14px}
-  .oauth-native-entry>strong,.oauth-native-entry>span{grid-column:1/-1}
+  .oauth-native-entry{grid-template-columns:34px minmax(0,1fr);gap:10px;padding:14px}
+  .oauth-native-entry>span{grid-column:1/-1}
+  .oauth-native-entry>strong{grid-column:2}
   .oauth-native-entry>.btn{min-width:0;justify-content:center}
   #tab-providers [data-subpage="oauth"]>.section>.section-title>.title-tools{margin-left:0;width:100%}
 }

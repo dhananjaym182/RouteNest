@@ -10,5 +10,6 @@
     "vision-model",
     "coder-model"
   ],
-  "authFlow": "qwen"
+  "authFlow": "qwen",
+  "logo": "/admin/assets/providers/qwen.png"
 }

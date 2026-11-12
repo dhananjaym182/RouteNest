@@ -12,12 +12,35 @@ type RouteAccess struct {
 	// AllowanceVerified is true only when the selected account or route has a
 	// verified active free-tier allowance.
 	AllowanceVerified bool
+	// Basis says what decided the route when it came from an offering: the
+	// detected class, a tier the administrator set by hand, or the provider's
+	// Free-only setting. Empty means the class alone decides.
+	Basis domain.FreeOnlyBasis
+	// ProviderID is the provider that owns the route, when known. It lets an
+	// explanation point at that provider's setting.
+	ProviderID domain.ProviderInstanceID
+}
+
+// RouteAccessOf describes an offering's route with the administrator's choices
+// applied: a hand-set model tier first, then the provider's Free-only setting.
+func RouteAccessOf(offering domain.ModelOffering) RouteAccess {
+	return RouteAccess{
+		Class:             offering.Access,
+		AllowanceVerified: offering.AllowanceVerified,
+		Basis:             offering.FreeOnlyDecision().Basis,
+		ProviderID:        offering.ProviderID,
+	}
 }
 
 // FreeOnlyEligible reports whether a route may serve a request while Free-only
 // routing is enabled. free is always eligible; free_tier only with a verified
 // allowance; every other class is ineligible.
 func FreeOnlyEligible(r RouteAccess) bool {
+	// The provider's setting is the administrator's explicit choice. A hand-set
+	// model tier (BasisManual) is not a grant: it only fixes the class.
+	if r.Basis.GrantsFreeOnly() {
+		return true
+	}
 	if !r.Class.Valid() {
 		return false
 	}

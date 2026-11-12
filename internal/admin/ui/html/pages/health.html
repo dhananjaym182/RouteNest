@@ -1,28 +1,61 @@
-<div id="tab-health" class="tab-panel system-page" style="display:none">
+<div id="tab-health" class="tab-panel system-page health-page" style="display:none" aria-busy="false">
   <div class="page-header">
     <div>
       <div class="page-kicker">可观测性</div>
       <div class="large-title">Provider 健康与诊断</div>
-      <div class="large-subtitle">检查凭据状态、模型可用性、限流与冷却恢复证据。</div>
+      <div class="large-subtitle">查看问题范围、冷却截止和重置证据；这是只读快照，不是实时连通性测试。</div>
     </div>
-    <div class="action-row"><button type="button" class="btn btn-sm" onclick="loadGlobal(true)">刷新状态</button></div>
+    <div class="action-row health-page-actions">
+      <span id="globalHealthUpdated" class="health-updated" role="status"></span>
+      <button id="globalHealthRefresh" type="button" class="btn btn-sm" onclick="loadGlobalHealth()">刷新状态</button>
+    </div>
   </div>
 
-  <div id="globalHealthSummary" class="health-summary-grid" aria-live="polite"></div>
-
-  <div class="section system-section">
-    <div class="section-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l2.5-7 5 14 2.5-7h4"/><path d="M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"/></svg><span>可用性观察</span></div>
-    <div class="section-desc">冷却截止与配额重置分开显示。没有重置证据时明确标为未知，不把回退冷却当作上游重置。</div>
-    <div class="system-toolbar">
-      <div class="field system-filter-field">
-        <label for="globalHealthProviderFilter">Provider 筛选</label>
-        <select id="globalHealthProviderFilter" onchange="setGlobalFilter(this.value)"></select>
-      </div>
-      <div class="state-legend" aria-label="时间证据图例">
-        <span class="evidence-key evidence-reset">确认重置</span>
-        <span class="evidence-key evidence-fallback">回退冷却</span>
-      </div>
+  <div class="health-toolbar">
+    <div class="health-filter">
+      <label for="globalHealthProviderFilter">Provider 筛选</label>
+      <select id="globalHealthProviderFilter" onchange="setGlobalFilter(this.value)"></select>
     </div>
-    <div id="globalState" class="section-body system-inventory" aria-live="polite"></div>
+    <div class="health-filter">
+      <label for="globalHealthKindFilter">问题类型</label>
+      <select id="globalHealthKindFilter" onchange="setGlobalHealthKind(this.value)">
+        <option value="">全部问题</option>
+        <option value="auth_expired">认证过期</option>
+        <option value="model_gone">模型下架</option>
+        <option value="quota_exhausted">配额耗尽</option>
+        <option value="rate_limited">限流</option>
+        <option value="transient_failure">瞬时故障</option>
+      </select>
+    </div>
+    <div class="health-filter health-search">
+      <label for="globalHealthSearch">搜索观察</label>
+      <input id="globalHealthSearch" type="search" placeholder="Provider、模型、凭据或证据来源" oninput="setGlobalHealthSearch(this.value)">
+    </div>
+  </div>
+
+  <div id="globalHealthError" class="health-error" role="alert" hidden></div>
+  <div id="globalHealthSummary" class="health-summary-grid" aria-live="polite"></div>
+  <div id="globalHealthCredentialNote" class="health-note" role="status" hidden></div>
+  <div id="globalHealthRuntime" class="health-runtime" aria-live="polite"></div>
+
+  <details id="globalHealthCredentialIssues" class="health-credential-issues" hidden>
+    <summary><span>需关注凭据</span><span id="globalHealthCredentialCount" class="health-issue-count" data-numeric></span></summary>
+    <div id="globalHealthCredentials"></div>
+  </details>
+
+  <section class="section health-observations" aria-labelledby="globalHealthObservationTitle">
+    <div class="health-section-head">
+      <h2 id="globalHealthObservationTitle">可用性观察</h2>
+      <span id="globalHealthObservationCount" class="health-muted" role="status"></span>
+    </div>
+    <div id="globalState" aria-live="polite"></div>
+  </section>
+  <div class="health-footnote">
+    <span>回退冷却不是上游配额重置。观察只影响所列范围，不代表整个 Provider 不可用。</span>
+    <div class="health-related-links">
+      <button type="button" class="text-action" onclick="switchTab('providers')">查看 Provider</button>
+      <button type="button" class="text-action" onclick="switchTab('quota')">用量与配额</button>
+      <button type="button" class="text-action" onclick="switchTab('logs')">查看请求日志</button>
+    </div>
   </div>
 </div>

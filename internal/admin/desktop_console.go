@@ -213,18 +213,14 @@ func (console *DesktopConsole) ServeHTTP(w http.ResponseWriter, r *http.Request)
 		writeAdminSecurityError(w, http.StatusServiceUnavailable, "security_unavailable")
 		return
 	}
-	if r == nil || r.URL == nil || r.URL.Path != "/admin/" || r.URL.RawPath != "" || r.URL.RawQuery != "" || r.URL.User != nil || r.URL.Fragment != "" {
+	if r == nil || r.URL == nil || r.URL.RawPath != "" || r.URL.RawQuery != "" || r.URL.User != nil || r.URL.Fragment != "" ||
+		(r.URL.Path != "/admin/" && !strings.HasPrefix(r.URL.Path, "/admin/assets/providers/")) {
 		http.NotFound(w, r)
 		return
 	}
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
 		w.Header().Set("Allow", "GET, HEAD")
 		writeAdminSecurityError(w, http.StatusMethodNotAllowed, "method_not_allowed")
-		return
-	}
-	if r.Method == http.MethodHead {
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		w.WriteHeader(http.StatusOK)
 		return
 	}
 	adminStaticHandler(w, r)

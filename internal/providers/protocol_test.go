@@ -1,7 +1,6 @@
 package providers
 
 import (
-	"strings"
 	"testing"
 
 	"routenest/internal/providerreg"
@@ -40,7 +39,8 @@ func TestProviderProtocolByBaseURL(t *testing.T) {
 
 // TestQoderPresetsAreRoutable guards the wiring that makes a logged-in Qoder
 // account usable: the preset must declare the qoder protocol, stay a login-flow
-// provider, and ship a catalog so models exist before any manual import.
+// provider, and point at the signed catalogue. Presets ship no seeded models —
+// the catalogue is read live during configuration (see DiscoverQoderModels).
 func TestQoderPresetsAreRoutable(t *testing.T) {
 	for _, id := range []string{"qoder", "qoder-cn"} {
 		p, ok := providerreg.Builtin().Get(id)
@@ -53,15 +53,8 @@ func TestQoderPresetsAreRoutable(t *testing.T) {
 		if !p.LoginFlow {
 			t.Errorf("%s: loginFlow must be true (device-code auth)", id)
 		}
-		if len(p.ModelIDs) == 0 {
-			t.Errorf("%s: no modelIds, models would be unreachable", id)
-		}
-		// Custom-provider model ids are global, so every qoder model must be
-		// namespaced to avoid colliding with other providers' bare ids ("auto").
-		for _, mid := range p.ModelIDs {
-			if !strings.HasPrefix(mid, "qoder/") {
-				t.Errorf("%s: model id %q is not namespaced with qoder/", id, mid)
-			}
+		if len(p.ModelIDs) != 0 {
+			t.Errorf("%s: presets must not seed models (%v); the catalogue is fetched at configuration time", id, p.ModelIDs)
 		}
 		if p.ModelsFetcher == nil || p.ModelsFetcher.Type != "qoder" {
 			t.Errorf("%s: modelsFetcher must use the qoder catalog type", id)

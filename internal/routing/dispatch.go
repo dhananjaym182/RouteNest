@@ -24,13 +24,13 @@ func CallClineAPI(params map[string]any, stream bool) (*http.Response, *domain.A
 	bare, pin, refErr := ResolveModelReference(model)
 	if refErr != nil {
 		if legacyBare, legacyPin := providers.SplitPin(model); legacyPin != "" && liveConfig().OnlyFree && !ModelFreeOnlyEligible(legacyBare) {
-			return nil, nil, fmt.Errorf("model %q is not eligible while onlyFree is enabled (access class: %s)", model, ModelRouteAccess(legacyBare).Class)
+			return nil, nil, fmt.Errorf("model %q is not eligible while onlyFree is enabled (%s)", model, FreeOnlyRefusalDetail(legacyBare))
 		}
 		return nil, nil, refErr
 	}
 	if pin.active() {
 		if liveConfig().OnlyFree && !ModelFreeOnlyEligible(model) {
-			return nil, nil, fmt.Errorf("model %q is not eligible while onlyFree is enabled (access class: %s)", model, ModelRouteAccess(model).Class)
+			return nil, nil, fmt.Errorf("model %q is not eligible while onlyFree is enabled (%s)", model, FreeOnlyRefusalDetail(model))
 		}
 		params["model"] = bare
 		params[providers.ProviderIDParam] = string(pin.ProviderID)
@@ -63,7 +63,7 @@ func CallClineAPI(params map[string]any, stream bool) (*http.Response, *domain.A
 			params[ProviderNameParam] = provName
 			return resp, nil, nil
 		case !attempted:
-			return nil, nil, &FreeModelUnavailableError{Message: fmt.Sprintf("no enabled provider %q serves model %q", providerPin, bare)}
+			return nil, nil, &FreeModelUnavailableError{Message: providers.PinUnavailableReason(bare, providerPin)}
 		default:
 			return nil, nil, perr
 		}

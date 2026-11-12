@@ -14,7 +14,7 @@ import (
 	"embed"
 )
 
-//go:embed ui/head.html ui/css/*.css ui/html/*.html ui/html/pages/*.html ui/html/dialogs/*.html ui/js/*.js
+//go:embed ui/head.html ui/css/*.css ui/html/*.html ui/html/pages/*.html ui/html/dialogs/*.html ui/js/*.js ui/assets/providers/* ui/assets/*.svg ui/assets/*.png ui/assets/*.ico
 var adminUIFS embed.FS
 
 var adminHTML string

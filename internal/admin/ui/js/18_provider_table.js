@@ -22,6 +22,7 @@ function globalProviderRow(instance, data) {
     id: id,
     name: name,
     initial: initial.toUpperCase(),
+    logo: instance.logo || '',
     kindLabel: instance.runtimeBuiltin ? '内置' : '自定义',
     isCustom: instance.deletable === true,
     enabled: !!instance.enabled,
@@ -74,11 +75,17 @@ function globalProviderSortHeader(key, label) {
 }
 
 // ----- cells -----
+function globalProviderIdentityHTML(row) {
+  const fallback = '<span class="provider-monogram mgmt-monogram" aria-hidden="true">' + esc(row.initial) + '</span>';
+  if (!row.logo) return fallback;
+  return '<span class="provider-logo-stack"><img class="provider-monogram mgmt-provider-logo" src="' + escAttr(row.logo) + '" alt="" aria-hidden="true" onerror="this.parentElement.classList.add(\'logo-error\')">' + fallback + '</span>';
+}
+
 function globalProviderNameHTML(row) {
   const tags =
     (row.free ? '<span class="green-xs" title="' + escAttr(t('整源免费标记，不代表池内每个模型都免费；逐模型计费以分级预览为准')) + '">free</span>' : '') +
     (row.connections ? '<span class="acc-xs" title="' + escAttr(t('连接池轮转派发')) + '">token×' + row.connections + '</span>' : '');
-  return '<div class="mgmt-provider-cell"><span class="provider-monogram mgmt-monogram" aria-hidden="true">' + esc(row.initial) + '</span>' +
+  return '<div class="mgmt-provider-cell">' + globalProviderIdentityHTML(row) +
     '<div class="mgmt-primary"><span class="mgmt-name-line"><span class="mgmt-name" title="' + escAttr(row.name) + '">' + esc(row.name) + '</span>' + tags + '</span>' +
     '<code class="mgmt-id" title="' + escAttr(row.id) + '">' + esc(row.id) + '</code></div></div>';
 }
@@ -175,7 +182,7 @@ function globalProviderCompactRows(rows) {
     const facts = [];
     if (row.priority != null) facts.push(esc(t('优先级')) + ' ' + esc(String(row.priority)));
     return '<article class="provider-compact-item" data-prov="' + escAttr(row.id) + '">' +
-      '<div class="pc-line1"><span class="provider-monogram mgmt-monogram" aria-hidden="true">' + esc(row.initial) + '</span><strong title="' + escAttr(row.name) + '">' + esc(row.name) + '</strong>' +
+      '<div class="pc-line1">' + globalProviderIdentityHTML(row) + '<strong title="' + escAttr(row.name) + '">' + esc(row.name) + '</strong>' +
         (row.free ? '<span class="green-xs">free</span>' : '') +
         globalBadge(row.enabled ? '已启用' : '已停用', row.enabled ? 'positive' : 'negative') + '</div>' +
       '<div class="pc-line2"><span title="' + escAttr(row.authText) + '">' + esc(t(row.kindLabel)) + ' · ' + esc(row.authText) + '</span>' +

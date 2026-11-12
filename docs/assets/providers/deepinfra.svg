@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <defs>
+    <linearGradient id="dig" x1="8" y1="8" x2="56" y2="56" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#60A5FA"/>
+      <stop offset="1" stop-color="#2563EB"/>
+    </linearGradient>
+  </defs>
+  <!-- DeepInfra — layered compute grid / infra stack -->
+  <rect width="64" height="64" rx="14" fill="#0C1830"/>
+  <rect width="64" height="64" rx="14" fill="url(#dig)" opacity="0.22"/>
+  <rect x="1.5" y="1.5" width="61" height="61" rx="12.5" fill="none" stroke="#2563EB" stroke-opacity="0.4"/>
+  <g stroke-linejoin="round">
+    <path d="M32 13 L52 23 L32 33 L12 23 Z" fill="url(#dig)"/>
+    <path d="M12 31 L32 41 L52 31 L52 36 L32 46 L12 36 Z" fill="#2563EB" opacity="0.85"/>
+    <path d="M12 43 L32 53 L52 43" fill="none" stroke="#60A5FA" stroke-width="4.5"/>
+  </g>
+  <circle cx="32" cy="23" r="3.2" fill="#FFFFFF"/>
+</svg>

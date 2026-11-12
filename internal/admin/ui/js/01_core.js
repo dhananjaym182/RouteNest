@@ -111,6 +111,7 @@ function setLang(l){
     if (_('modelsList')) loadModels();
     if (_('settingDefModel')) loadConfig();
     if (typeof renderGlobal === 'function' && typeof _globalData !== 'undefined' && _globalData) renderGlobal();
+    else if (typeof renderGlobalHealth === 'function' && typeof _globalHealthData !== 'undefined' && _globalHealthData) renderGlobalHealth(_globalHealthData);
     renderAdminPrincipal(_adminPrincipal);
     if (typeof _activeTabName !== 'undefined' && _activeTabName === 'security' && adminHasPermission('security.write')) {
       loadAdminSessions(); loadAdminUsers(); if (typeof loadTrustedDevices === 'function') loadTrustedDevices(); loadSSOProviders();

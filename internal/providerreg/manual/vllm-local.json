@@ -3,5 +3,6 @@
   "name": "Local vLLM / Ollama",
   "baseURL": "http://127.0.0.1:8000/v1",
   "notes": "Self-hosted OpenAI-compatible server (no key needed usually)",
-  "freeTier": true
+  "freeTier": true,
+  "logo": "/admin/assets/providers/vllm-local.png"
 }

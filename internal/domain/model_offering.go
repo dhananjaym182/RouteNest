@@ -22,12 +22,24 @@ type ModelOffering struct {
 	ThinkingLevels    []string           `json:"thinkingLevels,omitempty"`
 	InputModalities   []string           `json:"inputModalities,omitempty"`
 	OutputModalities  []string           `json:"outputModalities,omitempty"`
+	// ProviderPolicy is the administrator's Free-only setting for the provider
+	// that owns this route. It is read when the route is checked and is not
+	// stored per model, so changing it needs no re-sync. Empty means detect.
+	ProviderPolicy ProviderAccessPolicy `json:"providerAccessPolicy,omitempty"`
 }
 
 func (offering ModelOffering) Key() OfferingKey {
 	return OfferingKey{ProviderID: offering.ProviderID, ModelID: offering.ModelID}
 }
 
+// FreeOnlyDecision applies the administrator's choices to this route: a tier
+// set by hand on the model, then the provider's Free-only setting, then the
+// model's detected access class. Only TierSignal "manual" counts as a hand-set
+// tier; the Manual and Custom flags describe how the model entered the catalog.
+func (offering ModelOffering) FreeOnlyDecision() FreeOnlyDecision {
+	return DecideFreeOnly(offering.Access, offering.AllowanceVerified, offering.TierSignal == "manual", offering.ProviderPolicy)
+}
+
 func (offering ModelOffering) FreeOnlyEligible() bool {
-	return offering.Access.Valid() && offering.Access.EligibleForFreeOnly(offering.AllowanceVerified)
+	return offering.FreeOnlyDecision().Eligible
 }

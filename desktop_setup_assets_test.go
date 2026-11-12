@@ -31,6 +31,12 @@ func TestDesktopAssetMiddlewareRestrictsContent(t *testing.T) {
 			t.Fatalf("security header %s missing", header)
 		}
 	}
+	request = httptest.NewRequest(http.MethodGet, desktopAssetOrigin()+"/admin/assets/providers/openai.png", nil)
+	recorder = httptest.NewRecorder()
+	handler.ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusNoContent {
+		t.Fatalf("provider logo GET status = %d", recorder.Code)
+	}
 	request = httptest.NewRequest(http.MethodPost, desktopAssetOrigin()+"/", nil)
 	recorder = httptest.NewRecorder()
 	handler.ServeHTTP(recorder, request)

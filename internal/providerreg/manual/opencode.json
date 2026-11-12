@@ -23,5 +23,6 @@
     "contextCompaction": "supported"
   },
   "missingThreshold": 1,
-  "runtimeBuiltin": true
+  "runtimeBuiltin": true,
+  "logo": "/admin/assets/providers/opencode.png"
 }

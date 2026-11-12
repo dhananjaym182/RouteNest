@@ -116,6 +116,13 @@ func SaveCustomProvider(p CustomProvider) (CustomProvider, error) {
 	} else if p.TokenWindow != "monthly" && p.TokenWindow != "daily" {
 		return CustomProvider{}, errors.New(`tokenWindow must be "monthly" or "daily"`)
 	}
+	// Free-only 处理方式由管理员显式选择：未知值拒绝（猜错会放行付费模型）；
+	// 默认值 detect 存为空，使未改动的 provider 记录与此设置出现前完全一致。
+	accessPolicy, policyOK := domain.NormalizeProviderAccessPolicy(string(p.AccessPolicy))
+	if !policyOK {
+		return CustomProvider{}, errors.New(`accessPolicy must be "detect", "all_free" or "allow_all"`)
+	}
+	p.AccessPolicy = accessPolicy.Effective()
 	// Wave-4 pool hygiene: keep only connection IDs that still exist.
 	seenConn := map[string]bool{}
 	var cids []string
@@ -246,6 +253,7 @@ type PresetEntry struct {
 	Kind          string
 	LoginFlow     bool
 	AuthFlow      string
+	Logo          string
 }
 
 // PresetEntries lists the built-in presets in catalogue order.
@@ -268,7 +276,7 @@ func PresetEntries() []PresetEntry {
 				kind = "other"
 			}
 		}
-		out = append(out, PresetEntry{Key: k, Name: p.Name, BaseURL: p.BaseURL, Headers: p.Headers, Notes: p.Notes, FreeTier: p.FreeTier, ModelIDs: p.ModelIDs, ModelsFetcher: p.ModelsFetcher, Kind: kind, LoginFlow: p.LoginFlow, AuthFlow: p.AuthFlow})
+		out = append(out, PresetEntry{Key: k, Name: p.Name, BaseURL: p.BaseURL, Headers: p.Headers, Notes: p.Notes, FreeTier: p.FreeTier, ModelIDs: p.ModelIDs, ModelsFetcher: p.ModelsFetcher, Kind: kind, LoginFlow: p.LoginFlow, AuthFlow: p.AuthFlow, Logo: p.Logo})
 	}
 	return out
 }

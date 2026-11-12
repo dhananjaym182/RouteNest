@@ -58,7 +58,7 @@ func TestSnapshotInstancesIncludesBuiltInsAndCustomProviders(t *testing.T) {
 	}
 
 	cline := instanceByID(t, instances, "cline")
-	if !cline.RuntimeBuiltin || cline.Deletable || !cline.Enabled || cline.DefinitionID != "cline" || cline.AdapterID != "cline" {
+	if !cline.RuntimeBuiltin || cline.Deletable || !cline.Enabled || cline.DefinitionID != "cline" || cline.AdapterID != "cline" || cline.Logo != "/admin/assets/providers/cline.png" {
 		t.Fatalf("cline instance = %+v", cline)
 	}
 	openCode := instanceByID(t, instances, "opencode")
@@ -67,7 +67,7 @@ func TestSnapshotInstancesIncludesBuiltInsAndCustomProviders(t *testing.T) {
 	}
 
 	github := instanceByID(t, instances, "prov_github")
-	if github.DefinitionID != "github-copilot" || github.AdapterID != "openaicompat" || !github.Deletable {
+	if github.DefinitionID != "github-copilot" || github.AdapterID != "openaicompat" || !github.Deletable || github.Logo != "/admin/assets/providers/github.png" {
 		t.Fatalf("github projection = %+v", github)
 	}
 	if github.Priority != 3 || github.Weight != 2 || github.TimeoutSec != 45 {

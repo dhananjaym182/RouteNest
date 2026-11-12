@@ -4,6 +4,12 @@
 let _globalData = null;
 let _globalLoadGeneration = 0;
 let _globalFilter = '';
+let _globalHealthData = null;
+let _globalHealthLoadGeneration = 0;
+let _globalHealthLoading = false;
+let _globalHealthError = '';
+let _globalHealthKind = '';
+let _globalHealthSearch = '';
 let _globalLoadFailed = false; // the last loadGlobal failed and left no data: summaries must not read it as empty
 let _globalProviderSearch = '';
 let _globalProviderKind = '';
@@ -144,7 +150,7 @@ function renderGlobalFilters(data) {
   if (_globalFilter && !seen[_globalFilter]) {
     options.push('<option value="' + escAttr(_globalFilter) + '">' + esc(_globalFilter) + '</option>');
   }
-  _globalFilterIDs.forEach(id => {
+  _globalFilterIDs.filter(id => id !== 'globalHealthProviderFilter').forEach(id => {
     const el = _(id);
     if (!el) return;
     el.innerHTML = options.join('');
@@ -409,17 +415,57 @@ function renderGlobalOfferings(data) {
   }
 }
 
+function globalHealthProviderName(data, providerID) {
+  const id = String(providerID || '');
+  const instance = (data.instances || []).find(item => String(item.id) === id);
+  return instance ? (instance.name || id) : id;
+}
+
+function globalHealthObservations(data) {
+  return (data.state || []).filter(observation => observation && observation.scope && globalMatches(observation.scope.providerId));
+}
+
+function globalHealthDeadline(observation) {
+  return globalTime(observation.kind === 'quota_exhausted' && globalTime(observation.resetAt) ? observation.resetAt : observation.until);
+}
+
+function globalHealthCredentialIssues(data) {
+  const now = Date.now();
+  return (data.credentials || []).filter(credential => !_globalFilter || (credential.providerIds || []).some(globalMatches)).map(credential => {
+    const reasons = [];
+    if (credential.status === 'disabled') return { credential: credential, reasons: reasons };
+    if (credential.status !== 'active') reasons.push(credential.status === 'reauth_required' ? '需要重新认证' : (_globalStatuses[credential.status] || credential.status || '未知'));
+    const expires = globalTime(credential.expiresAt);
+    if (credential.status === 'active' && expires && expires.getTime() <= now && !credential.refreshable) reasons.push('已过期');
+    const cooldown = globalTime(credential.cooldownUntil);
+    if (cooldown && cooldown.getTime() > now) reasons.push('冷却中');
+    const modelCooldowns = Object.entries(credential.modelCooldowns || {}).filter(([, until]) => {
+      const at = globalTime(until);
+      return at && at.getTime() > now;
+    });
+    if (modelCooldowns.length) reasons.push('模型冷却');
+    if (credential.secretConfigured === false && credential.kind !== 'public') reasons.push('缺少凭据');
+    return { credential: credential, reasons: reasons, modelCooldowns: modelCooldowns };
+  }).filter(item => item.reasons.length);
+}
+
 function renderGlobalHealthSummary(data) {
   const el = _('globalHealthSummary');
   if (!el) return;
-  const view = filteredGlobalData(data);
-  const activeCreds = view.credentials.filter(c => c.status === 'active').length;
-  const attentionCreds = view.credentials.length - activeCreds;
-  const attentionObservations = view.state.filter(o => o.kind !== 'recovered' && o.kind !== 'quota_reset').length;
-  const stat = (value, label, tone) => '<div class="health-summary-card' + (tone ? ' ' + tone : '') + '"><strong>' + formatNumber(value) + '</strong><span>' + esc(t(label)) + '</span></div>';
-  el.innerHTML = stat(view.instances.filter(i => i.enabled).length, '已启用 Providers') +
-    stat(activeCreds, '活跃凭据') + stat(attentionCreds, '需关注凭据', attentionCreds ? 'has-warning' : '') +
-    stat(view.state.length, '可用性观察', attentionObservations ? 'has-warning' : '');
+  const observations = globalHealthObservations(data).filter(observation => observation.kind !== 'recovered' && observation.kind !== 'quota_reset');
+  const providers = new Set(observations.map(observation => observation.scope.providerId).filter(Boolean));
+  const cooldowns = observations.filter(observation => {
+    const deadline = globalHealthDeadline(observation);
+    return deadline && deadline.getTime() > Date.now();
+  }).length;
+  const issues = globalHealthCredentialIssues(data).length;
+  const credentialKnown = data.credentialsState === 'ok';
+  const credentialUnavailable = data.credentialsState === 'denied' ? '无权限查看' : (data.credentialsState === 'failed' ? '不可用' : '未知');
+  const observationKnown = !data.runtimeState || !(data.runtimeState.degraded || data.runtimeState.stale || data.runtimeState.ready === false);
+  const stat = (value, label, warning) => '<div class="health-stat' + (warning ? ' has-warning' : '') + '"><span>' + esc(t(label)) + '</span><strong' + (typeof value === 'number' ? ' data-numeric' : ' class="health-stat-unknown"') + '>' + esc(typeof value === 'number' ? formatNumber(value) : t(value)) + '</strong></div>';
+  el.innerHTML = stat((data.instances || []).filter(instance => globalMatches(instance.id) && instance.enabled).length, '已启用 Providers', false) +
+    stat(observationKnown ? providers.size : '未知', '观察涉及 Provider', observationKnown && providers.size > 0) + stat(observationKnown ? cooldowns : '未知', '有效冷却', observationKnown && cooldowns > 0) +
+    stat(credentialKnown ? issues : credentialUnavailable, '需关注凭据', credentialKnown && issues > 0);
 }
 
 function showMoreGlobalOfferings() {
@@ -457,36 +503,281 @@ function globalScopeParts(scope) {
   ].filter(([, value]) => value);
 }
 
+function globalHealthResetEvidence(observation) {
+  const reset = globalTime(observation.resetAt);
+  if (!reset) return { label: '未确认重置', tone: 'neutral' };
+  if (observation.source === 'configured_window') return { label: '配置窗口重置', tone: 'neutral' };
+  if (observation.source === 'retry-after') return { label: '建议重试时间', tone: 'neutral' };
+  if (observation.confidence === 'inferred') return { label: '推断重置', tone: 'accent' };
+  if (observation.confidence === 'explicit' && ['reset-header', 'body'].includes(observation.source)) return { label: '上游确认重置', tone: 'positive' };
+  return { label: '已知重置', tone: 'neutral' };
+}
+
+function globalHealthTime(value, missing) {
+  const at = globalTime(value);
+  if (!at) return '<span class="health-muted">' + esc(t(missing || '未知')) + '</span>';
+  const remaining = at.getTime() - Date.now();
+  const label = remaining <= 0 ? t('已到期，待刷新') : (remaining < 3600000 ? Math.ceil(remaining / 60000) + 'm' : (remaining / 3600000).toFixed(1) + 'h');
+  return '<time datetime="' + escAttr(at.toISOString()) + '" title="' + escAttr(at.toLocaleString(LC())) + '">' + esc(label) + '</time>';
+}
+
 function renderObservationTimes(observation) {
   const until = globalTime(observation.until);
   const reset = globalTime(observation.resetAt);
   const fallback = observation.confidence === 'fallback' && !!until && !reset;
-  let resetLabel = '未确认重置';
-  let resetTone = 'unknown';
-  if (reset && observation.confidence === 'explicit') { resetLabel = '上游确认重置'; resetTone = 'confirmed'; }
-  else if (reset && observation.confidence === 'inferred') { resetLabel = '推断重置'; resetTone = 'inferred'; }
-  else if (reset) { resetLabel = '已知重置'; resetTone = 'confirmed'; }
-  const cooldownLabel = fallback ? '回退冷却截止' : '可用性冷却截止';
-  return '<div class="observation-times">' +
-    '<div class="observation-time ' + (fallback ? 'fallback' : 'cooldown') + '"><span>' + esc(t(cooldownLabel)) + '</span><strong>' + (until ? globalCountdown(observation.until) : '—') + '</strong>' + (until ? '<small>' + esc(globalDate(observation.until)) + '</small>' : '') + '</div>' +
-    '<div class="observation-time reset ' + resetTone + '"><span>' + esc(t(resetLabel)) + '</span><strong>' + (reset ? globalCountdown(observation.resetAt) : esc(t('未知'))) + '</strong>' + (reset ? '<small>' + esc(globalDate(observation.resetAt)) + '</small>' : '<small>' + esc(t('没有上游重置证据')) + '</small>') + '</div>' +
-    '</div>';
+  const resetEvidence = globalHealthResetEvidence(observation);
+  const applicable = observation.kind === 'quota_exhausted' || observation.kind === 'rate_limited' || !!reset;
+  return '<dl class="health-detail-times"><div><dt>' + esc(t(fallback ? '回退冷却截止' : '可用性冷却截止')) + '</dt><dd>' + (until ? esc(globalDate(observation.until)) : esc(t('未提供截止时间'))) + '</dd></div>' +
+    '<div><dt>' + esc(t(resetEvidence.label)) + '</dt><dd>' + (reset ? esc(globalDate(observation.resetAt)) : esc(t(applicable ? '没有上游重置证据' : '不适用'))) + '</dd></div></dl>';
+}
+
+function globalHealthObservationDetails(data, observation) {
+  const scope = observation.scope || {};
+  const providerID = scope.providerId || '';
+  const label = _globalObservations[observation.kind] || observation.kind || '未知';
+  const scopeRows = globalScopeParts(scope).map(([key, value]) => '<div><dt>' + esc(t(key)) + '</dt><dd><code>' + esc(value) + '</code></dd></div>').join('');
+  let owner = 'providers';
+  let action = '查看 Provider';
+  const credential = data.credentialsState === 'ok' && (data.credentials || []).find(item => String(item.id) === String(scope.credentialId || ''));
+  if (observation.kind === 'auth_expired' && credential) { owner = 'credentials'; action = '查看凭据'; }
+  else if (observation.kind === 'model_gone') { owner = 'models'; action = '查看模型'; }
+  const handler = owner === 'credentials' ? 'openGlobalHealthCredential(' + globalJS(credential.id) + ',' + globalJS(providerID) + ')' : 'openGlobalProviderView(' + globalJS(owner) + ',' + globalJS(providerID) + ')';
+  return '<details class="health-evidence"><summary aria-label="' + escAttr(t('详情') + ' · ' + t('查看证据') + ' · ' + globalHealthProviderName(data, providerID) + ' · ' + t(label)) + '">' + esc(t('详情')) + '</summary>' +
+    '<div class="health-evidence-body"><dl class="health-detail-scope">' + scopeRows + '<div><dt>' + esc(t('证据来源')) + '</dt><dd><code>' + esc(observation.source || t('未知')) + '</code></dd></div>' +
+    '<div><dt>' + esc(t('证据')) + '</dt><dd>' + esc(t(_globalConfidence[observation.confidence] || '未知')) + '</dd></div></dl>' + renderObservationTimes(observation) +
+    '<button type="button" class="btn btn-sm" onclick="' + handler + '">' + esc(t(action)) + '</button></div></details>';
 }
 
 function renderGlobalState(data) {
   const el = _('globalState');
   if (!el) return;
-  const observations = (data.state || []).filter(o => globalMatches(o.scope && o.scope.providerId));
-  if (!observations.length) { el.innerHTML = globalEmpty('暂无可用性观察'); return; }
-  el.innerHTML = '<div class="observation-list">' + observations.map(o => {
-    const scope = globalScopeParts(o.scope);
-    return '<article class="observation-card' + (o.confidence === 'fallback' && !globalTime(o.resetAt) ? ' is-fallback' : '') + '">' +
-      '<div class="observation-head"><div><span class="provider-byline">' + esc(globalProviderName(o.scope && o.scope.providerId)) + '</span><h3>' + esc(t(_globalObservations[o.kind] || o.kind || '未知')) + '</h3></div>' + globalBadge(_globalConfidence[o.confidence] || '未知', o.confidence === 'fallback' ? 'warning' : 'accent') + '</div>' +
-      '<div class="scope-row">' + scope.map(([label, value]) => '<span><b>' + esc(t(label)) + '</b><code>' + esc(value) + '</code></span>').join('') + '</div>' +
-      renderObservationTimes(o) +
-      '<div class="evidence-row"><span>' + esc(t('证据来源')) + '</span><code>' + esc(o.source || '—') + '</code></div>' +
-      '</article>';
-  }).join('') + '</div>';
+  const all = globalHealthObservations(data);
+  const search = _globalHealthSearch.toLowerCase();
+  const observations = all.filter(observation => {
+    if (_globalHealthKind && observation.kind !== _globalHealthKind) return false;
+    return !search || [globalHealthProviderName(data, observation.scope.providerId), ...globalScopeParts(observation.scope).map(([, value]) => value), observation.source, t(_globalObservations[observation.kind] || observation.kind || '未知')].join(' ').toLowerCase().includes(search);
+  }).sort((left, right) => {
+    const priority = { auth_expired: 0, model_gone: 1, quota_exhausted: 2, rate_limited: 2, transient_failure: 2, recovered: 3, quota_reset: 3 };
+    const kindOrder = (priority[left.kind] == null ? 2 : priority[left.kind]) - (priority[right.kind] == null ? 2 : priority[right.kind]);
+    if (kindOrder) return kindOrder;
+    const leftDeadline = globalHealthDeadline(left);
+    const rightDeadline = globalHealthDeadline(right);
+    return (leftDeadline ? leftDeadline.getTime() : Infinity) - (rightDeadline ? rightDeadline.getTime() : Infinity) || globalHealthProviderName(data, left.scope.providerId).localeCompare(globalHealthProviderName(data, right.scope.providerId), LC());
+  });
+  const count = _('globalHealthObservationCount');
+  if (count) count.textContent = t('已显示') + ' ' + observations.length + ' / ' + all.length;
+  if (!observations.length) {
+    const unavailable = data.runtimeState && (data.runtimeState.degraded || data.runtimeState.stale || data.runtimeState.ready === false);
+    el.innerHTML = '<div class="health-empty"><strong>' + esc(t(unavailable ? '当前观察状态未知' : (all.length ? '没有匹配的观察' : '暂无可用性观察'))) + '</strong><span>' + esc(t(unavailable ? '观察可能来自上次成功读取，不能确认当前健康状态。' : (all.length ? '调整 Provider、问题类型或搜索条件。' : '没有观察记录不代表健康已验证。请在 Providers 测试连接，或查看请求日志。'))) + '</span></div>';
+    return;
+  }
+  const headers = ['Provider', '问题 / 范围', '冷却截止', '配额重置时间', '证据来源', '详情'];
+  el.innerHTML = '<div class="health-table-wrap" role="region" tabindex="0" aria-label="' + escAttr(t('可用性观察')) + '"><table class="health-table"><caption class="sr-only">' + esc(t('可用性观察')) + '</caption><thead><tr>' +
+    headers.map(label => '<th scope="col">' + esc(t(label)) + '</th>').join('') + '</tr></thead><tbody>' + observations.map(observation => {
+      const scope = observation.scope;
+      const until = globalTime(observation.until);
+      const reset = globalTime(observation.resetAt);
+      const deadline = globalHealthDeadline(observation);
+      const expired = deadline && deadline.getTime() <= Date.now();
+      const fallback = observation.confidence === 'fallback' && !!until && !reset;
+      const resetEvidence = globalHealthResetEvidence(observation);
+      const applicable = observation.kind === 'quota_exhausted' || observation.kind === 'rate_limited' || !!reset;
+      const label = _globalObservations[observation.kind] || observation.kind || '未知';
+      const tone = expired ? 'neutral' : (observation.kind === 'auth_expired' || observation.kind === 'model_gone' ? 'negative' : (observation.kind === 'recovered' || observation.kind === 'quota_reset' ? 'positive' : 'warning'));
+      const scopeLabel = scope.modelId || (scope.credentialId ? t('凭据范围') : (scope.egressId ? t('出口范围') : t('整个 Provider')));
+      const cell = (className, header, content) => '<td class="' + className + '" data-label="' + escAttr(t(header)) + '">' + content + '</td>';
+      return '<tr' + (expired ? ' class="is-expired"' : '') + '>' +
+        cell('health-provider', 'Provider', '<strong title="' + escAttr(globalHealthProviderName(data, scope.providerId)) + '">' + esc(globalHealthProviderName(data, scope.providerId)) + '</strong><code class="health-sub" title="' + escAttr(scope.providerId) + '">' + esc(scope.providerId) + '</code>') +
+        cell('health-issue', '问题 / 范围', globalBadge(label, tone) + '<code class="health-sub" title="' + escAttr(scopeLabel) + '">' + esc(scopeLabel) + '</code>') +
+        cell('health-time', '冷却截止', globalHealthTime(observation.until, '未提供截止时间') + (until ? '<span class="health-sub' + (fallback ? ' health-warning' : '') + '">' + esc(t(fallback ? '回退冷却' : '冷却至')) + '</span>' : '')) +
+        cell('health-reset', '配额重置时间', globalHealthTime(observation.resetAt, applicable ? '未知' : '不适用') + (reset ? '<span class="health-sub' + (resetEvidence.tone === 'positive' ? ' health-positive' : '') + '">' + esc(t(resetEvidence.label)) + '</span>' : '')) +
+        cell('health-source', '证据来源', '<span>' + esc(t(_globalConfidence[observation.confidence] || '未知')) + '</span><code class="health-sub" title="' + escAttr(observation.source || '') + '">' + esc(observation.source || t('未知')) + '</code>') +
+        cell('health-details', '详情', globalHealthObservationDetails(data, observation)) + '</tr>';
+    }).join('') + '</tbody></table></div>';
+}
+
+function setGlobalHealthKind(value) {
+  _globalHealthKind = String(value || '');
+  if (_globalHealthData) renderGlobalState(_globalHealthData);
+}
+
+function setGlobalHealthSearch(value) {
+  _globalHealthSearch = String(value || '').trim();
+  if (_globalHealthData) renderGlobalState(_globalHealthData);
+}
+
+function renderGlobalHealthCredentials(data) {
+  const note = _('globalHealthCredentialNote');
+  if (note) {
+    note.hidden = data.credentialsState === 'ok';
+    note.textContent = data.credentialsState === 'denied' ? t('账号与连接状态需要凭据管理权限') : (data.credentialsState === 'failed' ? t('凭据状态加载失败，其他健康信息仍可查看。') + (data.credentialsError ? ' ' + data.credentialsError : '') : '');
+  }
+  const details = _('globalHealthCredentialIssues');
+  const body = _('globalHealthCredentials');
+  if (!details || !body) return;
+  const issues = data.credentialsState === 'ok' ? globalHealthCredentialIssues(data) : [];
+  details.hidden = !issues.length;
+  const count = _('globalHealthCredentialCount');
+  if (count) count.textContent = String(issues.length);
+  body.innerHTML = issues.map(item => {
+    const credential = item.credential;
+    const providers = (credential.providerIds || []).filter(globalMatches);
+    const names = providers.map(id => globalHealthProviderName(data, id)).join(' · ');
+    const cooldowns = (item.modelCooldowns || []).map(([model, until]) => '<span><code>' + esc(model) + '</code> · ' + globalHealthTime(until) + '</span>').join('');
+    const facts = (globalTime(credential.expiresAt) ? '<span>' + esc(t('到期')) + ' · ' + esc(globalDate(credential.expiresAt)) + '</span>' : '') +
+      (globalTime(credential.cooldownUntil) ? '<span>' + esc(t('冷却至')) + ' · ' + esc(globalDate(credential.cooldownUntil)) + '</span>' : '') + cooldowns;
+    return '<article class="health-credential-row"><div><strong>' + esc(credential.subject || credential.id) + '</strong><span class="health-sub">' + esc(names || t('未绑定 Provider')) + '</span><code class="health-sub">' + esc(credential.id) + '</code></div>' +
+      '<div class="health-credential-facts"><span class="health-warning">' + item.reasons.map(reason => esc(t(reason))).join(' · ') + '</span>' + facts + '</div>' +
+      '<button type="button" class="btn btn-sm" onclick="openGlobalHealthCredential(' + globalJS(credential.id) + ',' + globalJS(providers[0] || '') + ')">' + esc(t('查看凭据')) + '</button></article>';
+  }).join('');
+}
+
+function openGlobalHealthCredential(credentialID, providerID) {
+  const credential = _globalHealthData && _globalHealthData.credentialsState === 'ok' && (_globalHealthData.credentials || []).find(item => String(item.id) === String(credentialID));
+  if (!credential || typeof adminHasPermission === 'function' && !adminHasPermission('credential.write')) return;
+  const subpage = (credential.providerIds || []).includes('cline') ? 'cline' : (['oauth_account', 'refresh_token', 'imported_token'].includes(credential.kind) ? 'conns' : 'inventory');
+  _globalFilter = String(providerID || '');
+  applyTab('credentials');
+  switchPageSubTab('credentials', subpage, true);
+  if (_globalData) renderGlobal();
+}
+
+function renderGlobalHealthRuntime(data) {
+  const el = _('globalHealthRuntime');
+  if (!el) return;
+  const health = data.runtimeState;
+  if (!health || typeof health.ready !== 'boolean') {
+    el.innerHTML = '<strong>' + esc(t('路由状态存储')) + '</strong><span class="health-muted">' + esc(t('未提供状态存储诊断')) + '</span>';
+    el.classList.toggle('is-warning', false);
+    return;
+  }
+  const warning = health.degraded || health.stale || !health.ready || health.enforcement === 'best_effort';
+  const label = health.stale ? '状态快照已陈旧' : (health.degraded || !health.ready ? '状态存储降级' : (health.enforcement === 'best_effort' ? '尽力记账' : '状态存储就绪'));
+  const backends = { local_file: '本地文件', shared: '共享后端', memory: '进程内存', runtime_state: '运行状态后端', unconfigured: '未配置' };
+  const policies = { fail_closed: '故障时拒绝派发', fail_open: '故障时允许派发', best_effort: '尽力记账' };
+  const reasons = { backend_unavailable: '状态后端不可用', backend_not_ready: '状态后端未就绪', multi_replica_unsupported: '不支持多副本部署', initializing: '状态后端初始化中', best_effort_accounting: '尽力记账', persistence_failed: '状态持久化失败', state_corrupt: '存储状态损坏', state_unreadable: '存储状态不可读' };
+  el.classList.toggle('is-warning', !!warning);
+  const meta = [t(backends[health.backend] || health.backend || '未知'), health.multiReplicaSupported === false ? t('不支持多副本部署') : '', t(policies[health.enforcement] || health.enforcement || '未知')].filter(Boolean).join(' · ');
+  el.innerHTML = '<strong>' + esc(t('路由状态存储')) + '</strong>' + globalBadge(label, warning ? 'warning' : 'positive') + '<span class="health-runtime-meta">' + esc(meta) + '</span>' +
+    '<details class="health-runtime-details"><summary>' + esc(t('详情')) + '</summary><dl><div><dt>' + esc(t('最近成功读取')) + '</dt><dd>' + esc(globalDate(health.lastSuccessfulRead)) + '</dd></div>' +
+    '<div><dt>' + esc(t('最近成功写入')) + '</dt><dd>' + esc(globalDate(health.lastSuccessfulWrite)) + '</dd></div>' +
+    (health.reason ? '<div><dt>' + esc(t('原因')) + '</dt><dd>' + esc(t(reasons[health.reason] || health.reason)) + '</dd></div>' : '') + '</dl></details>' +
+    (health.degraded || health.stale || !health.ready ? '<span class="health-runtime-warning-note">' + esc(t('观察可能来自上次成功读取，不能确认当前健康状态。')) + '</span>' : '');
+}
+
+function renderGlobalHealthStatus() {
+  const panel = _('tab-health');
+  if (panel) panel.setAttribute('aria-busy', _globalHealthLoading ? 'true' : 'false');
+  const refresh = _('globalHealthRefresh');
+  if (refresh) refresh.disabled = _globalHealthLoading;
+  const status = _('globalHealthUpdated');
+  if (status) {
+    const at = _globalHealthData && globalTime(_globalHealthData.fetchedAt);
+    status.innerHTML = esc(t(_globalHealthLoading ? '加载中…' : (_globalHealthError ? (_globalHealthData ? '刷新失败，显示上次快照' : '加载失败') : '快照时间'))) +
+      (at ? ' <time datetime="' + escAttr(at.toISOString()) + '" title="' + escAttr(at.toLocaleString(LC())) + '">' + esc(at.toLocaleTimeString(LC())) + '</time>' : '');
+  }
+  const error = _('globalHealthError');
+  if (error) {
+    error.hidden = !_globalHealthError;
+    error.innerHTML = _globalHealthError ? '<span>' + esc(t('加载失败')) + ': ' + esc(_globalHealthError) + '</span><button type="button" class="btn btn-sm" onclick="loadGlobalHealth()">' + esc(t('重试')) + '</button>' : '';
+  }
+}
+
+function renderGlobalHealth(data) {
+  const providerFilter = _('globalHealthProviderFilter');
+  if (providerFilter) {
+    const options = ['<option value="">' + esc(t('全部 Provider')) + '</option>'];
+    const seen = new Set();
+    (data.instances || []).forEach(instance => {
+      if (!instance.id || seen.has(instance.id)) return;
+      seen.add(instance.id);
+      options.push('<option value="' + escAttr(instance.id) + '">' + esc(instance.name || instance.id) + '</option>');
+    });
+    if (_globalFilter && !seen.has(_globalFilter)) options.push('<option value="' + escAttr(_globalFilter) + '">' + esc(_globalFilter) + '</option>');
+    providerFilter.innerHTML = options.join('');
+    providerFilter.value = _globalFilter;
+  }
+  const kind = _('globalHealthKindFilter');
+  if (kind) kind.value = _globalHealthKind;
+  renderGlobalHealthSummary(data);
+  renderGlobalState(data);
+  renderGlobalHealthCredentials(data);
+  renderGlobalHealthRuntime(data);
+  renderGlobalHealthStatus();
+}
+
+function globalHealthResponseList(response, key) {
+  if (!response || !response.data || !Object.prototype.hasOwnProperty.call(response.data, key) || (response.data[key] !== null && !Array.isArray(response.data[key]))) throw new Error(t('健康快照格式无效'));
+  const list = response.data[key] || [];
+  const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
+  const text = value => typeof value === 'string' && value.trim().length > 0;
+  const optionalText = value => value == null || typeof value === 'string';
+  const optionalBoolean = value => value == null || typeof value === 'boolean';
+  const valid = list.every(item => {
+    if (!object(item)) return false;
+    if (key === 'instances') return text(item.id) && optionalText(item.name) && typeof item.enabled === 'boolean';
+    if (key === 'credentials') return text(item.id) && text(item.status) && text(item.kind) && optionalText(item.subject) && optionalText(item.expiresAt) && optionalText(item.cooldownUntil) &&
+      optionalBoolean(item.refreshable) && optionalBoolean(item.secretConfigured) && (item.providerIds == null || Array.isArray(item.providerIds) && item.providerIds.every(text)) &&
+      (item.modelCooldowns == null || object(item.modelCooldowns) && Object.values(item.modelCooldowns).every(optionalText));
+    if (key === 'observations') return text(item.kind) && text(item.source) && text(item.confidence) && object(item.scope) && text(item.scope.providerId) &&
+      [item.scope.credentialId, item.scope.modelId, item.scope.egressId, item.until, item.resetAt].every(optionalText);
+    return false;
+  });
+  if (!valid) throw new Error(t('健康快照格式无效'));
+  return list;
+}
+
+function globalHealthResponseRuntime(response) {
+  const health = response.data.runtimeState;
+  if (health == null) return null;
+  if (typeof health !== 'object' || Array.isArray(health) || typeof health.ready !== 'boolean' ||
+    ['degraded', 'stale', 'singleNodeReady', 'multiReplicaSupported'].some(key => health[key] != null && typeof health[key] !== 'boolean') ||
+    ['backend', 'enforcement', 'reason', 'lastSuccessfulRead', 'lastSuccessfulWrite'].some(key => health[key] != null && typeof health[key] !== 'string')) throw new Error(t('健康快照格式无效'));
+  return health;
+}
+
+async function loadGlobalHealth() {
+  const generation = ++_globalHealthLoadGeneration;
+  _globalHealthLoading = true;
+  _globalHealthError = '';
+  renderGlobalHealthStatus();
+  if (!_globalHealthData) {
+    const summary = _('globalHealthSummary');
+    if (summary) summary.innerHTML = ['已启用 Providers', '观察涉及 Provider', '有效冷却', '需关注凭据'].map(label => '<div class="health-stat"><span>' + esc(t(label)) + '</span><strong class="health-stat-unknown">' + esc(t('加载中…')) + '</strong></div>').join('');
+    const state = _('globalState');
+    if (state) state.innerHTML = globalSkeleton();
+  }
+  try {
+    const canReadCredentials = typeof adminHasPermission !== 'function' || adminHasPermission('credential.write');
+    const credentialRequest = canReadCredentials ? api('GET', '/credentials').then(response => ({ state: 'ok', credentials: globalHealthResponseList(response, 'credentials') })).catch(error => ({ state: 'failed', credentials: [], error: error.message })) : Promise.resolve({ state: 'denied', credentials: [] });
+    const [instances, state, credentials] = await Promise.all([api('GET', '/provider-instances'), api('GET', '/provider-state'), credentialRequest]);
+    if (generation !== _globalHealthLoadGeneration) return;
+    const nextData = {
+      instances: globalHealthResponseList(instances, 'instances'),
+      state: globalHealthResponseList(state, 'observations'),
+      runtimeState: globalHealthResponseRuntime(state),
+      credentials: credentials.credentials,
+      credentialsState: credentials.state,
+      credentialsError: credentials.error || '',
+      fetchedAt: new Date().toISOString(),
+    };
+    _globalHealthData = nextData;
+    renderGlobalHealth(_globalHealthData);
+  } catch (error) {
+    if (generation !== _globalHealthLoadGeneration) return;
+    _globalHealthError = error.message;
+    if (!_globalHealthData) {
+      ['globalHealthSummary', 'globalState', 'globalHealthRuntime', 'globalHealthObservationCount'].forEach(id => {
+        const el = _(id);
+        if (el) el.innerHTML = '';
+      });
+    }
+  } finally {
+    if (generation === _globalHealthLoadGeneration) {
+      _globalHealthLoading = false;
+      renderGlobalHealthStatus();
+    }
+  }
 }
 
 function renderGlobalEgress(data) {
@@ -516,15 +807,15 @@ function renderGlobalEgress(data) {
 
 function renderGlobal() {
   const data = _globalData;
-  if (!data) return;
-  renderGlobalFilters(data);
-  renderGlobalSummary(data);
-  renderGlobalInstances(data);
-  renderGlobalCredentials(data);
-  renderGlobalOfferings(data);
-  renderGlobalState(data);
-  renderGlobalEgress(data);
-  renderGlobalHealthSummary(data);
+  if (data) {
+    renderGlobalFilters(data);
+    renderGlobalSummary(data);
+    renderGlobalInstances(data);
+    renderGlobalCredentials(data);
+    renderGlobalOfferings(data);
+    renderGlobalEgress(data);
+  }
+  if (_globalHealthData) renderGlobalHealth(_globalHealthData);
 }
 
 function setGlobalFilter(value) {
@@ -580,10 +871,11 @@ function setGlobalOfferingSort(value) {
 }
 
 function openGlobalProviderView(tab, providerID) {
+  const credentialData = typeof _activeTabName !== 'undefined' && _activeTabName === 'health' && _globalHealthData ? _globalHealthData : _globalData;
   _globalFilter = String(providerID || '');
   applyTab(tab);
   if (tab === 'credentials') {
-    const credentials = ((_globalData && _globalData.credentials) || []).filter(c => (c.providerIds || []).includes(providerID));
+    const credentials = ((credentialData && credentialData.credentials) || []).filter(c => (c.providerIds || []).includes(providerID));
     const oauth = providerID === 'cline' || credentials.some(c => ['oauth_account', 'refresh_token', 'imported_token'].includes(c.kind));
     switchPageSubTab('credentials', oauth ? 'conns' : 'inventory', true);
   }
@@ -594,7 +886,7 @@ function openGlobalProviderView(tab, providerID) {
 async function loadGlobal(showSkeleton) {
   const generation = ++_globalLoadGeneration;
   _globalLoadFailed = false;
-  const ids = ['globalInstances', 'globalCredentials', 'globalOfferings', 'globalState', 'globalEgress', 'globalHealthSummary'];
+  const ids = ['globalInstances', 'globalCredentials', 'globalOfferings', 'globalEgress'];
   if (showSkeleton !== false) {
     ids.forEach(id => {
       const el = _(id);

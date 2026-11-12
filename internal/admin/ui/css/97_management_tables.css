@@ -26,6 +26,10 @@
 
 .mgmt-provider-cell{display:flex;align-items:center;gap:10px;min-width:0}
 .mgmt-monogram{width:30px;height:30px;min-width:30px;border-radius:8px;font-size:13px}
+.provider-logo-stack{position:relative;display:inline-grid;width:30px;height:30px;min-width:30px;flex:0 0 auto}
+.provider-logo-stack>.provider-monogram{grid-area:1/1}
+.provider-logo-stack>.mgmt-provider-logo{position:relative;z-index:1;width:30px;height:30px;min-width:30px;border-radius:8px;object-fit:contain;background:var(--surface);border:1px solid var(--border2)}
+.provider-logo-stack.logo-error>.mgmt-provider-logo{display:none}
 .mgmt-primary{display:flex;flex-direction:column;min-width:0;max-width:220px}
 .mgmt-name{display:block;overflow:hidden;color:var(--text);font-size:14px;font-weight:650;line-height:1.35;text-overflow:ellipsis;white-space:nowrap}
 .mgmt-id{display:block;overflow:hidden;margin-top:2px;color:var(--text3);font-size:12px;line-height:1.3;text-overflow:ellipsis;white-space:nowrap}
@@ -162,6 +166,8 @@
   .provider-compact-item,
   .credential-compact-item{padding:9px 10px;gap:5px}
   .mgmt-monogram{width:26px;height:26px;min-width:26px;font-size:12px}
+  .provider-logo-stack{width:26px;height:26px;min-width:26px}
+  .provider-logo-stack>.mgmt-provider-logo{width:26px;height:26px;min-width:26px}
   .pc-line1 strong{font-size:13.5px}
   .pc-line2{font-size:11.5px}
   .pc-actions .btn{font-size:11.5px;padding:4px 8px}

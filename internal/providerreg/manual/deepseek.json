@@ -3,5 +3,6 @@
   "name": "DeepSeek",
   "baseURL": "https://api.deepseek.com/v1",
   "notes": "Paid, very cheap. Key: platform.deepseek.com",
-  "freeTier": false
+  "freeTier": false,
+  "logo": "/admin/assets/providers/deepseek.png"
 }

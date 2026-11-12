@@ -85,6 +85,12 @@ func DiscoverModels(p CustomProvider, ov DiscoveryOverrides) ([]upstreamModelEnt
 					headers[spec.OrgHeader] = oid
 				}
 			}
+			// Some upstreams only answer their catalogue endpoint for their own
+			// client identity (CodeBuddy/WorkBuddy CLI). The connection probe
+			// sends this User-Agent; the catalogue read must send it too.
+			if spec.UserAgent != "" && headers["User-Agent"] == "" {
+				headers["User-Agent"] = spec.UserAgent
+			}
 		} else {
 			apiKey = conn.AccessToken
 		}

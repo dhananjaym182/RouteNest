@@ -8,6 +8,7 @@ let _loginGeneration = 0;
 // 流程 key → 用户可读名由后端 /connections 的 flowLabels 提供（规范 provider
 // 目录的投影）；目录缺标签时回落实体 key，前端不再维护并行表。
 let _flowLabels = {};
+let _flowLogos = {};
 let _connLoadPromise = null;
 let _connLoadFailed = false;
 // idle: not requested yet · ok · failed · denied (no credential.write). The summary and the list
@@ -30,7 +31,7 @@ async function loadConnectionSnapshot() {
   _connLoadError = '';
   if (typeof canManageCredentials === 'function' && !canManageCredentials()) {
     _connState = 'denied';
-    _connFlows = []; _connList = []; _flowLabels = {};
+    _connFlows = []; _connList = []; _flowLabels = {}; _flowLogos = {};
   } else {
     try {
       const d = await api('GET', '/connections');
@@ -38,12 +39,13 @@ async function loadConnectionSnapshot() {
       _connFlows = r.flows || [];
       _connList = r.connections || [];
       _flowLabels = r.flowLabels || {};
+      _flowLogos = r.flowLogos || {};
       _connState = 'ok';
     } catch (e) {
       _connLoadFailed = true;
       _connLoadError = e && e.message ? e.message : '';
       _connState = 'failed';
-      _connFlows = []; _connList = []; _flowLabels = {};
+      _connFlows = []; _connList = []; _flowLabels = {}; _flowLogos = {};
     }
   }
   renderConnectionProviders();
@@ -66,6 +68,13 @@ function connsForProvider(provider) {
 
 function flowIconText(provider) {
   return flowLabel(provider).trim().slice(0, 2).toUpperCase();
+}
+
+function flowIcon(provider) {
+  const monogram = '<span class="conn-tile-monogram">' + esc(flowIconText(provider)) + '</span>';
+  const logo = _flowLogos[provider];
+  if (!logo) return monogram;
+  return '<img class="conn-tile-logo" src="' + escAttr(logo) + '" alt="" aria-hidden="true" onerror="this.parentElement.classList.add(\'logo-error\')">' + monogram;
 }
 
 function renderConnectionProviders() {
@@ -102,7 +111,7 @@ function renderConnectionProviders() {
       t(has ? '添加账号' : '连接') + '</button>';
     return '<div class="conn-provider-tile' + (has ? ' connected' : '') + '">' +
       '<div class="conn-tile-main">' +
-        '<div class="conn-tile-icon">' + esc(flowIconText(p)) + '</div>' +
+        '<div class="conn-tile-icon">' + flowIcon(p) + '</div>' +
         '<div class="conn-tile-body">' +
           '<div class="conn-tile-name">' + esc(flowLabel(p)) + '</div>' +
           '<div class="conn-tile-sub mono">' + esc(p) + '</div>' +

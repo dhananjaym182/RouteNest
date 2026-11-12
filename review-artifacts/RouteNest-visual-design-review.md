@@ -8,7 +8,7 @@ Method: read-only source inspection plus Playwright screenshots at 1440px and 39
 
 RouteNest already has a credible developer-infrastructure shell: the navigation is grouped well, the palette is restrained, both themes share a coherent token system, the Models page is inventory-oriented, and Request Logs has real filters, a dense desktop table, attempt traces, and a right-side inspection drawer.
 
-The current UI falls short of the requested direction in four concrete areas:
+The current UI falls short of the requested de irection in four concrete areas:
 
 1. Typography is materially too small on operational surfaces. Browser evidence measured 10px table headers and 12px table cells, while the target is approximately 14px. Desktop page headings render at 32px, above the requested 25–28px range.
 2. IBM Plex Mono is absent. `--font-mono` points to Inter, and the final stylesheet explicitly forces technical identifiers back to the UI font.

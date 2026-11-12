@@ -3,5 +3,6 @@
   "name": "Google AI Studio",
   "baseURL": "https://generativelanguage.googleapis.com/v1beta/openai",
   "notes": "Gemini free tier via OpenAI-compat layer. Key: aistudio.google.com/apikey",
-  "freeTier": true
+  "freeTier": true,
+  "logo": "/admin/assets/providers/gemini.png"
 }

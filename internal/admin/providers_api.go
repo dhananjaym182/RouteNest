@@ -137,11 +137,12 @@ func handleProviderPresets(w http.ResponseWriter, r *http.Request) {
 		Kind          string                     `json:"kind"`
 		LoginFlow     bool                       `json:"loginFlow,omitempty"`
 		AuthFlow      string                     `json:"authFlow,omitempty"`
+		Logo          string                     `json:"logo,omitempty"`
 	}
 	entries := providers.PresetEntries()
 	out := make([]presetOut, 0, len(entries))
 	for _, p := range entries {
-		out = append(out, presetOut{Key: p.Key, Name: p.Name, BaseURL: p.BaseURL, Headers: p.Headers, Notes: p.Notes, FreeTier: p.FreeTier, ModelIDs: p.ModelIDs, ModelsFetcher: p.ModelsFetcher, Kind: p.Kind, LoginFlow: p.LoginFlow, AuthFlow: p.AuthFlow})
+		out = append(out, presetOut{Key: p.Key, Name: p.Name, BaseURL: p.BaseURL, Headers: p.Headers, Notes: p.Notes, FreeTier: p.FreeTier, ModelIDs: p.ModelIDs, ModelsFetcher: p.ModelsFetcher, Kind: p.Kind, LoginFlow: p.LoginFlow, AuthFlow: p.AuthFlow, Logo: p.Logo})
 	}
 	httpx.WriteAPI(w, http.StatusOK, httpx.Response{Success: true, Data: map[string]any{"presets": out}})
 }

@@ -225,6 +225,7 @@ provider-a.runtime.tombstones[].scope.egressId
 provider-a.runtime.tombstones[].scope.modelId
 provider-a.runtime.tombstones[].scope.providerId
 == .routenest-providers.json
+[].accessPolicy
 [].apiKey
 [].baseURL
 [].connectionId

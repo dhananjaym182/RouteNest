@@ -4,5 +4,6 @@
   "baseURL": "http://127.0.0.1:11434/v1",
   "notes": "Ollama 自带 OpenAI 兼容端点（/api 同服务），无需密钥，模型列表来自本机 /v1/models",
   "freeTier": true,
-  "kind": "local"
+  "kind": "local",
+  "logo": "/admin/assets/providers/ollama-local.png"
 }

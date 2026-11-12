@@ -96,8 +96,9 @@ type Preset struct {
 	Notes    string            `json:"notes,omitempty"`
 	// FreeTier is a provider-level UI hint, not a per-model entitlement.
 	FreeTier bool `json:"freeTier"`
-	// ModelIDs seeds the provider's catalog; models are still classified by
-	// the import path before they become routable.
+	// ModelIDs seeds the provider's catalog. Built-in presets ship none: the
+	// model list is fetched live while the provider is configured, so a preset
+	// never carries a stale default catalogue.
 	ModelIDs      []string       `json:"modelIds,omitempty"`
 	ModelsFetcher *ModelsFetcher `json:"modelsFetcher,omitempty"`
 	// Kind is the UI grouping hint: free, freeTier, hasFree, local, or other.
@@ -125,6 +126,9 @@ type Preset struct {
 	// Provenance is derived from the source file set and is not stored in
 	// preset files.
 	Provenance string `json:"provenance,omitempty"`
+	// Logo is a relative path to the provider's logo asset, used by the admin
+	// UI to render a brand icon next to provider names.
+	Logo string `json:"logo,omitempty"`
 }
 
 // Registry is an immutable preset catalogue with lookup indexes. Indexes are
@@ -331,6 +335,21 @@ func (r *Registry) AuthFlowLabels() map[string]string {
 		for _, id := range ids {
 			if p, ok := r.byID[id]; ok && p.Name != "" {
 				out[flow] = p.Name
+				break
+			}
+		}
+	}
+	return out
+}
+
+// AuthFlowLogos maps every auth flow to the logo path of the first preset
+// (sorted by ID) that uses it.
+func (r *Registry) AuthFlowLogos() map[string]string {
+	out := make(map[string]string, len(r.byAuthFlow))
+	for flow, ids := range r.byAuthFlow {
+		for _, id := range ids {
+			if p, ok := r.byID[id]; ok && p.Logo != "" {
+				out[flow] = p.Logo
 				break
 			}
 		}

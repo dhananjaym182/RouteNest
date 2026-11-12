@@ -549,6 +549,10 @@ func TestDesktopConsoleStaticHandlerNeverDispatchesAPI(t *testing.T) {
 	}{
 		{http.MethodGet, "/admin/", http.StatusOK},
 		{http.MethodHead, "/admin/", http.StatusOK},
+		{http.MethodGet, "/admin/assets/providers/openai.png", http.StatusOK},
+		{http.MethodHead, "/admin/assets/providers/openai.png", http.StatusOK},
+		{http.MethodGet, "/admin/assets/providers/deepinfra.png", http.StatusOK},
+		{http.MethodGet, "/admin/assets/providers/electronhub.png", http.StatusOK},
 		{http.MethodPost, "/admin/", http.StatusMethodNotAllowed},
 		{http.MethodGet, "/admin/api/auth/session", http.StatusNotFound},
 		{http.MethodPost, "/admin/api/auth/desktop-handoff", http.StatusNotFound},
@@ -564,6 +568,9 @@ func TestDesktopConsoleStaticHandlerNeverDispatchesAPI(t *testing.T) {
 		}
 		if target.method == http.MethodHead && recorder.Body.Len() != 0 {
 			t.Fatal("static HEAD returned a body")
+		}
+		if strings.HasSuffix(target.path, ".png") && target.method == http.MethodGet && recorder.Header().Get("Content-Type") != "image/png" {
+			t.Fatalf("provider PNG content type = %q", recorder.Header().Get("Content-Type"))
 		}
 	}
 	response := console.Request(t.Context(), DesktopConsoleRequest{Method: http.MethodPost, Path: "/admin/api/auth/desktop-handoff", Body: `{"token":"` + token + `"}`})

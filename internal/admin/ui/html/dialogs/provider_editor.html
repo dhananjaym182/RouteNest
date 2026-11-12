@@ -75,7 +75,17 @@
         <div class="field">
           <label for="provFree">免费来源（供统计）</label>
           <select id="provFree"><option value="true">免费</option><option value="false">付费</option></select>
+          <div class="field-hint">仅用于统计和分组，不影响「仅免费模型」。要控制放行范围，请用下面的设置。</div>
         </div>
+      </div>
+      <div class="field">
+        <label for="provAccessPolicy">Free-only 模式处理</label>
+        <select id="provAccessPolicy" onchange="syncProvAccessPolicyUI()">
+          <option value="detect">自动识别（默认）</option>
+          <option value="all_free">全部模型视为免费</option>
+          <option value="allow_all">免费与付费混合：全部放行</option>
+        </select>
+        <div class="field-hint" id="provAccessPolicyHint"></div>
       </div>
       <div class="field">
         <label>Provider OAuth 账号 <span id="provConnCount" class="grp-count"></span></label>

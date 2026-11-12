@@ -250,7 +250,12 @@ function setPresetFilter(f) {
 
 function presetRowHTML(p) {
   const g = _presetKinds.find(x => x.kind === (p.kind || 'other')) || _presetKinds[_presetKinds.length - 1];
+  var logoHTML = '';
+  if (p.logo) {
+    logoHTML = '<img class="preset-logo" src="' + escAttr(p.logo) + '" alt="' + escAttr(p.name) + '" aria-hidden="true" onerror="this.style.display=\'none\'">';
+  }
   return '<div class="preset-row" onclick="applyPreset(\'' + esc(p.key) + '\')" title="' + esc(p.baseURL || '') + '">' +
+    logoHTML +
     '<span class="preset-name">' + esc(p.name) + '</span>' +
     '<span class="preset-key">' + esc(p.baseURL || p.key) + '</span>' +
     '<span class="row-inline">' +

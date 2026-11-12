@@ -115,7 +115,7 @@ function applyTab(name){
   else if (name === 'combos') { loadCombos(); }
   else if (name === 'network') { loadGlobal(); loadClineProxyConfig(); }
   else if (name === 'providers') { loadGlobal(); loadProviders(); loadConnections(); }
-  else if (name === 'health') { loadGlobal(); }
+  else if (name === 'health') { loadGlobalHealth(); }
   else if (name === 'security') {
     loadConfig();
     if (typeof adminHasPermission === 'function' && adminHasPermission('security.write')) {

@@ -8,5 +8,6 @@
     "url": "https://api.githubcopilot.com/models",
     "type": "openai"
   },
-  "authFlow": "github"
+  "authFlow": "github",
+  "logo": "/admin/assets/providers/github.png"
 }

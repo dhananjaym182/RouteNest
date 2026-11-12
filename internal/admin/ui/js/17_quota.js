@@ -54,10 +54,39 @@ function quotaMeter(label, used, limit) {
   '</div>';
 }
 
+// 已用尽的配置上限（health.blocks，providers/health.go budgetBlocks）。与「冷却」不同：
+// 冷却由上游报错触发、到点自动解除；这里是 Provider 自己设的额度用尽，要等窗口重置。
+// 两者都会让路由跳过该 Provider，所以必须分开展示，否则会出现「无冷却」却整家不可用。
+const QUOTA_BLOCK_LABELS = {
+  rpm: '每分钟请求数已达上限',
+  daily_requests: '每日请求数已达上限',
+  daily_tokens: '每日 Token 已达上限',
+  monthly_tokens: '每月 Token 已达上限'
+};
+
+function quotaBlockedHtml(blocks) {
+  if (!blocks || !blocks.length) return '';
+  const rows = blocks.map(b => {
+    const wait = new Date(b.resetAt) - Date.now();
+    const when = wait > 0 ? t('恢复倒计时') + ' ' + fmtDurationZh(wait) : t('即将恢复');
+    const what = QUOTA_BLOCK_LABELS[b.kind] ? t(QUOTA_BLOCK_LABELS[b.kind]) : b.kind;
+    return '<div class="quota-block-row">' +
+      '<span class="quota-block-what">' + esc(what) + (b.model ? ' <span class="mono">' + esc(b.model) + '</span>' : '') + '</span>' +
+      '<span class="quota-block-num">' + formatNumber(b.usage) + ' / ' + formatNumber(b.limit) + '</span>' +
+      '<span class="quota-cd-time" title="' + escAttr(new Date(b.resetAt).toLocaleString()) + '">' + esc(when) + '</span>' +
+    '</div>';
+  }).join('');
+  return '<div class="quota-blocked" role="status">' +
+    '<div class="quota-block-title">' + esc(t('已被限额拦截')) + '</div>' + rows +
+    '<div class="quota-block-note">' + esc(t('限额重置前不会向此 Provider 发送请求，组合会改用下一个条目。')) + '</div>' +
+  '</div>';
+}
+
 function renderQuotaCard(p, health) {
   const h = health || {};
   const lim = h.limits || {};
   const cds = h.cooldowns || [];
+  const blockedHtml = quotaBlockedHtml(h.blocks);
   let cdHtml;
   if (!cds.length) {
     cdHtml = '<div class="quota-cd-none">' + esc(t('无冷却')) + '</div>';
@@ -84,7 +113,7 @@ function renderQuotaCard(p, health) {
         quotaMeter('每分钟请求', h.rpm, lim.rpm) +
         quotaMeter('每日请求', h.daily, lim.daily) +
         quotaMeter(tokWin === 'daily' ? 'Token 配额/日' : 'Token 配额/月', h.tokens, lim.tokens) +
-      '</div>' + resetNote +
+      '</div>' + resetNote + blockedHtml +
       '<div class="quota-cooldowns">' +
         '<div class="quota-cd-title">' + esc(t('冷却中的模型')) + '<span class="quota-cd-count">' + cds.length + '</span></div>' +
         cdHtml +
@@ -100,6 +129,7 @@ function renderQuota() {
   if (!d) { listEl.innerHTML = ''; return; }
   const st = d.stats || {};
   // Provider 侧本月 Token 合计（health.Tokens，UTC 月内），与左侧账号累计 Token 区分开
+  const blockedProviders = (d.providers || []).filter(p => (((d.health || {})[p.id] || {}).blocks || []).length > 0).length;
   const monthTokens = (d.providers || []).reduce((s, p) => s + (Number((d.health || {})[p.id] && (d.health || {})[p.id].tokens) || 0), 0);
   if (sumEl) {
     sumEl.innerHTML =
@@ -108,6 +138,7 @@ function renderQuota() {
       '<div class="quota-stat"><div class="quota-stat-n">' + formatNumber(st.usageCount || 0) + '</div><div class="quota-stat-l">' + esc(t('总请求')) + '</div></div>' +
       '<div class="quota-stat"><div class="quota-stat-n">' + formatTokenCount(st.totalTokens || 0) + '</div><div class="quota-stat-l">' + esc(t('总 Token')) + '</div></div>' +
       '<div class="quota-stat"><div class="quota-stat-n">' + formatNumber(monthTokens) + '</div><div class="quota-stat-l">' + esc(t('本月 Provider Token')) + '</div></div>' +
+      '<div class="quota-stat"><div class="quota-stat-n">' + formatNumber(blockedProviders) + '</div><div class="quota-stat-l">' + esc(t('受限 Provider')) + '</div></div>' +
       '<div class="quota-stat"><div class="quota-stat-n">' + esc(fmtDurationZh(utcMidnightCountdown())) + '</div><div class="quota-stat-l">' + esc(t('距每日预算 UTC 重置')) + '</div></div>';
   }
   const provs = d.providers || [];

@@ -13,6 +13,8 @@
 // generated. A generated entry whose base URL matches a manual preset is skipped
 // so each upstream has one definition. Manual corrections to generated entries
 // are recorded in tools/provider-presets.overrides.json and applied after mapping.
+// If the registry checkout contains public/providers/<id>.<ext>, the generated
+// preset also points at RouteNest's embedded copy under /admin/assets/providers/.
 import fs from "fs";
 import path from "path";
 import { fileURLToPath, pathToFileURL } from "url";
@@ -76,23 +78,8 @@ export function mapModule(mod, skipped, file) {
     return null;
   }
   const fetcher = transport.modelsFetcher || mod.modelsFetcher || {};
-  // Registry models are objects ({id, kind}). Non-chat modalities (embedding,
-  // rerank, speech, ...) are excluded. Free-signal ids (":free" / "-free"
-  // suffix) sort first so the seeded list shows free models first.
-  const modelIDs = (() => {
-    const out = [];
-    const seen = new Set();
-    for (const m of mod.models || []) {
-      const id = typeof m === "string" ? m : (m && m.id) || "";
-      if (!id || seen.has(id)) continue;
-      if (m && /(embedding|rerank|tts|audio|image|speech|moderation)/i.test(String(m.kind || ""))) continue;
-      if (/(embedding|rerank|tts|whisper|image|speech)/i.test(id)) continue;
-      seen.add(id);
-      out.push(id);
-    }
-    out.sort((a, b) => (/-?free$/i.test(b) ? 1 : 0) - (/-?free$/i.test(a) ? 1 : 0));
-    return out;
-  })();
+  // No seeded model list: the catalogue is fetched live at configuration time
+  // (see the provider editor's model picker), so presets carry no stale models.
 
   const tiered = category === "free" || category === "freeTier";
   const host = (() => { try { return new URL(base).hostname; } catch { return ""; } })();
@@ -107,7 +94,6 @@ export function mapModule(mod, skipped, file) {
     hasFree: tiered || mod.noAuth === true,
     headers: Object.keys(headers).length ? headers : undefined,
     modelsFetcher: fetcher?.url ? { url: fetcher.url, type: fetcher.type || "openai" } : undefined,
-    modelIDs: modelIDs.length ? modelIDs : undefined,
     notes: `${mod.id} (from extremerouter registry)`,
     file,
   };
@@ -132,6 +118,21 @@ export async function loadRegistry(dir, skipped) {
     if (rec) presets.push(rec);
   }
   return presets;
+}
+
+function providerLogoPath(registryDir, id) {
+  let current = path.resolve(registryDir);
+  while (true) {
+    const providersDir = path.join(current, "public", "providers");
+    for (const ext of ["png", "jpg", "jpeg", "webp", "svg"]) {
+      if (fs.existsSync(path.join(providersDir, `${id}.${ext}`))) {
+        return `/admin/assets/providers/${id}.png`;
+      }
+    }
+    const parent = path.dirname(current);
+    if (parent === current) return "";
+    current = parent;
+  }
 }
 
 // generate returns the imported catalogue as a plain object keyed by id, plus
@@ -159,22 +160,25 @@ export async function generate({ registryDir, manualDir, overrides }) {
       notices.push([p.key, "non chat/completions source (web/speech), skipped"]);
       continue;
     }
+    // The override is applied while the preset is built, so a manual
+    // correction lands in the same key order as a generated field.
+    const fix = overrides[p.key];
+    const modelsFetcher = fix && fix.modelsFetcher
+      ? { url: fix.modelsFetcher.url, type: fix.modelsFetcher.type || "openai" }
+      : (p.modelsFetcher ? { url: p.modelsFetcher.url, type: p.modelsFetcher.type } : undefined);
+    const logo = fix && fix.logo !== undefined ? fix.logo : providerLogoPath(registryDir, p.key);
     const preset = {
       id: p.key,
-      name: p.displayName,
-      baseURL: p.baseURL,
+      name: fix && fix.name !== undefined ? fix.name : p.displayName,
+      baseURL: fix && fix.baseURL !== undefined ? fix.baseURL : p.baseURL,
       ...(p.headers ? { headers: p.headers } : {}),
       ...(p.notes ? { notes: p.notes } : {}),
       freeTier: p.hasFree,
-      ...(p.modelIDs ? { modelIds: p.modelIDs.slice(0, 40) } : {}),
-      ...(p.modelsFetcher ? { modelsFetcher: { url: p.modelsFetcher.url, type: p.modelsFetcher.type } } : {}),
-      kind: p.kind,
+      ...(modelsFetcher ? { modelsFetcher } : {}),
+      kind: fix && fix.kind !== undefined ? fix.kind : p.kind,
+      ...(logo ? { logo } : {}),
     };
-    const fix = overrides[p.key];
     if (fix) {
-      for (const field of ["baseURL", "kind", "name", "notes"]) {
-        if (fix[field] !== undefined) preset[field] = fix[field];
-      }
       notices.push([p.key, "manual override applied"]);
     }
     imported[p.key] = preset;

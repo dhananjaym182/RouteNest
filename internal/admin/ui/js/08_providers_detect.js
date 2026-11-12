@@ -172,6 +172,26 @@ function syncProvTokenWindowUI() {
   if (hint) hint.textContent = t(win === 'daily' ? 'Token 配额按每日重置（每天 0 点 UTC），0=不限。' : 'Token 配额按月度重置（每月 1 日 UTC），0=不限。');
 }
 
+// Free-only 处理方式：用户的显式选择，默认「自动识别」。预设、同步、导入都不会替用户选。
+// 只有「全部放行」会让付费模型通过「仅免费模型」，所以那一档用警示色说明后果。
+const PROV_ACCESS_POLICIES = ['detect', 'all_free', 'allow_all'];
+const PROV_ACCESS_POLICY_HINTS = {
+  detect: '每个模型按自己的免费/付费判定。开启「仅免费模型」时，被判为付费或未知的模型会被跳过。',
+  all_free: '你声明此 Provider 的全部模型都免费：开启「仅免费模型」时全部放行。你手动设置过层级的模型除外。',
+  allow_all: '此 Provider 同时有免费和付费模型：开启「仅免费模型」时不过滤它。付费模型仍会标为付费，但会被放行，可能产生费用。你手动设置过层级的模型除外。'
+};
+function provAccessPolicyValue() {
+  const el = _('provAccessPolicy');
+  return el && PROV_ACCESS_POLICIES.includes(el.value) ? el.value : 'detect';
+}
+function syncProvAccessPolicyUI() {
+  const policy = provAccessPolicyValue();
+  const hint = _('provAccessPolicyHint');
+  if (!hint) return;
+  hint.textContent = t(PROV_ACCESS_POLICY_HINTS[policy]);
+  hint.classList.toggle('hint-red', policy === 'allow_all');
+}
+
 // 表单字段回填（showProviderEditor 与「放弃更改」共用）
 function applyProviderForm(p) {
   _('provName').value = p ? p.name : '';
@@ -196,6 +216,9 @@ function applyProviderForm(p) {
   _('provEnabled').value = p ? String(p.enabled !== false) : 'true';
   // 手动新建默认付费：整源标 free 会把付费模型误标为免费（审计 §9.2）；free 来源应由预设/导入按模型判定
   _('provFree').value = p ? String(!!p.free) : 'false';
+  // 新建与旧记录（没有该字段）都显示默认「自动识别」；未知值也按默认显示，保存时由后端拒绝
+  if (_('provAccessPolicy')) _('provAccessPolicy').value = p && PROV_ACCESS_POLICIES.includes(p.accessPolicy) ? p.accessPolicy : 'detect';
+  syncProvAccessPolicyUI();
   initConnPick(p ? (p.connectionIds && p.connectionIds.length ? p.connectionIds : (p.connectionId ? [p.connectionId] : [])) : []);
   syncProvTokenWindowUI();
   renderProvModelChips();
@@ -205,7 +228,7 @@ function applyProviderForm(p) {
 const PROV_FIELD_LABELS = {
   name: '名称', baseURL: 'Base URL', apiKey: 'API Key', priority: '优先级', timeoutSec: '超时(秒)',
   rpmLimit: '分钟请求上限', dailyLimit: '每日请求上限', tokenLimit: 'Token 配额/月', tokenWindow: '重置周期', proxyUrl: '出口代理', weight: '权重',
-  models: '模型', modelMap: '上游模型 ID', headers: '自定义请求头', enabled: '启用', free: '免费来源', connections: '连接池',
+  models: '模型', modelMap: '上游模型 ID', headers: '自定义请求头', enabled: '启用', free: '免费来源', accessPolicy: 'Free-only 模式处理', connections: '连接池',
 };
 function serializeProvForm() {
   return {
@@ -225,6 +248,7 @@ function serializeProvForm() {
     headers: _('provHeaders').value.trim(),
     enabled: _('provEnabled').value,
     free: _('provFree').value,
+    accessPolicy: provAccessPolicyValue(),
     connections: (_provConnSel || []).slice().sort().join(','),
   };
 }
@@ -421,6 +445,7 @@ async function saveProvider(btn) {
     headers: parseHeaderText(_('provHeaders').value),
     enabled: _('provEnabled').value === 'true',
     free: _('provFree').value === 'true',
+    accessPolicy: provAccessPolicyValue(),
     connectionIds: _provConnSel.slice(),
     connectionId: '',
   };

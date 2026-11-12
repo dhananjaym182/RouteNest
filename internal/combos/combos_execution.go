@@ -248,8 +248,9 @@ func CallSingleModel(params map[string]any, entry domain.ComboEntry, stream bool
 			params[providers.ProviderIDParam] = id
 		}
 		if !attempted {
+			// 固定 provider 无候选：如实说明是禁用、未提供该模型、冷却还是额度用尽。
 			return nil, nil, zen.UpstreamProvider, "", newUnavailableError(
-				fmt.Sprintf("model %q is not served by provider %q", model, strings.TrimSpace(entry.Provider)),
+				providers.PinUnavailableReason(model, entry.Provider),
 			)
 		}
 		if perr != nil {
@@ -391,7 +392,7 @@ func RunCombo(params map[string]any, combo domain.ModelCombo, stream bool, sessi
 		if GetConfig().OnlyFree {
 			if !routing.ModelFreeOnlyEligible(reference) {
 				trace = append(trace, domain.AttemptLog{Model: m, Order: order, Outcome: "skipped",
-					Reason: fmt.Sprintf("not eligible under onlyFree (access class: %s)", routing.ModelRouteAccess(reference).Class),
+					Reason: "not eligible under onlyFree (" + routing.FreeOnlyRefusalDetail(reference) + ")",
 					Source: strings.TrimSpace(entry.Source), Provider: strings.TrimSpace(entry.Provider)})
 				continue
 			}

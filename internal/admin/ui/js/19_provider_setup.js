@@ -95,10 +95,10 @@ function renderProviderSetupChoices() {
     return;
   }
   const choices = [
-    { kind: 'cline', name: 'Cline', note: '浏览器登录、刷新令牌或批量导入' },
-    { kind: 'opencode', name: 'OpenCode Zen', note: '公共模型或 API Key 连接' },
+    { kind: 'cline', name: 'Cline', logo: '/admin/assets/providers/cline.png', note: '浏览器登录、刷新令牌或批量导入' },
+    { kind: 'opencode', name: 'OpenCode Zen', logo: '/admin/assets/providers/opencode.png', note: '公共模型或 API Key 连接' },
     { kind: 'api', name: '自定义 API 或本地服务', note: '填写服务地址和 API Key' },
-    ..._presetList.map(p => ({ kind: 'preset', key: p.key, name: p.name, preset: p,
+    ..._presetList.map(p => ({ kind: 'preset', key: p.key, name: p.name, logo: p.logo || '', preset: p,
       note: p.loginFlow ? (_connFlows.includes(p.authFlow) ? '浏览器登录或导入 Token' : '导入 Token')
         : (p.kind === 'local' ? '本地服务' : p.kind === 'free' ? '无需 API Key' : 'API Key 连接') })),
   ];
@@ -106,7 +106,7 @@ function renderProviderSetupChoices() {
   // not invent the endpoint/model configuration needed to route that service.
   const presetFlows = new Set(_presetList.filter(p => p.loginFlow).map(p => p.authFlow));
   _connFlows.filter(flow => !presetFlows.has(flow)).forEach(flow => {
-    choices.push({ kind: 'oauth', key: flow, name: flowLabel(flow), note: '登录账号后配置 Provider' });
+    choices.push({ kind: 'oauth', key: flow, name: flowLabel(flow), logo: _flowLogos[flow] || '', note: '登录账号后配置 Provider' });
   });
   renderProviderSetupFilters(choices);
   const query = _('providerSetupSearch').value.trim().toLowerCase();
@@ -121,10 +121,14 @@ function renderProviderSetupChoices() {
     // service actually lives; keep the type label when the list is flat.
     const note = c.preset && c.preset.baseURL && _providerSetupCategory === 'all'
       ? providerSetupHost(c.preset.baseURL) : t(c.note);
+    const monogram = '<span class="connect-provider-monogram">' + esc(Array.from(c.name)[0]) + '</span>';
+    const icon = c.logo
+      ? '<span class="connect-provider-icon"><img src="' + escAttr(c.logo) + '" alt="" aria-hidden="true" onerror="this.parentElement.classList.add(\'logo-error\')">' + monogram + '</span>'
+      : '<span class="connect-provider-icon" aria-hidden="true">' + monogram + '</span>';
     return '<button type="button" class="connect-provider-choice" data-setup-kind="' + escAttr(c.kind) + '" data-setup-key="' + escAttr(c.key || '') + '"' +
       ' data-setup-category="' + escAttr(providerSetupCategoryOf(c)) + '"' +
       ' onclick="chooseProviderSetup(' + globalJS(c.kind) + ',' + globalJS(c.key || '') + ')">' +
-      '<span class="connect-provider-icon" aria-hidden="true">' + esc(Array.from(c.name)[0]) + '</span><span><strong>' + esc(t(c.name)) +
+      icon + '<span><strong>' + esc(t(c.name)) +
       '</strong><small>' + esc(note) + '</small></span><span aria-hidden="true">→</span></button>';
   };
   // A single flat list when the operator narrowed to one category; otherwise

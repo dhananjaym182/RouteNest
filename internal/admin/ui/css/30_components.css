@@ -145,8 +145,12 @@ tr.conn-group-row td{background:var(--surface2);color:var(--text2);font-size:12p
 .conn-provider-tile{display:flex;flex-direction:column;gap:10px;background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius);padding:12px;box-shadow:var(--shadow-sm);transition:border-color .15s var(--ease)}
 .conn-provider-tile:hover{border-color:var(--border)}
 .conn-tile-main{display:flex;align-items:center;gap:10px;min-width:0}
-.conn-tile-icon{width:34px;height:34px;border-radius:9px;display:flex;align-items:center;justify-content:center;flex-shrink:0;background:var(--surface2);color:var(--text2);font-size:12px;font-weight:700;letter-spacing:.5px}
+.conn-tile-icon{position:relative;width:34px;height:34px;border-radius:9px;display:grid;align-items:center;justify-content:center;flex-shrink:0;background:var(--surface2);color:var(--text2);font-size:12px;font-weight:700;letter-spacing:.5px}
 .conn-provider-tile.connected .conn-tile-icon{background:var(--green-soft);color:var(--green)}
+.conn-tile-icon>.conn-tile-logo,.conn-tile-icon>.conn-tile-monogram{grid-area:1/1}
+.conn-tile-logo{position:relative;z-index:1;width:34px;height:34px;object-fit:contain;border-radius:7px;background:var(--surface);border:1px solid var(--border2);display:block}
+.conn-tile-icon.logo-error>.conn-tile-logo{display:none}
+.conn-tile-monogram{display:flex;align-items:center;justify-content:center;width:34px;height:34px;font-size:12px;font-weight:700;letter-spacing:.5px}
 .conn-tile-body{flex:1;min-width:0}
 .conn-tile-name{font-size:13px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .conn-tile-sub{font-size:11px;color:var(--text3);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}

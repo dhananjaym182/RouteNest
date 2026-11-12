@@ -120,7 +120,7 @@ func StreamAnthropicCombo(ctx context.Context, w http.ResponseWriter, params map
 			continue
 		}
 		if liveConfig().OnlyFree && !routing.ModelFreeOnlyEligible(reference) {
-			trace = append(trace, domain.AttemptLog{Model: m, Order: i + 1, Outcome: "skipped", Reason: "not eligible under onlyFree", Source: e.Source, Provider: e.Provider})
+			trace = append(trace, domain.AttemptLog{Model: m, Order: i + 1, Outcome: "skipped", Reason: "not eligible under onlyFree (" + routing.FreeOnlyRefusalDetail(reference) + ")", Source: e.Source, Provider: e.Provider})
 			continue
 		}
 		seen[key] = true

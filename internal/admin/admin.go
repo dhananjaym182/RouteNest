@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"routenest/internal/zen"
+	"strings"
 	"time"
 
 	"routenest/internal/accounts"
@@ -18,6 +18,7 @@ import (
 	"routenest/internal/httpx"
 	"routenest/internal/i18n"
 	"routenest/internal/requestlog"
+	"routenest/internal/zen"
 )
 
 type APIResponse = httpx.Response
@@ -157,6 +158,9 @@ func registerRoutesWithSecurity(mux *http.ServeMux, runtime *adminSecurityRuntim
 	registerMiscRoutes(registry)
 	mux.Handle("/admin/api/", runtime.handler(registry))
 	mux.Handle("/admin/", runtime.staticHandler(http.HandlerFunc(adminStaticHandler)))
+	// The site icon lives at the server root: browsers ask for /favicon.ico on
+	// every tab, whatever page they show.
+	mux.HandleFunc("/favicon.ico", faviconHandler)
 }
 
 func registerPublicRoute(registry *adminRouteRegistry, method, path string, csrf csrfMode, handler http.HandlerFunc) {
@@ -317,10 +321,89 @@ func adminStaticHandler(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-store, must-revalidate")
 		w.Header().Set("Pragma", "no-cache")
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(adminHTML))
+		if r.Method != http.MethodHead {
+			_, _ = w.Write([]byte(adminHTML))
+		}
+		return
+	}
+	if strings.HasPrefix(r.URL.Path, "/admin/assets/providers/") {
+		assetPath := "ui/" + strings.TrimPrefix(r.URL.Path, "/admin/")
+		data, err := adminUIFS.ReadFile(assetPath)
+		if err != nil {
+			http.NotFound(w, r)
+			return
+		}
+		switch {
+		case strings.HasSuffix(assetPath, ".png"):
+			w.Header().Set("Content-Type", "image/png")
+		case strings.HasSuffix(assetPath, ".jpg"), strings.HasSuffix(assetPath, ".jpeg"):
+			w.Header().Set("Content-Type", "image/jpeg")
+		case strings.HasSuffix(assetPath, ".svg"):
+			w.Header().Set("Content-Type", "image/svg+xml")
+		case strings.HasSuffix(assetPath, ".webp"):
+			w.Header().Set("Content-Type", "image/webp")
+		}
+		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+		w.WriteHeader(http.StatusOK)
+		if r.Method != http.MethodHead {
+			_, _ = w.Write(data)
+		}
+		return
+	}
+	if icon, ok := adminIconAsset(r.URL.Path); ok {
+		serveAdminIcon(w, r, icon)
 		return
 	}
 	http.NotFound(w, r)
+}
+
+// adminIconAssets maps the served icon paths to their embedded file. The icons
+// are real files, not inline data: URIs: a data: URI favicon is not rendered by
+// every browser, so the tab icon was missing while the page logos worked.
+var adminIconAssets = map[string]string{
+	"/admin/assets/icon.svg":     "ui/assets/icon.svg",
+	"/admin/assets/icon.png":     "ui/assets/icon.png",
+	"/admin/assets/icon-512.png": "ui/assets/icon-512.png",
+	"/admin/assets/favicon.ico":  "ui/assets/favicon.ico",
+}
+
+// adminIconAsset returns the embedded icon file for a request path.
+func adminIconAsset(path string) (string, bool) {
+	name, ok := adminIconAssets[path]
+	return name, ok
+}
+
+// serveAdminIcon writes one icon file with its content type.
+func serveAdminIcon(w http.ResponseWriter, r *http.Request, name string) {
+	data, err := adminUIFS.ReadFile(name)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	switch {
+	case strings.HasSuffix(name, ".svg"):
+		w.Header().Set("Content-Type", "image/svg+xml")
+	case strings.HasSuffix(name, ".png"):
+		w.Header().Set("Content-Type", "image/png")
+	case strings.HasSuffix(name, ".ico"):
+		w.Header().Set("Content-Type", "image/x-icon")
+	}
+	w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+	w.WriteHeader(http.StatusOK)
+	if r.Method != http.MethodHead {
+		_, _ = w.Write(data)
+	}
+}
+
+// faviconHandler serves the site icon at the server root. Browsers request
+// /favicon.ico for every tab, including pages that render no HTML of their
+// own (the API root answers 404), so the icon is served from there too.
+func faviconHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
+		return
+	}
+	serveAdminIcon(w, r, "ui/assets/favicon.ico")
 }
 
 // GET /admin/api/accounts

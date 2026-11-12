@@ -53,6 +53,7 @@ func builtInInstance(reg *providerreg.Registry, id string, enabled bool, baseURL
 		FreeTier:       definition.FreeTier,
 		Kind:           definition.Kind,
 		Capabilities:   definitionCapabilities(definition),
+		Logo:           definition.Logo,
 	}, nil
 }
 
@@ -72,12 +73,14 @@ func customInstance(reg *providerreg.Registry, p domain.CustomProvider) domain.P
 	capabilities := definitionCapabilities(providerreg.Preset{})
 	kind := "other"
 	freeTier := p.Free
+	logo := ""
 	if known {
 		definitionID = domain.ProviderDefinitionID(definition.ID)
 		adapterID = reg.AdapterFor(definition.ID)
 		capabilities = definitionCapabilities(definition)
 		kind = definition.Kind
 		freeTier = definition.FreeTier || p.Free
+		logo = definition.Logo
 	}
 	return domain.ProviderInstance{
 		ID:           domain.ProviderInstanceID(p.ID),
@@ -93,6 +96,8 @@ func customInstance(reg *providerreg.Registry, p domain.CustomProvider) domain.P
 		Weight:       p.Weight,
 		TimeoutSec:   p.TimeoutSec,
 		Capabilities: capabilities,
+		AccessPolicy: p.AccessPolicy.Effective(),
+		Logo:         logo,
 	}
 }
 

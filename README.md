@@ -22,7 +22,7 @@ RouteNest is a self-hosted AI gateway written in Go. Point your coding agents an
 
 ## Contents
 
-[Why RouteNest](#why-routenest) · [Highlights](#highlights) · [Works with](#works-with) · [Supported providers](#supported-providers) · [Quick start](#quick-start) · [Connect a client](#connect-a-client) · [How routing works](#how-routing-works) · [Admin console](#admin-console) · [Security](#security) · [Accounts and upstreams](#accounts-and-upstreams) · [Provider coverage](#provider-coverage) · [Model discovery](#model-discovery) · [Egress proxies](#egress-proxies) · [Data and upgrades](#data-and-upgrades) · [Build from source](#build-from-source) · [Project layout](#project-layout) · [Documentation](#documentation) · [Contributing](#contributing) · [License](#license-and-notices)
+[Why RouteNest](#why-routenest) · [Highlights](#highlights) · [Light on resources](#light-on-resources) · [Works with](#works-with) · [Supported providers](#supported-providers) · [Quick start](#quick-start) · [Connect a client](#connect-a-client) · [How routing works](#how-routing-works) · [Admin console](#admin-console) · [Security](#security) · [Accounts and upstreams](#accounts-and-upstreams) · [Provider coverage](#provider-coverage) · [Model discovery](#model-discovery) · [Egress proxies](#egress-proxies) · [Data and upgrades](#data-and-upgrades) · [Build from source](#build-from-source) · [Project layout](#project-layout) · [Documentation](#documentation) · [Contributing](#contributing) · [License](#license-and-notices)
 
 ## Why RouteNest
 
@@ -65,6 +65,34 @@ AI coding tools want one stable endpoint, while the services behind them rate-li
 - **Runs where you do.** A single Go binary with file-based state and no external database, a desktop app for Windows, macOS and Linux, or Docker.
 
 Provider availability, authentication, free allowances and supported features depend on the upstream service. A preset is a configuration template, not a tested integration. Its presence does not mean every model is available to your account.
+
+## Light on resources
+
+RouteNest is one statically linked Go binary. There is no runtime to install, no `node_modules` and no external database. State lives in plain files, and the admin console is embedded in the binary.
+
+| Measured on Linux x86-64, Go 1.26.10, empty data directory | Result |
+| --- | --- |
+| Binary size (admin console included) | 15.5 MB |
+| Time until `/ready` answers | about 1 second |
+| Memory while it syncs model catalogs at startup | peaks near 155 MB |
+| Memory when idle | about 26 MB after a few minutes |
+| CPU when idle | about 0% |
+
+Build it the way the Docker image does and read the resident memory from `/proc/<pid>/status` to check these figures on your own machine:
+
+```bash
+CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o routenest .
+```
+
+For context, here is what two similar gateways document that they need, taken from their own repositories in November 2026. We have not measured their memory or CPU use.
+
+| | RouteNest | [9Router](https://github.com/decolua/9router) | [OmniRoute](https://github.com/cheaper-inference/OmniRoute) |
+| --- | --- | --- | --- |
+| Runtime to install | none | Node.js 22 | Node.js 22 or newer |
+| Direct npm dependencies | none | 30 | 105 |
+| Building from source | `go build` | README suggests a temporary 2 GB swap file before `npm run build` | `npm` build |
+
+Both of those projects offer features RouteNest does not, such as token compression and a much larger provider catalog. RouteNest's aim is a small footprint with a strong security model.
 
 ## Works with
 
@@ -364,6 +392,15 @@ Only a subset of presets and request patterns is exercised by the repository's t
   - Filtering relies on RouteNest's current model classification, which may be incomplete, stale or inaccurate.
   - A model or provider being labelled free does not guarantee that the underlying account, route or request is free of charge.
   - Before relying on this setting, verify your provider's terms of service, account entitlements, pricing and usage limits. Do not treat free-only mode as a guarantee of zero cost.
+- **You can override the detection for a whole provider.** Free-or-paid detection is a guess from names, prices and flags, and many providers make a model free without marking it. Each provider therefore has a **Free-only handling** setting in its editor:
+
+  | Setting | What Free-only mode does with that provider's models |
+  | --- | --- |
+  | **Auto-detect per model** (default) | Each model's own classification decides. Models judged paid or unknown are skipped. |
+  | **All models are free** | You declare the provider free. Every model is allowed. |
+  | **Mixed free and paid: allow every model** | Free-only mode does not filter this provider. Paid models stay labelled paid but are allowed, so they can cost money. |
+
+  Only you change this setting. Presets, model syncs and imports never do, and the separate **Free source (for statistics)** field does not affect it. It applies as soon as you save, with no re-sync. A model whose tier you set by hand in the model editor always keeps that tier, even on a provider set to allow everything. When a model is refused, the combo trace and Route check name the access class and which of the two settings would allow it.
 
 ## Egress proxies
 

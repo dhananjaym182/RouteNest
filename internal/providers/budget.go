@@ -27,20 +27,24 @@ func providerBudgetPolicy(provider CustomProvider) budget.Policy {
 // consumes no capacity; every real invocation is rechecked atomically by
 // AdmitDispatch.
 func providerBudgetExceeded(providerID, model string, rpmLimit, dailyLimit int, tokenLimit int64, tokenWindow string) bool {
-	if !budget.HasDefault() {
-		return false
-	}
-	policy := budget.Policy{
+	exhaustion, unavailable := providerBudgetBlock(providerID, model, budget.Policy{
 		RPMLimit: rpmLimit, DailyLimit: dailyLimit,
 		TokenLimit: tokenLimit, TokenWindow: tokenWindow,
+	})
+	return exhaustion != nil || unavailable
+}
+
+// providerBudgetBlock is providerBudgetExceeded with the evidence kept: which
+// configured limit is reached, its usage, and when it resets. unavailable is
+// true when the budget store cannot be read and the provider has a hard limit,
+// which fails closed. Like providerBudgetExceeded it consumes no capacity.
+func providerBudgetBlock(providerID, model string, policy budget.Policy) (exhaustion *budget.ExhaustionError, unavailable bool) {
+	if !budget.HasDefault() {
+		return nil, false
 	}
 	exhaustion, err := budget.Default().ExhaustionWithPolicy(context.Background(), providerID, model, policy)
-	blocked := exhaustion != nil
 	mirrorConfiguredBudgetObservation(providerID, model, exhaustion)
-	if err != nil && policy.HardLimited() {
-		return true
-	}
-	return blocked
+	return exhaustion, err != nil && policy.HardLimited()
 }
 
 func mirrorConfiguredBudgetObservation(providerID, model string, exhaustion *budget.ExhaustionError) {

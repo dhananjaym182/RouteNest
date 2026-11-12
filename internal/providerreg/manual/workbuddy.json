@@ -11,5 +11,6 @@
     "glm-5.3-flash",
     "minimax-m3"
   ],
-  "authFlow": "workbuddy"
+  "authFlow": "workbuddy",
+  "logo": "/admin/assets/providers/workbuddy.png"
 }

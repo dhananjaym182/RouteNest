@@ -22,6 +22,9 @@ func handleConnectionsList(w http.ResponseWriter, r *http.Request) {
 		// flowLabels is the canonical display name for each auth flow, taken
 		// from the provider catalogue. The UI must not keep a parallel table.
 		"flowLabels": providerreg.Builtin().AuthFlowLabels(),
+		// flowLogos is the logo path for each auth flow, taken from the
+		// provider catalogue presets.
+		"flowLogos": providerreg.Builtin().AuthFlowLogos(),
 	}})
 }
 

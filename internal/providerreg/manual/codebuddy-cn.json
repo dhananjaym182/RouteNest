@@ -11,5 +11,6 @@
     "minimax-m3",
     "kimi-k2.7"
   ],
-  "authFlow": "codebuddy-cn"
+  "authFlow": "codebuddy-cn",
+  "logo": "/admin/assets/providers/codebuddy-cn.png"
 }

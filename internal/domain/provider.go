@@ -24,6 +24,11 @@ type CustomProvider struct {
 	// Free is a provider-level flag used for statistics and fallback hints.
 	// It is not a per-model access entitlement.
 	Free bool `json:"free"`
+	// AccessPolicy is the administrator's explicit Free-only setting for this
+	// provider: "detect" (also the empty value), "all_free" or "allow_all". Unlike
+	// Free it does change routing, so only an administrator may set it: presets,
+	// syncs and imports never do.
+	AccessPolicy ProviderAccessPolicy `json:"accessPolicy,omitempty"`
 	// ConnectionID binds one logged-in provider connection.
 	ConnectionID string `json:"connectionId,omitempty"`
 	// ConnectionIDs pools several connections for round-robin and failover.
@@ -56,4 +61,10 @@ type ProviderInstance struct {
 	Weight         int                        `json:"weight,omitempty"`
 	TimeoutSec     int                        `json:"timeoutSec,omitempty"`
 	Capabilities   map[string]CapabilityState `json:"capabilities"`
+	// AccessPolicy is the provider's explicit Free-only setting. It is empty
+	// for the default ("detect") and for built-in routes.
+	AccessPolicy ProviderAccessPolicy `json:"accessPolicy,omitempty"`
+	// Logo is a relative path to the provider's brand logo, served by the
+	// admin UI when available.
+	Logo string `json:"logo,omitempty"`
 }

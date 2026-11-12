@@ -23,5 +23,6 @@
     "contextCompaction": "unsupported"
   },
   "missingThreshold": 1,
-  "runtimeBuiltin": true
+  "runtimeBuiltin": true,
+  "logo": "/admin/assets/providers/cline.png"
 }

@@ -51,3 +51,9 @@ test("generated ids are sorted by code unit", () => {
   const sorted = [...keys].sort((x, y) => (x < y ? -1 : x > y ? 1 : 0));
   assert.deepEqual(keys, sorted);
 });
+
+test("generated presets use rasterized provider logos", () => {
+  const obj = JSON.parse(runGenerator(tempFile("logos.json")).toString("utf8"));
+  assert.equal(obj.alpha.logo, "/admin/assets/providers/alpha.png");
+  assert.equal(obj.beta.logo, undefined);
+});

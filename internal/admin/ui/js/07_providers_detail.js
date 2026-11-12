@@ -1,4 +1,16 @@
 // ========== §供应商详情（master–detail）：列表紧凑，全量数据进只读抽屉 ==========
+// Free-only 处理方式的详情徽标。默认「自动识别」用灰字；两个会放行付费模型的选项用徽标 + 说明，
+// 这样在列表详情里一眼能看出哪个 Provider 不再被「仅免费模型」过滤。
+function provAccessPolicyBadge(policy) {
+  if (policy === 'all_free') {
+    return '<span class="model-source-badge custom" title="' + escAttr(t(PROV_ACCESS_POLICY_HINTS.all_free)) + '">' + t('全部模型视为免费') + '</span>';
+  }
+  if (policy === 'allow_all') {
+    return '<span class="model-source-badge custom" title="' + escAttr(t(PROV_ACCESS_POLICY_HINTS.allow_all)) + '">' + t('免费与付费混合：全部放行') + '</span>';
+  }
+  return '<span class="mut" title="' + escAttr(t(PROV_ACCESS_POLICY_HINTS.detect)) + '">' + t('自动识别（默认）') + '</span>';
+}
+
 function openProvDetail(id) {
   const p = _provCache[id];
   if (!p) { toast(t('加载失败'), 'error'); return; }
@@ -43,6 +55,7 @@ function provDetailSectionsHTML(p) {
     kv(t('免费来源（整源）'), p.free
       ? '<span class="model-source-badge custom" title="' + escAttr(t('整源免费标记，不代表池内每个模型都免费；逐模型计费以分级预览为准')) + '">' + t('整源免费') + '</span>'
       : '<span class="model-source-badge provider" title="' + escAttr(t('整源按付费标记；池内个别模型仍可能被判定为免费')) + '">' + t('整源付费') + '</span>') +
+    kv(t('Free-only 模式处理'), provAccessPolicyBadge(p.accessPolicy)) +
     kv(t('优先级'), esc(String(p.priority))) +
     kv(t('权重'), esc(String(p.weight))) +
     kv(t('代理'), p.proxyUrl ? '<span class="mono detail-clip">' + esc(p.proxyUrl) + '</span>' : '<span class="mut">' + t('未设置') + '</span>') +

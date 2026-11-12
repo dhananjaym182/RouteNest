@@ -235,6 +235,13 @@
 .quota-cd-row .mono{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text)}
 .quota-cd-time{color:var(--red);font-family:ui-monospace,monospace;font-size:11px;flex:none}
 .quota-cd-list{margin-bottom:8px}
+/* 额度用尽（被配置上限拦截）：与冷却分开展示，红色左边线 + 倒计时，文字用主文本色保证对比度 */
+.quota-blocked{margin-top:12px;padding:10px 12px;border:1px solid var(--border2);border-left:3px solid var(--red);border-radius:var(--radius-sm);background:var(--red-soft)}
+.quota-block-title{font-size:12px;font-weight:700;color:var(--text);margin-bottom:6px}
+.quota-block-row{display:flex;align-items:center;gap:10px;padding:3px 0;font-size:12px;color:var(--text)}
+.quota-block-what{flex:1;min-width:0;overflow-wrap:anywhere}
+.quota-block-num{color:var(--text2);font-variant-numeric:tabular-nums;white-space:nowrap;flex:none}
+.quota-block-note{margin-top:6px;font-size:11px;color:var(--text2)}
 .quickstart-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px}
 .about-feature-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px}
 @media (max-width:760px){.quickstart-grid,.about-feature-grid{grid-template-columns:1fr}}
