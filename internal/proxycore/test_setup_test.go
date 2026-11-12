@@ -139,7 +139,7 @@ func init() {
 	if err := providerstate.Publish(state); err != nil {
 		panic(err)
 	}
-	credentialRegistry, err := credentials.NewRegistry(state, credentials.AccountsSource{})
+	credentialRegistry, err := credentials.NewRegistry(state, credentials.AccountsSource{}, credentials.ZenSessionsSource{})
 	if err != nil {
 		panic(err)
 	}
