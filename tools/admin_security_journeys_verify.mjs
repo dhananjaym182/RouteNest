@@ -795,6 +795,10 @@ export async function runVerification(environment = process.env) {
     await page.evaluate(() => closePasswordRecovery());
     await waitLogin(page);
   };
+  const recoveryStage = async (page, stage, action) => {
+    currentStep = stage;
+    return action(page);
+  };
   try {
     if (environment.ROUTENEST_SECURITY_VERIFY_MUTATIONS !== '1') throw new VerificationFailure('Set ROUTENEST_SECURITY_VERIFY_MUTATIONS=1 only for a disposable service.');
     base = validateBase(environment.BASE_URL);
@@ -1090,10 +1094,9 @@ export async function runVerification(environment = process.env) {
     await openRecovery(recoveryPage);
     await recover(recoveryPage, issuedB, replacementReset, false);
     await session(primary, true, 'replay rejection leaves the replacement password session intact');
-    await returnRecoveryToLogin(recoveryPage);
-    currentStep = 'replacement recovery credential works through UI';
-    await openRecovery(recoveryPage);
-    const finalCode = await recover(recoveryPage, replacement, replacementReset);
+    await recoveryStage(recoveryPage, 'replacement recovery/return to login', returnRecoveryToLogin);
+    await recoveryStage(recoveryPage, 'replacement recovery/open form', openRecovery);
+    const finalCode = await recoveryStage(recoveryPage, 'replacement recovery/submit credential', page => recover(page, replacement, replacementReset));
     check(finalCode !== issuedA && finalCode !== issuedB && finalCode !== replacement, 'second successful reset returns another distinct replacement', 'securityChecks');
     await session(primary, false, 'using the replacement code also revokes newly created sessions');
     await finishRecovery(recoveryPage);
@@ -1231,7 +1234,9 @@ export async function selfTests() {
     assert.match(String(runVerification), /security-overview-left/);
     assert.match(String(runVerification), /security-overview-right/);
     assert.doesNotMatch(String(runVerification), /access-account-card/);
-    assert.match(String(runVerification), /replay rejection leaves the replacement password session intact'[\s\S]*returnRecoveryToLogin\(recoveryPage\)[\s\S]*replacement recovery credential works through UI'[\s\S]*await openRecovery\(recoveryPage\)/);
+    assert.match(String(runVerification), /replacement recovery\/return to login/);
+    assert.match(String(runVerification), /replacement recovery\/open form/);
+    assert.match(String(runVerification), /replacement recovery\/submit credential/);
   });
   test('screenshot redaction restores recovery text and inputs even after capture failure', async () => {
     const vm = await import('node:vm');
