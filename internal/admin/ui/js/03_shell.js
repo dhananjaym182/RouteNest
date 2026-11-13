@@ -209,10 +209,10 @@ function showLogin(mode) {
   setAdminAuthMode(mode || _adminAuthMode);
   if (typeof syncAdminAuthRoute === 'function') syncAdminAuthRoute();
   else if (_('loginOverlay')) _('loginOverlay').style.display = 'flex';
-  if (opening) setTimeout(() => {
+  setTimeout(() => {
     if (root && root.dataset.adminAuthView && root.dataset.adminAuthView !== 'login') return;
     const target = (_adminAuthMode === 'bootstrap' || _adminAuthMode === 'recovery') ? _('bootstrapSecret') : _('loginPassword');
-    if (target && !target.closest('[inert]')) target.focus();
+    if (target && !target.closest('[inert]') && (opening || !document.activeElement || document.activeElement === document.body || !document.activeElement.closest('#adminAuthPage'))) target.focus();
   }, 50);
 }
 

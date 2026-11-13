@@ -16,6 +16,9 @@ func acquireLock(f *os.File) error {
 	return nil
 }
 func releaseLock(f *os.File) error { return unix.Flock(int(f.Fd()), unix.LOCK_UN) }
+func openPrivateFile(path string) (*os.File, error) {
+	return os.OpenFile(path, os.O_RDWR|os.O_CREATE, 0600)
+}
 func checkSecurePath(path string, directory bool) error {
 	v, e := os.Lstat(path)
 	if e != nil {

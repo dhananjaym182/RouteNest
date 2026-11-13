@@ -10,16 +10,30 @@ import (
 	"unsafe"
 )
 
+func lockRange() windows.Overlapped {
+	return windows.Overlapped{Offset: ^uint32(0), OffsetHigh: 0x3fffffff}
+}
 func acquireLock(f *os.File) error {
-	var ov windows.Overlapped
+	ov := lockRange()
 	if e := windows.LockFileEx(windows.Handle(f.Fd()), windows.LOCKFILE_EXCLUSIVE_LOCK|windows.LOCKFILE_FAIL_IMMEDIATELY, 0, 1, 0, &ov); e != nil {
 		return fmt.Errorf("%w: %v", ErrLocked, e)
 	}
 	return nil
 }
 func releaseLock(f *os.File) error {
-	var ov windows.Overlapped
+	ov := lockRange()
 	return windows.UnlockFileEx(windows.Handle(f.Fd()), 0, 1, 0, &ov)
+}
+func openPrivateFile(path string) (*os.File, error) {
+	name, e := windows.UTF16PtrFromString(path)
+	if e != nil {
+		return nil, e
+	}
+	handle, e := windows.CreateFile(name, windows.GENERIC_READ|windows.GENERIC_WRITE, windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE|windows.FILE_SHARE_DELETE, nil, windows.OPEN_ALWAYS, windows.FILE_ATTRIBUTE_NORMAL|windows.FILE_FLAG_OPEN_REPARSE_POINT, 0)
+	if e != nil {
+		return nil, e
+	}
+	return os.NewFile(uintptr(handle), path), nil
 }
 func checkSecurePath(path string, directory bool) error {
 	v, e := os.Lstat(path)
@@ -100,18 +114,7 @@ func secureCreatedWindowsPath(path string, directory bool) error {
 	}
 	return checkSecurePath(path, directory)
 }
-func syncDirectory(path string) error {
-	p, e := windows.UTF16PtrFromString(path)
-	if e != nil {
-		return e
-	}
-	h, e := windows.CreateFile(p, windows.GENERIC_READ|windows.GENERIC_WRITE, windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE|windows.FILE_SHARE_DELETE, nil, windows.OPEN_EXISTING, windows.FILE_FLAG_BACKUP_SEMANTICS, 0)
-	if e != nil {
-		return e
-	}
-	defer windows.CloseHandle(h)
-	return windows.FlushFileBuffers(h)
-}
+func syncDirectory(string) error { return nil }
 func replaceSnapshot(old, new string) error {
 	o, e := windows.UTF16PtrFromString(old)
 	if e != nil {

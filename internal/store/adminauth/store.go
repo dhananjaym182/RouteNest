@@ -117,7 +117,7 @@ func openPrivate(path string) (*os.File, error) {
 		return nil, e
 	}
 	_, existedErr := os.Lstat(path)
-	f, e := os.OpenFile(path, os.O_RDWR|os.O_CREATE, 0600)
+	f, e := openPrivateFile(path)
 	if e != nil {
 		return nil, e
 	}

@@ -134,8 +134,8 @@
 #tab-security .security-card .access-card-head h3{font-size:var(--fs-md);font-weight:600}
 #tab-security .security-card .access-card-desc{margin-bottom:var(--sp-4)}
 #tab-security .security-card .access-footnote{margin-top:var(--sp-3)}
-#tab-security .security-card .access-card-head .access-refresh{width:34px;height:34px;min-height:34px}
-#tab-security .access-card-head .btn{min-height:34px}
+#tab-security .security-card .access-card-head .access-refresh{width:40px;height:40px;min-height:40px}
+#tab-security .access-card-head .btn{min-height:40px}
 
 #tab-security .security-overview{display:grid;grid-template-columns:minmax(0,1fr) minmax(260px,340px);gap:var(--sp-5);margin-bottom:var(--sp-5)}
 #tab-security .security-overview-left,#tab-security .security-overview-right{display:grid;gap:var(--sp-5);align-content:start}
@@ -197,7 +197,7 @@
 #tab-security .access-list-row{gap:var(--sp-3);padding:var(--sp-3) var(--sp-4)}
 #tab-security .access-row-meta{margin-top:var(--sp-1)}
 #tab-security .access-empty{padding:var(--sp-5);font-size:var(--fs-sm)}
-#tab-security .access-row-actions .btn{min-height:34px}
+#tab-security .access-row-actions .btn{min-height:40px}
 
 #tab-security .access-editor{margin-top:var(--sp-5);padding:var(--sp-5);border:1px solid var(--border2);border-radius:var(--radius-sm);background:var(--surface2)}
 #tab-security .access-form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--sp-4)}
