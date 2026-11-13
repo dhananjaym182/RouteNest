@@ -777,7 +777,8 @@ export async function runVerification(environment = process.env) {
     check(await page.locator('#passwordRecoveryFinish').isDisabled(), 'replacement proof requires save acknowledgement', 'uiChecks');
     check(await page.evaluate(() => ['passwordRecoveryCode', 'passwordRecoveryNewPassword', 'passwordRecoveryConfirmPassword'].every(id => document.getElementById(id).value === '')), 'successful recovery clears all entered secret fields', 'securityChecks');
     currentStep += '/verify session';
-    await session(page.context(), false, 'recovery result does not grant an authenticated session');
+    const sessionReply = await http(page.context(), '/auth/session', { retry: true });
+    rejected(sessionReply, [401], 'recovery result does not grant an authenticated session');
     return replacement;
   };
   const finishRecovery = async page => {
@@ -1243,6 +1244,7 @@ export async function selfTests() {
     assert.match(String(runVerification), /replacement recovery\/open form/);
     assert.match(String(runVerification), /replacement recovery\/submit credential/);
     assert.match(String(runVerification), /verify result[\s\S]*verify session/);
+    assert.match(String(runVerification), /sessionReply[\s\S]*retry: true/);
     assert.match(String(runVerification), /_passwordRecoveryBusy[\s\S]*passwordRecoveryFinish/);
   });
   test('screenshot redaction restores recovery text and inputs even after capture failure', async () => {
