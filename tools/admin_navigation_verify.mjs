@@ -264,13 +264,8 @@ try {
             check(await securitySubtabs.count(), 1, label + ': security has sub-tabs navigation');
             const subtabButtons = securitySubtabs.locator('.subtab');
             check(await subtabButtons.count(), 5, label + ': security has five sub-tabs');
-            const subtabLabels = await subtabButtons.evaluateAll(els => els.map(e => e.textContent.trim()));
-            check(subtabLabels.includes('身份与访问'), true, label + ': identity subtab present');
-            check(subtabLabels.includes('设备与会话'), true, label + ': devices subtab present');
-            check(subtabLabels.includes('网络访问'), true, label + ': network subtab present');
-            check(subtabLabels.includes('团队与 SSO'), true, label + ': team subtab present');
-            check(subtabLabels.includes('危险操作'), true, label + ': danger subtab present');
-            // Verify identity subtab is active by default
+            const subtabIDs = await subtabButtons.evaluateAll(els => els.map(e => e.dataset.sub));
+            check(subtabIDs, ['identity', 'devices', 'network', 'team', 'danger'], label + ': security sub-tabs registered in order');
             check(await page.locator('#tab-security .page-subpage[data-subpage="identity"]').isVisible(), true, label + ': identity subpage shown by default');
           }
           if (tab === 'credentials') {

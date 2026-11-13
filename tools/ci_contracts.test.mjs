@@ -28,6 +28,13 @@ test('navigation focus check does not depend on a control that is hidden on narr
   assert.doesNotMatch(script, /page\.locator\('#refreshAllBtn'\)/, 'must not focus the refresh button unconditionally');
 });
 
+test('navigation checks security sub-tabs by stable IDs after localization', () => {
+  const script = read('tools/admin_navigation_verify.mjs');
+  assert.match(script, /els\.map\(e => e\.dataset\.sub\)/);
+  assert.match(script, /\['identity', 'devices', 'network', 'team', 'danger'\]/);
+  assert.doesNotMatch(script, /subtabLabels\.includes/, 'localized labels must not be asserted after setLang');
+});
+
 // CI failure: the Windows race job threw because gcc was not at one hard-coded path.
 test('the Windows race job finds the C compiler instead of assuming one path', () => {
   const workflow = read('.github/workflows/test.yml');

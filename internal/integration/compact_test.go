@@ -5,8 +5,10 @@ import (
 	"net/http"
 	"routenest/internal/admin"
 	"routenest/internal/compaction"
+	"routenest/internal/domain"
 	"routenest/internal/egress"
 	"routenest/internal/platform"
+	"routenest/internal/providerstate"
 	"routenest/internal/zen"
 	"strings"
 	"testing"
@@ -49,9 +51,19 @@ func TestMaybeCompactFallsBackToClineSummary(t *testing.T) {
 	zenCfg := zen.DefaultConfig()
 	zenCfg.Failover = true
 	zenCfg.Compaction = zen.CompactConfig{Auto: true, Buffer: 100, KeepTokens: 200, MaxSummary: 64}
+	autoHarvest := false
+	zenCfg.SessionAutoHarvest = &autoHarvest
 	zen.ConfigMu.Lock()
 	zen.Config = zenCfg
 	zen.ConfigMu.Unlock()
+	zenScope := domain.AvailabilityScope{
+		ProviderID: "opencode", CredentialID: "opencode:public", ModelID: "deepseek-v4-flash-free",
+	}
+	t.Cleanup(func() {
+		if err := providerstate.Default().Recover(zenScope); err != nil {
+			t.Errorf("clear Zen availability observation: %v", err)
+		}
+	})
 
 	// Zen is healthy (not in its failover window) but rate-limited: the first
 	// summary candidate must fail fast and hand over to the Cline free chain.
