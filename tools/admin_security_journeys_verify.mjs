@@ -794,7 +794,12 @@ export async function runVerification(environment = process.env) {
     currentStep += '/finish';
     await page.locator('#passwordRecoveryFinish').click();
     currentStep += '/wait login';
-    await waitLogin(page);
+    try {
+      await waitLogin(page);
+    } catch (error) {
+      const state = await page.evaluate(() => ({ auth: document.documentElement.dataset.adminAuth, view: document.documentElement.dataset.adminAuthView, hash: location.hash, mode: typeof _adminAuthMode === 'undefined' ? 'undefined' : _adminAuthMode, passwordDisabled: document.getElementById('loginPassword')?.disabled, recoveryBusy: typeof _passwordRecoveryBusy === 'undefined' ? 'undefined' : _passwordRecoveryBusy, recoveryCompleted: typeof _passwordRecoveryCompleted === 'undefined' ? 'undefined' : _passwordRecoveryCompleted, recoveryRestartRequired: typeof _passwordRecoveryRestartRequired === 'undefined' ? 'undefined' : _passwordRecoveryRestartRequired, resultLength: document.getElementById('passwordRecoveryReplacementCode')?.textContent.length }));
+      throw new Error('recovery finish did not reach login: ' + JSON.stringify(state) + '; ' + diagnosticMessage(error));
+    }
     check(await page.evaluate(() => location.hash === '#login'), 'acknowledged recovery result returns to canonical #login', 'navigationChecks');
     equal(await page.locator('#passwordRecoveryReplacementCode').textContent(), '', 'replacement credential is cleared after leaving result', 'securityChecks');
   };
