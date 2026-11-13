@@ -784,6 +784,7 @@ export async function runVerification(environment = process.env) {
     equal(await page.locator('#passwordRecoveryReplacementCode').textContent(), '', 'replacement credential is cleared after leaving result', 'securityChecks');
   };
   const openRecovery = async page => {
+    await waitLogin(page);
     await page.locator('#forgotPasswordButton').waitFor({ state: 'visible' });
     await page.locator('#forgotPasswordButton').click();
     await waitAuthView(page, 'recover');
@@ -1085,6 +1086,7 @@ export async function runVerification(environment = process.env) {
     await openRecovery(recoveryPage);
     await recover(recoveryPage, issuedB, replacementReset, false);
     await session(primary, true, 'replay rejection leaves the replacement password session intact');
+    await recoveryPage.locator('#passwordRecoveryBack').click();
     currentStep = 'replacement recovery credential works through UI';
     await openRecovery(recoveryPage);
     const finalCode = await recover(recoveryPage, replacement, replacementReset);
@@ -1225,7 +1227,7 @@ export async function selfTests() {
     assert.match(String(runVerification), /security-overview-left/);
     assert.match(String(runVerification), /security-overview-right/);
     assert.doesNotMatch(String(runVerification), /access-account-card/);
-    assert.match(String(runVerification), /replacement recovery credential works through UI'[\s\S]*await openRecovery\(recoveryPage\)/);
+    assert.match(String(runVerification), /replay rejection leaves the replacement password session intact'[\s\S]*passwordRecoveryBack[\s\S]*replacement recovery credential works through UI'[\s\S]*await openRecovery\(recoveryPage\)/);
   });
   test('screenshot redaction restores recovery text and inputs even after capture failure', async () => {
     const vm = await import('node:vm');
