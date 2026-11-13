@@ -17,6 +17,7 @@ var Mu sync.Mutex
 // Publish, which stores a clone. A reader therefore keeps a coherent value for
 // the whole operation even while an admin update is applied.
 var live atomic.Pointer[Proxy]
+var saveLiveProxy = SaveProxy
 
 // heldLocked returns the published configuration, loading it on first use. The
 // caller must hold Mu (or otherwise guarantee exclusive access).
@@ -85,7 +86,7 @@ func Publish(c *Proxy) {
 		return
 	}
 	if len(next.ProviderModelPrefixes) > 0 {
-		if err := SaveProxy(platform.ResolveDataPath(ProxyPath, nil), next); err != nil {
+		if err := saveLiveProxy(platform.ResolveDataPath(ProxyPath, nil), next); err != nil {
 			log.Printf("proxy config save failed: %v", err)
 			return
 		}
@@ -98,7 +99,7 @@ func Publish(c *Proxy) {
 
 // SaveLocked persists the live configuration. The caller must hold Mu.
 func SaveLocked() {
-	if err := SaveProxy(platform.ResolveDataPath(ProxyPath, nil), heldLocked()); err != nil {
+	if err := saveLiveProxy(platform.ResolveDataPath(ProxyPath, nil), heldLocked()); err != nil {
 		log.Printf("proxy config save failed: %v", err)
 	}
 }

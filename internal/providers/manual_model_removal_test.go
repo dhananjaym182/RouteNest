@@ -1,8 +1,8 @@
 package providers
 
 import (
+	"errors"
 	"os"
-	"path/filepath"
 	"reflect"
 	"testing"
 	"time"
@@ -329,11 +329,14 @@ func TestRemoveModelFailedWritesAreTruthfulAndRetryable(t *testing.T) {
 				before := CooldownsPath
 				CooldownsPath = t.TempDir()
 				restore = func() { CooldownsPath = before }
+			case "config":
+				before := pruneModelReferences
+				pruneModelReferences = func(domain.ModelRemovalRef, bool, bool, bool) error {
+					return errors.New("injected config save failure")
+				}
+				restore = func() { pruneModelReferences = before }
 			default:
 				path := providerSyncFilePath
-				if failure == "config" {
-					path = filepath.Join(os.Getenv(platform.DataDirEnv), config.ProxyPath)
-				}
 				if err := os.Remove(path); err != nil {
 					t.Fatal(err)
 				}

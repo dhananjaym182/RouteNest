@@ -7,12 +7,12 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"os"
 	"strings"
 	"testing"
 
 	"routenest/internal/adminapi"
 	"routenest/internal/adminauth"
+	"routenest/internal/platform"
 	storeadminauth "routenest/internal/store/adminauth"
 )
 
@@ -137,7 +137,7 @@ func (r preparedRepository) Apply(ctx context.Context, event adminauth.AuditEven
 
 func TestWebBootstrapPreparedMutationReturnsCodeWithRestartRequired(t *testing.T) {
 	dir := t.TempDir()
-	if err := os.Chmod(dir, 0o700); err != nil {
+	if err := platform.EnsurePrivateDir(dir); err != nil {
 		t.Fatal(err)
 	}
 	repo, err := storeadminauth.Open(dir)

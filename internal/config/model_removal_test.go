@@ -1,8 +1,7 @@
 package config
 
 import (
-	"os"
-	"path/filepath"
+	"errors"
 	"reflect"
 	"testing"
 
@@ -30,19 +29,15 @@ func TestPruneModelReferencesPreservesPublishedSnapshotAndOrder(t *testing.T) {
 }
 
 func TestPruneModelReferencesFailedSaveDoesNotPublish(t *testing.T) {
-	path := t.TempDir()
-	t.Setenv("ROUTENEST_DATA_DIR", path)
+	t.Setenv("ROUTENEST_DATA_DIR", t.TempDir())
 	resetLive(t)
 	base := DefaultProxy()
 	base.ModelChain = []string{"gone"}
 	Publish(base)
 	before := Live()
-	if err := os.Remove(filepath.Join(path, ProxyPath)); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Mkdir(filepath.Join(path, ProxyPath), 0700); err != nil {
-		t.Fatal(err)
-	}
+	originalSave := saveModelReferences
+	saveModelReferences = func(string, *Proxy) error { return errors.New("injected save failure") }
+	t.Cleanup(func() { saveModelReferences = originalSave })
 	if err := PruneModelReferences(domain.ModelRemovalRef{ID: "gone", Source: "remote"}, true, true, false); err == nil || Live() != before {
 		t.Fatalf("failed save published cleanup: %v %+v", err, Live())
 	}

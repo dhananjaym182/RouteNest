@@ -8,6 +8,8 @@ import (
 	"routenest/internal/platform"
 )
 
+var saveProviderModelPrefixes = SaveProxy
+
 // ProviderModelIDReserved reports whether id is a stable provider identity,
 // including a deleted instance whose model namespace must never be reassigned.
 func ProviderModelIDReserved(id string) bool {
@@ -163,7 +165,7 @@ func EnsureProviderModelPrefixes(providerIDs []string, choosePrefix func(string,
 	if !changed {
 		return nil
 	}
-	if err := SaveProxy(platform.ResolveDataPath(ProxyPath, nil), next); err != nil {
+	if err := saveProviderModelPrefixes(platform.ResolveDataPath(ProxyPath, nil), next); err != nil {
 		return fmt.Errorf("save provider model namespaces: %w", err)
 	}
 	live.Store(next)

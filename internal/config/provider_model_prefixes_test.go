@@ -1,7 +1,7 @@
 package config
 
 import (
-	"os"
+	"errors"
 	"path/filepath"
 	"reflect"
 	"testing"
@@ -66,12 +66,6 @@ func TestEnsureProviderModelPrefixesPersistsReservationsBeforePublish(t *testing
 		t.Fatalf("restart lost reservations: prefixes=%v err=%v", reloaded.ProviderModelPrefixes, err)
 	}
 	current := Live()
-	if err := os.Remove(filepath.Join(dir, ProxyPath)); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Mkdir(filepath.Join(dir, ProxyPath), 0700); err != nil {
-		t.Fatal(err)
-	}
 	if err := EnsureProviderModelPrefixes(ids, choose); err != nil || Live() != current || calls != 3 {
 		t.Fatalf("unchanged reservations wrote or republished: err=%v calls=%d", err, calls)
 	}
@@ -83,9 +77,9 @@ func TestEnsureProviderModelPrefixesFailedSaveDoesNotPublish(t *testing.T) {
 	resetLive(t)
 	before := DefaultProxy()
 	live.Store(before)
-	if err := os.Mkdir(filepath.Join(dir, ProxyPath), 0700); err != nil {
-		t.Fatal(err)
-	}
+	originalSave := saveProviderModelPrefixes
+	saveProviderModelPrefixes = func(string, *Proxy) error { return errors.New("injected save failure") }
+	t.Cleanup(func() { saveProviderModelPrefixes = originalSave })
 	err := EnsureProviderModelPrefixes([]string{"antseed"}, func(string, *Proxy) (string, error) { return "as", nil })
 	if err == nil || Live() != before || before.ProviderModelPrefixes != nil {
 		t.Fatalf("failed registration published a namespace: err=%v prefixes=%v", err, Live().ProviderModelPrefixes)

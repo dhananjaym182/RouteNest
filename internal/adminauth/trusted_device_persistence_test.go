@@ -13,13 +13,14 @@ import (
 	"time"
 
 	"routenest/internal/adminauth"
+	"routenest/internal/platform"
 	authstore "routenest/internal/store/adminauth"
 )
 
 func trustedDeviceStore(t *testing.T) (string, *authstore.Store, *adminauth.Service, adminauth.Credentials, adminauth.Options) {
 	t.Helper()
 	dir := t.TempDir()
-	if err := os.Chmod(dir, 0700); err != nil {
+	if err := platform.EnsurePrivateDir(dir); err != nil {
 		t.Fatal(err)
 	}
 	repo, err := authstore.Open(dir)

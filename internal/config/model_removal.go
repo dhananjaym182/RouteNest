@@ -9,6 +9,8 @@ import (
 	"routenest/internal/platform"
 )
 
+var saveModelReferences = SaveProxy
+
 // PruneModelReferences removes stale route configuration using a private copy.
 // Global references survive when another offering still serves this logical ID.
 // A same-name provider pin survives when another live provider has that name.
@@ -102,7 +104,7 @@ func PruneModelReferences(ref domain.ModelRemovalRef, removeGlobal, removeSource
 	if reflect.DeepEqual(before, next) {
 		return nil
 	}
-	if err := SaveProxy(platform.ResolveDataPath(ProxyPath, nil), next); err != nil {
+	if err := saveModelReferences(platform.ResolveDataPath(ProxyPath, nil), next); err != nil {
 		return err
 	}
 	live.Store(next)

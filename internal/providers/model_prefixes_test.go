@@ -1,6 +1,7 @@
 package providers
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -196,13 +197,11 @@ func TestSaveCustomProviderReservesNamespaceBeforePublication(t *testing.T) {
 
 func TestSaveCustomProviderNamespaceFailureDoesNotPublishProvider(t *testing.T) {
 	installModelPrefixTest(t, nil)
-	path := filepath.Join(os.Getenv("ROUTENEST_DATA_DIR"), config.ProxyPath)
-	if err := os.Remove(path); err != nil {
-		t.Fatal(err)
+	originalEnsure := ensureProviderModelPrefixes
+	ensureProviderModelPrefixes = func([]string, func(string, *config.Proxy) (string, error)) error {
+		return errors.New("injected namespace save failure")
 	}
-	if err := os.Mkdir(path, 0700); err != nil {
-		t.Fatal(err)
-	}
+	t.Cleanup(func() { ensureProviderModelPrefixes = originalEnsure })
 	before := config.Live()
 	_, err := SaveCustomProvider(CustomProvider{ID: "antseed", Name: "AntSeed", BaseURL: "https://antseed.test/v1", Enabled: true, ModelIDs: []string{"deepseek-v4-flash"}})
 	if err == nil || Find("antseed") != nil || config.Live() != before || len(models.Snapshot()) != 0 {

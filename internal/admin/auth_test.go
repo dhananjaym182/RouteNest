@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -15,6 +14,7 @@ import (
 	"routenest/internal/adminapi"
 	"routenest/internal/adminauth"
 	"routenest/internal/domain"
+	"routenest/internal/platform"
 	poolstore "routenest/internal/store/accounts"
 	storeadminauth "routenest/internal/store/adminauth"
 )
@@ -127,7 +127,7 @@ func TestClientKeyMutationsRequireFinalConfirmationAndWriteRedactedAudit(t *test
 func newAdminAuthTestMux(t *testing.T) (*http.ServeMux, *adminSecurityRuntime) {
 	t.Helper()
 	dir := t.TempDir()
-	if err := os.Chmod(dir, 0o700); err != nil {
+	if err := platform.EnsurePrivateDir(dir); err != nil {
 		t.Fatal(err)
 	}
 	repo, err := storeadminauth.Open(dir)

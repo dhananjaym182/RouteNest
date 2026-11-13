@@ -14,6 +14,8 @@ import (
 	"routenest/internal/providerreg"
 )
 
+var ensureProviderModelPrefixes = config.EnsureProviderModelPrefixes
+
 // EnsureModelPrefixes durably reserves provider-scoped client model namespaces.
 // Startup and provider saves call this explicitly; read-only projections never
 // allocate prefixes. Disabled and deleted provider identities stay reserved.
@@ -79,7 +81,7 @@ func ensureModelPrefixesFor(providers []CustomProvider, records []domain.Model) 
 			return fmt.Errorf("raw model ID conflicts with reserved provider namespace %q", prefix)
 		}
 	}
-	return config.EnsureProviderModelPrefixes(ids, func(providerID string, current *config.Proxy) (string, error) {
+	return ensureProviderModelPrefixes(ids, func(providerID string, current *config.Proxy) (string, error) {
 		available := func(prefix string) bool {
 			if _, reserved := current.ProviderModelPrefixes[prefix]; reserved || rawNamespaces[prefix] {
 				return false

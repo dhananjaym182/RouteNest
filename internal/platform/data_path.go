@@ -139,6 +139,11 @@ func TestIsolatedDataDir() string {
 			log.Printf("Failed to create isolated test data dir: %v", err)
 			return
 		}
+		if err := EnsurePrivateDir(dir); err != nil {
+			log.Printf("Failed to secure isolated test data dir: %v", err)
+			_ = os.RemoveAll(dir)
+			return
+		}
 		testDataDir = dir
 	})
 	return testDataDir

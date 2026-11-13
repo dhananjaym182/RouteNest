@@ -2,10 +2,9 @@ package providers
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -196,18 +195,11 @@ func TestRemoveDelistedModelSaveFailuresAreTruthfulAndRetryable(t *testing.T) {
 				accounts.PoolPath = t.TempDir()
 				restore = func() { accounts.PoolPath = before }
 			case "config":
-				path := filepath.Join(os.Getenv("ROUTENEST_DATA_DIR"), config.ProxyPath)
-				if err := os.Remove(path); err != nil {
-					t.Fatal(err)
+				before := pruneModelReferences
+				pruneModelReferences = func(domain.ModelRemovalRef, bool, bool, bool) error {
+					return errors.New("injected config save failure")
 				}
-				if err := os.Mkdir(path, 0700); err != nil {
-					t.Fatal(err)
-				}
-				restore = func() {
-					if err := os.Remove(path); err != nil {
-						t.Fatal(err)
-					}
-				}
+				restore = func() { pruneModelReferences = before }
 			}
 			removed, err := RemoveDelistedModel(ref)
 			if err == nil || removed {

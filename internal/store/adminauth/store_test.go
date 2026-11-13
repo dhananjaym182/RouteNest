@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	auth "routenest/internal/adminauth"
+	"routenest/internal/platform"
 	"strings"
 	"sync"
 	"testing"
@@ -249,7 +250,7 @@ func TestCanceledAndInvalidMutationsLeaveStoreUsable(t *testing.T) {
 func privateDir(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
-	if e := os.Chmod(dir, 0700); e != nil {
+	if e := platform.EnsurePrivateDir(dir); e != nil {
 		t.Fatal(e)
 	}
 	return dir

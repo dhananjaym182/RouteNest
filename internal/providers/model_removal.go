@@ -21,6 +21,7 @@ var modelLifecycleMu sync.Mutex
 // The composition root includes offline builtin offerings in this read-only
 // catalogue. The local projection keeps this package independently testable.
 var ModelRemovalOfferingsProvider = SnapshotModelOfferings
+var pruneModelReferences = config.PruneModelReferences
 
 // RemoveDelistedModel removes one verified delisted offering and its stale
 // references. Each store write is strict. A failure may leave earlier cleanup
@@ -155,7 +156,7 @@ func removeModel(input domain.ModelRemovalRef, explicit bool) (bool, error) {
 			return false, fmt.Errorf("model offerings unavailable after removal: %w", err)
 		}
 	}
-	if err := config.PruneModelReferences(configRef, !globalLive, !sourceLive, !nameLive && (target != nil || ref.Source != models.SourceProvider)); err != nil {
+	if err := pruneModelReferences(configRef, !globalLive, !sourceLive, !nameLive && (target != nil || ref.Source != models.SourceProvider)); err != nil {
 		return false, fmt.Errorf("persist routing references: %w", err)
 	}
 	return removed, nil

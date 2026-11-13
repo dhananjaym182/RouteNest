@@ -1,7 +1,7 @@
 package config
 
 import (
-	"os"
+	"errors"
 	"path/filepath"
 	"reflect"
 	"testing"
@@ -72,8 +72,7 @@ func TestPublishRejectsProviderModelPrefixRemappingAndDuplicateIdentity(t *testi
 func TestPublishNamespaceSaveFailurePreservesPreviousSnapshot(t *testing.T) {
 	for _, reserved := range []bool{false, true} {
 		t.Run(map[bool]string{false: "first reservation", true: "existing reservation"}[reserved], func(t *testing.T) {
-			dir := t.TempDir()
-			t.Setenv("ROUTENEST_DATA_DIR", dir)
+			t.Setenv("ROUTENEST_DATA_DIR", t.TempDir())
 			resetLive(t)
 			base := DefaultProxy()
 			if reserved {
@@ -81,13 +80,9 @@ func TestPublishNamespaceSaveFailurePreservesPreviousSnapshot(t *testing.T) {
 			}
 			Publish(base)
 			before := Live()
-			path := filepath.Join(dir, ProxyPath)
-			if err := os.Remove(path); err != nil {
-				t.Fatal(err)
-			}
-			if err := os.Mkdir(path, 0700); err != nil {
-				t.Fatal(err)
-			}
+			originalSave := saveLiveProxy
+			saveLiveProxy = func(string, *Proxy) error { return errors.New("injected save failure") }
+			t.Cleanup(func() { saveLiveProxy = originalSave })
 			next := DefaultProxy()
 			next.OnlyFree = true
 			if !reserved {

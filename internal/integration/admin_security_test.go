@@ -2,18 +2,18 @@ package integration
 
 import (
 	"net/http"
-	"os"
 	"testing"
 
 	"routenest/internal/admin"
 	"routenest/internal/adminauth"
+	"routenest/internal/platform"
 	storeadminauth "routenest/internal/store/adminauth"
 )
 
 func integrationAdminRegistrar(t *testing.T, canonicalURL string) func(*http.ServeMux) {
 	t.Helper()
 	dir := t.TempDir()
-	if err := os.Chmod(dir, 0o700); err != nil {
+	if err := platform.EnsurePrivateDir(dir); err != nil {
 		t.Fatal(err)
 	}
 	repo, err := storeadminauth.Open(dir)

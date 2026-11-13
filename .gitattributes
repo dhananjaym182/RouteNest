@@ -1,0 +1,3 @@
+*.golden text eol=lf
+internal/admin/testdata/*.json text eol=lf
+internal/providerreg/testdata/*.json text eol=lf
