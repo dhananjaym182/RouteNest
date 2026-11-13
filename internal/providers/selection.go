@@ -17,6 +17,17 @@ import (
 // 换组内下一家重试，全部失败才降级到回退链上的其他模型。冷却中与预算超限的
 // provider 不入候选，路由在派发前就避开配额墙。
 func ResolveForModel(model string) []*CustomProvider {
+	return resolveForModel(model, false)
+}
+
+// ResolveForModelProbe resolves candidates for an explicit admin probe. It
+// keeps provider/offering configuration checks but deliberately bypasses
+// runtime cooldowns, connection cooling and configured-budget admission gates.
+func ResolveForModelProbe(model string) []*CustomProvider {
+	return resolveForModel(model, true)
+}
+
+func resolveForModel(model string, probe bool) []*CustomProvider {
 	Load()
 	Mu.Lock()
 	defer Mu.Unlock()
@@ -24,31 +35,24 @@ func ResolveForModel(model string) []*CustomProvider {
 	now := time.Now()
 	legacyOwners := providerLegacyOwnerCountsLocked()
 	for _, p := range CustomProviders {
-		if !p.Enabled {
+		if !providerEligibleForProbeLocked(p, model, legacyOwners) {
 			continue
 		}
-		for _, m := range p.ModelIDs {
-			if m != model {
-				continue
-			}
-			if !providerOfferingEligibleScoped(*p, model, providerMayInheritLegacy(*p, model, legacyOwners)) {
-				break
-			}
+		if !probe {
 			if until, cool := Cooldowns[p.ID+":"+model]; cool && now.Before(until) {
-				break // 该 provider 的该模型冷却中
+				continue // 该 provider 的该模型冷却中
 			}
 			// 预算上限：超限的 provider 不入候选，路由在派发前就避开配额墙
 			if providerBudgetExceeded(p.ID, model, p.RpmLimit, p.DailyLimit, p.TokenLimit, p.TokenWindow) {
-				break
+				continue
 			}
 			// Bound connections: provider stays out of candidates only when EVERY
 			// pooled connection is missing/expired/pending reauth (fallback chain takes over).
 			if len(connections.ProviderConnIDs(p)) > 0 && !connections.HasUsableConnection(p) {
-				break
+				continue
 			}
-			cs = append(cs, providerCand{p: *cloneProvider(p)})
-			break
 		}
+		cs = append(cs, providerCand{p: *cloneProvider(p)})
 	}
 	cs = orderProviderCands(cs, model)
 	out := make([]*CustomProvider, 0, len(cs))
@@ -56,6 +60,20 @@ func ResolveForModel(model string) []*CustomProvider {
 		out = append(out, &cs[i].p)
 	}
 	return out
+}
+
+func providerEligibleForProbeLocked(p *CustomProvider, model string, legacyOwners map[string]int) bool {
+	if p == nil || !p.Enabled {
+		return false
+	}
+	listed := false
+	for _, candidate := range p.ModelIDs {
+		if candidate == model {
+			listed = true
+			break
+		}
+	}
+	return listed && providerOfferingEligibleScoped(*p, model, providerMayInheritLegacy(*p, model, legacyOwners))
 }
 
 // ResolveOne 找到该模型的首选 provider（启用中、未冷却、优先级最小）。
@@ -243,6 +261,17 @@ func SplitPin(model string) (bare, pin string) {
 // Eligibility cannot turn an unavailable ID pin into a display-name fallback.
 // Model IDs, including embedded '@' characters, are passed through unchanged.
 func ResolveNamedForModel(model, name string) []*CustomProvider {
+	return resolveNamedForModel(model, name, false)
+}
+
+// ResolveNamedForModelProbe is the strict pinned-provider counterpart to
+// ResolveForModelProbe. Identity, enabled state, model membership and offering
+// validity remain enforced; transient runtime and budget gates are not.
+func ResolveNamedForModelProbe(model, name string) []*CustomProvider {
+	return resolveNamedForModel(model, name, true)
+}
+
+func resolveNamedForModel(model, name string, probe bool) []*CustomProvider {
 	Load()
 	Mu.Lock()
 	defer Mu.Unlock()
@@ -264,10 +293,16 @@ func ResolveNamedForModel(model, name string) []*CustomProvider {
 		if !providerPinMatches(*p, name, idPin) {
 			continue
 		}
-		// 禁用、不提供该模型、被下架、冷却中或预算用尽都排除；原因见 pinBlockLocked，
-		// PinUnavailableReason 用同一判断向调用方解释。
-		if pinBlockLocked(p, model, now, legacyOwners) != "" {
-			continue
+		if probe {
+			if !providerEligibleForProbeLocked(p, model, legacyOwners) {
+				continue
+			}
+		} else {
+			// 禁用、不提供该模型、被下架、冷却中或预算用尽都排除；原因见 pinBlockLocked，
+			// PinUnavailableReason 用同一判断向调用方解释。
+			if pinBlockLocked(p, model, now, legacyOwners) != "" {
+				continue
+			}
 		}
 		cs = append(cs, providerCand{p: *cloneProvider(p)})
 	}

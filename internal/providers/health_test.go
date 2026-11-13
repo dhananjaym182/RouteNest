@@ -166,3 +166,62 @@ func TestProviderCooldownResetAndListPayload(t *testing.T) {
 		t.Fatalf("health missing provR: %v", ov.Health)
 	}
 }
+
+func TestProviderCooldownResetClearsEveryMatchingCooldownScopeOnly(t *testing.T) {
+	installProviders(t, &CustomProvider{ID: "prov_scope_reset", Name: "Scoped reset"})
+	now := time.Now()
+	store := providerstate.NewStore(func() time.Time { return now })
+	if err := providerstate.Publish(store); err != nil {
+		t.Fatal(err)
+	}
+	providerID := domain.ProviderInstanceID("prov_scope_reset")
+	modelScope := domain.AvailabilityScope{ProviderID: providerID, ModelID: "m1"}
+	credentialScope := domain.AvailabilityScope{ProviderID: providerID, CredentialID: "api-key:prov_scope_reset", ModelID: "m1"}
+	egressScope := domain.AvailabilityScope{ProviderID: providerID, CredentialID: "api-key:prov_scope_reset", ModelID: "m1", EgressID: "proxy-1"}
+	broadEgressScope := domain.AvailabilityScope{ProviderID: providerID, EgressID: "proxy-2"}
+	authScope := domain.AvailabilityScope{ProviderID: providerID, CredentialID: "api-key:auth", ModelID: "m1"}
+	siblingScope := domain.AvailabilityScope{ProviderID: providerID, CredentialID: "api-key:sibling", ModelID: "m2"}
+
+	SetCooldown(string(providerID), "m1", now.Add(time.Hour))
+	for _, observation := range []domain.AvailabilityObservation{
+		{Kind: domain.ObservationQuotaExhausted, Scope: modelScope, Until: now.Add(time.Hour), ResetAt: now.Add(time.Hour), Source: "configured_window", Confidence: domain.ConfidenceExplicit},
+		{Kind: domain.ObservationRateLimited, Scope: credentialScope, Until: now.Add(time.Hour), Source: "retry-after", Confidence: domain.ConfidenceExplicit},
+		{Kind: domain.ObservationTransientFailure, Scope: egressScope, Until: now.Add(time.Hour), Source: "status", Confidence: domain.ConfidenceInferred},
+		{Kind: domain.ObservationRateLimited, Scope: broadEgressScope, Until: now.Add(time.Hour), Source: "retry-after", Confidence: domain.ConfidenceExplicit},
+		{Kind: domain.ObservationAuthExpired, Scope: authScope, Source: "status", Confidence: domain.ConfidenceExplicit},
+		{Kind: domain.ObservationRateLimited, Scope: siblingScope, Until: now.Add(time.Hour), Source: "retry-after", Confidence: domain.ConfidenceExplicit},
+	} {
+		if err := store.Apply(observation); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if removed := ResetCooldowns(string(providerID), "m1"); removed != 1 {
+		t.Fatalf("removed = %d, want one legacy cooldown", removed)
+	}
+	remaining := store.Snapshot(providerID)
+	for _, observation := range remaining {
+		if observation.Scope == credentialScope || observation.Scope == egressScope || observation.Scope == broadEgressScope ||
+			(observation.Scope == modelScope && observation.Source == "legacy_provider_cooldown") {
+			t.Errorf("matching cooldown survived reset: %+v", observation)
+		}
+	}
+	if !hasAvailabilityObservation(remaining, modelScope, domain.ObservationQuotaExhausted, "configured_window") {
+		t.Errorf("configured budget evidence was cleared by cooldown reset: %+v", remaining)
+	}
+	if !hasAvailabilityObservation(remaining, authScope, domain.ObservationAuthExpired, "status") {
+		t.Errorf("permanent auth evidence was cleared by cooldown reset: %+v", remaining)
+	}
+	if !hasAvailabilityObservation(remaining, siblingScope, domain.ObservationRateLimited, "retry-after") {
+		t.Errorf("sibling model cooldown was cleared by model reset: %+v", remaining)
+	}
+}
+
+func hasAvailabilityObservation(observations []domain.AvailabilityObservation, scope domain.AvailabilityScope, kind domain.ObservationKind, source string) bool {
+	for _, observation := range observations {
+		if observation.Scope == scope && observation.Kind == kind && observation.Source == source {
+			return true
+		}
+	}
+	return false
+}

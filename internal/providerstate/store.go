@@ -352,6 +352,63 @@ func (s *Store) recover(guard *ScopeGuard, scope domain.AvailabilityScope) error
 	})
 }
 
+// ClearCooldowns removes active, resettable runtime evidence for one provider.
+// A model-specific reset also includes broader scopes (an empty ModelID), since
+// those scopes block that model too. Durable configured-budget evidence and
+// permanent auth/model availability evidence are deliberately retained.
+func (s *Store) ClearCooldowns(providerID domain.ProviderInstanceID, modelID string) (int, error) {
+	if s == nil || !providerID.Valid() || modelID != strings.TrimSpace(modelID) {
+		return 0, fmt.Errorf("providerstate: invalid cooldown reset")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	now := s.now()
+	removed := 0
+	err := s.mutateLocked(context.Background(), func(state *BackendSnapshot) (bool, error) {
+		removed = 0 // mutateLocked may retry after a compare-and-swap conflict.
+		changed := purgeExpired(state, now)
+		for i := range state.Scopes {
+			entry := &state.Scopes[i]
+			if entry.Scope.ProviderID != providerID || modelID != "" && entry.Scope.ModelID != "" && entry.Scope.ModelID != modelID {
+				continue
+			}
+			kept := entry.Observations[:0]
+			entryRemoved := 0
+			for _, observation := range entry.Observations {
+				if resettableCooldown(observation) {
+					entryRemoved++
+					continue
+				}
+				kept = append(kept, observation)
+			}
+			if entryRemoved == 0 {
+				continue
+			}
+			entry.Observations = kept
+			entry.Revision++
+			removed += entryRemoved
+			changed = true
+		}
+		return changed, nil
+	})
+	if err != nil {
+		return 0, err
+	}
+	return removed, nil
+}
+
+func resettableCooldown(observation domain.AvailabilityObservation) bool {
+	if observation.Source == "configured_window" {
+		return false
+	}
+	switch observation.Kind {
+	case domain.ObservationRateLimited, domain.ObservationQuotaExhausted, domain.ObservationTransientFailure:
+		return true
+	default:
+		return false
+	}
+}
+
 func observationLess(a, b domain.AvailabilityObservation) bool {
 	if a.Scope != b.Scope {
 		return scopeLess(a.Scope, b.Scope)

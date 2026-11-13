@@ -6,8 +6,9 @@ package admin
 //	EP4 POST /admin/api/combos/test  {id, model?}               → 逐条目测组合
 //	    （/admin/api/providers/models 见文件尾 HandleProviderModels —— EP2）
 //
-// QuickModelTest 是共享入口（EP3/EP4 内核）：max_tokens=16 + 单条 "hi" user 消息，
-// 复用既有路由判定（provider 冷却/预算表是只读，测试旁路粘性会话与日志）。
+// QuickModelTest 是共享入口（EP3/EP4 内核）：max_tokens=1024 + 单条 "hi" user 消息。
+// 显式探测保留 provider/模型配置校验，但旁路运行时冷却和本地预算准入；生产派发
+// 仍严格执行这些限制。测试也旁路粘性会话与日志。
 // 上游失败 ≠ API 失败：一律 200 包裹 {success:true, data:{ok:false, error:...}}。
 
 import (
@@ -141,10 +142,27 @@ func RunQuickModelTest(model string, forcedProvider *CustomProvider, pinSource s
 		return result
 	}
 	model, pinSource = resolved.Model, resolved.Source
-	if pinSource == "provider" && forcedProvider == nil {
-		forcedProvider = FindEnabledProviderByName(resolved.Provider)
+	if pinSource == "provider" {
+		candidates := providers.ResolveNamedForModelProbe(model, resolved.Provider)
 		if forcedProvider == nil {
-			setResult(zen.UpstreamProvider, fmt.Sprintf("provider %q not found or disabled", resolved.Provider))
+			if len(candidates) > 0 {
+				forcedProvider = candidates[0]
+			}
+		} else {
+			eligible := false
+			for _, candidate := range candidates {
+				if forcedProvider.ID != "" && candidate.ID == forcedProvider.ID ||
+					forcedProvider.ID == "" && strings.EqualFold(strings.TrimSpace(candidate.Name), strings.TrimSpace(forcedProvider.Name)) {
+					eligible = true
+					break
+				}
+			}
+			if !eligible {
+				forcedProvider = nil
+			}
+		}
+		if forcedProvider == nil {
+			setResult(zen.UpstreamProvider, fmt.Sprintf("provider %q is not enabled for model %q", resolved.Provider, model))
 			return result
 		}
 	}
@@ -160,7 +178,7 @@ func RunQuickModelTest(model string, forcedProvider *CustomProvider, pinSource s
 	tryProvider := func(p *CustomProvider) {
 		result["providerId"] = p.ID
 		result["providerName"] = p.Name
-		resp, err := providers.Call(p, params, false)
+		resp, err := providers.ProbeCall(p, params, false)
 		if err != nil {
 			setResult(zen.UpstreamProvider, err.Error())
 			return
@@ -234,8 +252,8 @@ func RunQuickModelTest(model string, forcedProvider *CustomProvider, pinSource s
 
 	// cline 侧：先自定义 provider（若有），失败/缺席再走账号池。
 	var lastProviderErr error
-	for _, p := range providers.ResolveForModel(model) {
-		resp, err := providers.Call(p, params, false)
+	for _, p := range providers.ResolveForModelProbe(model) {
+		resp, err := providers.ProbeCall(p, params, false)
 		if err == nil {
 			result["providerId"] = p.ID
 			result["providerName"] = p.Name

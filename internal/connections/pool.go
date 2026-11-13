@@ -84,7 +84,7 @@ func ProviderConnIDs(p *CustomProvider) []string {
 // expired without a refresh token -> marked reauth_required (persisted) and
 // skipped; expired WITH a refresh token -> still returned (refresh is handled
 // by ConnectionBearer/token exchange on the call path).
-func connectionUsableLocked(c *Connection, now time.Time) bool {
+func connectionUsableLocked(c *Connection, now time.Time, ignoreCooldown bool) bool {
 	if c == nil || c.Status != "active" {
 		return false
 	}
@@ -92,6 +92,9 @@ func connectionUsableLocked(c *Connection, now time.Time) bool {
 		c.Status = "reauth_required"
 		saveConnectionsLocked()
 		return false
+	}
+	if ignoreCooldown {
+		return true
 	}
 	connPoolMu.Lock()
 	defer connPoolMu.Unlock()
@@ -101,10 +104,9 @@ func connectionUsableLocked(c *Connection, now time.Time) bool {
 	return true
 }
 
-// UsableConnectionsForProvider snapshots all currently usable connections of
-// a provider in rotation order (starting at the provider's cursor). Copies
-// are returned; callers never mutate the store through them.
-func UsableConnectionsForProvider(p *CustomProvider) []*Connection {
+// connectionsForProvider snapshots eligible connections in rotation order.
+// Copies are returned; callers never mutate the store through them.
+func connectionsForProvider(p *CustomProvider, ignoreCooldown bool) []*Connection {
 	ids := ProviderConnIDs(p)
 	if len(ids) == 0 {
 		return nil
@@ -123,7 +125,7 @@ func UsableConnectionsForProvider(p *CustomProvider) []*Connection {
 			if c.ID != id {
 				continue
 			}
-			if !connectionUsableLocked(c, now) {
+			if !connectionUsableLocked(c, now, ignoreCooldown) {
 				break
 			}
 			cp := *c
@@ -132,6 +134,19 @@ func UsableConnectionsForProvider(p *CustomProvider) []*Connection {
 		}
 	}
 	return out
+}
+
+// UsableConnectionsForProvider returns production-eligible connections. Active
+// process-local cooldowns are honored.
+func UsableConnectionsForProvider(p *CustomProvider) []*Connection {
+	return connectionsForProvider(p, false)
+}
+
+// ProbeConnectionsForProvider returns connections eligible for an explicit
+// admin probe. It ignores only process-local cooling; inactive, expired and
+// reauth-required credentials remain excluded.
+func ProbeConnectionsForProvider(p *CustomProvider) []*Connection {
+	return connectionsForProvider(p, true)
 }
 
 // HasUsableConnection reports whether at least one bound connection is
@@ -182,6 +197,21 @@ func SetConnectionCooldown(connID string, until time.Time) {
 	connPoolMu.Lock()
 	connCooling[connID] = until
 	connPoolMu.Unlock()
+}
+
+// ClearConnectionCooldowns removes only transient process-local cooling for
+// the supplied connections. Credential status and expiry are never changed.
+func ClearConnectionCooldowns(connIDs ...string) int {
+	connPoolMu.Lock()
+	defer connPoolMu.Unlock()
+	removed := 0
+	for _, id := range connIDs {
+		if _, exists := connCooling[id]; exists {
+			delete(connCooling, id)
+			removed++
+		}
+	}
+	return removed
 }
 
 // connectionCooldownActive reports whether a connection is currently parked.

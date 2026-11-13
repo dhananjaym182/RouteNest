@@ -25,7 +25,22 @@ func messageCount(params map[string]any) int {
 	return 0
 }
 
+type callOptions struct {
+	probe bool
+}
+
 func Call(p *CustomProvider, params map[string]any, stream bool) (*http.Response, error) {
+	return call(p, params, stream, callOptions{})
+}
+
+// ProbeCall performs one explicit admin probe. It preserves normal upstream
+// handling while bypassing transient connection cooling and configured budget
+// admission; production Call semantics and accounting remain unchanged.
+func ProbeCall(p *CustomProvider, params map[string]any, stream bool) (*http.Response, error) {
+	return call(p, params, stream, callOptions{probe: true})
+}
+
+func call(p *CustomProvider, params map[string]any, stream bool, options callOptions) (*http.Response, error) {
 	if p == nil {
 		return nil, fmt.Errorf("provider is nil")
 	}
@@ -65,7 +80,12 @@ func Call(p *CustomProvider, params map[string]any, stream bool) (*http.Response
 	// in place with the next one BEFORE the outer next-provider loop ever sees
 	// a failure. API-key-only providers make exactly one attempt, as before.
 	connIDs := connections.ProviderConnIDs(p)
-	conns := connections.UsableConnectionsForProvider(p)
+	var conns []*Connection
+	if options.probe {
+		conns = connections.ProbeConnectionsForProvider(p)
+	} else {
+		conns = connections.UsableConnectionsForProvider(p)
+	}
 	if len(connIDs) > 0 && len(conns) == 0 {
 		return nil, fmt.Errorf("provider %s: connection unavailable (expired or reauth required)", p.Name)
 	}
@@ -107,7 +127,7 @@ func Call(p *CustomProvider, params map[string]any, stream bool) (*http.Response
 		}
 		started := time.Now()
 		attemptID := invocationID
-		if p.ID != "" {
+		if p.ID != "" && !options.probe {
 			attemptID, err = AdmitDispatch(context.Background(), *p, modelKey, invocationID, started)
 			if err != nil {
 				return nil, fmt.Errorf("provider %s budget admission: %w", p.Name, err)
@@ -130,10 +150,12 @@ func Call(p *CustomProvider, params map[string]any, stream bool) (*http.Response
 		if resp.StatusCode == http.StatusOK {
 			if p.ID != "" {
 				recordProviderOutcome(p.ID, modelKey, true, latency)
-				TagResponseBudgetAttempt(resp, attemptID)
+				if !options.probe {
+					TagResponseBudgetAttempt(resp, attemptID)
+				}
 			}
 			if conn != nil {
-				// Consumed a real dispatch: move rotation past this connection.
+				// Preserve the established rotation behavior for calls and probes.
 				connections.AdvanceConnCursor(p, conn.ID)
 			}
 			connections.TagResponseConn(resp, conn)

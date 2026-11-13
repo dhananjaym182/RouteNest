@@ -109,6 +109,31 @@ func readReqModel(req *http.Request) string {
 	return m
 }
 
+func TestQuickModelTestBypassesProviderSelectionCooldown(t *testing.T) {
+	inactive := comboTestAccount("cooldown-fallback")
+	inactive.Status = "reauth_required"
+	installPool(t, nil, inactive)
+	provider := &CustomProvider{
+		ID: "probe_cooling", Name: "Cooling probe", BaseURL: "https://cooling-probe.example/v1",
+		Enabled: true, ModelIDs: []string{"cooling-model"},
+	}
+	installProviders(t, provider)
+	requests := 0
+	installTransport(t, func(req *http.Request) *http.Response {
+		requests++
+		return stubResp(req, http.StatusOK, okCompletion)
+	})
+	providers.SetCooldown(provider.ID, "cooling-model", time.Now().Add(time.Hour))
+	if got := providers.ResolveForModel("cooling-model"); len(got) != 0 {
+		t.Fatalf("fixture provider is not cooling: %+v", got)
+	}
+
+	result := admin.QuickModelTest("cooling-model", nil)
+	if result["ok"] != true || result["providerId"] != provider.ID || requests != 1 {
+		t.Fatalf("model probe was blocked by provider cooldown: result=%+v requests=%d", result, requests)
+	}
+}
+
 const okCompletion = `{"id":"ok","object":"chat.completion","choices":[{"index":0,"message":{"role":"assistant","content":"ok"},"finish_reason":"stop"}],"usage":{"prompt_tokens":1,"completion_tokens":1,"total_tokens":2}}`
 
 // TestMain installs the composition root before any test runs. The wiring is

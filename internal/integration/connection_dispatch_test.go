@@ -145,6 +145,57 @@ func TestCallProviderAllConnsDeadFailsOnce(t *testing.T) {
 	}
 }
 
+func TestProviderCooldownResetAlsoClearsBoundConnectionCooldown(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"ok"}}]}`))
+	}))
+	defer server.Close()
+	connection := importTestConn(t, "reset-connection-cooldown", "token", "reset-cooldown@example.invalid")
+	provider := &CustomProvider{
+		ID: "reset_conn", Name: "Reset connection", BaseURL: server.URL, Enabled: true,
+		ConnectionID: connection.ID, ModelIDs: []string{"m"},
+	}
+	installProviders(t, provider)
+	connections.SetConnectionCooldown(connection.ID, time.Now().Add(time.Hour))
+	providers.SetCooldown(provider.ID, "m", time.Now().Add(time.Hour))
+	if got := providers.ResolveForModel("m"); len(got) != 0 {
+		t.Fatalf("fixture provider is not blocked: %+v", got)
+	}
+
+	if removed := providers.ResetCooldowns(provider.ID, "m"); removed != 1 {
+		t.Fatalf("removed = %d, want 1", removed)
+	}
+	if got := providers.ResolveForModel("m"); len(got) != 1 || got[0].ID != provider.ID {
+		t.Fatalf("reset left bound connection cooling: %+v", got)
+	}
+}
+
+func TestSavedProviderProbeBypassesBoundConnectionCooldown(t *testing.T) {
+	requests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requests++
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"ok"}}]}`))
+	}))
+	defer server.Close()
+	connection := importTestConn(t, "probe-connection-cooldown", "token", "probe-cooldown@example.invalid")
+	provider := &CustomProvider{
+		ID: "probe_conn", Name: "Probe connection", BaseURL: server.URL, Enabled: true,
+		ConnectionID: connection.ID, ModelIDs: []string{"m"},
+	}
+	installProviders(t, provider)
+	connections.SetConnectionCooldown(connection.ID, time.Now().Add(time.Hour))
+
+	result, err := providers.ProbeSavedProvider(provider.ID, "m", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result["ok"] != true || requests != 1 {
+		t.Fatalf("probe was blocked by connection cooldown: result=%+v requests=%d", result, requests)
+	}
+}
+
 func TestRemoveConnectionPrunesProviders(t *testing.T) {
 	c1 := importTestConn(t, "testprov", "t1", "prune-a@x.io")
 	c2 := importTestConn(t, "testprov", "t2", "prune-b@x.io")

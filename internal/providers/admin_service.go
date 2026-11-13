@@ -18,6 +18,7 @@ import (
 	"routenest/internal/platform"
 	"routenest/internal/protocol/openaichat"
 	"routenest/internal/providerreg"
+	"routenest/internal/providerstate"
 	"routenest/internal/transport"
 )
 
@@ -281,28 +282,33 @@ func PresetEntries() []PresetEntry {
 	return out
 }
 
-// ResetCooldowns clears cooldown entries for a provider, optionally narrowed to
-// one model, and returns how many were removed.
+// ResetCooldowns clears transient legacy, normalized and bound-connection
+// cooldowns for a provider, optionally narrowed to one model. Configured budget
+// evidence and permanent auth/model evidence are preserved. The return value is
+// the number of legacy compatibility entries removed.
 func ResetCooldowns(id, model string) int {
+	Load()
 	Mu.Lock()
 	var removed int
-	var scopes []domain.AvailabilityScope
+	var connectionIDs []string
+	for _, provider := range CustomProviders {
+		if provider != nil && provider.ID == id {
+			connectionIDs = connections.ProviderConnIDs(provider)
+			break
+		}
+	}
 	for key := range Cooldowns {
 		pid := strings.SplitN(key, ":", 2)[0]
 		if pid != id {
 			continue
 		}
 		if model != "" {
-			m := key
 			if i := strings.Index(key, ":"); i >= 0 {
-				m = key[i+1:]
+				keyModel := key[i+1:]
+				if keyModel != "" && keyModel != model {
+					continue
+				}
 			}
-			if m != model {
-				continue
-			}
-		}
-		if scope, ok := legacyCooldownScope(key); ok {
-			scopes = append(scopes, scope)
 		}
 		delete(Cooldowns, key)
 		removed++
@@ -311,14 +317,22 @@ func ResetCooldowns(id, model string) int {
 		saveProviderCooldownsLocked()
 	}
 	Mu.Unlock()
-	recoverLegacyCooldownScopes(scopes)
-	if removed > 0 {
-		log.Printf("admin: provider cooldown reset id=%s model=%s removed=%d", id, model, removed)
+	connectionRemoved := connections.ClearConnectionCooldowns(connectionIDs...)
+	normalizedRemoved := 0
+	if providerstate.HasDefault() {
+		var err error
+		normalizedRemoved, err = providerstate.Default().ClearCooldowns(domain.ProviderInstanceID(id), model)
+		if err != nil {
+			log.Printf("admin: provider cooldown reset state id=%s model=%s: %v", id, model, err)
+		}
+	}
+	if removed > 0 || normalizedRemoved > 0 || connectionRemoved > 0 {
+		log.Printf("admin: provider cooldown reset id=%s model=%s removed=%d normalized=%d connections=%d", id, model, removed, normalizedRemoved, connectionRemoved)
 	}
 	return removed
 }
 
-// runProviderMiniTest 用 Call 发一条安全预算（1024 tokens / 单条 "hi"）
+// runProviderMiniTest 用 ProbeCall 发一条安全预算（1024 tokens / 单条 "hi"）
 // 非流式补全，返回测试结果 map：durationMs/model/ok,error?/inputTokens?/outputTokens?。
 // 预算不能用 16：推理模型会整份耗在 reasoning 上导致上游空正文假失败（issue #32）。
 func runProviderMiniTest(p *CustomProvider, model string) map[string]any {
@@ -328,7 +342,7 @@ func runProviderMiniTest(p *CustomProvider, model string) map[string]any {
 		"messages":   []any{map[string]any{"role": "user", "content": "hi"}},
 	}
 	started := time.Now()
-	resp, err := Call(p, params, false)
+	resp, err := ProbeCall(p, params, false)
 	result := map[string]any{"durationMs": time.Since(started).Milliseconds(), "model": model}
 	if upstream := UpstreamModelFor(*p, model); upstream != model {
 		result["upstreamModel"] = upstream

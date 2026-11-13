@@ -169,6 +169,35 @@ func TestCallClassifiesFailureIntoProviderState(t *testing.T) {
 	}
 }
 
+func TestSavedProviderProbeBypassesConfiguredBudgetAdmission(t *testing.T) {
+	now := time.Date(2026, 11, 12, 12, 0, 0, 0, time.UTC)
+	installTestBudget(t, func() time.Time { return now })
+	provider := &CustomProvider{
+		ID: "probe_budget", Name: "Probe budget", BaseURL: "https://probe-budget.example/v1",
+		APIKey: "secret", ModelIDs: []string{"m"}, Enabled: true, DailyLimit: 1,
+	}
+	installProviders(t, provider)
+	if _, err := AdmitDispatch(context.Background(), *provider, "m", "real-dispatch", now); err != nil {
+		t.Fatal(err)
+	}
+	if !providerBudgetExceeded(provider.ID, "m", provider.RpmLimit, provider.DailyLimit, provider.TokenLimit, provider.TokenWindow) {
+		t.Fatal("fixture failed to exhaust the configured request budget")
+	}
+
+	invoker := &recordingInvoker{responses: []*http.Response{adapterResponse(http.StatusOK, `{"choices":[{"message":{"content":"ok"}}]}`)}}
+	publishAdapterRegistry(t,
+		provideradapters.Bundle{ID: "openaicompat", Invoker: invoker},
+		provideradapters.Bundle{ID: "qoder", Invoker: &recordingInvoker{}},
+	)
+	result, err := ProbeSavedProvider(provider.ID, "m", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result["ok"] != true || len(invoker.inputs) != 1 {
+		t.Fatalf("probe was blocked by configured budget: result=%+v invocations=%d", result, len(invoker.inputs))
+	}
+}
+
 func TestCallAPIKeepsProviderAttribution(t *testing.T) {
 	invoker := &recordingInvoker{responses: []*http.Response{adapterResponse(http.StatusOK, `{}`)}}
 	publishAdapterRegistry(t,
