@@ -693,7 +693,6 @@ export async function runVerification(environment = process.env) {
           await geometry(page, surface);
           if (width === 1440) {
             await contrast(page, surface);
-            if (surface === 'security') await page.locator('#desktopSignInCard').scrollIntoViewIfNeeded();
             await screenshot(page, surface + '-' + theme + '-' + language + '-1440');
             await axe(page, surface);
           }
