@@ -160,7 +160,7 @@ const CONTRAST = {
   'recovery-form': [...AUTH_HEADER_CONTRAST, '#passwordRecoveryBack', '#passwordRecoveryTitle', '#passwordRecoveryHelp', '#passwordRecoveryForm label', '#passwordRecoveryCode', '#passwordRecoverySubmit', '#passwordRecoveryError'],
   'recovery-result': [...AUTH_HEADER_CONTRAST, '#passwordRecoveryResultTitle', '#passwordRecoveryResultView > p:not([hidden])', '#passwordRecoveryReplacementCode', '#passwordRecoveryResultView .recovery-confirm span', '#passwordRecoveryFinish'],
 };
-const SCOPES = { login: '.login-card', security: '#tab-security .access-settings', 'recovery-form': '.recovery-dialog', 'recovery-result': '.recovery-dialog' };
+const SCOPES = { login: '.login-card', security: '#tab-security', 'recovery-form': '.recovery-dialog', 'recovery-result': '.recovery-dialog' };
 
 export async function runVerification(environment = process.env) {
   const report = {
@@ -1215,11 +1215,12 @@ export async function selfTests() {
     assert.equal(retryDelay('12'), 12100);
     for (const value of ['0', '16', '-1', '1.5', undefined, 'Wed, 1 Jan', 'Infinity']) assert.equal(retryDelay(value), null);
   });
-  test('route inventory retains 13 routes and four canonical aliases', () => {
+  test('route inventory retains 13 routes, four canonical aliases, and real surface scopes', () => {
     assert.equal(TABS.length, 13);
     assert.equal(new Set(TABS).size, 13);
     assert.equal(Object.keys(ALIASES).length, 4);
     assert.ok(Object.values(ALIASES).every(value => TABS.includes(value)));
+    assert.equal(SCOPES.security, '#tab-security');
   });
   test('screenshot redaction restores recovery text and inputs even after capture failure', async () => {
     const vm = await import('node:vm');
