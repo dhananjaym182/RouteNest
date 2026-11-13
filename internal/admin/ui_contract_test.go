@@ -116,6 +116,23 @@ func TestAdminUIMarkupHasRequiredIDs(t *testing.T) {
 	}
 }
 
+func TestAdminUIMarkupIDsAreUnique(t *testing.T) {
+	counts := map[string]int{}
+	for _, match := range markupIDRe.FindAllStringSubmatch(adminHTML, -1) {
+		counts[match[1]]++
+	}
+	var duplicates []string
+	for id, count := range counts {
+		if count > 1 {
+			duplicates = append(duplicates, id)
+		}
+	}
+	sort.Strings(duplicates)
+	if len(duplicates) > 0 {
+		t.Fatalf("admin markup contains duplicate DOM ids: %v", duplicates)
+	}
+}
+
 // Every `_('id')` lookup must resolve to an element in the assembled markup or to
 // an element a script renders. The scripts tolerate a missing element in places,
 // so a renamed ID otherwise fails only at click time.

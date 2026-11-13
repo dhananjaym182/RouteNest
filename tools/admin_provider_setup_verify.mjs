@@ -355,7 +355,7 @@ try {
       await duplicateIDs(page);
       await closeSetup(page);
       check(await page.evaluate(() => window.__verifyZenNode.parentNode === window.__verifyZenParent && window.__verifyZenNode.closest('.tab-panel').id === 'tab-providers'), 'closing returns OpenCode node to Providers native settings');
-      const restore = await context.request.post(apiURL('/opencode/config/update'), { data: originalZen });
+      const restore = await context.request.post(apiURL('/opencode/config/update'), { headers: { Origin: base.origin }, data: originalZen });
       check(restore.ok() && (await restore.json()).success, 'restore temporary OpenCode configuration'); zenChanged = false;
       step = label + ': API provider branch';
       await openDirectory(page);
@@ -554,7 +554,7 @@ try {
       if (releaseCatalogue) releaseCatalogue();
       for (const release of [releaseConnectionRead, releaseZenRead, releaseLoginStart, releaseLoginStatus]) if (release) release();
       if (zenChanged && originalZen) {
-        try { await context.request.post(apiURL('/opencode/config/update'), { data: originalZen }); } catch { result.failures.push({ step: label, label: 'temporary Zen restore failed' }); }
+        try { await context.request.post(apiURL('/opencode/config/update'), { headers: { Origin: base.origin }, data: originalZen }); } catch { result.failures.push({ step: label, label: 'temporary Zen restore failed' }); }
       }
       closing = true;
       await context.close();

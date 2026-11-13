@@ -45,6 +45,7 @@ window.showConfirm = async message => { window.__desktopSimulation.confirmations
 window.toast = (message, tone) => { window.__desktopSimulation.toasts.push({ message, tone }); window.__persistSimulation(); };
 document.documentElement.dataset.theme = window.__desktopSimulation.colorScheme;
 document.getElementById('tab-security').style.display = 'block';
+document.querySelectorAll('#tab-security > .page-subpage').forEach(page => { page.style.display = page.dataset.subpage === 'devices' ? '' : 'none'; });
 applyLang();
 window.__fixtureReady = (async () => { if (await initializeAdminAuth()) await loadTrustedDevices(); })();
 `;

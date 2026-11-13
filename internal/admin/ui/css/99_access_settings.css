@@ -238,5 +238,8 @@
 @media (max-width:600px){
   #tab-security .security-card,#tab-security .security-summary-card,#tab-security .security-quick-actions,#tab-security .security-status-card{padding:var(--sp-4)}
   #tab-security .security-action-grid,#tab-security .access-form-grid,#tab-security .access-form-grid-three,#tab-security .access-reference-grid,#tab-security .access-role-options,#tab-security .desktop-signin-status{grid-template-columns:minmax(0,1fr)}
+  #tab-security input:not([type=checkbox],[type=hidden]),#tab-security select{min-height:44px}
+  #tab-security .access-card-head .btn,#tab-security .access-row-actions .btn{min-height:44px}
+  #tab-security .security-card .access-card-head .access-refresh{height:44px;min-height:44px}
   #tab-security .security-tabs .subtab{min-height:40px}
 }
