@@ -767,6 +767,7 @@ export async function runVerification(environment = process.env) {
     }
     if (reply.status === 503 && reply.envelope?.error === 'security_restart_required') restartRequired = true;
     success(reply, 'single-use code resets password through real recovery UI');
+    await waitAuthView(page, 'recovery-result');
     const replacement = await readRecoveryValue(page, '#passwordRecoveryReplacementCode', reply);
     check(replacement !== code, 'successful recovery rotates the credential', 'securityChecks', true);
     check(reply.envelope.data.loginRequired === true, 'recovery requires a separate password login', 'securityChecks');
@@ -1085,6 +1086,7 @@ export async function runVerification(environment = process.env) {
     await recover(recoveryPage, issuedB, replacementReset, false);
     await session(primary, true, 'replay rejection leaves the replacement password session intact');
     currentStep = 'replacement recovery credential works through UI';
+    await openRecovery(recoveryPage);
     const finalCode = await recover(recoveryPage, replacement, replacementReset);
     check(finalCode !== issuedA && finalCode !== issuedB && finalCode !== replacement, 'second successful reset returns another distinct replacement', 'securityChecks');
     await session(primary, false, 'using the replacement code also revokes newly created sessions');
@@ -1223,6 +1225,7 @@ export async function selfTests() {
     assert.match(String(runVerification), /security-overview-left/);
     assert.match(String(runVerification), /security-overview-right/);
     assert.doesNotMatch(String(runVerification), /access-account-card/);
+    assert.match(String(runVerification), /replacement recovery credential works through UI'[\s\S]*await openRecovery\(recoveryPage\)/);
   });
   test('screenshot redaction restores recovery text and inputs even after capture failure', async () => {
     const vm = await import('node:vm');
