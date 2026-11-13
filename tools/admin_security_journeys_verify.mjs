@@ -767,10 +767,13 @@ export async function runVerification(environment = process.env) {
     }
     if (reply.status === 503 && reply.envelope?.error === 'security_restart_required') restartRequired = true;
     success(reply, 'single-use code resets password through real recovery UI');
+    currentStep += '/wait for result';
     await waitAuthView(page, 'recovery-result');
+    currentStep += '/read replacement';
     const replacement = await readRecoveryValue(page, '#passwordRecoveryReplacementCode', reply);
     check(replacement !== code, 'successful recovery rotates the credential', 'securityChecks', true);
     check(reply.envelope.data.loginRequired === true, 'recovery requires a separate password login', 'securityChecks');
+    currentStep += '/verify result';
     check(await page.locator('#passwordRecoveryFinish').isDisabled(), 'replacement proof requires save acknowledgement', 'uiChecks');
     check(await page.evaluate(() => ['passwordRecoveryCode', 'passwordRecoveryNewPassword', 'passwordRecoveryConfirmPassword'].every(id => document.getElementById(id).value === '')), 'successful recovery clears all entered secret fields', 'securityChecks');
     await session(page.context(), false, 'recovery result does not grant an authenticated session');
