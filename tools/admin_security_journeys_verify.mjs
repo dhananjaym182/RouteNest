@@ -1087,6 +1087,7 @@ export async function runVerification(environment = process.env) {
     await recover(recoveryPage, issuedB, replacementReset, false);
     await session(primary, true, 'replay rejection leaves the replacement password session intact');
     await recoveryPage.locator('#passwordRecoveryBack').click();
+    await waitLogin(recoveryPage);
     currentStep = 'replacement recovery credential works through UI';
     await openRecovery(recoveryPage);
     const finalCode = await recover(recoveryPage, replacement, replacementReset);
@@ -1227,7 +1228,7 @@ export async function selfTests() {
     assert.match(String(runVerification), /security-overview-left/);
     assert.match(String(runVerification), /security-overview-right/);
     assert.doesNotMatch(String(runVerification), /access-account-card/);
-    assert.match(String(runVerification), /replay rejection leaves the replacement password session intact'[\s\S]*passwordRecoveryBack[\s\S]*replacement recovery credential works through UI'[\s\S]*await openRecovery\(recoveryPage\)/);
+    assert.match(String(runVerification), /replay rejection leaves the replacement password session intact'[\s\S]*passwordRecoveryBack[\s\S]*await waitLogin\(recoveryPage\)[\s\S]*replacement recovery credential works through UI'[\s\S]*await openRecovery\(recoveryPage\)/);
   });
   test('screenshot redaction restores recovery text and inputs even after capture failure', async () => {
     const vm = await import('node:vm');
