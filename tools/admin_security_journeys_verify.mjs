@@ -704,8 +704,8 @@ export async function runVerification(environment = process.env) {
           await geometry(page, surface, factor);
           await reachable(page, surface);
           if (surface === 'security') check(await page.evaluate(() => {
-            const account = document.querySelector('.access-account-card').getBoundingClientRect(), side = document.querySelector('.access-side-stack').getBoundingClientRect();
-            return side.top >= account.bottom - 2 && Math.abs(side.left - account.left) < 2;
+            const left = document.querySelector('.security-overview-left').getBoundingClientRect(), right = document.querySelector('.security-overview-right').getBoundingClientRect();
+            return right.top >= left.bottom - 2 && Math.abs(right.left - left.left) < 2;
           }), 'security columns genuinely reflow at the zoom-equivalent width', 'accessibilityChecks');
           report.counters.zoomCells++;
         }
@@ -1220,6 +1220,9 @@ export async function selfTests() {
     assert.equal(Object.keys(ALIASES).length, 4);
     assert.ok(Object.values(ALIASES).every(value => TABS.includes(value)));
     assert.equal(SCOPES.security, '#tab-security');
+    assert.match(String(runVerification), /security-overview-left/);
+    assert.match(String(runVerification), /security-overview-right/);
+    assert.doesNotMatch(String(runVerification), /access-account-card/);
   });
   test('screenshot redaction restores recovery text and inputs even after capture failure', async () => {
     const vm = await import('node:vm');
