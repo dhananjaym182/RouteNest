@@ -330,11 +330,11 @@ html[dir="rtl"] th:last-child,html[dir="rtl"] td:last-child{text-align:left}
   margin:0 auto;
 }
 .login-card,.recovery-dialog{
-  background:var(--surface) !important;
-  border:1px solid var(--border) !important;
-  border-radius:18px !important;
-  box-shadow:var(--shadow-md) !important;
-  padding:clamp(28px,4vw,40px) !important;
+  background:transparent;
+  border:0;
+  border-radius:0;
+  box-shadow:none;
+  padding:0;
   text-align:left;
   width:100%;
   box-sizing:border-box;
@@ -590,6 +590,11 @@ html:not([data-admin-auth="authenticated"]){scrollbar-gutter:stable}
 @media (max-width:600px){
   .auth-main{padding-top:clamp(20px,5vh,40px)}
 }
+@media (max-width:380px){
+  .auth-header-content{display:block}
+  .auth-wordmark{margin-bottom:var(--sp-1)}
+  .auth-preferences{justify-content:flex-start;flex-wrap:wrap}
+}
 .auth-brand-content{
   width:100%;
   max-width:480px;
@@ -685,7 +690,9 @@ html:not([data-admin-auth="authenticated"]){scrollbar-gutter:stable}
 }
 @media (max-width:600px){
   .auth-main{padding-block:20px}
-  .login-card,.recovery-dialog{padding:24px 18px !important;border-radius:14px !important;box-shadow:var(--shadow-sm) !important}
+}
+@media (prefers-reduced-motion:reduce){
+  .auth-page *{animation-duration:0s !important;transition-duration:0s !important}
 }
 
 /* ---------- 13. Drawers and modals ----------

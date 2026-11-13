@@ -4,10 +4,13 @@ package adminauth
 
 import (
 	"fmt"
-	"golang.org/x/sys/windows"
 	"os"
-	"routenest/internal/platform"
+	"path/filepath"
 	"unsafe"
+
+	"golang.org/x/sys/windows"
+
+	"routenest/internal/platform"
 )
 
 func lockRange() windows.Overlapped {
@@ -116,13 +119,10 @@ func secureCreatedWindowsPath(path string, directory bool) error {
 }
 func syncDirectory(string) error { return nil }
 func replaceSnapshot(old, new string) error {
-	o, e := windows.UTF16PtrFromString(old)
+	root, e := os.OpenRoot(filepath.Dir(old))
 	if e != nil {
 		return e
 	}
-	n, e := windows.UTF16PtrFromString(new)
-	if e != nil {
-		return e
-	}
-	return windows.MoveFileEx(o, n, windows.MOVEFILE_REPLACE_EXISTING|windows.MOVEFILE_WRITE_THROUGH)
+	defer root.Close()
+	return root.Rename(filepath.Base(old), filepath.Base(new))
 }

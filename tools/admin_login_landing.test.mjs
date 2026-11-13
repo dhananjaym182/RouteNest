@@ -6,6 +6,7 @@ import { adminSecuritySimulation } from './admin_security_devices.test.mjs';
 const head = readFileSync(new URL('../internal/admin/ui/head.html', import.meta.url), 'utf8');
 const login = readFileSync(new URL('../internal/admin/ui/html/pages/login.html', import.meta.url), 'utf8');
 const styles = readFileSync(new URL('../internal/admin/ui/css/50_components_a11y.css', import.meta.url), 'utf8');
+const optimizedStyles = readFileSync(new URL('../internal/admin/ui/css/100_ui_optimization.css', import.meta.url), 'utf8');
 const status = { initialized: true, bootstrapRequired: false, recoveryRequired: false, legacyRotationRequired: false, recoveryCodeAvailable: true, ssoProviders: [] };
 
 function statusAPI(overrides) {
@@ -63,6 +64,19 @@ test('an expired session returns to the landing and clears stale identity and pe
   assert.equal(ui.element('loginOverlay').style.display, 'flex');
 });
 
+test('login submission locks synchronously and an empty password restores the action', async () => {
+  const ui = await adminSecuritySimulation({ load: false, useNativeAPI: true });
+  ui.element('loginPassword').value = '';
+  const empty = ui.run('submitLogin()');
+  assert.equal(ui.element('loginSubmit').disabled, false);
+  await empty;
+  ui.element('loginPassword').value = 'test-password';
+  const submitted = ui.run('submitLogin()');
+  assert.equal(ui.element('loginSubmit').disabled, true);
+  await submitted;
+  assert.equal(ui.element('loginSubmit').disabled, false);
+});
+
 test('repeated unauthorized responses do not steal focus from the visible login form', async () => {
   const ui = await adminSecuritySimulation({ load: false, useNativeAPI: true });
   ui.element('loginPassword').closest = () => null;
@@ -95,6 +109,13 @@ test('a malformed successful session envelope cannot open the dashboard', async 
 test('the sign-in shell stays invisible during the pending check, so a reload does not flash it', () => {
   assert.match(styles, /html\[data-admin-auth="pending"\] \.auth-page\{[^}]*visibility:hidden[^}]*animation:auth-pending-reveal/);
   assert.match(styles, /@keyframes auth-pending-reveal\{to\{visibility:visible\}\}/);
+});
+
+test('the final login layer preserves page semantics, reduced motion, and 400 percent reflow', () => {
+  assert.doesNotMatch(optimizedStyles, /\.login-card,.recovery-dialog\{[^}]*background:[^}]*!important/);
+  assert.match(optimizedStyles, /@media \(prefers-reduced-motion:reduce\)\{\s*\.auth-page \*\{[^}]*animation-duration:0s !important[^}]*transition-duration:0s !important/);
+  assert.match(optimizedStyles, /@media \(max-width:380px\)\{[^}]*\.auth-header-content\{display:block\}/s);
+  assert.match(optimizedStyles, /@media \(max-width:380px\)\{[\s\S]*?\.auth-preferences\{[^}]*flex-wrap:wrap/);
 });
 
 test('the tab title is not "Sign in" while pending or after a verified session', async () => {

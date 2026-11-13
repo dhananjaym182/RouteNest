@@ -270,6 +270,7 @@ async function startSSOLogin(provider) {
 async function submitLogin() {
   const button = _('loginSubmit');
   if (button && button.disabled) return;
+  if (button) button.disabled = true;
   const username = (_('loginUsername') && _('loginUsername').value.trim()) || 'admin';
   const pwd = (_('loginPassword') && _('loginPassword').value) || '';
   const secret = (_('bootstrapSecret') && _('bootstrapSecret').value) || '';
@@ -277,14 +278,14 @@ async function submitLogin() {
   const confirm = (_('loginConfirmPassword') && _('loginConfirmPassword').value) || '';
   const bootstrap = _adminAuthMode === 'bootstrap' || _adminAuthMode === 'recovery';
   const rotating = bootstrap || _adminAuthMode === 'legacy';
-  if (!bootstrap && !pwd) { _('loginError').textContent = t('请输入管理员密码'); return; }
-  if (bootstrap && !secret) { _('loginError').textContent = t('请输入一次性本机密钥'); return; }
+  if (!bootstrap && !pwd) { _('loginError').textContent = t('请输入管理员密码'); if (button) button.disabled = false; return; }
+  if (bootstrap && !secret) { _('loginError').textContent = t('请输入一次性本机密钥'); if (button) button.disabled = false; return; }
   if (rotating && (adminPasswordTooShort(newPassword) || newPassword !== confirm)) {
     _('loginError').textContent = adminPasswordTooShort(newPassword) ? t('永久密码至少 8 位') : t('两次输入的密码不一致');
+    if (button) button.disabled = false;
     return;
   }
   _('loginError').textContent = '';
-  if (button) button.disabled = true;
   try {
     let path = '/login', body = { username: username, password: pwd };
     if (_adminAuthMode === 'bootstrap' || _adminAuthMode === 'recovery') {
