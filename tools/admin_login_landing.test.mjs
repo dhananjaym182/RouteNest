@@ -21,6 +21,7 @@ test('administrator entry is a standalone pending landing before JavaScript or a
   assert.match(styles, /html\[data-admin-auth="pending"\] #loginForm[^}]*display:none/);
   assert.match(styles, /html\[data-admin-auth="pending"\] #loginSSOProviders[^}]*display:none/);
   assert.match(login, /id="loginStatus"[^>]*role="status"/);
+  assert.match(login, /id="loginPassword"[^>]*\bautofocus\b/);
 });
 
 test('a fresh browser setup stays on the landing and requires the owner bootstrap proof', async () => {

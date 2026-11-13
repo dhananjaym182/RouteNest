@@ -30,6 +30,16 @@ type inspectionPath struct {
 	info      os.FileInfo
 }
 
+type inspectionRoot interface {
+	Close() error
+	OpenFile(string, int, os.FileMode) (*os.File, error)
+	Stat(string) (os.FileInfo, error)
+}
+
+type inspectionIdentity interface {
+	inspectionIdentity() (uint64, uint64, bool)
+}
+
 func Inspect(ctx context.Context, dataDir string) (auth.State, error) {
 	if dataDir == "" {
 		return auth.State{}, fmt.Errorf("administrator data directory is required")
@@ -89,7 +99,7 @@ func inspectOnce(ctx context.Context, dataDir string) (auth.State, error) {
 			return auth.State{}, ErrMissing
 		}
 	}
-	root, err := os.OpenRoot(dir)
+	root, err := openInspectionRoot(dir)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return auth.State{}, ErrUncertain
@@ -121,7 +131,7 @@ func inspectOnce(ctx context.Context, dataDir string) (auth.State, error) {
 }
 
 func inspectSecureInfo(path string, directory bool) (os.FileInfo, error) {
-	info, err := os.Lstat(path)
+	info, err := inspectionPathInfo(path)
 	if os.IsNotExist(err) {
 		return nil, nil
 	}
@@ -141,10 +151,24 @@ func sameInspectionInfo(before, after os.FileInfo, directory bool) bool {
 	if before == nil || after == nil {
 		return before == nil && after == nil
 	}
-	return os.SameFile(before, after) && before.Mode() == after.Mode() && (directory || before.Size() == after.Size() && before.ModTime().Equal(after.ModTime()))
+	return sameInspectionFile(before, after) && before.Mode() == after.Mode() && (directory || before.Size() == after.Size() && before.ModTime().Equal(after.ModTime()))
 }
 
-func openInspectionFile(root *os.Root, name string, expected os.FileInfo) (*os.File, error) {
+func sameInspectionFile(before, after os.FileInfo) bool {
+	left, leftOK := before.(inspectionIdentity)
+	right, rightOK := after.(inspectionIdentity)
+	if leftOK || rightOK {
+		if !leftOK || !rightOK {
+			return false
+		}
+		leftVolume, leftFile, leftValid := left.inspectionIdentity()
+		rightVolume, rightFile, rightValid := right.inspectionIdentity()
+		return leftValid && rightValid && leftVolume == rightVolume && leftFile == rightFile
+	}
+	return os.SameFile(before, after)
+}
+
+func openInspectionFile(root inspectionRoot, name string, expected os.FileInfo) (*os.File, error) {
 	file, err := root.OpenFile(name, os.O_RDONLY|syscall.O_NONBLOCK, 0)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -152,7 +176,7 @@ func openInspectionFile(root *os.Root, name string, expected os.FileInfo) (*os.F
 		}
 		return nil, err
 	}
-	info, err := file.Stat()
+	info, err := inspectionFileInfo(file)
 	if err != nil {
 		file.Close()
 		return nil, err
@@ -164,7 +188,7 @@ func openInspectionFile(root *os.Root, name string, expected os.FileInfo) (*os.F
 	return file, nil
 }
 
-func inspectFiles(ctx context.Context, root *os.Root, snapshotInfo, journalInfo, lockInfo os.FileInfo) (auth.State, error) {
+func inspectFiles(ctx context.Context, root inspectionRoot, snapshotInfo, journalInfo, lockInfo os.FileInfo) (auth.State, error) {
 	if journalInfo == nil || lockInfo == nil {
 		return auth.State{}, ErrMissing
 	}
@@ -198,7 +222,7 @@ func inspectFiles(ctx context.Context, root *os.Root, snapshotInfo, journalInfo,
 	return disk.State, nil
 }
 
-func inspectSnapshot(ctx context.Context, root *os.Root, info os.FileInfo) (snapshot, error) {
+func inspectSnapshot(ctx context.Context, root inspectionRoot, info os.FileInfo) (snapshot, error) {
 	if info.Size() > inspectionSnapshotLimit {
 		return snapshot{}, fmt.Errorf("%w: snapshot size limit", ErrCorrupt)
 	}
@@ -224,7 +248,7 @@ func inspectSnapshot(ctx context.Context, root *os.Root, info os.FileInfo) (snap
 	return value, nil
 }
 
-func inspectJournal(ctx context.Context, root *os.Root, info os.FileInfo) (auth.State, *record, error) {
+func inspectJournal(ctx context.Context, root inspectionRoot, info os.FileInfo) (auth.State, *record, error) {
 	if info.Size() > inspectionJournalLimit {
 		return auth.State{}, nil, fmt.Errorf("%w: journal size limit", ErrCorrupt)
 	}

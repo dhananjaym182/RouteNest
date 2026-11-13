@@ -204,7 +204,6 @@ function renderBootstrapSecretHelp(visible) {
 
 function showLogin(mode) {
   const root = document.documentElement;
-  const opening = !root || root.dataset.adminAuth !== 'signed-out' || !!mode && mode !== _adminAuthMode;
   renderAdminPrincipal(null);
   setAdminAuthMode(mode || _adminAuthMode);
   if (typeof syncAdminAuthRoute === 'function') syncAdminAuthRoute();
@@ -212,7 +211,9 @@ function showLogin(mode) {
   setTimeout(() => {
     if (root && root.dataset.adminAuthView && root.dataset.adminAuthView !== 'login') return;
     const target = (_adminAuthMode === 'bootstrap' || _adminAuthMode === 'recovery') ? _('bootstrapSecret') : _('loginPassword');
-    if (target && !target.closest('[inert]') && (opening || !document.activeElement || document.activeElement === document.body || !document.activeElement.closest('#adminAuthPage'))) target.focus();
+    const active = document.activeElement;
+    const activeInAuthPage = active && typeof active.closest === 'function' ? active.closest('#adminAuthPage') : active && active !== document.body;
+    if (target && !target.closest('[inert]') && (!active || active === document.body || !activeInAuthPage)) target.focus();
   }, 50);
 }
 

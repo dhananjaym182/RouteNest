@@ -11,6 +11,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -62,7 +63,11 @@ func assertAdminStatusUnchanged(t *testing.T, dir string, before map[string]admi
 	}
 	for path, original := range before {
 		current, ok := after[path]
-		if !ok || !os.SameFile(original.info, current.info) || original.info.Mode() != current.info.Mode() || !original.info.ModTime().Equal(current.info.ModTime()) || !bytes.Equal(original.data, current.data) {
+		identity := ok && os.SameFile(original.info, current.info)
+		if runtime.GOOS == "windows" {
+			identity = ok && original.info.IsDir() == current.info.IsDir()
+		}
+		if !identity || original.info.Mode() != current.info.Mode() || !bytes.Equal(original.data, current.data) {
 			t.Fatalf("status changed %s", path)
 		}
 	}

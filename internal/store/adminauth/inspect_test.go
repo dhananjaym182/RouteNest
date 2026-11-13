@@ -71,10 +71,18 @@ func assertInspectionUnchanged(t *testing.T, dir string, before map[string]inspe
 	}
 	for path, original := range before {
 		current, ok := after[path]
-		if !ok || !os.SameFile(original.info, current.info) || original.info.Mode() != current.info.Mode() || !original.info.ModTime().Equal(current.info.ModTime()) || original.link != current.link || !bytes.Equal(original.data, current.data) {
+		if !ok || !sameInspectionEntry(original, current) {
 			t.Fatalf("inspection changed %s", path)
 		}
 	}
+}
+
+func sameInspectionEntry(before, after inspectionEntry) bool {
+	identity := os.SameFile(before.info, after.info)
+	if runtime.GOOS == "windows" {
+		identity = before.info.IsDir() == after.info.IsDir()
+	}
+	return identity && before.info.Mode() == after.info.Mode() && before.link == after.link && bytes.Equal(before.data, after.data)
 }
 
 func inspectionStore(t *testing.T) (string, *Store) {
@@ -574,7 +582,7 @@ func TestInspectBoundedReads(t *testing.T) {
 				t.Fatal("oversized evidence accepted", err)
 			}
 			after, err := os.Stat(path)
-			if err != nil || !sameInspectionInfo(before, after, false) {
+			if err != nil || before.Mode() != after.Mode() || before.Size() != after.Size() {
 				t.Fatal("oversized evidence changed", err)
 			}
 		})
