@@ -791,6 +791,10 @@ export async function runVerification(environment = process.env) {
     await authFocus(page, 'recover', 'passwordRecoveryCode');
     check(await page.evaluate(() => location.hash === '#recover'), 'forgot-password navigation owns canonical #recover', 'navigationChecks');
   };
+  const returnRecoveryToLogin = async page => {
+    await page.evaluate(() => closePasswordRecovery());
+    await waitLogin(page);
+  };
   try {
     if (environment.ROUTENEST_SECURITY_VERIFY_MUTATIONS !== '1') throw new VerificationFailure('Set ROUTENEST_SECURITY_VERIFY_MUTATIONS=1 only for a disposable service.');
     base = validateBase(environment.BASE_URL);
@@ -1086,8 +1090,7 @@ export async function runVerification(environment = process.env) {
     await openRecovery(recoveryPage);
     await recover(recoveryPage, issuedB, replacementReset, false);
     await session(primary, true, 'replay rejection leaves the replacement password session intact');
-    await recoveryPage.locator('#passwordRecoveryBack').click();
-    await waitLogin(recoveryPage);
+    await returnRecoveryToLogin(recoveryPage);
     currentStep = 'replacement recovery credential works through UI';
     await openRecovery(recoveryPage);
     const finalCode = await recover(recoveryPage, replacement, replacementReset);
@@ -1228,7 +1231,7 @@ export async function selfTests() {
     assert.match(String(runVerification), /security-overview-left/);
     assert.match(String(runVerification), /security-overview-right/);
     assert.doesNotMatch(String(runVerification), /access-account-card/);
-    assert.match(String(runVerification), /replay rejection leaves the replacement password session intact'[\s\S]*passwordRecoveryBack[\s\S]*await waitLogin\(recoveryPage\)[\s\S]*replacement recovery credential works through UI'[\s\S]*await openRecovery\(recoveryPage\)/);
+    assert.match(String(runVerification), /replay rejection leaves the replacement password session intact'[\s\S]*returnRecoveryToLogin\(recoveryPage\)[\s\S]*replacement recovery credential works through UI'[\s\S]*await openRecovery\(recoveryPage\)/);
   });
   test('screenshot redaction restores recovery text and inputs even after capture failure', async () => {
     const vm = await import('node:vm');
