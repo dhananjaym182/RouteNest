@@ -259,8 +259,19 @@ try {
             check(await page.locator('#tab-health #globalHealthSummary').count(), 1, label + ': existing health summary retained');
           }
           if (tab === 'security') {
-            check(await page.locator('#localAdminPasswordForm').isVisible(), true, label + ': administrator password is directly visible');
-            check(await page.locator('#tab-security .page-subtabs').count(), 0, label + ': administrator security is not nested under page tabs');
+            check(await page.locator('#localAdminPasswordForm').isVisible(), true, label + ': administrator password form visible in identity subtab');
+            const securitySubtabs = page.locator('#tab-security .page-subtabs');
+            check(await securitySubtabs.count(), 1, label + ': security has sub-tabs navigation');
+            const subtabButtons = securitySubtabs.locator('.subtab');
+            check(await subtabButtons.count(), 5, label + ': security has five sub-tabs');
+            const subtabLabels = await subtabButtons.evaluateAll(els => els.map(e => e.textContent.trim()));
+            check(subtabLabels.includes('身份与访问'), true, label + ': identity subtab present');
+            check(subtabLabels.includes('设备与会话'), true, label + ': devices subtab present');
+            check(subtabLabels.includes('网络访问'), true, label + ': network subtab present');
+            check(subtabLabels.includes('团队与 SSO'), true, label + ': team subtab present');
+            check(subtabLabels.includes('危险操作'), true, label + ': danger subtab present');
+            // Verify identity subtab is active by default
+            check(await page.locator('#tab-security .page-subpage[data-subpage="identity"]').isVisible(), true, label + ': identity subpage shown by default');
           }
           if (tab === 'credentials') {
             await page.locator('#tab-credentials .subtab[data-sub="client-keys"]').click();

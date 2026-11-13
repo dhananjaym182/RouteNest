@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"routenest/internal/app"
+	"routenest/internal/platform"
 	"testing"
 
 	"routenest/internal/accounts"
@@ -14,11 +15,17 @@ import (
 // 单元测试绝不读写用户真实的 .cline-accounts.json。
 func TestMain(m *testing.M) {
 	_ = os.Setenv(accounts.InitializeEmptyAccountStoreEnv, "true")
-	app.Configure()
+
+	// Create temp dir FIRST and set ROUTENEST_DATA_DIR so providerstate/runtime-state
+	// is isolated to this test run (before app.Configure initializes them).
 	tmp, err := os.MkdirTemp("", "routenest-test-*")
 	if err != nil {
 		panic(err)
 	}
+	_ = os.Setenv(platform.DataDirEnv, tmp)
+
+	app.Configure()
+
 	accounts.PoolPath = filepath.Join(tmp, ".cline-accounts.json")
 	requestlog.Path = filepath.Join(tmp, ".cline-request-logs.json")
 
