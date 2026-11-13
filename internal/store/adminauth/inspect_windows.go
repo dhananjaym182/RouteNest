@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"syscall"
 	"time"
 
 	"golang.org/x/sys/windows"
@@ -37,7 +38,7 @@ func (root *windowsInspectionRoot) Stat(name string) (os.FileInfo, error) {
 }
 
 func (root *windowsInspectionRoot) OpenFile(name string, flag int, _ os.FileMode) (*os.File, error) {
-	if flag&^(os.O_RDONLY) != 0 {
+	if flag != os.O_RDONLY && flag != os.O_RDONLY|syscall.O_NONBLOCK {
 		return nil, &os.PathError{Op: "open", Path: name, Err: errors.New("unsupported file mode")}
 	}
 	path, err := root.resolve(name)

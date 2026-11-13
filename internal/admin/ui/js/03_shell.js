@@ -114,6 +114,7 @@ function fallbackCopy(text) {
 let _adminAuthMode = 'login';
 let _adminAuthStatus = null;
 let _adminPrincipal = null;
+let _adminLoginFocusEstablished = false;
 const ADMIN_PASSWORD_MIN_LENGTH = 8;
 
 function adminPasswordTooShort(password) {
@@ -202,19 +203,29 @@ function renderBootstrapSecretHelp(visible) {
   box.appendChild(list);
 }
 
-function showLogin(mode) {
+function focusAdminLoginTarget(attempt = 0) {
   const root = document.documentElement;
+  if (root && root.dataset.adminAuthView !== 'login') return;
+  const target = (_adminAuthMode === 'bootstrap' || _adminAuthMode === 'recovery') ? _('bootstrapSecret') : _('loginPassword');
+  const active = document.activeElement;
+  const activeInAuthPage = active && typeof active.closest === 'function' ? active.closest('#adminAuthPage') : active && active !== document.body;
+  if (_adminLoginFocusEstablished && activeInAuthPage) return;
+  if (target && !target.disabled && !target.closest('[inert]')) {
+    target.focus();
+    if (document.activeElement === target) {
+      _adminLoginFocusEstablished = true;
+      return;
+    }
+  }
+  if (attempt < 4) setTimeout(() => focusAdminLoginTarget(attempt + 1), 50);
+}
+
+function showLogin(mode) {
   renderAdminPrincipal(null);
   setAdminAuthMode(mode || _adminAuthMode);
   if (typeof syncAdminAuthRoute === 'function') syncAdminAuthRoute();
   else if (_('loginOverlay')) _('loginOverlay').style.display = 'flex';
-  setTimeout(() => {
-    if (root && root.dataset.adminAuthView && root.dataset.adminAuthView !== 'login') return;
-    const target = (_adminAuthMode === 'bootstrap' || _adminAuthMode === 'recovery') ? _('bootstrapSecret') : _('loginPassword');
-    const active = document.activeElement;
-    const activeInAuthPage = active && typeof active.closest === 'function' ? active.closest('#adminAuthPage') : active && active !== document.body;
-    if (target && !target.closest('[inert]') && (!active || active === document.body || !activeInAuthPage)) target.focus();
-  }, 50);
+  setTimeout(() => focusAdminLoginTarget(), 50);
 }
 
 function renderSSOLoginProviders() {

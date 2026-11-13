@@ -69,6 +69,7 @@ test('repeated unauthorized responses do not steal focus from the visible login 
   ui.context.setTimeout = callback => callback();
   assert.equal(await ui.run('initializeAdminAuth()'), true);
   ui.transport.authenticated = false;
+  ui.element('loginUsername').focus();
   await assert.rejects(ui.run('api("GET", "/auth/session")'), /Login required/);
   assert.equal(ui.document.activeElement.id, 'loginPassword');
   ui.element('loginUsername').focus();

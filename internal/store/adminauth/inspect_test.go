@@ -481,7 +481,7 @@ func TestInspectConcurrentSnapshotRevisions(t *testing.T) {
 func TestInspectFileIsReadOnlyAndAllowsSnapshotReplacement(t *testing.T) {
 	dataDir, store := inspectionStore(t)
 	dir := filepath.Join(dataDir, "admin-auth")
-	root, err := os.OpenRoot(dir)
+	root, err := openInspectionRoot(dir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -523,7 +523,7 @@ func TestInspectFileIdentityRejectsReplacement(t *testing.T) {
 		t.Fatal(err)
 	}
 	dir := filepath.Join(dataDir, "admin-auth")
-	root, err := os.OpenRoot(dir)
+	root, err := openInspectionRoot(dir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -676,7 +676,7 @@ func TestInspectJournalValidationMatchesRecovery(t *testing.T) {
 
 func inspectJournalFixture(t *testing.T, dir string) (auth.State, *record, error) {
 	t.Helper()
-	root, err := os.OpenRoot(dir)
+	root, err := openInspectionRoot(dir)
 	if err != nil {
 		t.Fatal(err)
 	}
