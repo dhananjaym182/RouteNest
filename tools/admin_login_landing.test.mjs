@@ -114,6 +114,7 @@ test('the sign-in shell stays invisible during the pending check, so a reload do
 test('the final login layer preserves page semantics, reduced motion, and 400 percent reflow', () => {
   assert.doesNotMatch(optimizedStyles, /\.login-card,.recovery-dialog\{[^}]*background:[^}]*!important/);
   assert.match(optimizedStyles, /@media \(prefers-reduced-motion:reduce\)\{\s*\.auth-page \*\{[^}]*animation-duration:0s !important[^}]*transition-duration:0s !important/);
+  assert.doesNotMatch(optimizedStyles, /transition:[^;}]+!important/);
   assert.match(optimizedStyles, /@media \(max-width:380px\)\{[^}]*\.auth-header-content\{display:block\}/s);
   assert.match(optimizedStyles, /@media \(max-width:380px\)\{[\s\S]*?\.auth-preferences\{[^}]*flex-wrap:wrap/);
 });

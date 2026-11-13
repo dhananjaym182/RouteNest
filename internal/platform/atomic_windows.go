@@ -2,7 +2,12 @@
 
 package platform
 
-import "golang.org/x/sys/windows"
+import (
+	"os"
+	"path/filepath"
+
+	"golang.org/x/sys/windows"
+)
 
 func syncDirectoryDurable(path string) error {
 	utf16Path, err := windows.UTF16PtrFromString(path)
@@ -23,15 +28,10 @@ func syncDirectoryDurable(path string) error {
 }
 
 func replaceFileAtomic(oldPath, newPath string) error {
-	oldUTF16, err := windows.UTF16PtrFromString(oldPath)
+	root, err := os.OpenRoot(filepath.Dir(oldPath))
 	if err != nil {
 		return err
 	}
-	newUTF16, err := windows.UTF16PtrFromString(newPath)
-	if err != nil {
-		return err
-	}
-	// MOVEFILE_WRITE_THROUGH waits for the move to complete on disk. The temp
-	// file itself has already been flushed by file.Sync before this call.
-	return windows.MoveFileEx(oldUTF16, newUTF16, windows.MOVEFILE_REPLACE_EXISTING|windows.MOVEFILE_WRITE_THROUGH)
+	defer root.Close()
+	return root.Rename(filepath.Base(oldPath), filepath.Base(newPath))
 }

@@ -426,6 +426,9 @@ export async function runVerification(environment = process.env) {
     check(devices.every(item => !Object.keys(item).some(key => /secret|token|password|hash/i.test(key))), 'device projection contains no credential/verifier fields', 'securityChecks');
     if (page) {
       await dismissNotice(page);
+      const activeSub = await page.locator('#tab-security .page-subtabs[data-page="security"] .subtab.active').getAttribute('data-sub') || 'identity';
+      if (activeSub !== 'devices') await page.locator('#tab-security .page-subtabs[data-page="security"] .subtab[data-sub="devices"]').click();
+      await page.locator('#tab-security .page-subpage[data-subpage="devices"]').waitFor({ state: 'visible' });
       await page.locator('#tab-security [onclick="loadAdminSessions()"]').click();
       await page.locator('#desktopSignInCard [onclick="loadTrustedDevices()"]').click();
       await page.waitForFunction(count => document.querySelectorAll('#adminSessionsList .access-list-row').length === count && typeof _trustedDesktopState !== 'undefined' && _trustedDesktopState?.devicesKnown === true, sessions.length);
@@ -433,6 +436,10 @@ export async function runVerification(environment = process.env) {
       equal(await page.locator('#trustedDevicesList [role="listitem"]').count(), devices.length, 'security UI accounts for every returned device', 'uiChecks');
       check(await page.locator('#trustedDevicesList .access-empty').isVisible(), 'zero devices is an explicit loaded empty state', 'uiChecks');
       await browserTrustHidden(page);
+      if (activeSub !== 'devices') {
+        await page.locator('#tab-security .page-subtabs[data-page="security"] .subtab[data-sub="' + activeSub + '"]').click();
+        await page.locator('#tab-security .page-subpage[data-subpage="' + activeSub + '"]').waitFor({ state: 'visible' });
+      }
     }
     return { sessions, devices, ids };
   };

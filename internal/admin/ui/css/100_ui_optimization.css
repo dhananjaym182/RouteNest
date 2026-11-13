@@ -463,7 +463,7 @@ html[dir="rtl"] th:last-child,html[dir="rtl"] td:last-child{text-align:left}
   border:none !important;
   cursor:pointer;
   box-shadow:0 4px 14px rgba(103,61,230,0.28) !important;
-  transition:all 0.15s ease !important;
+  transition:all 0.15s ease;
   display:flex;
   align-items:center;
   justify-content:center;
