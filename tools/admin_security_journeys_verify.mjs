@@ -1120,9 +1120,13 @@ export async function runVerification(environment = process.env) {
     check(finalCode !== issuedA && finalCode !== issuedB && finalCode !== replacement, 'second successful reset returns another distinct replacement', 'securityChecks');
     await session(primary, false, 'using the replacement code also revokes newly created sessions');
     await finishRecovery(recoveryPage);
+    currentStep = 'replacement recovery/reject superseded password';
     await uiLogin(recoveryPage, recovered, false);
+    currentStep = 'replacement recovery/login with active password';
     await uiLogin(recoveryPage, activePassword);
     await track(recovering, 'after-replacement-recovery');
+    currentStep = 'replacement recovery/open security inventory';
+    await recoveryPage.evaluate(() => { location.hash = '#security'; });
     await selected(recoveryPage, 'security');
     const finalInventory = await inventory(recovering, 'after-replacement-code-reset', recoveryPage);
     check(finalInventory.sessions.length === 1 && finalInventory.devices.length === 0, 'replacement reset leaves exactly the newly authenticated session and zero unseeded devices', 'securityChecks', true);
@@ -1259,6 +1263,7 @@ export async function selfTests() {
     assert.match(String(runVerification), /replacement recovery\/submit credential/);
     assert.match(String(runVerification), /verify result[\s\S]*verify session/);
     assert.match(String(runVerification), /sessionReply[\s\S]*retry: true/);
+    assert.match(String(runVerification), /replacement recovery\/open security inventory[\s\S]*location.hash = '#security'/);
     assert.match(String(runVerification), /_passwordRecoveryBusy[\s\S]*passwordRecoveryFinish/);
   });
   test('screenshot redaction restores recovery text and inputs even after capture failure', async () => {
