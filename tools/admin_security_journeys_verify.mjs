@@ -781,6 +781,7 @@ export async function runVerification(environment = process.env) {
   };
   const finishRecovery = async page => {
     await page.locator('#passwordRecoverySaved').check();
+    await page.waitForFunction(() => typeof _passwordRecoveryBusy === 'boolean' && !_passwordRecoveryBusy && !document.getElementById('passwordRecoveryFinish').disabled);
     await page.locator('#passwordRecoveryFinish').click();
     await waitLogin(page);
     check(await page.evaluate(() => location.hash === '#login'), 'acknowledged recovery result returns to canonical #login', 'navigationChecks');
@@ -1240,6 +1241,7 @@ export async function selfTests() {
     assert.match(String(runVerification), /replacement recovery\/return to login/);
     assert.match(String(runVerification), /replacement recovery\/open form/);
     assert.match(String(runVerification), /replacement recovery\/submit credential/);
+    assert.match(String(runVerification), /_passwordRecoveryBusy[\s\S]*passwordRecoveryFinish/);
   });
   test('screenshot redaction restores recovery text and inputs even after capture failure', async () => {
     const vm = await import('node:vm');
