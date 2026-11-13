@@ -782,9 +782,13 @@ export async function runVerification(environment = process.env) {
     return replacement;
   };
   const finishRecovery = async page => {
+    currentStep += '/acknowledge';
     await page.locator('#passwordRecoverySaved').check();
+    currentStep += '/wait ready';
     await page.waitForFunction(() => typeof _passwordRecoveryBusy === 'boolean' && !_passwordRecoveryBusy && !document.getElementById('passwordRecoveryFinish').disabled);
+    currentStep += '/finish';
     await page.locator('#passwordRecoveryFinish').click();
+    currentStep += '/wait login';
     await waitLogin(page);
     check(await page.evaluate(() => location.hash === '#login'), 'acknowledged recovery result returns to canonical #login', 'navigationChecks');
     equal(await page.locator('#passwordRecoveryReplacementCode').textContent(), '', 'replacement credential is cleared after leaving result', 'securityChecks');
