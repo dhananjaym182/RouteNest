@@ -323,7 +323,12 @@ export async function runVerification(environment = process.env) {
     await page.locator(expected === 'login' ? '#loginOverlay' : expected === 'recover' ? '#passwordRecoveryFormView' : '#passwordRecoveryResultView').waitFor({ state: 'visible' });
   };
   const waitLogin = async page => {
-    await page.waitForFunction(() => document.documentElement.dataset.adminAuth === 'signed-out' && document.documentElement.dataset.adminAuthView === 'login' && location.hash === '#login' && typeof _adminAuthMode !== 'undefined' && _adminAuthMode === 'login' && !document.getElementById('loginPassword').disabled);
+    try {
+      await page.waitForFunction(() => document.documentElement.dataset.adminAuth === 'signed-out' && document.documentElement.dataset.adminAuthView === 'login' && location.hash === '#login' && typeof _adminAuthMode !== 'undefined' && _adminAuthMode === 'login' && !document.getElementById('loginPassword').disabled);
+    } catch (error) {
+      const state = await page.evaluate(() => ({ auth: document.documentElement.dataset.adminAuth, view: document.documentElement.dataset.adminAuthView, hash: location.hash, mode: typeof _adminAuthMode === 'undefined' ? 'undefined' : _adminAuthMode, passwordDisabled: document.getElementById('loginPassword')?.disabled, principal: typeof _adminPrincipal !== 'undefined' && _adminPrincipal ? 'present' : 'none', recoveryBusy: typeof _passwordRecoveryBusy === 'undefined' ? 'undefined' : _passwordRecoveryBusy, recoveryCompleted: typeof _passwordRecoveryCompleted === 'undefined' ? 'undefined' : _passwordRecoveryCompleted, recoveryRestartRequired: typeof _passwordRecoveryRestartRequired === 'undefined' ? 'undefined' : _passwordRecoveryRestartRequired }));
+      throw new Error('login state not reached: ' + JSON.stringify(state) + '; ' + diagnosticMessage(error));
+    }
     await page.locator('#loginForm').waitFor({ state: 'visible' });
     check(await page.evaluate(() => _adminPrincipal === null && getComputedStyle(document.querySelector('.layout')).display === 'none'), 'standalone login page hides the dashboard and has no authenticated principal', 'uiChecks');
     check(await page.evaluate(({ tabs, aliases }) => {
