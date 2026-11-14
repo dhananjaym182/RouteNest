@@ -6,7 +6,7 @@ require (
 	github.com/beevik/etree v1.8.1
 	github.com/coreos/go-oidc/v3 v3.21.0
 	github.com/crewjam/saml v0.5.2
-	github.com/go-jose/go-jose/v4 v4.1.4
+	github.com/go-jose/go-jose/v4 v4.1.6
 	github.com/mattermost/xml-roundtrip-validator v0.1.0
 	github.com/refraction-networking/utls v1.8.2
 	github.com/russellhaering/goxmldsig v1.6.1
