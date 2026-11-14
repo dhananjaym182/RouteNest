@@ -4,8 +4,10 @@
 package main
 
 import (
+	"flag"
 	"image"
 	"image/color"
+	"io"
 	"math"
 	"os"
 
@@ -15,48 +17,70 @@ import (
 
 // 版本信息常量，打包发布时在此处更新。
 const (
-	appName      = "RouteNest"
-	appCompany   = "dhananjaym182"
-	appVersion   = "1.1.0.0" // 与 build.sh 产物保持一致
-	appCopyright = "Copyright (c) 2026 dhananjaym182"
-	appFileName  = "routenest-desktop.exe"
+	appName        = "RouteNest"
+	appCompany     = "dhananjaym182"
+	appVersion     = "v0.1.0-beta.1"
+	appFileVersion = "0.1.0.1"
+	appCopyright   = "Copyright (c) 2026 dhananjaym182"
+	appFileName    = "routenest-desktop.exe"
 )
 
 func main() {
+	out := flag.String("out", "resource_windows_amd64.syso", "output Windows resource object")
+	flag.Parse()
+	f, err := os.Create(*out)
+	if err != nil {
+		panic(err)
+	}
+	defer f.Close()
+	if err := writeResource(f); err != nil {
+		panic(err)
+	}
+	if err := f.Close(); err != nil {
+		panic(err)
+	}
+	println("wrote", *out)
+}
+
+func writeResource(w io.Writer) error {
 	const size = 256
 	img := drawIcon(size)
 
 	// 从单张图生成多尺寸图标（256/48/32/16）
 	icon, err := winres.NewIconFromResizedImage(img, []int{256, 48, 32, 16})
 	if err != nil {
-		panic(err)
+		return err
 	}
 
 	rs := &winres.ResourceSet{}
 	// 资源 ID = 3，匹配 Wails 的 winc.AppIconID
 	if err := rs.SetIcon(winres.ID(3), icon); err != nil {
-		panic(err)
+		return err
 	}
 
 	// 版本信息资源（Windows 文件属性 → 详细信息页显示）
 	vi := &version.Info{}
 	if err := vi.Set(version.LangDefault, version.CompanyName, appCompany); err != nil {
-		panic(err)
+		return err
 	}
 	if err := vi.Set(version.LangDefault, version.ProductName, appName); err != nil {
-		panic(err)
+		return err
 	}
 	if err := vi.Set(version.LangDefault, version.FileDescription, appName+" Desktop"); err != nil {
-		panic(err)
+		return err
 	}
 	if err := vi.Set(version.LangDefault, version.LegalCopyright, appCopyright); err != nil {
-		panic(err)
+		return err
 	}
 	if err := vi.Set(version.LangDefault, version.OriginalFilename, appFileName); err != nil {
-		panic(err)
+		return err
 	}
-	vi.SetFileVersion(appVersion)
-	vi.SetProductVersion(appVersion)
+	vi.SetFileVersion(appFileVersion)
+	vi.SetProductVersion(appFileVersion)
+	if err := vi.Set(version.LangDefault, version.ProductVersion, appVersion); err != nil {
+		return err
+	}
+	vi.Flags.Prerelease = true
 	rs.SetVersionInfo(*vi)
 
 	// 应用 manifest：asInvoker 权限 + 高 DPI 感知 + Win10/11 兼容性声明
@@ -67,16 +91,7 @@ func main() {
 		Compatibility:  winres.Win10AndAbove,
 	})
 
-	out := "resource_windows_amd64.syso"
-	f, err := os.Create(out)
-	if err != nil {
-		panic(err)
-	}
-	defer f.Close()
-	if err := rs.WriteObject(f, winres.ArchAMD64); err != nil {
-		panic(err)
-	}
-	println("wrote", out)
+	return rs.WriteObject(w, winres.ArchAMD64)
 }
 
 // drawIcon 绘制 256×256 图标：圆角方形渐变背景 + 白色 "C" 环。

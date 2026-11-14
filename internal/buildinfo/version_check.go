@@ -3,6 +3,7 @@ package buildinfo
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strconv"
 	"strings"
@@ -43,6 +44,8 @@ type githubReleaseJSON struct {
 	TagName     string `json:"tag_name"`
 	HTMLURL     string `json:"html_url"`
 	PublishedAt string `json:"published_at"`
+	Draft       bool   `json:"draft"`
+	Prerelease  bool   `json:"prerelease"`
 }
 
 // refresh 拉取最新版本信息并更新缓存；force=false 且缓存新鲜时直接返回。
@@ -76,8 +79,18 @@ func (v *versionCheckCache) refresh(force bool) {
 		v.recordFetchError(err)
 		return
 	}
+	latest := strings.TrimSpace(rel.TagName)
+	releaseVersion, ok := parseSemver(latest)
+	if !ok {
+		v.recordFetchError(errors.New("version check upstream returned an invalid release version"))
+		return
+	}
+	if rel.Draft || rel.Prerelease || len(releaseVersion.prerelease) != 0 {
+		v.recordFetchError(errors.New("version check upstream did not return a stable release"))
+		return
+	}
 	v.err = ""
-	v.latest = strings.TrimSpace(rel.TagName)
+	v.latest = latest
 	v.htmlURL = rel.HTMLURL
 	v.published = rel.PublishedAt
 }
@@ -93,31 +106,80 @@ func errStatus(code int) error { return statusError(code) }
 
 func (e statusError) Error() string { return "version check upstream status " + strconv.Itoa(int(e)) }
 
-// parseSemver 解析 v1.2.3（可带 -rc 后缀，后缀忽略），返回数值三元组。
-func parseSemver(s string) ([3]int, bool) {
+type semver struct {
+	core       [3]string
+	prerelease []string
+}
+
+func parseSemver(s string) (semver, bool) {
+	var out semver
 	s = strings.TrimPrefix(strings.TrimSpace(s), "v")
-	if i := strings.IndexAny(s, "-+"); i >= 0 {
-		s = s[:i]
+	if core, build, found := strings.Cut(s, "+"); found {
+		if !validSemverIdentifiers(build, false) {
+			return semver{}, false
+		}
+		s = core
+	}
+	if core, prerelease, found := strings.Cut(s, "-"); found {
+		if !validSemverIdentifiers(prerelease, true) {
+			return semver{}, false
+		}
+		out.prerelease = strings.Split(prerelease, ".")
+		s = core
 	}
 	parts := strings.Split(s, ".")
-	if len(parts) == 0 || parts[0] == "" {
-		return [3]int{}, false
+	if len(parts) != len(out.core) {
+		return semver{}, false
 	}
-	var out [3]int
-	for i := 0; i < 3; i++ {
-		if i >= len(parts) {
-			continue
+	for i, part := range parts {
+		if !numericSemverIdentifier(part) || (len(part) > 1 && part[0] == '0') {
+			return semver{}, false
 		}
-		n, err := strconv.Atoi(parts[i])
-		if err != nil {
-			return out, false
-		}
-		out[i] = n
+		out.core[i] = part
 	}
 	return out, true
 }
 
-// versionNewer 判断 latest 是否比 current 新；current 非 semver（如 dev）不提示更新。
+func validSemverIdentifiers(s string, prerelease bool) bool {
+	for _, part := range strings.Split(s, ".") {
+		if part == "" {
+			return false
+		}
+		for i := 0; i < len(part); i++ {
+			c := part[i]
+			if !('0' <= c && c <= '9' || 'A' <= c && c <= 'Z' || 'a' <= c && c <= 'z' || c == '-') {
+				return false
+			}
+		}
+		if prerelease && len(part) > 1 && part[0] == '0' && numericSemverIdentifier(part) {
+			return false
+		}
+	}
+	return true
+}
+
+func numericSemverIdentifier(s string) bool {
+	if s == "" {
+		return false
+	}
+	for i := 0; i < len(s); i++ {
+		if s[i] < '0' || s[i] > '9' {
+			return false
+		}
+	}
+	return true
+}
+
+func compareSemverNumbers(a, b string) int {
+	if len(a) < len(b) {
+		return -1
+	}
+	if len(a) > len(b) {
+		return 1
+	}
+	return strings.Compare(a, b)
+}
+
 func versionNewer(current, latest string) bool {
 	c, ok := parseSemver(current)
 	if !ok {
@@ -127,12 +189,32 @@ func versionNewer(current, latest string) bool {
 	if !ok {
 		return false
 	}
-	for i := 0; i < 3; i++ {
-		if l[i] != c[i] {
-			return l[i] > c[i]
+	for i := range c.core {
+		if cmp := compareSemverNumbers(l.core[i], c.core[i]); cmp != 0 {
+			return cmp > 0
 		}
 	}
-	return false
+	if len(c.prerelease) == 0 {
+		return false
+	}
+	if len(l.prerelease) == 0 {
+		return true
+	}
+	for i := 0; i < len(c.prerelease) && i < len(l.prerelease); i++ {
+		currentID, latestID := c.prerelease[i], l.prerelease[i]
+		currentNumeric, latestNumeric := numericSemverIdentifier(currentID), numericSemverIdentifier(latestID)
+		if currentNumeric != latestNumeric {
+			return currentNumeric
+		}
+		cmp := strings.Compare(latestID, currentID)
+		if currentNumeric {
+			cmp = compareSemverNumbers(latestID, currentID)
+		}
+		if cmp != 0 {
+			return cmp > 0
+		}
+	}
+	return len(l.prerelease) > len(c.prerelease)
 }
 
 // VersionStatus is the cached release check, ready for the admin console.

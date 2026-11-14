@@ -25,22 +25,22 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest]
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
         with:
           go-version-file: go.mod
           cache: true
       - name: Verify modules
         run: go mod verify
       - name: Run unit and integration tests
-        run: go test -count=1 ./...
+        run: go test -mod=readonly -count=1 ./...
       - name: Compile desktop authentication paths
-        run: go test -tags desktop -count=1 .
+        run: go test -mod=readonly -tags desktop -count=1 .
       - name: Run vet
-        run: go vet ./...
+        run: go vet -mod=readonly ./...
       - name: Run Windows persistence tests
         if: runner.os == 'Windows'
-        run: go test -count=1 ./internal/platform -run "TestWindows|TestWriteFileAtomicDurable"
+        run: go test -mod=readonly -count=1 ./internal/platform -run "TestWindows|TestWriteFileAtomicDurable"
 
   race:
     name: Race (${{ matrix.os }})
@@ -53,8 +53,8 @@ jobs:
     env:
       CGO_ENABLED: "1"
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
         with:
           go-version-file: go.mod
           cache: true
@@ -79,17 +79,17 @@ jobs:
           $gccDirectory | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
           & "$gccDirectory\gcc.exe" --version
       - name: Run race detector
-        run: go test -race -count=1 ./...
+        run: go test -mod=readonly -race -count=1 ./...
       - name: Run desktop authentication race checks
-        run: go test -tags desktop -race -count=1 .
+        run: go test -mod=readonly -tags desktop -race -count=1 .
 
   frontend:
     name: Frontend contracts
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-node@395ad3262231945c25e8478fd5baf05154b1d79f
         with:
           node-version: '22'
       - name: Check JavaScript syntax
@@ -111,8 +111,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-node@395ad3262231945c25e8478fd5baf05154b1d79f
         with:
           node-version: '22'
       - name: Install isolated Playwright runtime
@@ -135,7 +135,7 @@ jobs:
             sleep 1
           done
           ARTIFACT_DIR="$RUNNER_TEMP/desktop-auth-simulation" node tools/desktop_setup_verify.mjs
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         if: always()
         with:
           name: desktop-auth-ui-simulation
@@ -147,12 +147,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
         with:
           go-version-file: go.mod
           cache: true
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@395ad3262231945c25e8478fd5baf05154b1d79f
         with:
           node-version: '22'
       - name: Install isolated Playwright runtime
@@ -162,7 +162,7 @@ jobs:
           "$RUNNER_TEMP/routenest-playwright/node_modules/.bin/playwright" install --with-deps chromium
       - name: Build verification server
         shell: bash
-        run: go build -trimpath -o "$RUNNER_TEMP/routenest-browser-verify" .
+        run: go build -mod=readonly -trimpath -o "$RUNNER_TEMP/routenest-browser-verify" .
       - name: Run authenticated navigation and provider setup checks
         shell: bash
         env:
@@ -194,7 +194,7 @@ jobs:
           ROUTENEST_SECURITY_VERIFY_MUTATIONS=1 \
           ARTIFACT_DIR="$RUNNER_TEMP/admin-security-journeys" \
           node tools/admin_security_journeys_verify.mjs
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         if: always()
         with:
           name: admin-security-browser-evidence
@@ -206,6 +206,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       - name: Build and exercise the source Docker image
         run: bash scripts/docker-smoke.sh

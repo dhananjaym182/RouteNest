@@ -21,7 +21,9 @@ func TestAdminSecurityDependencyVersions(t *testing.T) {
 	exact := map[string]string{
 		"github.com/andybalholm/brotli": "v1.2.8",
 		"github.com/coreos/go-oidc/v3":  "v3.21.0",
-		"github.com/crewjam/saml":       "v0.5.2",
+		"github.com/crewjam/saml":       "v0.6.3",
+		"github.com/go-jose/go-jose/v4": "v4.1.9",
+		"github.com/labstack/echo/v4":   "v4.16.4",
 		"github.com/klauspost/compress": "v1.20.3",
 		"github.com/wailsapp/wails/v2":  "v2.17.1",
 		"github.com/zalando/go-keyring": "v0.2.8",
@@ -29,7 +31,8 @@ func TestAdminSecurityDependencyVersions(t *testing.T) {
 	}
 	args := []string{"list", "-mod=readonly", "-m", "-json", "routenest",
 		"github.com/andybalholm/brotli", "github.com/coreos/go-oidc/v3",
-		"github.com/crewjam/saml", "github.com/klauspost/compress",
+		"github.com/crewjam/saml", "github.com/go-jose/go-jose/v4",
+		"github.com/labstack/echo/v4", "github.com/klauspost/compress",
 		"github.com/wailsapp/wails/v2", "github.com/zalando/go-keyring",
 		"golang.org/x/oauth2", "github.com/russellhaering/goxmldsig"}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -57,8 +60,8 @@ func TestAdminSecurityDependencyVersions(t *testing.T) {
 		if want, ok := exact[module.Path]; ok && module.Version != want {
 			t.Errorf("%s = %s, want %s", module.Path, module.Version, want)
 		}
-		if module.Path == "routenest" && module.GoVersion != "1.26.10" {
-			t.Errorf("Go baseline = %s, want 1.26.10", module.GoVersion)
+		if module.Path == "routenest" && module.GoVersion != "1.26.11" {
+			t.Errorf("Go baseline = %s, want 1.26.11", module.GoVersion)
 		}
 		if module.Path == "github.com/russellhaering/goxmldsig" &&
 			(strings.Contains(module.Version, "-") ||

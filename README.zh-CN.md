@@ -12,9 +12,9 @@ RouteNest 是一个自托管、Go 驱动的 AI 网关，面向编码代理与 AI
 
 它提供服务商预设、账号管理、模型发现、有序回退、请求日志与内置管理控制台。
 
-[![Go](https://img.shields.io/badge/Go-1.26-00ADD8?logo=go&logoColor=white)](https://go.dev)
+[![Go](https://img.shields.io/badge/Go-1.26.11-00ADD8?logo=go&logoColor=white)](https://go.dev)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux-blue)](#从源码构建)
+[![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux-blue)](#首次公开预览)
 [![Provider definitions](https://img.shields.io/badge/Provider%20definitions-111-brightgreen)](#服务商覆盖)
 
 **English:** [English README](README.md)
@@ -23,16 +23,30 @@ RouteNest 是一个自托管、Go 驱动的 AI 网关，面向编码代理与 AI
 
 ---
 
+## 首次公开预览
+
+**[RouteNest v0.1.0-beta.1 - First public preview](https://github.com/dhananjaym182/RouteNest/releases/tag/v0.1.0-beta.1)** 是**供评估使用的预发布版本**，不是稳定版，也未获生产环境认证。Beta 期间 API、状态格式与上游集成可能变化。
+
+- **发布产物：** 提供 **Windows x64、macOS Apple Silicon 与 Linux x64** 的带版本号桌面归档、三个对应的 SPDX SBOM 与 `SHA256SUMS`。每个归档包含一个可执行文件、许可证 / 声明与发布说明。本次预览**没有 Intel macOS 产物**、安装器、独立 CLI 下载或已发布的容器镜像；CLI / 服务端与 Docker 需从源码构建。
+- **运行条件与签名：** 运行下载文件无需 Go 或 Node.js。Windows 需要 WebView2，macOS 使用系统 WKWebView，Linux 需要兼容 glibc 的桌面环境、GTK 3 与 **WebKitGTK 4.0**；只有 4.1 并不足够。Windows **未签名**；macOS **没有 Developer ID 签名，也未公证**。参见[桌面运行条件](#桌面端预编译版本)。
+- **解压前验证：** 用 `SHA256SUMS` 检查归档与 SBOM，再验证这两个文件及校验和清单的 GitHub 构建证明（attestation），限定到本仓库的 Build 工作流与发布标签。校验不匹配、验证失败或缺少证明时请停止。来源证明与 SBOM 不等于代码安全认证，也不能代替操作系统签名。[安装与校验命令](RELEASE_NOTES.md#install-and-verify)。
+- **能力与限制：** 支持 OpenAI / Anthropic 流式请求、**Responses API 子集**、账号轮换、有序回退、模型发现、限额、出口控制与双语管理台。服务商预设只是模板，**不是集成认证**；免费优先 / 仅免费标签不是零成本保证。只使用有权使用的账号，遵守上游条款、定价与授权；Cline 账号集成为非官方路径。
+- **设置与数据：** 没有默认管理员密码；保存首次设置的恢复码，并在依赖客户端认证前生成 API 密钥。经验证的空密钥列表仍按兼容规则允许匿名模型 / 推理访问。服务商凭据、刷新令牌与生成的客户端密钥以**明文**保存，依赖文件系统权限保护，而非静态加密。升级前备份整个数据目录；托管管理后台应使用 HTTPS 与范围严格的受信代理配置。
+- **验证范围：** CI 包含自动化 Go / race、前端 / 本地化、Docker 与浏览器检查、原生构建及无窗口就绪自检。模拟与编译不代表对打包 WebView、真实操作系统凭据存储、干净系统安装、签名升级或每个在线服务商的认证。参见 [CI 验证范围](#ci-验证范围)与标签工作流的实际结果。
+
+[发布说明](RELEASE_NOTES.md) · [变更日志](CHANGELOG.md) · [安全指南](docs/admin-security.md) · [升级与备份](#数据与升级)
+
 ## RouteNest 提供的能力
 
 拟议的契约权威、术语与尚未解决的行为决策见 [CONTRACTS.md](CONTRACTS.md)，等待评审。历史计划与验证报告属于带日期的证据，不代表当前测试结果。
 
 - **多账号路由** - 选择并轮换已配置的账号，具备冷却与可重试错误处理。
 - **服务商目录** - 111 个内置 Provider Definition，其中 109 个是可选接入预设，并支持自定义 OpenAI 兼容端点。可用性与协议支持因服务商而异。
-- **多种 API 格式** - OpenAI Chat Completions、受支持的 Responses API 功能，以及 Anthropic Messages 端点。
+- **多种 API 格式** - OpenAI Chat Completions、基于 chat completions 的 Responses API 子集，以及 Anthropic Messages 端点，支持上游可提供的流式内容、工具、reasoning 与 usage。
 - **模型组合** - 定义有序模型列表，在符合条件的上游失败时回退。
-- **模型发现** - 同步受支持的模型目录，配置自定义模型 ID，并选择默认模型。
-- **管理控制台** - 管理账号、连接、服务商、模型、组合、客户端 API 密钥、代理与请求日志。
+- **模型发现** - 同步受支持的模型目录，审批新发现的模型，管理按服务商划分的模型供应，配置自定义模型 ID，并选择默认模型。
+- **管理控制台** - 13 个页面，中英双语与明暗主题，管理账号、连接、服务商、模型、组合、客户端 API 密钥、代理与请求日志；快速开始页生成客户端示例。
+- **管理员访问控制** - 一次性设置、角色权限、OIDC / SAML、可撤销桌面信任、安全审计日志与恢复码。
 - **出口代理池** - 配置一个对所有 Provider 生效的默认（全局）出口池、独立的原生 Zen 出口池，以及单个 Provider 的覆盖；不宣称提供通用 Profile 绑定界面。
 - **请求可观测性** - 查看请求日志、延迟、token 用量与可用的服务商统计。
 - **灵活部署** - 运行 Go 二进制、使用桌面应用，或通过 Docker 部署。
@@ -52,7 +66,7 @@ RouteNest 是一个自托管、Go 驱动的 AI 网关，面向编码代理与 AI
 - **仅删除账号：** **删除全部账号**只会移除 Cline 账号及账号内状态。客户端 API 密钥、模型、默认模型、监听设置、移除保留项与旧版迁移哨兵都会保留；只有在持久化完成后才会报告成功。
 - **托管管理后台：** 二进制与桌面端默认绑定 `127.0.0.1`。生产环境的非回环监听必须配置精确公共 URL、受信反向代理模式及代理 CIDR，否则启动会被拒绝。HSTS 关闭时 RouteNest 仍接受 HTTP 规范源，因此由受信代理终止 HTTPS 是必需的部署实践，而不是所有路径都会强制执行的服务端不变量。
 - **客户端密钥安全：** 账号池状态损坏、不可读、部分恢复或缺失状态不确定时，受密钥包装的路由会以认证存储错误失败关闭。确认是全新数据目录时，首次启动必须设置 `ROUTENEST_INITIALIZE_EMPTY_ACCOUNT_STORE=true`，初始化后立即移除。生成的密钥使用 256 位密码学随机数，密钥变更只有在持久化完成后才会发布。删除密钥需要 `credential.write` 与 `dangerous.execute`；删除最后一个密钥还必须明确确认将禁用客户端 API 认证。经过验证且有意为空的密钥列表仍按兼容规则匿名开放。
-- **敏感数据：** 账号 refreshToken、Provider Credential 与生成的客户端 API 密钥以明文保存在数据目录中。请保护该目录，不要提交到 Git 或分享。
+- **敏感数据：** 账号刷新令牌、服务商凭据与生成的客户端 API 密钥以明文保存在数据目录中，依赖文件系统权限保护，而非静态加密。操作系统保护的桌面信任不会加密服务商秘密。请保护目录与备份，不要提交到 Git 或分享；系统凭据存储无法抵御同用户恶意软件或主机失陷。
 - **Docker：** 示例 compose 只把后端端口绑定到宿主机回环，并要求显式配置引导、公共 URL 与代理信任。不要把后端端口直接暴露到互联网。
 
 RBAC、OIDC、SAML、离线恢复与反向代理配置见 [管理员安全与 SSO](docs/admin-security.md)。`routenest auth --help` 与 `routenest auth status` 提供不修改状态的帮助和经过验证的只读状态；`routenest auth recover` 仍是所有者控制的离线恢复命令。
@@ -61,21 +75,44 @@ RBAC、OIDC、SAML、离线恢复与反向代理配置见 [管理员安全与 SS
 
 ### 桌面端（预编译版本）
 
-从 [Releases](https://github.com/dhananjaym182/RouteNest/releases) 下载对应平台的桌面端构建并运行。
+从 [v0.1.0-beta.1 发布页](https://github.com/dhananjaym182/RouteNest/releases/tag/v0.1.0-beta.1) 下载对应归档、SPDX SBOM 与 `SHA256SUMS`，[解压前完成校验](#验证下载文件)，再打开解压后的应用。这些是独立可执行文件的归档，不是安装器。
 
-确认是全新安装时，直接正常打开桌面应用。原生设置会创建管理员密码、显示一次性恢复码，并可选择信任此设备以便后续自动登录，无需终端命令或环境变量。`-initialize-empty-account-store` 仍是高级首次运行控制，不是密码重置机制。
+确认是全新安装时，正常打开桌面应用即可。原生设置会创建管理员密码、显示一次性恢复码，并可选择信任此设备以便后续自动登录，设置过程无需终端命令或环境变量。`-initialize-empty-account-store` 仍是高级首次运行控制，不是密码重置机制。
 
-| 平台 | 运行发布版本所需条件 |
-| --- | --- |
-| Windows x64 | Microsoft Edge WebView2 运行时。Windows 11 已包含；保持更新的 Windows 10 通常也有。若应用提示缺少 WebView2，请安装 Microsoft 的 Evergreen Runtime。 |
-| macOS Apple Silicon | 受支持的 macOS 版本（内置 WKWebView）。运行发布版本不需要 Xcode 工具。官方发布仅提供 arm64 版本；Intel Mac 可从源码构建。构建未公证，Gatekeeper 可能要求右键选择 **打开**，或在 **系统设置 → 隐私与安全性** 中放行。 |
-| Linux x64 | GTK 3 与 WebKitGTK 4.0 运行时库，与官方构建匹配。运行不需要开发头文件。 |
+| 平台 | 发布归档 | 运行条件 |
+| --- | --- | --- |
+| Windows x64 | `routenest_0.1.0-beta.1_windows_amd64.zip` | Microsoft Edge WebView2 运行时。Windows 11 已包含；保持更新的 Windows 10 通常也有。缺少时安装 Microsoft Evergreen Runtime。 |
+| macOS Apple Silicon | `routenest_0.1.0-beta.1_darwin_arm64.tar.gz` | 带系统 WKWebView 的 macOS；在 macOS 15 上构建。没有 Intel 产物。运行无需 Xcode 工具；Intel Mac 需从源码构建。 |
+| Linux x64 | `routenest_0.1.0-beta.1_linux_amd64.tar.gz` | 兼容 glibc 的桌面环境、GTK 3 与 WebKitGTK 4.0 运行时库；在 Ubuntu 22.04 上构建。Ubuntu 22.04 对应包为 `libgtk-3-0` 与 `libwebkit2gtk-4.0-37`。只有 WebKitGTK 4.1 并不足够。 |
 
-Windows SmartScreen 可能因为构建未做代码签名而警告。只有在文件来自官方发布页时才选择 **更多信息 → 仍要运行**。
+每个归档解压到 `routenest_0.1.0-beta.1_<platform>/`，包含 Windows 的 `routenest-desktop.exe` 或 macOS / Linux 的 `routenest-desktop`，以及 `LICENSE`、`THIRD_PARTY_NOTICES.md` 和以 `README.md` 保存的发布说明。对应 SBOM 为 `routenest_0.1.0-beta.1_windows_amd64.spdx.json`、`routenest_0.1.0-beta.1_darwin_arm64.spdx.json` 与 `routenest_0.1.0-beta.1_linux_amd64.spdx.json`。它们列出构建产物的组成，不代表没有漏洞。
+
+运行这些产物无需 Go、Node.js 或开发头文件。Linux 自动桌面登录可选依赖已解锁的 Secret Service；缺少时使用密码登录。旧版操作系统与干净系统安装未获广泛认证。
+
+**未签名 / 未公证：** Windows 没有可信代码签名；macOS 没有 Developer ID 签名，也未公证。完成校验后，SmartScreen 可能要求 **更多信息 → 仍要运行**，Gatekeeper 可能要求 **打开** 或在 **系统设置 → 隐私与安全性** 中批准。只批准已验证的文件，不要关闭系统级保护。
+
+### 验证下载文件
+
+使用同一版本的归档、对应 SBOM 与 `SHA256SUMS`。清单覆盖三个归档与三个 SBOM；解压前验证清单及已下载文件。Linux x64 下载这三个文件后执行：
+
+```bash
+(
+set -euo pipefail
+base=routenest_0.1.0-beta.1_linux_amd64
+for file in "$base.tar.gz" "$base.spdx.json"; do
+    awk -v file="$file" '$2 == file { print; n++ } END { if (n != 1) exit 1 }' SHA256SUMS | sha256sum --check -
+done
+for file in "$base.tar.gz" "$base.spdx.json" SHA256SUMS; do
+    gh attestation verify "$file" --repo dhananjaym182/RouteNest --signer-workflow dhananjaym182/RouteNest/.github/workflows/build.yml --source-ref refs/tags/v0.1.0-beta.1
+done
+)
+```
+
+归档与 SBOM 校验都必须显示 `OK`，所有证明必须验证本仓库的 Build 工作流与发布标签。校验不匹配、验证失败或缺少证明时请停止。macOS 使用 `shasum`，Windows 使用 `Get-FileHash`。完整下载、各平台验证、解压与启动命令见[发布说明](RELEASE_NOTES.md#install-and-verify)。校验和检查打包文件，不能把归档摘要当作解压后可执行文件的摘要；构建证明检查来源，不保证代码安全、操作系统签名或服务商认证。若发布版本启用不可变性，发布说明还提供 `gh release verify` 与 `gh release verify-asset`，用于检查 GitHub 签名的发布版本 / 产物绑定。
 
 ### 运行二进制
 
-构建需要 Go 1.26.10 或更高版本：
+构建需要 Go 1.26.11 或更高版本：
 
 ```bash
 go build -o routenest .
@@ -110,6 +147,8 @@ docker compose down
 3. 按“概览”中的设置清单连接 Cline 账号、原生 OpenCode Zen 或 API Provider，确认模型和客户端访问，然后发送第一条网关请求。
 4. 需要客户端认证时生成 API 密钥。在至少生成一个密钥之前，受密钥包装的模型与推理路由仍按已记录的兼容策略接受匿名请求。
 5. 保存管理员恢复码。“忘记密码？”会消费并轮换恢复码、撤销管理员会话和受信任设备，同时保留 Provider、模型和路由数据。
+
+内置更新检查只跟随稳定版本，可能不会提示本 Beta；请从对应标签发布页显式下载预览版本。
 
 ## 客户端配置
 
@@ -164,7 +203,7 @@ RouteNest 为受支持的请求模式提供 OpenAI 与 Anthropic 兼容端点。
 | 端点 | 格式 | 说明 |
 | --- | --- | --- |
 | `POST /v1/chat/completions` | OpenAI Chat Completions | 流式与非流式；在上游提供时支持工具、reasoning 字段与 usage 元数据 |
-| `POST /v1/responses` | OpenAI Responses | 转换为上游 chat-completions 调用；支持文本、工具、reasoning 内容、流式事件与 usage |
+| `POST /v1/responses` | OpenAI Responses 子集 | 转换为上游 chat-completions 调用；支持文本、工具、reasoning 内容、流式事件与 usage |
 | `POST /v1/messages` | Anthropic Messages | 流式与非流式；工具调用/结果、thinking 内容与 usage |
 | `POST /v1/messages/count_tokens` | Anthropic token 计量 | 本地估算，不是上游分词器 |
 | `GET /v1/models` | OpenAI 模型列表 | 已启用的模型与已启用的组合 |
@@ -293,6 +332,7 @@ RouteNest 默认把状态存放在操作系统的用户配置目录：
 | `.routenest-providers-sync.json` | 服务商目录同步状态 |
 | `.routenest-proxy.json` | 默认（全局）出口代理池 |
 | `.routenest-zen.json` | OpenCode Zen 配置与出口代理池 |
+| `.routenest-onboarding.json` | 设置清单进度：已验证服务商与首次成功网关请求 |
 | `.routenest-request-logs.json` | 请求日志 |
 | `capture-logs/` | 交互式 OAuth 抓包输出，可能包含授权流量 |
 | `override.md` | 可选的 System Prompt 覆盖，从工作目录读取 |
@@ -303,17 +343,22 @@ RouteNest 默认把状态存放在操作系统的用户配置目录：
 
 如果账号池和见证文件同时缺失，RouteNest 不会把已有或部分恢复的数据目录猜测为全新安装。请恢复有效账号池文件并重启。恢复的账号池有效但缺少见证文件时，只有在账号池验证成功后才会重新创建见证文件。
 
-在类 Unix 系统上，数据目录和抓包目录权限为 `0700`，已知状态文件为
-`0600`；Windows 对私有路径使用仅当前用户与 SYSTEM 可访问的受保护 ACL。
-如果无法建立安全权限，RouteNest 会以明确错误停止启动，不再回退到可执行文件旁写入凭据。
+在类 Unix 系统上，数据目录和抓包目录权限为 `0700`，已知状态文件为 `0600`。Windows 私有路径使用只向当前用户与 SYSTEM 授予访问权限的受保护 ACL，并接受 Windows 为本进程创建的文件指定的所有者（提升权限时为 Administrators 组）。如果无法建立安全权限，RouteNest 会以明确错误停止启动，不会回退到可执行文件旁写入凭据。
 
-Windows 持久写入使用带 write-through 的 `MoveFileEx` 替换，并通过可写目录句柄刷新。测试工作流已配置为在 Windows runner 上执行专门的持久化测试；在该工作流实际成功运行前，不应宣称 C1 已获得完整跨平台批准。
+安全敏感的持久写入会先同步临时文件，替换后尝试刷新所在目录。Windows 替换使用 Go 的目录根约束重命名，而不是保证 write-through 的 `MoveFileEx`；替换后刷新失败会报告不确定状态，不会当作普通成功。这些机制不能保证抵御故障存储硬件或所有文件系统 / 断电场景。
 
-> 数据文件包含明文 refreshToken、Provider Credential 与生成的客户端 API 密钥。请安全备份，不要公开，也不要提交到 Git。
+### 升级或回退之前
+
+1. 停止所有 RouteNest 进程，安全备份**整个所选数据目录**。把 `.routenest-accounts.json` 与 `.initialized` 见证文件保存在一起，把 `admin-auth/.routenest-admin-auth.json` 与审计日志保存在一起。包含被引用的 SSO 秘密文件，并另外保护环境变量秘密、已保存恢复码及工作目录中的 `override.md`。
+2. 用 `SHA256SUMS` 与 GitHub 构建证明验证新归档、SBOM 与清单，解压到单独目录后，只替换可执行文件。继续使用相同数据目录和操作系统用户；不要加入首次初始化参数或引导变量来重置已有安装。
+3. 重启、登录、检查就绪状态，并向每个依赖的服务商发送小请求。存储缺失、损坏或部分恢复时应停止并恢复有效备份，不要删除身份文件或绕过初始化保护。
+4. Beta 状态格式可能变化，旧程序可能拒绝新管理员元数据。回退时使用旧可执行文件**与完整兼容备份**，不要混用快照 / 日志版本或手工修改身份状态。桌面信任凭据保存在操作系统凭据库，不在目录备份中；更换用户、机器或目录可能需要密码登录并显式重新注册。恢复的会话 / 密钥同样敏感；备份可能泄露时应撤销或轮换。
+
+> 数据文件包含明文刷新令牌、服务商凭据与生成的客户端 API 密钥。请加密或以其他方式安全保护备份，不要公开，也不要提交到 Git。
 
 ## 从源码构建
 
-CLI 二进制需要 Go 1.26.10 或更高版本。构建桌面端还需要下面列出的平台工具链。
+CLI 二进制需要 Go 1.26.11 或更高版本。构建桌面端还需要目标操作系统工具链与原生 WebView 依赖；参见[桌面构建说明](desktop/README.md#building-for-each-platform)。
 
 ### 二进制
 
@@ -323,25 +368,28 @@ go build -o routenest .
 
 ### 桌面端
 
-Wails 使用各平台原生 WebView，需在目标系统上构建：
+Wails 使用原生 WebView 绑定。请在目标系统构建，不要把交叉编译当作运行验证。安装工具链后执行：
 
 ```bash
-# Windows：Go + C 工具链；运行需要 WebView2 运行时
-./desktop/build.sh
-
-# macOS：Xcode Command Line Tools
-xcode-select --install
-./desktop/build.sh
-
-# Linux：GTK 3 与 WebKitGTK 开发包，例如
-# Debian/Ubuntu（按发行版使用 4.0 或 4.1）
-sudo apt install libgtk-3-dev libwebkit2gtk-4.1-dev
-# Fedora: sudo dnf install gtk3-devel webkit2gtk4.1-devel
-# Arch:   sudo pacman -S gtk3 webkit2gtk
 ./desktop/build.sh
 ```
 
-开发包仅编译时需要。运行发布版本的用户需要对应的运行时库，而不是头文件。
+Windows 需要 Go 与 C 工具链。macOS 需要 Xcode Command Line Tools；原生构建还需按桌面指南链接 `UniformTypeIdentifiers`。默认 Linux 脚本与发布构建使用 GTK 3 和 WebKitGTK **4.0**，例如 Ubuntu 22.04 的 `libgtk-3-dev` 与 `libwebkit2gtk-4.0-dev`。从源码使用 4.1 时需要额外的 `webkit2_41` 标签，不能只安装 4.1 开发包；参见 [Linux 构建选项](desktop/README.md#linux)。
+
+开发包仅编译时需要。运行发布版本需要匹配的运行时库，而不是头文件。官方 macOS 产物仅支持 Apple Silicon。
+
+## CI 验证范围
+
+[Test 工作流](.github/workflows/test.yml)配置了：
+
+- **Linux 与 Windows** 上的模块验证、Go 单元 / 集成测试、desktop 标签认证测试、vet 和 race 检查，包括专门的 Windows 持久化运行测试。
+- Linux 上的 JavaScript 语法 / 单元契约与本地化检查。
+- Linux 上经过认证的 Chromium 导航、服务商设置与安全流程，以及独立的桌面设置 / 登录**桥接模拟**。
+- Linux 上从源码构建的 Docker 持久化冒烟测试。
+
+[Build 工作流](.github/workflows/build.yml)依赖 Test 工作流，验证发布标签元数据，仅编译而不执行 production 标签桌面测试，在 Windows x64、macOS 15 arm64 和 Ubuntu 22.04 x64 上原生构建，并对每个可执行文件执行**无窗口 `/ready` 自检**。随后打包带版本号归档与许可证 / 声明 / 说明，生成 SPDX SBOM，验证精确产物清单与 `SHA256SUMS`，生成标签绑定的构建 / SBOM 证明后创建可评审的预发布草稿。自检启动内嵌网关，但不打开窗口，也不访问操作系统凭据库。草稿不等于已发布，也不能证明发布版本不可变性。
+
+实际通过 / 失败以标签工作流结果为准。自动化测试、浏览器流程、模拟、校验和与来源证明**不等于**对打包 WebView、真实凭据库、干净安装 / 重开、签名升级、全部操作系统版本或在线服务商的全面认证。发布这些文档不代表真实运行验证通过报告。
 
 ## 项目结构
 
@@ -363,6 +411,13 @@ docs/, scripts/             已跟踪参考、本地历史记录与运维脚本
 ```
 
 Go 模块路径为 `routenest`。仓库根目录保留 CLI、桌面入口与本地管理员恢复命令；服务装配与服务实现代码均位于 `internal/`。
+
+## 发布文档
+
+- [RELEASE_NOTES.md](RELEASE_NOTES.md)：预览限制、下载、校验与安装命令。
+- [CHANGELOG.md](CHANGELOG.md)：按版本记录的用户可见变更。
+- [desktop/README.md](desktop/README.md)：桌面运行条件、构建与打包。
+- [CONTRIBUTING.md](CONTRIBUTING.md)：贡献者工作流程与文档检查要求；历史报告不是当前工作流结果。
 
 ## 署名与许可证
 

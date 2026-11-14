@@ -8,39 +8,126 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   test:
     uses: ./.github/workflows/test.yml
 
+  metadata:
+    name: Release metadata
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      app_version: ${{ steps.metadata.outputs.app_version }}
+      package_version: ${{ steps.metadata.outputs.package_version }}
+      build_date: ${{ steps.metadata.outputs.build_date }}
+      source_date_epoch: ${{ steps.metadata.outputs.source_date_epoch }}
+      prerelease: ${{ steps.metadata.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+
+      - name: Validate source and derive metadata
+        id: metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$GITHUB_REF_TYPE" == "tag" ]]; then
+            python3 - "$GITHUB_REF_NAME" <<'PY'
+          import re
+          import sys
+          tag = sys.argv[1]
+          match = re.fullmatch(r"v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?", tag)
+          if match is None:
+              raise SystemExit(f"invalid SemVer release tag: {tag}")
+          prerelease = match.group(4)
+          if prerelease and any(len(value) > 1 and value[0] == "0" and value.isdigit() for value in prerelease.split(".")):
+              raise SystemExit(f"invalid numeric prerelease identifier: {tag}")
+          PY
+            test "$(git cat-file -t "$GITHUB_REF")" = "tag"
+            test "$(git rev-parse "${GITHUB_REF}^{commit}")" = "$GITHUB_SHA"
+            git fetch --no-tags origin main:refs/remotes/origin/main
+            git merge-base --is-ancestor "$GITHUB_SHA" refs/remotes/origin/main
+            app_version="$GITHUB_REF_NAME"
+            package_version="${GITHUB_REF_NAME#v}"
+            prerelease=false
+            if [[ "$package_version" == *-* ]]; then
+              prerelease=true
+            fi
+          else
+            app_version="dev-${GITHUB_SHA:0:12}"
+            package_version="$app_version"
+            prerelease=false
+          fi
+          source_date_epoch=$(git show -s --format=%ct "$GITHUB_SHA")
+          build_date=$(python3 - "$source_date_epoch" <<'PY'
+          from datetime import datetime, timezone
+          import sys
+          print(datetime.fromtimestamp(int(sys.argv[1]), timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"))
+          PY
+          )
+          {
+            printf 'app_version=%s\n' "$app_version"
+            printf 'package_version=%s\n' "$package_version"
+            printf 'build_date=%s\n' "$build_date"
+            printf 'source_date_epoch=%s\n' "$source_date_epoch"
+            printf 'prerelease=%s\n' "$prerelease"
+          } >> "$GITHUB_OUTPUT"
+
   build:
-    name: Build (${{ matrix.artifact }})
-    needs: test
+    name: Build (${{ matrix.target }})
+    needs: [test, metadata]
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 30
+    timeout-minutes: 35
+    permissions:
+      contents: read
     strategy:
       fail-fast: false
       matrix:
         include:
           - runner: windows-latest
-            artifact: routenest-desktop.exe
-            ldflags: "-s -w -H windowsgui"
+            target: windows_amd64
+            executable: routenest-desktop.exe
+            archive_format: zip
+            archive_suffix: zip
+            platform_ldflags: -H windowsgui
             arch: amd64
           - runner: macos-15
-            artifact: routenest-desktop-darwin-arm64
-            ldflags: "-s -w"
+            target: darwin_arm64
+            executable: routenest-desktop
+            archive_format: tar.gz
+            archive_suffix: tar.gz
+            platform_ldflags: ''
             arch: arm64
           - runner: ubuntu-22.04
-            artifact: routenest-desktop-linux-amd64
-            ldflags: "-s -w"
+            target: linux_amd64
+            executable: routenest-desktop
+            archive_format: tar.gz
+            archive_suffix: tar.gz
+            platform_ldflags: ''
             arch: amd64
-
+    env:
+      APP_VERSION: ${{ needs.metadata.outputs.app_version }}
+      PACKAGE_VERSION: ${{ needs.metadata.outputs.package_version }}
+      APP_BUILD_DATE: ${{ needs.metadata.outputs.build_date }}
+      SOURCE_DATE_EPOCH: ${{ needs.metadata.outputs.source_date_epoch }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
         with:
           go-version-file: go.mod
           cache: true
+
+      - name: Verify modules
+        run: go mod verify
+
+      - name: Verify release dependencies
+        run: go test -mod=readonly -count=1 ./internal/buildinfo -run '^TestAdminSecurityDependencyVersions$'
 
       - name: Install Linux dependencies
         if: runner.os == 'Linux'
@@ -52,78 +139,326 @@ jobs:
         shell: bash
         env:
           CGO_LDFLAGS: ${{ runner.os == 'macOS' && '-framework UniformTypeIdentifiers' || '' }}
-        run: go test -tags "desktop production" -run '^$' .
+        run: go test -mod=readonly -tags "desktop production" -run '^$' .
 
-      - name: Build
+      - name: Build desktop executable
         shell: bash
         env:
           CGO_LDFLAGS: ${{ runner.os == 'macOS' && '-framework UniformTypeIdentifiers' || '' }}
-          APP_VERSION: ${{ github.ref_type == 'tag' && github.ref_name || 'dev' }}
-          PLATFORM_LDFLAGS: ${{ matrix.ldflags }}
+          PLATFORM_LDFLAGS: ${{ matrix.platform_ldflags }}
         run: |
           set -euo pipefail
           test "$(go env GOARCH)" = "${{ matrix.arch }}"
-          app_git_commit=$(git rev-parse --short HEAD)
-          app_build_date=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-          go build -tags "desktop production" -trimpath \
-            -ldflags="-s -w -X routenest/internal/buildinfo.AppVersion=${APP_VERSION} -X routenest/internal/buildinfo.AppGitCommit=${app_git_commit} -X routenest/internal/buildinfo.AppBuildDate=${app_build_date} ${PLATFORM_LDFLAGS}" \
-            -o "${{ matrix.artifact }}" .
+          go build -mod=readonly -tags "desktop production" -trimpath \
+            -ldflags="-s -w -X routenest/internal/buildinfo.AppVersion=${APP_VERSION} -X routenest/internal/buildinfo.AppGitCommit=${GITHUB_SHA} -X routenest/internal/buildinfo.AppBuildDate=${APP_BUILD_DATE} ${PLATFORM_LDFLAGS}" \
+            -o "${{ matrix.executable }}" .
+          go version -m "${{ matrix.executable }}"
 
       - name: Verify selfcheck
         shell: bash
         env:
           ROUTENEST_DATA_DIR: ${{ runner.temp }}/routenest-selfcheck
           ROUTENEST_ADMIN_BOOTSTRAP_PASSWORD: ci-selfcheck-only-bootstrap
-        run: ./"${{ matrix.artifact }}" -selfcheck -initialize-empty-account-store
+        run: ./"${{ matrix.executable }}" -selfcheck -initialize-empty-account-store
 
-      - uses: actions/upload-artifact@v4
+      - name: Package release archive
+        shell: bash
+        env:
+          TARGET: ${{ matrix.target }}
+          EXECUTABLE: ${{ matrix.executable }}
+          ARCHIVE_FORMAT: ${{ matrix.archive_format }}
+          ARCHIVE_SUFFIX: ${{ matrix.archive_suffix }}
+        run: |
+          set -euo pipefail
+          base="routenest_${PACKAGE_VERSION}_${TARGET}"
+          stage="$RUNNER_TEMP/$base"
+          archive_name="${base}.${ARCHIVE_SUFFIX}"
+          sbom_name="${base}.spdx.json"
+          rm -rf "$stage" dist
+          mkdir -p "$stage" dist
+          cp "$EXECUTABLE" "$stage/$EXECUTABLE"
+          cp LICENSE THIRD_PARTY_NOTICES.md "$stage/"
+          cp RELEASE_NOTES.md "$stage/README.md"
+          chmod 0755 "$stage/$EXECUTABLE"
+          chmod 0644 "$stage/LICENSE" "$stage/THIRD_PARTY_NOTICES.md" "$stage/README.md"
+          python3 - "$stage" "dist/$archive_name" "$ARCHIVE_FORMAT" "$SOURCE_DATE_EPOCH" <<'PY'
+          import gzip
+          import os
+          from pathlib import Path
+          import stat
+          import sys
+          import tarfile
+          import time
+          import zipfile
+
+          root = Path(sys.argv[1])
+          output = Path(sys.argv[2])
+          archive_format = sys.argv[3]
+          epoch = int(sys.argv[4])
+          files = sorted(path for path in root.rglob("*") if path.is_file())
+          if archive_format == "zip":
+              timestamp = time.gmtime(max(epoch, 315532800))[:6]
+              with zipfile.ZipFile(output, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=9, strict_timestamps=True) as archive:
+                  for path in files:
+                      name = f"{root.name}/{path.relative_to(root).as_posix()}"
+                      info = zipfile.ZipInfo(name, timestamp)
+                      info.create_system = 3
+                      info.compress_type = zipfile.ZIP_DEFLATED
+                      mode = stat.S_IMODE(path.stat().st_mode)
+                      info.external_attr = (stat.S_IFREG | mode) << 16
+                      archive.writestr(info, path.read_bytes(), compress_type=zipfile.ZIP_DEFLATED, compresslevel=9)
+          elif archive_format == "tar.gz":
+              with output.open("wb") as raw:
+                  with gzip.GzipFile(filename="", mode="wb", fileobj=raw, compresslevel=9, mtime=epoch) as compressed:
+                      with tarfile.open(fileobj=compressed, mode="w", format=tarfile.USTAR_FORMAT) as archive:
+                          directory = tarfile.TarInfo(root.name)
+                          directory.type = tarfile.DIRTYPE
+                          directory.mode = 0o755
+                          directory.mtime = epoch
+                          directory.uid = directory.gid = 0
+                          directory.uname = directory.gname = "root"
+                          archive.addfile(directory)
+                          for path in files:
+                              name = f"{root.name}/{path.relative_to(root).as_posix()}"
+                              info = tarfile.TarInfo(name)
+                              info.size = path.stat().st_size
+                              info.mode = stat.S_IMODE(path.stat().st_mode)
+                              info.mtime = epoch
+                              info.uid = info.gid = 0
+                              info.uname = info.gname = "root"
+                              with path.open("rb") as source:
+                                  archive.addfile(info, source)
+          else:
+              raise SystemExit(f"unsupported archive format: {archive_format}")
+          PY
+          test -s "dist/$archive_name"
+          {
+            printf 'ARCHIVE_NAME=%s\n' "$archive_name"
+            printf 'SBOM_NAME=%s\n' "$sbom_name"
+          } >> "$GITHUB_ENV"
+
+      - name: Generate SPDX SBOM
+        uses: anchore/sbom-action@fffec3d851af758d56fee099cf3fbf8aa8779843
         with:
-          name: ${{ matrix.artifact }}
-          path: ${{ matrix.artifact }}
-          if-no-files-found: error
+          path: ${{ runner.temp }}/routenest_${{ env.PACKAGE_VERSION }}_${{ matrix.target }}
+          format: spdx-json
+          output-file: dist/routenest_${{ env.PACKAGE_VERSION }}_${{ matrix.target }}.spdx.json
+          syft-version: v1.57.1
+          dependency-snapshot: false
+          upload-artifact: false
+          upload-release-assets: false
 
-  checksums:
-    name: Checksums
-    needs: build
+      - name: Normalize and validate SBOM
+        shell: bash
+        env:
+          TARGET: ${{ matrix.target }}
+        run: |
+          set -euo pipefail
+          python3 - "dist/$SBOM_NAME" "$APP_BUILD_DATE" "$GITHUB_REPOSITORY" "$APP_VERSION" "$TARGET" <<'PY'
+          import json
+          from pathlib import Path
+          import sys
+
+          path = Path(sys.argv[1])
+          data = json.loads(path.read_text(encoding="utf-8"))
+          if data.get("spdxVersion") != "SPDX-2.3" or data.get("SPDXID") != "SPDXRef-DOCUMENT" or not data.get("packages"):
+              raise SystemExit("generated SPDX SBOM is incomplete")
+          data["name"] = f"routenest-{sys.argv[4]}-{sys.argv[5]}"
+          data["documentNamespace"] = f"https://github.com/{sys.argv[3]}/releases/download/{sys.argv[4]}/{path.name}"
+          data.setdefault("creationInfo", {})["created"] = sys.argv[2]
+          path.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+          PY
+          test -s "dist/$SBOM_NAME"
+          shopt -s nullglob
+          files=(dist/*)
+          test "${#files[@]}" -eq 2
+          test -f "dist/$ARCHIVE_NAME"
+          test -f "dist/$SBOM_NAME"
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: release-${{ matrix.target }}
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 14
+
+  assemble:
+    name: Assemble release assets
+    needs: [metadata, build]
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: read
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
+          pattern: release-*
+          path: release-assets
+          merge-multiple: true
+
+      - name: Validate assets and generate checksums
+        shell: bash
+        env:
+          PACKAGE_VERSION: ${{ needs.metadata.outputs.package_version }}
+        run: |
+          set -euo pipefail
+          expected=(
+            "routenest_${PACKAGE_VERSION}_darwin_arm64.spdx.json"
+            "routenest_${PACKAGE_VERSION}_darwin_arm64.tar.gz"
+            "routenest_${PACKAGE_VERSION}_linux_amd64.spdx.json"
+            "routenest_${PACKAGE_VERSION}_linux_amd64.tar.gz"
+            "routenest_${PACKAGE_VERSION}_windows_amd64.spdx.json"
+            "routenest_${PACKAGE_VERSION}_windows_amd64.zip"
+          )
+          shopt -s nullglob
+          actual=(release-assets/*)
+          test "${#actual[@]}" -eq "${#expected[@]}"
+          for name in "${expected[@]}"; do
+            test -s "release-assets/$name"
+          done
+          cd release-assets
+          sha256sum "${expected[@]}" > SHA256SUMS
+          sha256sum --check SHA256SUMS
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: release-bundle
+          path: release-assets/*
+          if-no-files-found: error
+          retention-days: 14
+
+  attest:
+    name: Attest release assets
+    needs: [metadata, assemble]
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+      artifact-metadata: write
+    env:
+      PACKAGE_VERSION: ${{ needs.metadata.outputs.package_version }}
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          name: release-bundle
           path: release-assets
 
-      - name: Generate SHA-256 manifest
+      - name: Validate checksum manifest
         shell: bash
         run: |
           set -euo pipefail
-          find release-assets -type f -name 'routenest-*' -print | sort | while IFS= read -r file; do
-            printf '%s  %s\n' "$(sha256sum "$file" | awk '{print $1}')" "$(basename "$file")"
-          done > SHA256SUMS
-          test "$(wc -l < SHA256SUMS)" -eq 3
+          cd release-assets
+          sha256sum --check SHA256SUMS
+          shopt -s nullglob
+          files=(*)
+          test "${#files[@]}" -eq 7
 
-      - uses: actions/upload-artifact@v4
+      - name: Attest archives and SBOM files
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6
         with:
-          name: routenest-checksums
-          path: SHA256SUMS
-          if-no-files-found: error
+          subject-checksums: release-assets/SHA256SUMS
+
+      - name: Attest checksum manifest
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6
+        with:
+          subject-path: release-assets/SHA256SUMS
+
+      - name: Attest Windows SBOM
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6
+        with:
+          subject-path: release-assets/routenest_${{ env.PACKAGE_VERSION }}_windows_amd64.zip
+          sbom-path: release-assets/routenest_${{ env.PACKAGE_VERSION }}_windows_amd64.spdx.json
+
+      - name: Attest macOS SBOM
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6
+        with:
+          subject-path: release-assets/routenest_${{ env.PACKAGE_VERSION }}_darwin_arm64.tar.gz
+          sbom-path: release-assets/routenest_${{ env.PACKAGE_VERSION }}_darwin_arm64.spdx.json
+
+      - name: Attest Linux SBOM
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6
+        with:
+          subject-path: release-assets/routenest_${{ env.PACKAGE_VERSION }}_linux_amd64.tar.gz
+          sbom-path: release-assets/routenest_${{ env.PACKAGE_VERSION }}_linux_amd64.spdx.json
 
   release:
-    name: Release
-    needs: [build, checksums]
-    if: startsWith(github.ref, 'refs/tags/v')
+    name: Create draft release
+    needs: [metadata, attest]
+    if: github.ref_type == 'tag'
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      PACKAGE_VERSION: ${{ needs.metadata.outputs.package_version }}
+      PRERELEASE: ${{ needs.metadata.outputs.prerelease }}
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
 
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
-          generate_release_notes: true
-          files: |
-            routenest-desktop.exe/routenest-desktop.exe
-            routenest-desktop-darwin-arm64/routenest-desktop-darwin-arm64
-            routenest-desktop-linux-amd64/routenest-desktop-linux-amd64
-            routenest-checksums/SHA256SUMS
+          name: release-bundle
+          path: release-assets
+
+      - name: Create reviewed draft
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="$GITHUB_REF_NAME"
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            printf 'release %s already exists\n' "$tag" >&2
+            exit 1
+          fi
+          expected=(
+            SHA256SUMS
+            "routenest_${PACKAGE_VERSION}_darwin_arm64.spdx.json"
+            "routenest_${PACKAGE_VERSION}_darwin_arm64.tar.gz"
+            "routenest_${PACKAGE_VERSION}_linux_amd64.spdx.json"
+            "routenest_${PACKAGE_VERSION}_linux_amd64.tar.gz"
+            "routenest_${PACKAGE_VERSION}_windows_amd64.spdx.json"
+            "routenest_${PACKAGE_VERSION}_windows_amd64.zip"
+          )
+          shopt -s nullglob
+          actual=(release-assets/*)
+          test "${#actual[@]}" -eq "${#expected[@]}"
+          assets=()
+          for name in "${expected[@]}"; do
+            test -s "release-assets/$name"
+            assets+=("release-assets/$name")
+          done
+          args=(
+            "$tag"
+            --repo "$GITHUB_REPOSITORY"
+            --title "RouteNest ${tag} - First public preview"
+            --notes-file RELEASE_NOTES.md
+            --target "$GITHUB_SHA"
+            --verify-tag
+            --draft
+            --latest=false
+          )
+          if [[ "$PRERELEASE" == "true" ]]; then
+            args+=(--prerelease)
+          fi
+          gh release create "${args[@]}" "${assets[@]}"
+          gh release view "$tag" --repo "$GITHUB_REPOSITORY" \
+            --json tagName,isDraft,isPrerelease,assets,url > release.json
+          python3 - release.json "$tag" "$PRERELEASE" "${expected[@]}" <<'PY'
+          import json
+          from pathlib import Path
+          import sys
+
+          release = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+          expected = sorted(sys.argv[4:])
+          actual = sorted(asset["name"] for asset in release["assets"])
+          if release["tagName"] != sys.argv[2] or not release["isDraft"] or release["isPrerelease"] != (sys.argv[3] == "true"):
+              raise SystemExit("draft release metadata is incorrect")
+          if actual != expected or any(asset["size"] <= 0 for asset in release["assets"]):
+              raise SystemExit(f"draft release asset mismatch: expected={expected} actual={actual}")
+          print(release["url"])
+          PY
+          url=$(python3 -c 'import json; print(json.load(open("release.json"))["url"])')
+          printf 'Draft release ready for review: %s\n' "$url" >> "$GITHUB_STEP_SUMMARY"

@@ -9,9 +9,9 @@
 
 RouteNest is a self-hosted AI gateway written in Go. Point your coding agents and AI applications at one endpoint, and RouteNest routes each request to the provider API, local model runtime or connected account that should serve it, falling back in an order you control.
 
-[![Go](https://img.shields.io/badge/Go-1.26-00ADD8?logo=go&logoColor=white)](https://go.dev)
+[![Go](https://img.shields.io/badge/Go-1.26.11-00ADD8?logo=go&logoColor=white)](https://go.dev)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux-blue)](#build-from-source)
+[![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux-blue)](#first-public-preview)
 [![Provider definitions](https://img.shields.io/badge/Provider%20definitions-111-brightgreen)](#provider-coverage)
 
 **中文:** [中文 README](README.zh-CN.md)
@@ -20,9 +20,22 @@ RouteNest is a self-hosted AI gateway written in Go. Point your coding agents an
 
 ---
 
+## First public preview
+
+**[RouteNest v0.1.0-beta.1 - First public preview](https://github.com/dhananjaym182/RouteNest/releases/tag/v0.1.0-beta.1)** is a **prerelease for evaluation**, not a stable or production-certified release. APIs, state formats and upstream integrations may change during the beta.
+
+- **Release artifacts:** versioned desktop archives for **Windows x64, macOS Apple Silicon and Linux x64**, three matching SPDX SBOMs and `SHA256SUMS`. Each archive contains one executable, license/notices and release instructions. There is **no Intel macOS artifact**, installer, separate CLI asset or published container image; CLI/server and Docker are source-build options.
+- **Runtime and signing:** no Go or Node.js is needed to run the downloads. Windows needs WebView2, macOS uses system WKWebView, and Linux needs GTK 3 plus **WebKitGTK 4.0** on a compatible glibc-based desktop; 4.1 alone is insufficient. Windows is **unsigned**; macOS is **not Developer ID-signed or notarized**. See [desktop requirements](#desktop-app-prebuilt).
+- **Verify before extraction:** check the archive and SBOM against `SHA256SUMS`, then verify GitHub build attestations for those files and the manifest, pinned to this repository's Build workflow and release tag. Stop on a mismatch, failure or missing attestation. Provenance and an SBOM are not code-safety certification or OS signing. [Install and verify commands](RELEASE_NOTES.md#install-and-verify).
+- **Capabilities and limits:** streaming OpenAI/Anthropic request handling, a **Responses API subset**, account rotation, ordered fallback, model discovery, limits, egress controls and a bilingual admin console. Provider presets are templates, **not integration certification**; free-first/free-only labels are not zero-cost guarantees. Use only authorized accounts and follow upstream terms, pricing and entitlements; Cline account access is unofficial.
+- **Setup and data:** no default administrator password; save the first-run recovery code and create a client API key before relying on authenticated inference. A validated empty key list leaves model/inference routes anonymous for compatibility. Provider credentials, refresh tokens and generated client keys are **plaintext**, protected by filesystem permissions rather than encryption at rest. Back up the full data directory before upgrades and keep hosted administration behind HTTPS with narrow trusted-proxy settings.
+- **Validation scope:** CI includes automated Go/race, frontend/localization, Docker and browser checks, native builds and windowless readiness self-checks. Simulations and compilation do not certify packaged WebViews, actual OS credential stores, clean-system installation, signed upgrades or every live provider. See [CI validation](#ci-validation) and the tagged workflow results.
+
+[Release notes](RELEASE_NOTES.md) · [Changelog](CHANGELOG.md) · [Security guide](docs/admin-security.md) · [Upgrade and backup guidance](#data-and-upgrades)
+
 ## Contents
 
-[Why RouteNest](#why-routenest) · [Highlights](#highlights) · [Light on resources](#light-on-resources) · [Works with](#works-with) · [Supported providers](#supported-providers) · [Quick start](#quick-start) · [Connect a client](#connect-a-client) · [How routing works](#how-routing-works) · [Admin console](#admin-console) · [Security](#security) · [Accounts and upstreams](#accounts-and-upstreams) · [Provider coverage](#provider-coverage) · [Model discovery](#model-discovery) · [Egress proxies](#egress-proxies) · [Data and upgrades](#data-and-upgrades) · [Build from source](#build-from-source) · [Project layout](#project-layout) · [Documentation](#documentation) · [Contributing](#contributing) · [License](#license-and-notices)
+[First public preview](#first-public-preview) · [Why RouteNest](#why-routenest) · [Highlights](#highlights) · [Light on resources](#light-on-resources) · [Works with](#works-with) · [Supported providers](#supported-providers) · [Quick start](#quick-start) · [Connect a client](#connect-a-client) · [How routing works](#how-routing-works) · [Admin console](#admin-console) · [Security](#security) · [Accounts and upstreams](#accounts-and-upstreams) · [Provider coverage](#provider-coverage) · [Model discovery](#model-discovery) · [Egress proxies](#egress-proxies) · [Data and upgrades](#data-and-upgrades) · [Build from source](#build-from-source) · [CI validation](#ci-validation) · [Project layout](#project-layout) · [Documentation](#documentation) · [Contributing](#contributing) · [License](#license-and-notices)
 
 ## Why RouteNest
 
@@ -61,16 +74,18 @@ AI coding tools want one stable endpoint, while the services behind them rate-li
 - **Limits you control.** Per-provider daily, per-minute and token limits, with cooldowns visible under **Usage & Quotas**.
 - **Per-provider networking.** A default egress proxy pool with failover, a separate pool for Zen, and a per-provider override.
 - **A full admin console.** Thirteen pages, English and Chinese, light and dark, with a Quick Start page that builds client examples from your running instance.
-- **Secure by default.** One-time setup, role-based access, OIDC and SAML, revocable trusted desktop devices, an audit journal, and a recovery code.
+- **Administrator access controls.** One-time setup, role-based access, OIDC and SAML, revocable trusted desktop devices, an audit journal, and a recovery code.
 - **Runs where you do.** A single Go binary with file-based state and no external database, a desktop app for Windows, macOS and Linux, or Docker.
 
 Provider availability, authentication, free allowances and supported features depend on the upstream service. A preset is a configuration template, not a tested integration. Its presence does not mean every model is available to your account.
 
 ## Light on resources
 
-RouteNest is one statically linked Go binary. There is no runtime to install, no `node_modules` and no external database. State lives in plain files, and the admin console is embedded in the binary.
+The CLI/server can be built as one statically linked Go binary (`CGO_ENABLED=0`), with an embedded admin console and no Node.js runtime, `node_modules` or external database. State lives in plain files. Desktop downloads also need their platform's WebView libraries.
 
-| Measured on Linux x86-64, Go 1.26.10, empty data directory | Result |
+These measurements are from a Go 1.26.10 development build, not the beta desktop packages; they have not been remeasured for this release.
+
+| Measured on Linux x86-64, empty data directory | Result |
 | --- | --- |
 | Binary size (admin console included) | 15.5 MB |
 | Time until `/ready` answers | about 1 second |
@@ -96,7 +111,7 @@ Both of those projects offer features RouteNest does not, such as token compress
 
 ## Works with
 
-Any client that speaks the OpenAI or Anthropic API can use RouteNest. The **Quick Start** page generates ready-to-paste setup for these:
+Clients using supported OpenAI or Anthropic request patterns can use RouteNest; full API or provider certification is not implied. The **Quick Start** page generates ready-to-paste setup for these:
 
 <div align="center">
   <table>
@@ -168,19 +183,42 @@ A selection of the presets in the **Connect provider** directory. The full list 
 
 ### Desktop app (prebuilt)
 
-Download the build for your platform from [Releases](https://github.com/dhananjaym182/RouteNest/releases) and open it. On a confirmed fresh installation a native setup window lets you choose the administrator password, shows a recovery code once, and optionally trusts the device for automatic sign-in. No terminal or environment variable is needed.
+Download your archive, matching SPDX SBOM and `SHA256SUMS` from the [v0.1.0-beta.1 release](https://github.com/dhananjaym182/RouteNest/releases/tag/v0.1.0-beta.1), [verify before extraction](#verify-the-download), then open the extracted app. These are archives of standalone executables, not installers. On a confirmed fresh installation a native setup window lets you choose the administrator password, shows a recovery code once, and optionally trusts the device for automatic sign-in. No terminal or environment variable is needed for setup.
 
-| Platform | What you need to run a release |
-| --- | --- |
-| Windows x64 | Microsoft Edge WebView2 Runtime. Windows 11 includes it; updated Windows 10 usually has it. If the app reports it missing, install the Evergreen Runtime from Microsoft. |
-| macOS Apple Silicon | A supported macOS version (WKWebView is built in). The official release is arm64-only, and Intel Macs can build from source. The build is not notarized, so Gatekeeper may need right-click **Open** or approval under **System Settings → Privacy & Security**. |
-| Linux x64 | GTK 3 and WebKitGTK 4.0 runtime libraries, matching the official build. Development headers are not needed. |
+| Platform | Release archive | What you need to run it |
+| --- | --- | --- |
+| Windows x64 | `routenest_0.1.0-beta.1_windows_amd64.zip` | Microsoft Edge WebView2 Runtime. Windows 11 includes it; updated Windows 10 usually has it. If missing, install Microsoft's Evergreen Runtime. |
+| macOS Apple Silicon | `routenest_0.1.0-beta.1_darwin_arm64.tar.gz` | macOS with system WKWebView; built on macOS 15. No Intel artifact is published. Running does not need Xcode tools; Intel Macs require a source build. |
+| Linux x64 | `routenest_0.1.0-beta.1_linux_amd64.tar.gz` | Compatible glibc-based desktop with GTK 3 and WebKitGTK 4.0 runtime libraries; built on Ubuntu 22.04. On Ubuntu 22.04 the packages are `libgtk-3-0` and `libwebkit2gtk-4.0-37`. WebKitGTK 4.1 alone is insufficient. |
 
-Windows SmartScreen may warn because the build is not code-signed. Choose **More info → Run anyway** only if you downloaded the file from the official release page.
+Each archive extracts to `routenest_0.1.0-beta.1_<platform>/`, containing `routenest-desktop.exe` on Windows or `routenest-desktop` on macOS/Linux, plus `LICENSE`, `THIRD_PARTY_NOTICES.md` and release instructions as `README.md`. Matching SBOMs are `routenest_0.1.0-beta.1_windows_amd64.spdx.json`, `routenest_0.1.0-beta.1_darwin_arm64.spdx.json` and `routenest_0.1.0-beta.1_linux_amd64.spdx.json`. They inventory the built artifacts, not certify them as vulnerability-free.
+
+Go, Node.js and development headers are not required to run these artifacts. Linux automatic desktop sign-in optionally needs an unlocked Secret Service; without it, use password sign-in. Older OS versions and clean-system installation are not broadly certified.
+
+**Unsigned / unnotarized:** Windows has no trusted code signature; macOS has no Developer ID signature or notarization. After verification, SmartScreen may require **More info → Run anyway**, and Gatekeeper may require **Open** or approval under **System Settings → Privacy & Security**. Approve only the verified file; do not disable system-wide protections.
+
+### Verify the download
+
+Use the archive, its SBOM and `SHA256SUMS` from the same release. The manifest covers the three archives and three SBOMs; verify it and the downloaded files before extracting. For Linux x64, after downloading the three files:
+
+```bash
+(
+set -euo pipefail
+base=routenest_0.1.0-beta.1_linux_amd64
+for file in "$base.tar.gz" "$base.spdx.json"; do
+    awk -v file="$file" '$2 == file { print; n++ } END { if (n != 1) exit 1 }' SHA256SUMS | sha256sum --check -
+done
+for file in "$base.tar.gz" "$base.spdx.json" SHA256SUMS; do
+    gh attestation verify "$file" --repo dhananjaym182/RouteNest --signer-workflow dhananjaym182/RouteNest/.github/workflows/build.yml --source-ref refs/tags/v0.1.0-beta.1
+done
+)
+```
+
+Both archive and SBOM checksums must report `OK`, and all attestations must verify this repository's Build workflow and release tag. Stop on any mismatch, failure or missing attestation. macOS uses `shasum`; Windows uses `Get-FileHash`. Full download, platform-specific verification, extraction and launch commands are in [Release notes](RELEASE_NOTES.md#install-and-verify). Checksums check packaged bytes, not an extracted executable against its archive digest; attestations check provenance, not code safety, OS signing or provider certification. If the published release is immutable, the release notes also show `gh release verify` and `gh release verify-asset` for GitHub's signed release/asset binding.
 
 ### Run the binary
 
-Building requires Go 1.26.10 or newer.
+Building requires Go 1.26.11 or newer.
 
 ```bash
 go build -o routenest .
@@ -218,6 +256,8 @@ After sign-in, use the **Quick Start** page. It builds ready-to-copy examples fr
 1. Connect a Cline account, native OpenCode Zen, or a provider API key.
 2. Check that a model is enabled, and generate a client API key if you want authenticated client access. Until at least one key exists, key-wrapped model routes accept anonymous requests under the documented compatibility policy.
 3. Send your first request.
+
+The built-in update check follows stable releases only and may not advertise this beta; download previews explicitly from the tagged release page.
 
 **Forgot your password?** Select **Forgot password?** on the sign-in page. With a saved recovery code you can reset the main `admin` password, and a replacement code is shown once. If no recovery code was ever created, the same link explains the options: other users ask a security administrator, and the main administrator runs `routenest auth recover` on the server. See [Security](#security).
 
@@ -270,7 +310,7 @@ Compatibility is implementation-level. It does not guarantee every field, provid
 | Endpoint | Format | Notes |
 | --- | --- | --- |
 | `POST /v1/chat/completions` | OpenAI Chat Completions | Streaming and non-streaming; tools, reasoning fields and usage where the upstream supplies them |
-| `POST /v1/responses` | OpenAI Responses | Converted to an upstream chat-completions call; text, tools, reasoning content, streaming events and usage |
+| `POST /v1/responses` | OpenAI Responses subset | Converted to an upstream chat-completions call; text, tools, reasoning content, streaming events and usage |
 | `POST /v1/messages` | Anthropic Messages | Streaming and non-streaming; tool use and results, thinking content and usage |
 | `POST /v1/messages/count_tokens` | Anthropic token count | A local estimate, not an upstream tokenizer |
 | `GET /v1/models` | OpenAI model list | Enabled models and enabled combos |
@@ -341,7 +381,7 @@ Roles limit what each administrator sees: a viewer can read, while changing prov
 - **Account-only deletion:** **Delete All Accounts** removes Cline accounts and their account-owned state only. Client keys, models, the default model, listener settings and migration markers are preserved, and success is reported only after durable persistence.
 - **Hosted administration:** the binary and desktop app bind to `127.0.0.1` by default. A non-loopback listener is rejected unless an exact public URL, trusted-proxy mode and trusted proxy CIDRs are configured. An HTTP canonical origin is accepted when HSTS is off, so terminating HTTPS at the trusted proxy remains a deployment requirement.
 - **Docker:** the sample compose file binds the backend port to host loopback and requires explicit setup, public-URL and proxy settings. Do not expose the backend port directly to the internet.
-- **Sensitive data:** account refresh tokens, provider credentials and generated client keys are stored in plaintext in the data directory. Protect that directory, and never commit or share it.
+- **Sensitive data:** account refresh tokens, provider credentials and generated client keys are stored in plaintext in the data directory, protected by filesystem permissions rather than encryption at rest. OS-protected desktop trust does not encrypt provider secrets. Protect the directory and backups, and never commit or share them; OS credential stores do not defeat same-user malware or host compromise.
 
 See [Administrator security and SSO](docs/admin-security.md) for roles, OIDC, SAML, recovery and reverse-proxy configuration. `routenest auth help` and `routenest auth status` give non-mutating help and a read-only status. `routenest auth recover` is the owner-controlled offline recovery command for a lost recovery code.
 
@@ -446,13 +486,22 @@ On first use, RouteNest copies missing current `.routenest-*` files and legacy `
 
 If the pool and witness are both absent, RouteNest will not infer that an existing or partially restored data directory is a fresh installation. Restore a valid pool file and restart. A valid restored pool without its witness is accepted, and the witness is recreated only after the pool has been validated.
 
-On Unix-like systems the data and capture directories are restricted to `0700` and known state files to `0600`. Windows uses protected owner and SYSTEM ACLs for private RouteNest paths, and accepts the account Windows itself assigns as owner of files the process creates (the Administrators group for an elevated process). RouteNest fails startup with an actionable error if it cannot establish safe permissions, and never falls back to writing secrets beside the executable. On Windows, state files are replaced with a write-through move followed by a directory flush.
+On Unix-like systems the data and capture directories are restricted to `0700` and known state files to `0600`. Windows private paths use protected ACLs granting the current user and SYSTEM access, and accept the owner Windows assigns to files this process creates (the Administrators group for an elevated process). RouteNest fails startup with an actionable error if it cannot establish safe permissions, and never falls back to writing secrets beside the executable.
 
-> The data files contain plaintext refresh tokens, provider credentials and generated client API keys. Back them up securely and never publish them or commit them to Git.
+Durable security-sensitive writes sync the temporary file before replacement and attempt to flush the containing directory afterwards. Windows replacement uses Go's directory-rooted rename, not a write-through `MoveFileEx` guarantee; a post-replacement flush failure is reported as uncertain, not ordinary success. These mechanisms do not guarantee protection against faulty storage hardware or all filesystem/power-loss scenarios.
+
+### Before upgrading or rolling back
+
+1. Stop every RouteNest process and securely back up the **entire selected data directory**. Keep `.routenest-accounts.json` and its `.initialized` witness together, and `admin-auth/.routenest-admin-auth.json` and its journal together. Include referenced SSO secrets and separately protect environment-based secrets, the saved recovery code and any working-directory `override.md`.
+2. Download and verify the new archive, SBOM and manifest using `SHA256SUMS` and their GitHub attestations, extract into a separate directory, then replace only the executable. Reuse the same data directory and OS user; do not add first-run initialization flags or bootstrap variables to reset an established install.
+3. Restart, sign in, check readiness and send a small request through each provider you rely on. If storage is missing, corrupt or partially restored, stop and restore a valid backup rather than deleting identity files or bypassing initialization guards.
+4. Beta state formats may change, and older binaries can reject newer administrator metadata. Roll back with the old executable **and a complete compatible backup**, never a mixed snapshot/journal or hand-edited identity state. Desktop-trust credentials live in the OS vault, not the directory backup; moving user, machine or directory may require password sign-in and explicit re-enrollment. Treat restored sessions/keys as sensitive and revoke or rotate them if a backup may have leaked.
+
+> The data files contain plaintext refresh tokens, provider credentials and generated client API keys. Encrypt or otherwise securely protect backups, and never publish them or commit them to Git.
 
 ## Build from source
 
-The CLI binary requires Go 1.26.10 or newer. Building the desktop app also requires the platform toolchain listed below.
+The CLI binary requires Go 1.26.11 or newer. Building the desktop app also requires the target OS toolchain and native WebView dependencies; see [desktop build instructions](desktop/README.md#building-for-each-platform).
 
 ### Binary
 
@@ -462,25 +511,28 @@ go build -o routenest .
 
 ### Desktop app
 
-Wails uses each platform's native WebView and must be built on the target OS:
+Wails uses native WebView bindings. Build on the target OS rather than treating a cross-build as runtime validation. With the toolchain installed:
 
 ```bash
-# Windows: Go + C toolchain; WebView2 Runtime to run
-./desktop/build.sh
-
-# macOS: Xcode Command Line Tools
-xcode-select --install
-./desktop/build.sh
-
-# Linux: GTK 3 and WebKitGTK development packages, e.g.
-# Debian/Ubuntu (use 4.0 or 4.1 to match your distribution)
-sudo apt install libgtk-3-dev libwebkit2gtk-4.1-dev
-# Fedora: sudo dnf install gtk3-devel webkit2gtk4.1-devel
-# Arch:   sudo pacman -S gtk3 webkit2gtk
 ./desktop/build.sh
 ```
 
-Development packages are only needed to compile. Release users need the corresponding runtime libraries, not the headers. See [desktop/README.md](desktop/README.md) for packaging details.
+Windows needs Go and a C toolchain. macOS needs Xcode Command Line Tools; native macOS builds also link `UniformTypeIdentifiers`, as shown in the desktop guide. The default Linux script and release build target GTK 3 and WebKitGTK **4.0**, for example `libgtk-3-dev` and `libwebkit2gtk-4.0-dev` on Ubuntu 22.04. A source build against 4.1 requires the extra `webkit2_41` tag, not just installing 4.1 packages; see [the Linux build options](desktop/README.md#linux).
+
+Development packages are only needed to compile. Release users need the matching runtime libraries, not headers. The official macOS artifact is Apple Silicon only.
+
+## CI validation
+
+The [Test workflow](.github/workflows/test.yml) is configured to run:
+
+- Module verification, Go unit/integration tests, desktop-tag authentication tests, vet and race checks on **Linux and Windows**, including dedicated Windows persistence runtime tests.
+- JavaScript syntax/unit contracts and localization checks on Linux.
+- Authenticated Chromium navigation, provider-setup and security journeys, plus a separate desktop setup/login **bridge simulation** on Linux.
+- A source-built Docker persistence smoke test on Linux.
+
+The [Build workflow](.github/workflows/build.yml) depends on the test workflow, validates release-tag metadata, compiles production-tag desktop tests without executing them, builds natively on Windows x64, macOS 15 arm64 and Ubuntu 22.04 x64, and runs each executable's **windowless `/ready` self-check**. It then packages versioned archives with license/notices and instructions, generates SPDX SBOMs, validates the exact asset inventory and `SHA256SUMS`, and generates tag-bound build/SBOM attestations before creating a reviewable prerelease draft. A self-check starts the embedded gateway; it does not open a window or exercise an OS credential store. A draft is not publication or proof of release immutability.
+
+Read the tagged workflow run for actual pass/fail results. Automated tests, browser runs, simulations, checksums and provenance are **not** full packaged-WebView, real-vault, clean-install/reopen, signed-upgrade, OS-version or live-provider certification. Publication of these docs is not a runtime pass report.
 
 ## Project layout
 
@@ -511,9 +563,10 @@ The Go module path is `routenest`. The repository root keeps the CLI and desktop
 | Document | What it covers |
 | --- | --- |
 | [docs/admin-security.md](docs/admin-security.md) | Roles, OIDC and SAML, trusted devices, recovery, Docker and reverse-proxy settings |
-| [docs/model-api.md](docs/model-api.md) | Model and routing API reference |
+| [RELEASE_NOTES.md](RELEASE_NOTES.md) | Preview caveats, download, verification and installation commands |
+| [CHANGELOG.md](CHANGELOG.md) | User-facing changes by release |
 | [DESIGN.md](DESIGN.md) | Admin console design rules |
-| [CONTRACTS.md](CONTRACTS.md) | Behavioral contracts the console and gateway are held to |
+| [CONTRACTS.md](CONTRACTS.md) | Contract reconciliation, implementation evidence and explicitly proposed/unresolved decisions |
 | [CONTEXT.md](CONTEXT.md) | Domain glossary |
 | [desktop/README.md](desktop/README.md) | Building and packaging the desktop app |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | How to work on the project |
@@ -529,7 +582,7 @@ node --test tools/*.test.mjs
 node tools/i18n_check.js   # translations: no gaps, duplicates, unused keys or unkeyed Chinese text
 ```
 
-CI runs the unit tests on Linux and Windows, the race detector on both, the frontend contract checks, a Docker persistence smoke test and an authenticated browser run. See [CONTRIBUTING.md](CONTRIBUTING.md).
+CI is configured for these checks and the additional [validation scope](#ci-validation) above. See [CONTRIBUTING.md](CONTRIBUTING.md) for contributor expectations; historical reports are not current workflow results.
 
 ## License and notices
 

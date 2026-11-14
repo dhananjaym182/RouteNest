@@ -1,12 +1,12 @@
 module routenest
 
-go 1.26.10
+go 1.26.11
 
 require (
 	github.com/beevik/etree v1.8.1
 	github.com/coreos/go-oidc/v3 v3.21.0
-	github.com/crewjam/saml v0.5.2
-	github.com/go-jose/go-jose/v4 v4.1.4
+	github.com/crewjam/saml v0.6.3
+	github.com/go-jose/go-jose/v4 v4.1.9
 	github.com/mattermost/xml-roundtrip-validator v0.1.0
 	github.com/refraction-networking/utls v1.8.2
 	github.com/russellhaering/goxmldsig v1.6.1
@@ -31,7 +31,7 @@ require (
 	github.com/jchv/go-winloader v0.0.0-20210711035445-715c2860da7e // indirect
 	github.com/jonboulle/clockwork v0.5.0 // indirect
 	github.com/klauspost/compress v1.20.3 // indirect
-	github.com/labstack/echo/v4 v4.16.1 // indirect
+	github.com/labstack/echo/v4 v4.16.4 // indirect
 	github.com/labstack/gommon v0.5.0 // indirect
 	github.com/leaanthony/go-ansi-parser v1.6.1 // indirect
 	github.com/leaanthony/gosod v1.0.4 // indirect
